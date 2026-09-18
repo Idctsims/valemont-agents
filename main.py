@@ -1,9 +1,13 @@
 """Railway entry point. Canary-gated so the fake agent cannot ship by accident.
 
 Set CANARY=true in the environment to register `_fake` and run forever.
-Anything else — unset, false, misspelled — exits immediately with a clear
+Anything else — unset, false, misspelled — refuses to start with a clear
 message and an empty registry. The live roster belongs in
 `core.orchestrator.build_default()` later; it is not wired here.
+
+Configuration refusals sleep before exiting so Railway's restart loop is
+slow (~once a minute) rather than twice a second, and use exit code 78
+(EX_CONFIG) so they are distinguishable from a real crash (exit 1).
 """
 
 from __future__ import annotations
@@ -11,10 +15,29 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
+from typing import NoReturn
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+#: sysexits.h EX_CONFIG — config refusal, not a crash.
+CONFIG_EXIT = 78
+#: How long to sit before exiting so Railway does not thrash the container.
+REFUSAL_SLEEP_SECONDS = 60
+
+
+def _refuse(log: logging.Logger, reason: str) -> NoReturn:
+    log.error("%s", reason)
+    log.error(
+        "config refusal (exit %d) — sleeping %ds before exit to slow the "
+        "restart loop",
+        CONFIG_EXIT,
+        REFUSAL_SLEEP_SECONDS,
+    )
+    time.sleep(REFUSAL_SLEEP_SECONDS)
+    raise SystemExit(CONFIG_EXIT)
 
 
 def main() -> None:
@@ -25,10 +48,18 @@ def main() -> None:
     log = logging.getLogger("valemont.main")
 
     if os.getenv("CANARY", "").strip().lower() != "true":
-        sys.exit(
+        _refuse(
+            log,
             "No agents registered. Set CANARY=true to run the fake canary "
             "agent on this worker. Refusing to start empty — the canary must "
-            "not be able to ship by accident."
+            "not be able to ship by accident.",
+        )
+
+    if not os.getenv("DATABASE_URL", "").strip():
+        _refuse(
+            log,
+            "DATABASE_URL is not set. Add the Supabase Session pooler string "
+            "to this service's environment variables.",
         )
 
     from adapters._fake import build
