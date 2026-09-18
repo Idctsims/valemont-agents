@@ -50,7 +50,7 @@ CREATE TABLE commitments (
     run_id        BIGINT      NOT NULL REFERENCES runs(id),
 
     kind          TEXT        NOT NULL
-                  CHECK (kind IN ('paper_position','prop_slip')),
+                  CHECK (kind IN ('paper_position','prop_slip','event_contract')),
 
     -- The reasoning, in the agent's own words. Kept so we can audit WHY,
     -- not just whether it hit.
@@ -58,9 +58,10 @@ CREATE TABLE commitments (
     confidence    NUMERIC(4,3)
                   CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1)),
 
-    -- Domain-specific detail. Deliberately jsonb: a paper position and a
-    -- six-leg slip do not share a column shape, and forcing them to would
-    -- mean a schema migration every time an adapter learns something new.
+    -- Domain-specific detail. Deliberately jsonb: a paper position, a
+    -- six-leg slip, and an event contract do not share a column shape, and
+    -- forcing them to would mean a schema migration every time an adapter
+    -- learns something new. Three payload shapes, one per kind.
     payload       JSONB       NOT NULL,
 
     -- Set by the DATABASE, never by application code. No backdating.
@@ -89,7 +90,7 @@ CREATE TABLE legs (
     subject       TEXT        NOT NULL,   -- 'BTC-USD', 'NVDA', 'Ja Morant'
     market        TEXT        NOT NULL,   -- 'spot_long', 'points_over', ...
     line          NUMERIC,                -- entry price, or the prop line
-    direction     TEXT        CHECK (direction IN ('over','under','long','short')),
+    direction     TEXT        CHECK (direction IN ('over','under','long','short','yes','no')),
     size          NUMERIC,                -- units / notional / stake weight
 
     -- Outcome, filled in ONLY by the resolution path.
