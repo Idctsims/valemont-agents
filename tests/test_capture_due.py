@@ -95,6 +95,31 @@ class CaptureDue(LedgerTestCase):
         self.assertEqual(tomb.kwargs["status"], "missed")
         self.assertIn("4 attempts", tomb.kwargs["reason"])
 
+    def test_tombstone_reason_describes_the_close_not_a_resolution(self) -> None:
+        """A missed-close record must not read like a failed resolution.
+
+        The reason is persisted, so wording that says "no resolution" describes
+        the wrong failure to anyone reading the table or the logs later.
+        """
+        self.ledger.add_capture(closing(1, attempts=4))
+        self.agent().capture_due()
+
+        [tomb] = self.ledger.named("add_closing_snapshot")
+        reason = tomb.kwargs["reason"]
+        self.assertIn("close never captured", reason)
+        self.assertNotIn("resolution", reason)
+
+    def test_overdue_tombstone_names_closes_at_not_resolves_after(self) -> None:
+        """Capture measures overdue_by from closes_at. The reason must say so."""
+        self.ledger.add_capture(closing(1, attempts=0, overdue_by=timedelta(hours=49)))
+        self.agent().capture_due()
+
+        [tomb] = self.ledger.named("add_closing_snapshot")
+        reason = tomb.kwargs["reason"]
+        self.assertIn("past closes_at", reason)
+        self.assertNotIn("resolves_after", reason)
+        self.assertIn("close still uncaptured", reason)
+
     def test_exhausted_overdue_budget_tombstones(self) -> None:
         self.ledger.add_capture(closing(1, attempts=0, overdue_by=timedelta(hours=49)))
         outcome = self.agent().capture_due()

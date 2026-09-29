@@ -237,16 +237,36 @@ class DeferPolicy:
     max_attempts: int = 12
     max_overdue: timedelta = timedelta(hours=24)
 
-    def expired(self, pending: PendingCommitment) -> str | None:
-        """Return the reason to give up, or None to keep waiting."""
+    def expired(
+        self,
+        pending: PendingCommitment,
+        what: Literal["resolution", "close"] = "resolution",
+    ) -> str | None:
+        """Return the reason to give up, or None to keep waiting.
+
+        `what` only picks the wording, never the thresholds — one policy object
+        can serve either sweep. It matters because the reason is persisted: a
+        `missed` close tombstone that reads "no resolution after 48 attempts"
+        describes the wrong failure and names the wrong deadline column. Capture
+        measures `overdue_by` from `closes_at`; resolution measures it from
+        `resolves_after`.
+        """
         if pending.attempts >= self.max_attempts:
+            answer = (
+                "no resolution" if what == "resolution"
+                else "close never captured"
+            )
             return (
-                f"no resolution after {pending.attempts} attempts "
+                f"{answer} after {pending.attempts} attempts "
                 f"(cap {self.max_attempts})"
             )
         if pending.overdue_by >= self.max_overdue:
+            state, deadline = (
+                ("still unresolved", "resolves_after") if what == "resolution"
+                else ("close still uncaptured", "closes_at")
+            )
             return (
-                f"still unresolved {pending.overdue_by} past resolves_after "
+                f"{state} {pending.overdue_by} past {deadline} "
                 f"(cap {self.max_overdue})"
             )
         return None
@@ -1090,7 +1110,7 @@ class BaseAgent[Obs, Th](ABC):
 
         captured = deferred = missed = failed = 0
         for commitment in pending:
-            give_up = self.capture_policy.expired(commitment)
+            give_up = self.capture_policy.expired(commitment, "close")
             if give_up is not None:
                 if self._miss(commitment, give_up, run_id=run_id):
                     missed += 1
