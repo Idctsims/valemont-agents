@@ -778,8 +778,18 @@ _DUE_SQL: Final = """
            -- Counted here rather than in the worker: the bounded-defer
            -- thresholds must not depend on a worker's clock or its memory of
            -- previous sweeps. Both come off the database.
+           -- purpose = 'resolve' is LOAD-BEARING, not tidiness. Resolution and
+           -- capture share this table but NOT their budgets: each has its own
+           -- DeferPolicy. Counting both here spent the resolution budget on
+           -- capture waits, so a commitment whose market legitimately sat open
+           -- past its expected close burned 12 resolution attempts while
+           -- capture was still correctly waiting, and was then voided. A void
+           -- is permanent (resolutions.commitment_id is UNIQUE), so the row
+           -- died of bookkeeping while every component worked. The capture
+           -- query below has always filtered; this one had not.
            (SELECT count(*) FROM resolution_attempts ra
-             WHERE ra.commitment_id = c.id) AS attempts,
+             WHERE ra.commitment_id = c.id
+               AND ra.purpose = 'resolve') AS attempts,
            now() - c.resolves_after AS overdue_by,
            c.closes_at,
            COALESCE(

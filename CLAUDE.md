@@ -186,6 +186,31 @@ apply a migration programmatically.
   passing. A verification claim that is not in `tests/` is a claim that exists
   only in a chat transcript — add the test.
 
+- **`tests/` is structurally blind to SQL. Run `tests_live/` too when you
+  touch a query or add a migration:**
+
+  ```
+  python -m unittest discover -s tests_live -t .
+  ```
+
+  The stub ledger refuses the database on purpose, which is what keeps the fast
+  suite fast — and it means a defect in a query, a `CHECK`, a trigger or a
+  server-computed column cannot fail it. Two such bugs have shipped already:
+  `a.is_test` missing from a `GROUP BY`, and the resolution sweep counting
+  capture attempts against its own budget (silent permanent data loss, invisible
+  to 108 green stub tests).
+
+  `tests_live/` writes only as `_test` (`is_test = true`, seeded by `db/006`)
+  and **skips rather than fails** when the database is unreachable or the
+  migration is unpasted — a red suite should mean a broken invariant, not an
+  unplugged cable. Its rows are permanent, like all rows here; quarantine is the
+  only cleanup there is, and a test agent whose rows could be deleted would be
+  testing a different database from the real one.
+
+  Still outside both suites, and worth knowing before trusting a green run:
+  live HTTP response shapes, migrations actually running in the SQL Editor,
+  APScheduler firing on a real clock, and the SIGTERM drain.
+
 ---
 
 ## 7. Build order
