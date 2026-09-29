@@ -10,19 +10,21 @@ before writing code.
 
 A multi-agent paper-trading and forecast-tracking system with a live dashboard.
 
-Three worker agents, one supervisor:
+Four worker agents, one supervisor:
 
 | Agent | Domain | What it commits to | Money |
 |---|---|---|---|
-| `crypto` | Crypto markets | Simulated positions | None. Paper only. |
+| `crypto` | Crypto markets | Simulated positions, long and short | None. Paper only. |
 | `equities` | US stocks | Simulated positions | None. Paper only. |
 | `prizepicks` | Player props | Proposed slips, handed to the operator | None. Never places bets. |
+| `kalshi` | CFTC-regulated event contracts | Shadow positions | None. Never places orders. |
 | `chief_of_staff` | Supervision | Nothing. Writes briefs. | None. |
 
 **No component of this system moves real money, ever.** There is no broker
 credential with trade permission, no exchange key with withdrawal permission,
 and no bookmaker automation. The `prizepicks` agent produces slips for a human
-to enter manually and then tracks whether they would have hit. If a session
+to enter manually and then tracks whether they would have hit. `kalshi` tracks
+event contracts in shadow only and never places an order. If a session
 proposes adding live execution, stop and flag it.
 
 ---
@@ -55,7 +57,7 @@ wrong. Write a new row instead.
 
 ---
 
-## 3. Structure: one core loop, three thin adapters
+## 3. Structure: one core loop, four thin adapters
 
 ```
 core/          The shared machinery. Agents do not own logic.
@@ -66,6 +68,7 @@ adapters/      Domain specifics ONLY. Thin.
   crypto.py
   equities.py
   prizepicks.py
+  kalshi.py
 db/            Numbered SQL migrations. Committed to git.
 dashboard/     Next.js. Reads from the API, never from the DB directly.
 scripts/       One-off utilities, health checks.
@@ -78,14 +81,38 @@ that exists in `core/`, the abstraction is wrong. Fix `core/`, don't duplicate.
 An adapter is responsible for exactly four things:
 1. `observe()` — fetch domain data
 2. `form_thesis(observation)` — reason about it
-3. `build_commitment(thesis)` — produce a domain payload
+3. `build_commitment(thesis)` — produce one commitment, **or a slate of them**
 4. `resolve(commitment)` — determine what actually happened
+
+**On slates (hook 3).** `build_commitment` returns `Proposal`,
+`Sequence[Proposal]`, or `None`. One commitment is the common case and the only
+one crypto uses. A slate exists because forty independent player props on a
+Sunday are forty independent commitments, and one-per-tick would either lose
+thirty-nine or need forty ticks. Core commits each proposal **independently** —
+a bad one at index 3 does not strand the rest — and refuses the **whole** slate
+before writing anything if it exceeds `max_slate_size` or contains two legs
+identical in subject, market, direction and line. Half a slate is permanently
+indistinguishable from a complete one, which is why the refusal is total.
+`max_slate_size` defaults to 25 and must be raised deliberately, the same way
+`max_overdue` must be (§9.3).
 
 Everything else — scheduling, persistence, scoring, event emission, error
 handling, retries — belongs to `core/` and is written once.
 
-Adding a fourth agent later should be one new file in `adapters/` and one row
-in the agent registry. If it takes more than that, `core/` isn't doing its job.
+**One optional fifth hook, `capture_close()`**, exists for domains that have a
+market close worth snapshotting (§10). It is gated on `captures_close`, which
+defaults to False, so the four-hook contract holds exactly for every adapter
+that does not opt in — no stub, no `NotImplementedError` in production, no
+`closes_at` on its commitments, and no capture job scheduled. Crypto opts out:
+it trades 24/7 and there is no moment its market opinion is final.
+
+Adapters may also *call* core helpers they find useful — `open_subjects()` to
+avoid re-entering a position it already holds, for instance. Those are
+capabilities core offers, not stages every adapter must implement, and they do
+not count against the four.
+
+Adding an agent should be one new file in `adapters/` and one `Registration`
+in the orchestrator. If it takes more than that, `core/` isn't doing its job.
 
 ---
 
@@ -96,10 +123,10 @@ what each agent did, where a thesis was wrong and why, current running score.
 
 **It does not supervise.** It cannot cancel, override, or instruct another
 agent. It has read access to the ledger and write access only to `briefs`.
-It is a reporter, not a manager. Do not give it decision authority — at three
+It is a reporter, not a manager. Do not give it decision authority — at four
 agents that adds failure modes without adding capability.
 
-It reports **per-agent, with no blended headline number** — see §9.1. That is
+It reports **per-agent, with no blended headline number** — see §9.2. That is
 a constraint on the brief, not a stylistic preference.
 
 ---
@@ -118,8 +145,9 @@ apply a migration programmatically.
   authenticated by default. The worker connects via the Postgres string and
   bypasses RLS. Do not add policies to let the frontend read Supabase directly.
 - Schema changes **only** via numbered files in `db/`. Never via a GUI.
-- `timestamptz` everywhere, store UTC. Three agents span crypto (24/7),
-  US market hours, and game slates. Naive timestamps will burn us.
+- `timestamptz` everywhere, store UTC. Four agents span crypto (24/7),
+  US market hours, game slates, and contract settlement. Naive timestamps
+  will burn us.
 - Stay in the `public` schema. Supabase reserves `auth`, `storage`,
   `realtime`, `extensions`.
 - Assume **not superuser**. No `COPY FROM` a server path, no exotic extensions.
@@ -148,14 +176,17 @@ apply a migration programmatically.
 
 Do not skip ahead. Each step is cheap to change; the ones before it are not.
 
-1. Ledger schema + connection proven ← **you are here**
-2. `core/` loop with a fake agent writing real rows
-3. `crypto` adapter, live data, paper positions
+1. Ledger schema + connection proven ✓
+2. `core/` loop with a fake agent writing real rows ✓
+3. `crypto` adapter, live data, paper positions ✓
 4. Deploy to Railway — prove the 24/7 path with ONE agent running
-5. `equities` adapter
-6. `prizepicks` adapter
-7. `chief_of_staff`
-8. Dashboard + pixel visualization layer
+5. CLV machinery: closing snapshots, factors, selections (core + schema)
+   ← **you are here**
+6. `equities` adapter
+7. `prizepicks` adapter
+8. `kalshi` adapter
+9. `chief_of_staff`
+10. Dashboard + pixel visualization layer
 
 Reason for deploying at step 4 and not at the end: "works locally, dies
 silently at 3am in production" is the classic failure here. Hit it while
@@ -173,14 +204,71 @@ there's one agent to debug, not four.
   does: a dead settlement feed stops producing resolutions long before it
   produces wrong ones, and hit rate can't move on commitments that never
   resolve. A quiet adapter looks identical to a careful one on every other
-  chart. The dashboard (step 8) surfaces per-agent void rate over time as a
+  chart. The dashboard (step 10) surfaces per-agent void rate over time as a
   first-class number, not buried in the event stream — and `resolution_attempts`
   is the table that feeds it. Treat a rising line as an outage, not as data.
-- **Scoring methodology is unsolved.** Hit rate alone is a bad metric. Needs
-  a thought-through approach (calibration, EV vs. line, not just W/L).
-  Flag it when we get there rather than guessing. What *is* settled is the
-  unit the raw number is stored in — see §9. Solving the metric is still open;
-  the unit is not up for renegotiation.
+- **Scoring methodology: CLV is the best available signal, and it is NOT
+  profit.** Read both halves of that sentence before quoting either.
+
+  CLV (§10) is the primary metric wherever a closing price exists — `kalshi`,
+  `prizepicks` — for one reason: in a forward-running system with no backtest,
+  it is the only measurement that lands on **every** commitment instead of only
+  on resolved ones. Hit rate needs hundreds of resolutions before it separates
+  skill from variance. We will not have hundreds for months. CLV says something
+  on the first commitment. That is why it is primary.
+
+  **A positive CLV record is not evidence this would make money.** Not weak
+  evidence — not evidence. The two come apart in practice, and we have a
+  measured case: `jackc625` ran a pre-registered 2025 holdout in which the
+  single strongest statistical result in the entire project was a closing-line-
+  value result on win probability, in the **same run** where no target came out
+  profitable and the spread target returned −5.3%. He calls that divergence the
+  headline finding rather than a return, and he is right to. See
+  `docs/reference-analysis.md` §1.
+
+  So: **§10 does not mean scoring is solved.** It means the *unit* is settled
+  and the *signal* is the best one obtainable this early. If a future session
+  reads §10 as "CLV solved scoring," that is the misreading this paragraph
+  exists to prevent. Reporting CLV as though it were profitability — in a
+  brief, on the dashboard, anywhere — is the specific error to avoid. When we
+  eventually want a profitability claim it needs its own pre-registered
+  measurement, on data not used to build anything, with a stated significance
+  rule frozen before the number exists.
+
+  **CLV does not cover `crypto` at all.** A 24/7 market has no moment its
+  opinion becomes final, so there is no close to beat. Crypto is scored on the
+  §9 R-multiple alone, which still needs hundreds of resolutions and still has
+  no time dimension (§9.2). Do not report a blended "system CLV" that quietly
+  omits the agents which have none. Finding crypto's equivalent — some fixed
+  horizon reference price, perhaps — is the part of §8 that remains open.
+
+- **Three independent builders lost to the market on liquid game lines. We
+  target thin markets and player props instead.** If a session proposes betting
+  game moneylines or spreads, stop here.
+
+  Nobody coordinated; all three landed in the same place (full detail in
+  `docs/reference-analysis.md` §1):
+
+  - A real LOOCV search over Vegas/Elo blend weights chose **100% Vegas at
+    every one of five checkpoints**, contradicting the builder's own hypothesis
+    that his model would take over late in the season. Betting his own
+    disagreements with Vegas returned **−36% ROI** — "actively harmful, not
+    just unhelpful."
+  - A second builder's pre-registered holdout produced **no profitable-clean
+    target**, with the spread target at **−5.3%**.
+  - A third, across six sports: **"no model beats the closing point spread
+    reliably."**
+
+  These are hobby-scale models and so are ours. Three independent measurements
+  against an efficient market, three losses, is the strongest evidence in the
+  reference set and it points one way. The defensible ground is **thin,
+  low-liquidity markets and player props**, which is where both prop-focused
+  repositories went — not because props are easy, but because a market with
+  less money policing it is the only place a model this size has a chance.
+
+  This constrains `kalshi` and `prizepicks` when they land: target thin
+  contracts and player props, and treat a liquid game market as a benchmark to
+  measure against rather than a market to commit into.
 
 ---
 
@@ -191,80 +279,138 @@ adapter knows that a prop pays a multiplier and a contract settles at par.
 But without a shared unit, a chief-of-staff brief that averages crypto dollars
 against a prop multiplier is averaging nonsense, confidently.
 
-**`resolutions.pnl` is return on risk: a dimensionless decimal.**
+**`resolutions.pnl` is return on declared risk: a dimensionless decimal.**
 
 ```
 pnl = (proceeds - capital_at_risk) / capital_at_risk
+
+capital_at_risk = |entry - invalidation| × size
 ```
 
-where `capital_at_risk` is what would be lost in full in the worst modeled
-case, measured at commit time. Never dollars. Never a payout multiplier.
-Never a percentage — `0.05`, not `5`.
+**Every commitment declares an invalidation level at commit time.** Every
+domain, every direction, no exceptions. The denominator is the distance to
+that level. Never dollars. Never a payout multiplier. Never a percentage —
+`0.05`, not `5`.
 
-Read points:
+### This is §2, not a second rule
 
-- `-1.0` means everything at risk was lost. See the floor rule below — it is a
-  real floor, but only because `capital_at_risk` is defined to make it one.
-- `+0.05` is a 5% gain on capital at risk, whatever the domain.
-- `0` is a push, or a void that returned the stake. Write `0`, not `NULL`.
-- `NULL` means **not scored**: the return is not meaningful or never became
-  computable. An abandoned commitment (§9.1) is `NULL`. Never a break-even.
+§2 says: state the thesis before the outcome is known, and never edit it
+afterwards. An invalidation level is the other half of that same sentence.
+A thesis that says what it expects but not what would refute it is only half
+committed, and a track record built on it cannot distinguish "I was right"
+from "I was never willing to be wrong."
 
-### Defining `capital_at_risk`
+So §9 is not a scoring convention bolted onto §2. It is §2 applied to risk:
 
-It is the loss under the **worst case the instrument allows**, measured at
-commit time — not a margin requirement, not a broker's number.
+> **Declare what would prove you wrong, before you find out.**
 
-| Domain | worst case | capital_at_risk | proceeds | reduces to |
+Everything below follows from that. The earlier version of this section
+measured a long's risk as `entry × size` — the loss if price went to zero.
+That number is imaginary. It describes an outcome that has never happened to
+a major asset and would not be how the position actually ended. A stop
+distance is what the agent actually claimed. Only one of the two is honest,
+and scoring against the imaginary one made longs and shorts differ by more
+than an order of magnitude for identical moves.
+
+### Per domain
+
+| Domain | entry | invalidation | capital_at_risk | reduces to |
 |---|---|---|---|---|
-| paper long | price → 0 | `entry × size` | `exit × size` | `(exit − entry) / entry` |
-| **paper short** | **the declared invalidation** | **`\|entry − stop\| × size`** | **`(entry − exit) × size + risk`** | **`(entry − exit) / \|entry − stop\|`** |
-| prop slip | slip misses | `stake` | `stake × multiplier` if it hits, else `0` | `multiplier − 1`, or `−1` |
-| event contract YES | settles 0 | `price × contracts` | `settlement × contracts` | `(settlement − price) / price` |
-| event contract NO | settles 1 | `(1 − price) × contracts` | `(1 − settlement) × contracts` | `(price − settlement) / (1 − price)` |
+| paper long | entry price | stop **below** entry | `(entry − stop) × size` | `(exit − entry) / (entry − stop)` |
+| paper short | entry price | stop **above** entry | `(stop − entry) × size` | `(entry − exit) / (stop − entry)` |
+| prop slip | stake | `0` — the stake is the stop | `stake` | `multiplier − 1`, or `−1` |
+| event contract YES | price | `0` — settles worthless | `price × contracts` | `(settlement − price) / price` |
+| event contract NO | `1 − price` | `0` — settles worthless | `(1 − price) × contracts` | `(price − settlement) / (1 − price)` |
 
-That a YES contract and a long position reduce to the same expression is not a
-coincidence — it is the same trade with a settlement price that only ever
-lands on 0 or 1. If a fifth domain doesn't reduce this cleanly, say so before
-writing the adapter.
+Long and short are now the **same expression with a sign**:
 
-### The floor rule, and the one instrument that breaks it
+```
+pnl = signed_move / |entry - stop|      signed_move = exit-entry (long)
+                                                      entry-exit (short)
+```
 
-`-1.0` is a hard floor for a long, a prop and an event contract because each
-has a worst case the instrument itself supplies: price zero, slip missed,
-settlement against you. **A short has no such worst case.** Loss is unbounded,
-so `entry × size` is not what is at risk and using it would put `-2.0` on the
-board — a documented invariant violated by one domain, which is worse than no
-invariant.
+**Props and event contracts needed no change.** They were always R-multiples;
+we just hadn't noticed. A prop's stake *is* its stop — lose and it is gone —
+and a YES contract settling at zero is a stop at zero. Their invalidation is
+**structural**: supplied by the instrument, not chosen by the agent. That is
+the only distinction that remains, and it matters solely for the gaming guard
+below.
 
-So: **a paper short must declare an invalidation level at commit time**, in
-the leg's payload, and its `capital_at_risk` is the distance to that level.
-`-1.0` then means "the stop was hit, the thesis was fully wrong" — which is
-the same sentence as "the stake is gone", so the floor holds across all four.
+Worked, all four, same 1R favorable move:
 
-This is not a special case bolted on. Every other shape's worst case is
-implied by the instrument; a short's has to be stated. Requiring the agent to
-name what would prove it wrong, before the outcome is known, is the same
-principle as §2 applied to risk rather than to direction.
+```
+long   entry 60000, stop 58200, exit 61800   ->  1800 / 1800  = +1.00
+short  entry 60000, stop 61800, exit 58200   ->  1800 / 1800  = +1.00
+prop   stake 1, stop 0, multiplier 2.0       ->     1 / 1     = +1.00
+YES    price 0.50, stop 0, settles 1.00      ->  0.50 / 0.50  = +1.00
+```
 
-**A short with no declared invalidation has undefined risk. Report `pnl=NULL`
-rather than a number that is not comparable to anything.** Do not substitute
-notional and hope. Do not clamp a loss to `-1.0` — clamping would turn a
-modeling gap into a fake data point, which is the one thing this project
-exists not to do.
+and all four fully wrong:
 
-**The floor is an assumption, not a property.** `|entry − stop| × size` models
-the short as filling *at* the declared invalidation level. A real gap through
-the stop — an overnight halt, a weekend move, a squeeze — fills worse than
-that, and the true loss exceeds `-1.0` again. We are choosing to record the
-modeled fill, not the gapped one. Write that down in `resolutions.detail`
-(`{"fill": "assumed_at_stop"}`) so a resolution that relied on the assumption
-is distinguishable later from one that didn't need it. This is the honest
-statement of the limit: for shorts, `-1.0` is a floor on what we *model*, and
-the first time a real gap violates it, that is the assumption surfacing, not
-a new bug.
+```
+long stopped / short stopped / prop missed / YES settles 0   ->  -1.00
+```
 
-### 9.1 Aggregation: not yet, and not across agents
+### Read points
+
+- `-1.0` means **the stop was hit and the thesis was fully wrong**. It means
+  exactly that in every domain. There is no clamp and no special case,
+  because the denominator is defined to make it true.
+- `+2.5` is two and a half times the declared risk. This is an R-multiple.
+- `0` is a push, or a void that returned the stake. Write `0`, not `NULL`.
+- `NULL` means **not scored**: the return never became computable. An
+  abandoned commitment (§9.3) is `NULL`. Never a break-even.
+- A commitment with **no declared invalidation cannot be scored.** Report
+  `pnl=NULL`. Do not substitute notional and hope.
+
+### 9.0 The gaming guard
+
+A denominator the agent chooses is a denominator the agent can shrink. A 0.01%
+stop would turn an ordinary move into `+500R`. The guard has three parts, and
+the first is the one that matters:
+
+1. **The stop must be volatility-derived, by a documented rule.** Not a
+   per-commitment judgement call. crypto uses `1.5 × ATR(14)`; the rule name
+   goes in the payload as `stop_rule` so a reviewer can confirm the same rule
+   produced every row, rather than a number picked to flatter each one.
+2. **Minimum stop distance: `max(1.0 × ATR(period), 0.5% of entry)`.** The ATR
+   term is the real floor — a stop inside one average true range is inside
+   ordinary noise and gets hit by a random walk rather than by the thesis
+   being wrong. The percentage term is a backstop for a degenerate ATR
+   (a halted market, a stablecoin, rounding-scale ranges).
+3. **Maximum stop distance: 25% of entry.** The weaker guard, included for
+   completeness: an absurdly wide stop deflates every result toward zero and
+   conveniently means `-1.0` never appears. Declining to be wrong is not the
+   same as being right.
+
+Bounds 2 and 3 apply only where the stop is a **choice**. A structural
+invalidation of exactly `0` — props, event contracts — is exempt, because
+there is no free parameter there to exploit.
+
+`core.agent.declared_risk()` enforces this and raises rather than recording an
+unbounded multiple. An adapter that cannot produce a stop inside the band
+should stand down, not widen until it fits.
+
+### 9.1 The floor is a modeling assumption
+
+`|entry − stop| × size` assumes the position is closed **at** the declared
+level. Two things follow, and both must be honored:
+
+**Resolution has to check whether the stop was hit.** Marking only to the
+price at the horizon would let a position that blew through its stop record
+`-2.5`, breaking the floor. An adapter with intraperiod data (highs and lows
+over the holding window) checks it and records the exit at the stop with
+`{"stop_hit": true}`. This is not clamping — the stop is a live exit, and
+recording it is modeling the position that was actually declared.
+
+**A real gap can still fill worse.** An exchange halt, a weekend move, a
+squeeze. We record the modeled fill, not the gapped one, and say so:
+`{"fill": "assumed_at_stop"}` in `resolutions.detail`, so a resolution that
+relied on the assumption stays distinguishable from one that didn't need it.
+For directional positions `-1.0` is a floor on what we **model**, and the
+first real gap that violates it is the assumption surfacing, not a new bug.
+
+### 9.2 Aggregation: not yet, and not across agents
 
 Return on risk has **no time dimension**. `+0.05` over twenty minutes and
 `+0.05` over three weeks are the same number and are not the same result.
@@ -286,11 +432,11 @@ give holding period, `resolutions.detail` gives domain-native figures, and
 `legs.size` gives position size. A time-weighted metric is reconstructible
 later. A blended number published now is not retractable.
 
-### 9.2 Abandoned commitments
+### 9.3 Abandoned commitments
 
 A commitment whose outcome never becomes knowable is closed by core, not by
 the adapter: `outcome='void'`, `pnl=NULL`, with the reason in `detail`. See
-§9.1 on `NULL` — it is not a zero, and it must not be counted as one.
+§9 on `NULL` — it is not a zero, and it must not be counted as one.
 The mechanism and its thresholds are core's, described in `core/agent.py`.
 **A rising void rate is a broken adapter, not normal operation.**
 
@@ -325,3 +471,131 @@ cost of comparability, and it is paid back by keeping the raw figures:
 A size-weighted or EV-based metric can be reconstructed from those later.
 Storing only a normalized number would have made that impossible; storing only
 dollars would have made the brief meaningless. Store both.
+
+---
+
+## 10. Closing line value
+
+The ledger knew two moments: commit and resolve. CLV needs a third.
+
+```
+observe → form thesis → COMMIT → [market closes: SNAPSHOT] → resolve → score
+```
+
+**Why this is the primary metric where it exists.** Hit rate needs hundreds of
+resolutions before it distinguishes skill from variance. CLV produces a
+measurement on *every* commitment, won or lost, the moment the market closes —
+the difference between signal in weeks and signal in a season. A thesis that
+consistently beats the close is finding something before the market does, and
+that is visible long before the P&L is.
+
+> **CLV is not profit, and this section does not claim scoring is solved.**
+> A positive CLV record is not evidence the system would make money — there is
+> a measured case of CLV-positive and profit-negative in the same run. Read §8
+> before citing anything here as a result. This section settles the *unit* and
+> the *mechanism*; §8 holds what they do and do not license you to say.
+
+### The formula
+
+```
+clv     = close_price - entry_price
+clv_pct = clv / entry_price
+```
+
+**Both prices are the price of the side we hold.** That one convention removes
+the YES/NO branch entirely:
+
+```
+YES bought at 0.34, YES closes at 0.40  ->  +0.06   market came to us
+NO  bought at 0.66, NO  closes at 0.60  ->  -0.06   market left us
+```
+
+A NO position is stored with `entry_price = 1 - yes_price`, normalized once by
+the adapter at commit time. **Positive always means the market moved toward our
+view**, in every domain, on either side.
+
+`clv_pct` exists because six points of edge on a 0.10 contract is a different
+achievement from six points on a 0.80 one, and the absolute number cannot tell
+them apart.
+
+**Stored, never derived on read.** A formula living in a query can be changed,
+and changing it silently rewrites every historical measurement. Freezing the
+number at capture time is the same principle that freezes the commitment —
+§2 applied to the metric.
+
+### `closes_at` means "earliest worth looking"
+
+It sits on `commitments`, immutable, set at commit time, because the close time
+is part of the claim: which market you are pricing against. A close time that
+could be revised afterwards would let a thesis shop for a flattering
+comparison point.
+
+Games get postponed, so **the column is not a promise that the market closed
+then.** `capture_close()` returns `None` while the market is still open and the
+bounded-retry machinery keeps asking. Postponement is handled by the same
+discipline that already handles a postponed resolution — no `UPDATE`, no
+revision table, no gaming vector.
+
+### A missed close is permanent
+
+A missed resolution can be retried until it voids. **A missed close is data
+loss.** The close happens once. Three consequences:
+
+- Schedule capture **tighter** than the resolution sweep.
+- `default_capture_policy` is more patient than `default_defer_policy`
+  (48 attempts / 48h vs 12 / 24h).
+- Every failure path fails *toward retry*. Even a failure to record an attempt
+  leaves the commitment in the due set.
+
+When capture does give up, it writes a `missed` tombstone with a reason rather
+than leaving the row absent — absence and unrecoverable-loss must not look
+identical. That row is louder than a void in the logs, and for the same reason
+void rate is a health metric (§8), **rising missed-close rate is an outage.**
+
+### 10.1 Factor attribution
+
+Each commitment carries named signed adjustments in `commitment_factors`:
+`injury -0.04`, `short_week -0.02`. Relational rows, not payload JSON, so the
+question that matters is a join rather than an unnest:
+
+```sql
+SELECT f.name, count(*), avg(s.clv)
+  FROM commitment_factors f
+  JOIN closing_snapshots s ON s.commitment_id = f.commitment_id
+  JOIN commitments c ON c.id = f.commitment_id
+  JOIN agents a ON a.id = c.agent_id
+ WHERE s.status = 'captured' AND a.is_test = false
+ GROUP BY f.name
+ ORDER BY avg(s.clv);
+```
+
+That query is how the model calibrates itself from its own record. A factor
+that never beats the close gets cut on evidence, not on taste.
+
+**Names are `snake_case` by database CHECK.** Free text would let `injury`,
+`injuries` and `Injury` fragment into three factors, and every average would
+then be computed over a third of the evidence — silently, and in the direction
+of looking more significant than it is.
+
+Factors are immutable, written in the same transaction as the commitment.
+Adjusting an attribution after seeing the result is precisely the failure §2
+exists to prevent.
+
+### 10.2 Selections
+
+The operator's pick lives in `selections`, **not** as a column on
+`commitments`. Two reasons, and the second is the real one:
+
+1. The slate is committed at T and picked at T+30min. A column would need an
+   `UPDATE` against an immutable table.
+2. **The pick is itself a commitment.** A selection recorded after the line
+   moved is hindsight, not judgement, and would silently inflate any
+   measurement of whether the operator beats the model.
+
+So a trigger rejects a selection made after `closes_at`. This is
+`resolutions_timing` inverted: a resolution cannot land too *early*, a
+selection cannot land too *late*.
+
+`selected` is an explicit boolean rather than presence-means-yes, because
+declining is a decision. "I looked and passed" must not collapse into the same
+absent row as "I never looked."

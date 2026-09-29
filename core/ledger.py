@@ -48,6 +48,12 @@ __all__ = [
     "emit_event",
     "record_resolution_attempt",
     "due_for_resolution",
+    "open_commitments",
+    "Factor",
+    "ClosingSnapshot",
+    "add_closing_snapshot",
+    "record_selection",
+    "due_for_capture",
     "close_pool",
 ]
 
@@ -67,16 +73,25 @@ EventKind = Literal[
     "observing",
     "thesis",
     "committed",
+    "slate_committed",
     "idle",
     "resolving",
     "resolved",
     "deferred",
     "voided",
+    "capturing",
+    "captured",
+    "close_missed",
+    "selected",
     "error",
 ]
 
-#: Why an attempt to resolve did not produce an answer.
+#: Why an attempt did not produce an answer.
 AttemptResult = Literal["deferred", "error"]
+
+#: Which sweep an attempt belongs to. Capture and resolution share the counter
+#: because they share the bounded-retry discipline exactly.
+AttemptPurpose = Literal["resolve", "capture"]
 
 #: Anything numeric a caller may hand us for a NUMERIC column.
 Numeric = Decimal | int | float | str
@@ -119,6 +134,49 @@ class Leg:
     line: Numeric | None = None
     direction: Direction | None = None
     size: Numeric | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Factor:
+    """One named, signed adjustment making up a thesis.
+
+    The unit of self-calibration. Each commitment carries the factors that
+    produced it, so the ledger can later answer "when `injury` fired, did those
+    commitments beat the close?" — and a factor that never earns its keep gets
+    cut on evidence rather than on taste.
+
+    `name` is snake_case, enforced by a CHECK in the database. Free text would
+    let `injury`, `injuries` and `Injury` fragment into three factors, and every
+    average would then be computed over a third of the evidence.
+
+    `value` is signed and in the same units as the market price, so a
+    probability market's factors sum meaningfully against `clv`.
+
+    `leg_index` of None applies the factor to the whole commitment; otherwise
+    to that one leg — a six-leg slip with one hurt player needs the difference.
+    """
+
+    name: str
+    value: Numeric
+    leg_index: int | None = None
+    detail: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ClosingSnapshot:
+    """The third observation, as the database recorded it."""
+
+    id: int
+    commitment_id: int
+    captured_at: datetime
+    status: Literal["captured", "missed"]
+    clv: Decimal | None = None
+    clv_pct: Decimal | None = None
+    #: How late the captured "close" actually is, in seconds. Set by the
+    #: database trigger, never by application code — a worker computing it from
+    #: its own clock would write a wrong lag on a skewed container, and a wrong
+    #: lag is worse than none because it would be trusted.
+    capture_lag_seconds: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,6 +226,11 @@ class PendingCommitment:
     committed_at: datetime
     resolves_after: datetime
     legs: tuple[Leg, ...]
+
+    #: When this market's opinion becomes final, or None when the domain has no
+    #: meaningful close. Read as "earliest moment worth looking", not "look at
+    #: exactly this" — see db/004 and `BaseAgent.capture_close`.
+    closes_at: datetime | None = None
 
     #: How many times `resolve()` has already declined to answer for this one.
     #: Feeds the bounded-defer policy in `core.agent`.
@@ -333,8 +396,10 @@ def commit(
     resolves_after: datetime,
     legs: Sequence[Leg],
     confidence: Numeric | None = None,
+    closes_at: datetime | None = None,
+    factors: Sequence[Factor] = (),
 ) -> Commitment:
-    """Write a commitment and its legs in ONE transaction.
+    """Write a commitment, its legs and its factors in ONE transaction.
 
     There is deliberately no `committed_at` parameter. The database stamps it
     and hands it back. A half-written commitment — a thesis with no legs, or
@@ -359,14 +424,16 @@ def commit(
             "US market hours, game slates and event settlement — naive "
             "timestamps will burn us."
         )
+    if closes_at is not None and closes_at.tzinfo is None:
+        raise LedgerError("closes_at must be timezone-aware.")
 
     with _pool().connection() as conn, conn.cursor() as cur:
         row = cur.execute(
             """
             INSERT INTO commitments
                 (agent_id, run_id, kind, thesis, confidence,
-                 payload, resolves_after)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                 payload, resolves_after, closes_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id, committed_at, resolves_after
             """,
             (
@@ -377,10 +444,33 @@ def commit(
                 _num(confidence),
                 Jsonb(payload),
                 resolves_after,
+                closes_at,
             ),
         ).fetchone()
         assert row is not None
         commitment_id: int = row[0]
+
+        if factors:
+            # Same transaction as the commitment: a thesis whose attribution
+            # landed separately could be half-recorded, and a factor written
+            # after the fact is exactly the revision §2 forbids.
+            cur.executemany(
+                """
+                INSERT INTO commitment_factors
+                    (commitment_id, leg_index, name, value, detail)
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                [
+                    (
+                        commitment_id,
+                        factor.leg_index,
+                        factor.name,
+                        _num(factor.value),
+                        Jsonb(factor.detail or {}),
+                    )
+                    for factor in factors
+                ],
+            )
 
         cur.executemany(
             """
@@ -423,36 +513,58 @@ def add_resolution(
     `outcome` and `pnl` are the adapter's verdict, persisted as given. This
     function does not know what a hit is — see the module docstring.
 
-    **The pnl contract (CLAUDE.md §9 — binding).** `pnl` is *return on risk*,
-    a dimensionless decimal::
+    **The pnl contract (CLAUDE.md §9 — binding).** `pnl` is *return on declared
+    risk*, a dimensionless decimal — an R-multiple::
 
         pnl = (proceeds - capital_at_risk) / capital_at_risk
+        capital_at_risk = |entry - invalidation| × size
 
-    where `capital_at_risk` is what would be lost in full in the worst modeled
-    case, measured at commit time. Not dollars. Not a payout multiplier. Not a
-    percentage — `0.05`, never `5`. The unit has to be shared or the chief of
-    staff ends up averaging crypto dollars against a prop multiplier.
+    **Every commitment declares an invalidation level at commit time**, every
+    domain, every direction. The denominator is the distance to what the agent
+    said would prove it wrong — not notional, not a margin number, and never
+    a worst case the instrument merely permits. §9 is §2 applied to risk:
+    declare what would refute you, before you find out.
+
+    Not dollars. Not a payout multiplier. Not a percentage — ``0.05``, never
+    ``5``.
 
     ============  ==================================================
-    ``-1.0``      the whole stake was lost; the floor for props and
-                  event contracts, and it means the same in both
-    ``+0.05``     a 5% gain on capital committed, whatever the domain
-    ``0``         push or void — write ``0``, not ``None``
-    ``None``      not scored: the outcome is known but the return is
-                  not meaningful or not yet computable. Never a
-                  break-even
+    ``-1.0``      the stop was hit and the thesis was fully wrong.
+                  Means exactly that in every domain. No clamp, no
+                  special case — the denominator makes it true
+    ``+2.5``      two and a half times the declared risk
+    ``0``         push, or a void that returned the stake — write
+                  ``0``, not ``None``
+    ``None``      not scored: the return never became computable, or
+                  no invalidation was declared. Never a break-even
     ============  ==================================================
 
-    A short can legitimately come in below ``-1.0``. Do not clamp it.
+    Long and short are the same expression with a sign, which is the point:
+    ``(exit-entry)/(entry-stop)`` and ``(entry-exit)/(stop-entry)``. A prop's
+    stake and an event contract's price are stops at zero — structural, not
+    chosen — so those two shapes were always R-multiples already.
+
+    Two obligations on the caller:
+
+    *   **Bound the stop.** A denominator the agent picks is one it could
+        shrink to inflate its own multiple. `core.agent.declared_risk()`
+        enforces §9.0's band and raises rather than record ``+500R``.
+    *   **Truncate the exit at the stop** when the stop was hit during the
+        holding period (§9.1), or a position that blew through it records
+        ``-2.5`` and breaks the floor. That is modeling the declared exit,
+        not clamping.
 
     Normalizing throws away position size on purpose. Put the domain-native
     figures in `detail` so nothing is lost and a size-weighted metric stays
     reconstructible later::
 
-        detail={"unit": "usd", "capital_at_risk": 60000.00,
-                "proceeds": 63000.00, "gross": 3000.00}
+        detail={"unit": "usd", "entry": 60000, "invalidation": 58200,
+                "exit": 61800, "capital_at_risk": 1800.00,
+                "proceeds": 3600.00, "stop_hit": False,
+                "fill": "assumed_at_stop"}
 
-    `core.agent.return_on_risk()` does the arithmetic if you want it.
+    `core.agent.directional_return()` does the arithmetic for a long or a
+    short; `return_on_risk()` is the primitive underneath.
 
     Legs are writable exactly once (`legs_frozen`), and the resolution's timing
     is checked against `resolves_after` (`resolutions_timing`). Both surface as
@@ -529,10 +641,112 @@ def emit_event(
 # Resolution attempts — the bounded-defer counter.
 # ---------------------------------------------------------------------------
 
+def add_closing_snapshot(
+    *,
+    commitment_id: int,
+    entry_price: Numeric | None = None,
+    close_price: Numeric | None = None,
+    clv: Numeric | None = None,
+    clv_pct: Numeric | None = None,
+    status: Literal["captured", "missed"] = "captured",
+    reason: str | None = None,
+    detail: dict[str, Any] | None = None,
+) -> ClosingSnapshot:
+    """Record the market's final opinion. One per commitment, ever.
+
+    `clv` is passed in already computed rather than derived here or on read.
+    A formula living in a query can be changed, and changing it silently
+    rewrites every historical measurement — freezing the number at capture
+    time is the same principle that freezes the commitment itself. Use
+    `core.agent.closing_line_value()` to produce it.
+
+    A `missed` snapshot is a tombstone, not a failure to write: it records that
+    the close could not be captured and stops the capture sweep asking forever.
+    Absent and unrecoverable are otherwise indistinguishable, and the close
+    happens exactly once.
+
+    The database enforces that a snapshot cannot predate `closes_at`, cannot
+    exist for a commitment that declared no close, and cannot be written twice.
+    All three surface as loud psycopg errors.
+
+    `capture_lag_seconds` is filled in by the trigger and returned. It is not a
+    parameter: how late a capture was is a measured fact, not something the
+    caller gets to assert. A close captured thirty minutes late on a market
+    that kept moving is a late price wearing the name "close", and the lag is
+    what makes that detectable afterwards instead of invisible.
+    """
+    if status == "missed" and not reason:
+        raise LedgerError(
+            "a missed snapshot must say why — it is a record of permanent "
+            "data loss, and an unexplained one is no better than an absent row."
+        )
+
+    with _pool().connection() as conn:
+        row = conn.execute(
+            """
+            INSERT INTO closing_snapshots
+                (commitment_id, status, entry_price, close_price,
+                 clv, clv_pct, reason, detail)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id, commitment_id, captured_at, status, clv, clv_pct,
+                      capture_lag_seconds
+            """,
+            (
+                commitment_id,
+                status,
+                _num(entry_price),
+                _num(close_price),
+                _num(clv),
+                _num(clv_pct),
+                reason,
+                Jsonb(detail or {}),
+            ),
+        ).fetchone()
+
+    assert row is not None
+    return ClosingSnapshot(
+        id=row[0], commitment_id=row[1], captured_at=row[2],
+        status=row[3], clv=row[4], clv_pct=row[5],
+        capture_lag_seconds=row[6],
+    )
+
+
+def record_selection(
+    commitment_id: int,
+    selected: bool,
+    note: str | None = None,
+) -> int:
+    """Record the operator's pick on a commitment.
+
+    Deliberately not a column on `commitments`. The slate is committed at T and
+    picked at T+30min, so a column would need an UPDATE against an immutable
+    table — but the stronger reason is that the pick is itself a commitment. A
+    database trigger rejects a selection made after the close, because a pick
+    recorded once the line has moved is hindsight, not judgement, and would
+    silently inflate any measurement of whether the operator beats the model.
+
+    `selected=False` is a real answer and worth storing: declining is a
+    decision, and it must not collapse into the same absent row as never
+    having looked.
+    """
+    with _pool().connection() as conn:
+        row = conn.execute(
+            """
+            INSERT INTO selections (commitment_id, selected, note)
+            VALUES (%s, %s, %s)
+            RETURNING id
+            """,
+            (commitment_id, selected, note),
+        ).fetchone()
+    assert row is not None
+    return row[0]
+
+
 def record_resolution_attempt(
     commitment_id: int,
     result: AttemptResult = "deferred",
     reason: str | None = None,
+    purpose: AttemptPurpose = "resolve",
 ) -> None:
     """Note that a resolution attempt did not produce an answer.
 
@@ -546,10 +760,11 @@ def record_resolution_attempt(
     with _pool().connection() as conn:
         conn.execute(
             """
-            INSERT INTO resolution_attempts (commitment_id, result, reason)
-            VALUES (%s, %s, %s)
+            INSERT INTO resolution_attempts
+                (commitment_id, result, reason, purpose)
+            VALUES (%s, %s, %s, %s)
             """,
-            (commitment_id, result, reason[:2000] if reason else None),
+            (commitment_id, result, reason[:2000] if reason else None, purpose),
         )
 
 
@@ -566,6 +781,7 @@ _DUE_SQL: Final = """
            (SELECT count(*) FROM resolution_attempts ra
              WHERE ra.commitment_id = c.id) AS attempts,
            now() - c.resolves_after AS overdue_by,
+           c.closes_at,
            COALESCE(
                json_agg(
                    json_build_object(
@@ -582,7 +798,7 @@ _DUE_SQL: Final = """
       JOIN agents a ON a.id = c.agent_id
       LEFT JOIN legs l ON l.commitment_id = c.id
       LEFT JOIN resolutions r ON r.commitment_id = c.id
-     WHERE c.resolves_after <= now()
+     WHERE (%(due_only)s = false OR c.resolves_after <= now())
        AND r.id IS NULL
        AND (%(agent_id)s::smallint IS NULL OR c.agent_id = %(agent_id)s)
        AND (%(include_test)s OR a.is_test = false)
@@ -614,10 +830,127 @@ def due_for_resolution(
     `TRACK_RECORD_FILTER`, because a scorer has no business looking at the
     unresolved set in the first place. Every row also carries `is_test`.
     """
+    return _unresolved(agent_id, limit, include_test, due_only=True)
+
+
+def open_commitments(
+    agent_id: int | None = None,
+    limit: int = 200,
+    *,
+    include_test: bool = True,
+) -> list[PendingCommitment]:
+    """Every unresolved commitment, whether or not it is due yet.
+
+    This is what an agent needs to avoid committing twice to the same thing.
+    `due_for_resolution` deliberately cannot answer it: a position opened ten
+    minutes ago with a six-hour horizon is not due, so it is invisible there —
+    and an agent that can't see it will re-enter the same trade on every tick
+    until it is.
+
+    Exposed through `BaseAgent.open_commitments()` rather than as a fifth hook,
+    so the four-hook contract is unchanged and no adapter writes SQL.
+    """
+    return _unresolved(agent_id, limit, include_test, due_only=False)
+
+
+_CAPTURE_SQL: Final = """
+    SELECT c.id, c.agent_id, a.slug, a.is_test, c.kind, c.thesis, c.confidence,
+           c.payload, c.committed_at, c.resolves_after,
+           (SELECT count(*) FROM resolution_attempts ra
+             WHERE ra.commitment_id = c.id AND ra.purpose = 'capture')
+             AS attempts,
+           now() - c.closes_at AS overdue_by,
+           c.closes_at,
+           COALESCE(
+               json_agg(
+                   json_build_object(
+                       'subject',   l.subject,
+                       'market',    l.market,
+                       'line',      l.line,
+                       'direction', l.direction,
+                       'size',      l.size
+                   ) ORDER BY l.leg_index
+               ) FILTER (WHERE l.id IS NOT NULL),
+               '[]'::json
+           ) AS legs
+      FROM commitments c
+      JOIN agents a ON a.id = c.agent_id
+      LEFT JOIN legs l ON l.commitment_id = c.id
+      LEFT JOIN closing_snapshots s ON s.commitment_id = c.id
+     WHERE c.closes_at IS NOT NULL
+       AND c.closes_at <= now()
+       AND s.id IS NULL
+       AND (%(agent_id)s::smallint IS NULL OR c.agent_id = %(agent_id)s)
+       AND (%(include_test)s OR a.is_test = false)
+     GROUP BY c.id, a.id
+     ORDER BY c.closes_at ASC
+     LIMIT %(limit)s
+"""
+
+
+def due_for_capture(
+    agent_id: int | None = None,
+    limit: int = 100,
+    *,
+    include_test: bool = True,
+) -> list[PendingCommitment]:
+    """Commitments past their close with no snapshot yet.
+
+    Oldest close first. A missed snapshot is permanent data loss — the close
+    happens once — so this drains in the order the closes actually happened,
+    giving the oldest and most at-risk the first attempt.
+
+    A `missed` tombstone counts as a snapshot and removes the row from this
+    set, which is what stops a permanently uncapturable commitment being
+    retried forever.
+    """
+    with _pool().connection() as conn:
+        rows = conn.execute(
+            _CAPTURE_SQL,
+            {"agent_id": agent_id, "limit": limit, "include_test": include_test},
+        ).fetchall()
+
+    return [
+        PendingCommitment(
+            id=row[0], agent_id=row[1], agent_slug=row[2], is_test=row[3],
+            kind=row[4], thesis=row[5], confidence=row[6], payload=row[7],
+            committed_at=row[8], resolves_after=row[9],
+            attempts=row[10], overdue_by=row[11], closes_at=row[12],
+            legs=_legs_from_json(row[13]),
+        )
+        for row in rows
+    ]
+
+
+def _legs_from_json(rows: Sequence[dict[str, Any]]) -> tuple[Leg, ...]:
+    return tuple(
+        Leg(
+            subject=leg["subject"],
+            market=leg["market"],
+            line=_num(leg["line"]),
+            direction=leg["direction"],
+            size=_num(leg["size"]),
+        )
+        for leg in rows
+    )
+
+
+def _unresolved(
+    agent_id: int | None,
+    limit: int,
+    include_test: bool,
+    *,
+    due_only: bool,
+) -> list[PendingCommitment]:
     with _pool().connection() as conn:
         rows = conn.execute(
             _DUE_SQL,
-            {"agent_id": agent_id, "limit": limit, "include_test": include_test},
+            {
+                "agent_id": agent_id,
+                "limit": limit,
+                "include_test": include_test,
+                "due_only": due_only,
+            },
         ).fetchall()
 
     return [
@@ -634,16 +967,8 @@ def due_for_resolution(
             resolves_after=row[9],
             attempts=row[10],
             overdue_by=row[11],
-            legs=tuple(
-                Leg(
-                    subject=leg["subject"],
-                    market=leg["market"],
-                    line=_num(leg["line"]),
-                    direction=leg["direction"],
-                    size=_num(leg["size"]),
-                )
-                for leg in row[12]
-            ),
+            closes_at=row[12],
+            legs=_legs_from_json(row[13]),
         )
         for row in rows
     ]

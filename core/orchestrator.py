@@ -81,6 +81,10 @@ class Schedule:
 
     run: BaseTrigger | None
     sweep: BaseTrigger
+    #: Close-capture cadence. Required for an agent with captures_close=True,
+    #: ignored otherwise. Run it TIGHTER than the sweep: a missed resolution
+    #: retries until it voids, but a missed close is gone for good.
+    capture: BaseTrigger | None = None
     #: Bounds lateness independently per agent: a crypto tick is stale in
     #: minutes, a props sweep against a game slate is not.
     misfire_grace: int = DEFAULT_MISFIRE_GRACE
@@ -123,6 +127,14 @@ class Registration:
     #: postponed NFL game is legitimately unresolvable for a week, a crypto
     #: feed silent for an hour is broken.
     defer_policy: DeferPolicy | None = None
+    #: Patience for close capture. Separate from defer_policy because the
+    #: failure costs differ: an unresolved commitment can wait, an uncaptured
+    #: close cannot be recovered.
+    capture_policy: DeferPolicy | None = None
+    #: Most commitments this agent may write in one tick. Overrides the
+    #: adapter's own default. A board-committing adapter must raise it
+    #: deliberately; core refuses the whole slate rather than half-writing one.
+    max_slate_size: int | None = None
     enabled: bool = True
 
 
@@ -170,6 +182,22 @@ class Orchestrator:
             )
         if registration.defer_policy is not None:
             registration.agent.defer_policy = registration.defer_policy
+        if registration.capture_policy is not None:
+            registration.agent.capture_policy = registration.capture_policy
+        if registration.max_slate_size is not None:
+            registration.agent.slate_cap = registration.max_slate_size
+        if registration.agent.captures_close and registration.schedule.capture is None:
+            raise ValueError(
+                f"{slug!r} sets captures_close=True but its Schedule has no "
+                f"capture trigger. An opted-in agent with no capture job would "
+                f"accumulate commitments whose close is silently never taken — "
+                f"and a close missed is a measurement lost for good."
+            )
+        if registration.schedule.capture is not None and not registration.agent.captures_close:
+            log.warning(
+                "%s has a capture schedule but captures_close=False — "
+                "the capture job will not be scheduled", slug,
+            )
         self._registry[slug] = registration
         log.info(
             "registered %s (run=%s, sweep=%s, patience=%d attempts / %s)",
@@ -179,6 +207,8 @@ class Orchestrator:
             registration.agent.defer_policy.max_attempts,
             registration.agent.defer_policy.max_overdue,
         )
+        if registration.agent.slate_cap != BaseAgent.max_slate_size:
+            log.info("  %s slate cap: %d", slug, registration.agent.slate_cap)
 
     def register_all(self, registrations: Iterable[Registration]) -> None:
         for registration in registrations:
@@ -219,6 +249,25 @@ class Orchestrator:
                 slug, outcome.voided,
             )
 
+    def _capture_agent(self, slug: str) -> None:
+        """Body of a `:capture` job."""
+        if self._stopping.is_set():
+            log.info("shutting down, skipping %s capture", slug)
+            return
+        agent = self._registry[slug].agent
+        outcome = agent.capture_due()
+        if outcome.due:
+            log.info(
+                "%s capture: due=%d captured=%d deferred=%d missed=%d failed=%d",
+                slug, outcome.due, outcome.captured, outcome.deferred,
+                outcome.missed, outcome.failed,
+            )
+        if outcome.missed:
+            log.warning(
+                "%s permanently lost the close on %d commitment(s) — "
+                "unrecoverable, check capture cadence", slug, outcome.missed,
+            )
+
     # -- lifecycle ----------------------------------------------------------
 
     def _wire(self) -> None:
@@ -250,6 +299,17 @@ class Orchestrator:
                 misfire_grace_time=schedule.misfire_grace,
                 replace_existing=True,
             )
+
+            if registration.agent.captures_close and schedule.capture is not None:
+                self._scheduler.add_job(
+                    self._capture_agent,
+                    trigger=schedule.capture,
+                    args=[slug],
+                    id=f"{slug}:capture",
+                    name=f"{slug} capture",
+                    misfire_grace_time=schedule.misfire_grace,
+                    replace_existing=True,
+                )
 
     def start(self) -> None:
         """Prove the database works, wire the jobs, then start ticking.
@@ -354,11 +414,33 @@ class Orchestrator:
 def build_default() -> Orchestrator:
     """The live roster. Grows one `Registration` at a time.
 
-    Empty for now by design: part 4's fake agent is wired in `scripts/`, not
-    here, so nothing can accidentally ship a harness agent to production.
+    Harness agents are deliberately absent: the fake agent is wired in
+    `scripts/run_fake.py`, so nothing can accidentally ship one to production.
     """
+    from adapters.crypto import CRYPTO_DEFER_POLICY, CryptoAgent
+
     orchestrator = Orchestrator()
-    # Step 3 of the build order adds crypto here. Nothing before that.
+    orchestrator.register(
+        Registration(
+            agent=CryptoAgent(),
+            schedule=Schedule(
+                # Quarter-hourly. The rule reads hourly candles, so ticking
+                # faster would re-examine the same bar; jitter keeps us off
+                # the exact minute boundary the whole internet polls on.
+                run=every(minutes=15, jitter=45),
+                # Resolution is on its own clock: positions are judged six
+                # hours out, so a half-hourly sweep bounds how long a resolved
+                # position sits unscored without hammering the feed.
+                sweep=every(minutes=30, jitter=60),
+                misfire_grace=300,
+            ),
+            # Explicit even though it matches the adapter's own default —
+            # CLAUDE.md §9.2 wants patience chosen per agent, and a default
+            # that happens to be right is still a default nobody chose.
+            defer_policy=CRYPTO_DEFER_POLICY,
+        )
+    )
+    # Step 5 adds equities here. One file, one Registration.
     return orchestrator
 
 

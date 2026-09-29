@@ -22,14 +22,14 @@ import argparse
 import logging
 import sys
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from dotenv import load_dotenv
 
-from adapters._fake import HORIZON, SCRIPT, build
+from adapters._fake import CAPTURE_DELAY, HORIZON, SCRIPT, build
 from core import ledger
 from core.orchestrator import Orchestrator, Registration, Schedule, every
 
@@ -51,6 +51,7 @@ def drive() -> int:
     log.info("patience: %d attempts / %s",
              agent.defer_policy.max_attempts, agent.defer_policy.max_overdue)
 
+    started = datetime.now(timezone.utc)
     print(f"\n-- committing {len(SCRIPT)} scripted commitments --")
     committed: list[int] = []
     for _ in range(len(SCRIPT)):
@@ -71,10 +72,38 @@ def drive() -> int:
         print("\nNothing committed. Nothing to sweep.")
         return 1
 
+    # -- the third moment: capture the close BEFORE anything resolves -------
+    #
+    # This runs first on purpose. The close happens once and cannot be
+    # recovered, so the capture job must never be starved by the resolution
+    # sweep — which is also why the orchestrator schedules it more tightly.
+    closing = [sp for sp in SCRIPT if sp.closes_in is not None]
+    if closing:
+        soonest = min(sp.closes_in for sp in closing)
+        print(f"\n-- waiting {soonest.total_seconds():.0f}s for the close, "
+              f"then capturing --")
+        print("   (the first attempt is scripted to find the market still open)")
+        time.sleep(soonest.total_seconds() + 1)
+
+        for i in range(1, MAX_SWEEPS + 1):
+            c = agent.capture_due()
+            if c.due == 0:
+                print(f"   capture {i}: nothing due — done")
+                break
+            print(f"   capture {i}: due={c.due} captured={c.captured} "
+                  f"deferred={c.deferred} missed={c.missed} failed={c.failed}")
+            if c.deferred:
+                print("              ^ market still open — the postponement path")
+            if c.captured:
+                print("              ^ close snapshotted, CLV computed and stored")
+            time.sleep(SWEEP_PAUSE.total_seconds())
+
     wait = HORIZON.total_seconds() + 2
-    print(f"\n-- waiting {wait:.0f}s for resolves_after to pass --")
+    print(f"\n-- waiting for resolves_after to pass --")
     print("   (resolutions before then are rejected by the resolutions_timing trigger)")
-    time.sleep(wait)
+    remaining = wait - (datetime.now(timezone.utc) - started).total_seconds()
+    if remaining > 0:
+        time.sleep(remaining)
 
     print("\n-- sweeping --")
     for i in range(1, MAX_SWEEPS + 1):
@@ -103,7 +132,12 @@ def orchestrated(seconds: int) -> int:
     orchestrator.register(
         Registration(
             agent=agent,
-            schedule=Schedule(run=every(seconds=5), sweep=every(seconds=10)),
+            schedule=Schedule(
+                run=every(seconds=5),
+                sweep=every(seconds=10),
+                # Tighter than the sweep: a missed close is unrecoverable.
+                capture=every(seconds=5),
+            ),
         )
     )
     orchestrator.start()
