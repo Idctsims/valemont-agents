@@ -827,11 +827,16 @@ class BaseAgent[Obs, Th](ABC):
         seen: dict[tuple[str, str, str | None, str | None], int] = {}
         for index, proposal in enumerate(slate):
             for leg in proposal.legs:
+                # The line compares NUMERICALLY, not as text. `str(Decimal(...))`
+                # preserves trailing zeros, so 25.5 and 25.50 produced different
+                # keys and two permanent rows were written for one position.
+                # Decimal equality ignores scale and Python guarantees equal
+                # numbers hash equal, so the bare Decimal is a correct dict key.
                 identity = (
                     leg.subject,
                     leg.market,
                     leg.direction,
-                    None if leg.line is None else str(Decimal(str(leg.line))),
+                    None if leg.line is None else Decimal(str(leg.line)),
                 )
                 if identity in seen:
                     raise AgentError(

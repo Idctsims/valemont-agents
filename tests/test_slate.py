@@ -69,10 +69,42 @@ class ExactDuplicates(LedgerTestCase):
     def test_float_and_decimal_spellings_of_one_line_are_the_same_leg(self) -> None:
         self.assert_refused_whole([proposal("A", line=25.5), proposal("A", line=D("25.5"))])
 
-    @unittest.expectedFailure
     def test_trailing_zero_spelling_is_the_same_leg(self) -> None:
-        # Known gap: identity compares str(Decimal), so 25.5 and 25.50 differ.
+        # Was an expectedFailure: identity compared str(Decimal), which keeps
+        # trailing zeros, so these wrote two permanent rows for one position.
         self.assert_refused_whole([proposal("A", line=D("25.5")), proposal("A", line=D("25.50"))])
+
+    def test_many_spellings_of_one_line_all_collapse(self) -> None:
+        """Every spelling of the same number is the same leg.
+
+        The scale-preserving ones (25.50, 2.55E+1) are what the text comparison
+        missed; int-vs-Decimal is the same question one step further out.
+        """
+        for label, line in [
+            ("trailing zeros", D("25.500")),
+            ("exponent form", D("2.55E+1")),
+            ("float", 25.5),
+            ("string", "25.5"),
+        ]:
+            with self.subTest(spelling=label):
+                self.assert_refused_whole(
+                    [proposal("A", line=D("25.5")), proposal("A", line=line)]
+                )
+
+    def test_integer_line_spellings_collapse(self) -> None:
+        for line in (D("25"), D("25.0"), D("25.00"), 25, "25"):
+            with self.subTest(spelling=repr(line)):
+                self.assert_refused_whole(
+                    [proposal("A", line=D("25")), proposal("A", line=line)]
+                )
+
+    def test_genuinely_different_lines_still_pass(self) -> None:
+        """The fix must not over-collapse: 25.5 and 25.51 are different bets."""
+        outcome = ScriptedAgent(
+            proposals=[proposal("A", line=D("25.50")), proposal("A", line=D("25.51"))]
+        ).run_once()
+        self.assertEqual(outcome.status, "ok")
+        self.assertEqual(len(outcome.commitment_ids), 2)
 
 
 class NearDuplicatesAllowed(LedgerTestCase):
