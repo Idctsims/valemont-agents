@@ -72,6 +72,7 @@ adapters/      Domain specifics ONLY. Thin.
 db/            Numbered SQL migrations. Committed to git.
 dashboard/     Next.js. Reads from the API, never from the DB directly.
 scripts/       One-off utilities, health checks.
+tests/         Invariant suite. Stubbed ledger, no DB, no network. See §6.
 reference/     Cloned third-party repos for reading. GITIGNORED.
 ```
 
@@ -169,6 +170,21 @@ apply a migration programmatically.
 - Secrets in `.env`, which is gitignored. `.env.example` documents the keys.
 - Fail loudly. A silent exception in a worker that runs at 3am is the single
   most likely way this project quietly dies.
+- **Run the suite before and after touching `core/` or an adapter:**
+
+  ```
+  python -m unittest discover -s tests -t .
+  ```
+
+  Stdlib `unittest`, no extra dependency, under a second. Every ledger
+  function is stubbed, the real pool and the network raise, and every test
+  fails if anything was written as a non-test agent. It covers the invariants
+  this file states — §9 risk math and gaming band, §9.1 stop-as-exit, §10 CLV,
+  bounded defer/void, close capture and tombstones, slate isolation and
+  refusals, event kinds. Run it first so you know the baseline was green; a
+  red suite before you start is a finding to report, not something to fix in
+  passing. A verification claim that is not in `tests/` is a claim that exists
+  only in a chat transcript — add the test.
 
 ---
 
