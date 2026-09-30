@@ -30,16 +30,18 @@ REAL_AGENTS: dict[str, int] = {
     "crypto": 1, "equities": 2, "prizepicks": 3, "kalshi": 5,
 }
 #: Harness agents the suites run as. is_test = true.
-TEST_AGENTS: dict[str, int] = {"_fake": 4, "_test": 90, "_test_crypto": 91}
+TEST_AGENTS: dict[str, int] = {"_fake": 4, "_test": 90, "_test_crypto": 91,
+                               "_test_nfl_ml": 92}
 
 WRITES = frozenset({
     "start_run", "end_run", "commit", "add_resolution", "emit_event",
     "record_resolution_attempt", "add_closing_snapshot", "record_selection",
+    "record_model_version",
 })
 READS = frozenset({
     "agent_id", "agent_is_test", "agent_enabled", "due_for_resolution",
     "due_for_capture",
-    "open_commitments",
+    "open_commitments", "latest_model_version",
 })
 
 
@@ -64,6 +66,7 @@ class LedgerStub:
     due: list[PendingCommitment] = field(default_factory=list)
     capture: list[PendingCommitment] = field(default_factory=list)
     open: list[PendingCommitment] = field(default_factory=list)
+    model_versions: list[ledger.ModelVersion] = field(default_factory=list)
     agents: dict[str, tuple[int, bool]] = field(default_factory=dict)
     #: Slugs whose `agents.enabled` is false. Everything else reads as enabled.
     disabled: set[str] = field(default_factory=set)
@@ -151,6 +154,17 @@ class LedgerStub:
         if slug not in self.agents:
             raise ledger.LedgerError(f"No agent registered with slug {slug!r}.")
         return slug not in self.disabled
+
+    def latest_model_version(self, agent_id: int, model: str,
+                             before: datetime) -> ledger.ModelVersion | None:
+        self._record("latest_model_version", (agent_id, model, before), {}, agent_id)
+        usable = [m for m in self.model_versions
+                  if m.agent_id == agent_id and m.model == model and m.data_through < before]
+        return max(usable, key=lambda m: (m.data_through, m.id)) if usable else None
+
+    def record_model_version(self, **kwargs: Any) -> int:
+        self._record("record_model_version", (), kwargs, kwargs.get("agent_id"))
+        return next(self._ids)
 
     def start_run(self, agent_id: int, notes: str | None = None) -> int:
         self._record("start_run", (agent_id,), {"notes": notes}, agent_id)

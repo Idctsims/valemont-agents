@@ -68,7 +68,13 @@ adapters/      Domain specifics ONLY. Thin.
   crypto.py
   equities.py
   prizepicks.py
-  kalshi.py
+  nfl_ml.py       Kalshi NFL moneyline (nfl_spread.py, nfl_props.py to follow)
+venues/kalshi/ Shared by every Kalshi agent: read-only client, per-series fee
+               regimes, the edge gate, KalshiContractAgent (resolve + capture
+               written once). No SQL, no orders.
+sports/nfl/    Everything NFL: nflverse schedule/kickoff, team codes, injuries,
+               models. A new sport is a sibling package, not a rebuild.
+jobs/          Scheduled work that is not an agent (weekly model fits).
 db/            Numbered SQL migrations. Committed to git.
 dashboard/     Next.js. Reads from the API, never from the DB directly.
 scripts/       One-off utilities, health checks.
@@ -700,12 +706,11 @@ absent row as "I never looked."
 
 ## Current State (2026-09-30)
 
-- **Last migration applied: `db/007`** (confirmed live: real agents disabled). **`db/008`–`db/011` written, not yet pasted**: `settled` leg outcome, Kalshi NFL agent rows, `model_versions`, candle archive. Next new file is `db/012`.
-- **Six append-only tables, not five:** commitments, events, resolution_attempts, closing_snapshots, commitment_factors, selections.
-- **Tests:** `tests/` 124 (stub), `tests_live/` 57 (§2 triggers, UNIQUE, CHECKs, atomicity, attempt budgets). Run both with **`venv/Scripts/python.exe`**; the bare `python` has no psycopg.
-- **Step 4 done** (`_fake` canary). No real agent enabled yet; zero real-agent rows is expected. An agent runs only with BOTH a `Registration` AND `agents.enabled = true` (read at boot); `start()` refuses if nothing passes.
-- **Open:** adapters compute `resolves_after`/`closes_at` from the worker clock while the DB compares against its own; harmless at current margins (crypto 6h, `_fake` 15s vs ~2s skew). Not yet fixed; see Kalshi adapter notes.
-- **`tests_live` quarantine check counts non-test rows globally**, so a production agent writing during a run trips it. Expected, not a bug: rerun.
-- **Kalshi pillar (§8, owner decision):** commits into ML, spreads and props as separate agents, scored net of fees. Design `docs/kalshi_nfl.md`; candle collector `docs/kalshi_benchmark.md`. Roadmap NFL → CFB → NHL → tennis → MLB. **Maker fee coefficient pending from owner.**
-- **Pre-registration v1** `docs/preregistration_nfl.md` committed before any 2026 feature: holdout = 2026 weeks 1–3 minus BAL@DAL, LA@DEN, PHI@CHI (45 games). Fees per series from the API (makers charged on GAME/SPREAD/TOTAL/ANYTD only); inactive prop players settle at fair price.
-- **Next:** paste `db/008`–`db/011`; build the shared Kalshi layer and `nfl_ml`.
+- **Migrations:** `db/007` applied (confirmed live). **`db/008`–`db/011` written, not pasted** (`settled` leg outcome, NFL agent rows, `model_versions`, candle archive). Next file `db/012`.
+- **Six append-only tables, not five:** commitments, events, resolution_attempts, closing_snapshots, commitment_factors, selections (plus `model_versions` and the candle archive once pasted).
+- **Tests:** `tests/` 208, `tests_live/` 63 (6 skip until 008/010 are pasted). Run both with **`venv/Scripts/python.exe`**; bare `python` has no psycopg. The live quarantine check counts non-test rows globally, so a production write mid-run trips it: expected, rerun.
+- **Agents:** step 4 done (`_fake` canary). No real agent enabled; one runs only with BOTH a `Registration` AND `agents.enabled = true`. `nfl_ml` is registered, not enabled, and has no model fit.
+- **Kalshi pillar (§8, owner decision):** ML, spreads, props as separate agents, net of fees. Design `docs/kalshi_nfl.md`; pre-registration `docs/preregistration_nfl.md` (v1 + A1), holdout 2026 weeks 1–3 minus three games (45). **No 2026 feature computed yet.** Maker fees derive from each series' fetched `fee_type`.
+- **Built, awaiting review:** `venues/kalshi/`, `sports/nfl/`, `adapters/nfl_ml.py`, `jobs/fit_nfl_ml.py`.
+- **Open:** crypto and `_fake` still derive `resolves_after` from the worker clock (harmless at their margins; Kalshi agents use kickoff + API expiry).
+- **Next:** paste 008–011; `python -m jobs.fit_nfl_ml --through 2026-02-15T00:00:00Z --choose-lambda --dry-run` on 2025 dev, record λ by amendment; run the holdout (prereg §5).

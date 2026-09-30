@@ -467,7 +467,32 @@ def build_default() -> Orchestrator:
             defer_policy=CRYPTO_DEFER_POLICY,
         )
     )
-    # Step 5 adds equities here. One file, one Registration.
+    from adapters.nfl_ml import (
+        NFL_ML_CAPTURE_POLICY, NFL_ML_DEFER_POLICY, NflMoneylineAgent,
+    )
+
+    orchestrator.register(
+        Registration(
+            agent=NflMoneylineAgent(),
+            schedule=Schedule(
+                # Commit instant is kickoff − 24 h; a 15-minute tick commits
+                # within 15 minutes of it. Idle on every other tick.
+                run=every(minutes=15, jitter=30),
+                # Hourly: sized with the 264-attempt / 10-day resolution
+                # budget (preregistration_nfl.md §2.7).
+                sweep=every(hours=1, jitter=120),
+                # Every 10 minutes: sized with the 450-attempt / 72 h capture
+                # budget. The close is read from candles, so a late capture
+                # loses nothing; this cadence just bounds the wait.
+                capture=every(minutes=10, jitter=30),
+                misfire_grace=300,
+            ),
+            defer_policy=NFL_ML_DEFER_POLICY,
+            capture_policy=NFL_ML_CAPTURE_POLICY,
+        )
+    )
+    # Scheduled only once agents.enabled is true for nfl_ml (db/009 seeds it
+    # false; a later migration enables it after the holdout passes).
     return orchestrator
 
 

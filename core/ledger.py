@@ -54,6 +54,9 @@ __all__ = [
     "add_closing_snapshot",
     "record_selection",
     "due_for_capture",
+    "ModelVersion",
+    "record_model_version",
+    "latest_model_version",
     "close_pool",
 ]
 
@@ -65,7 +68,10 @@ __all__ = [
 
 Kind = Literal["paper_position", "prop_slip", "event_contract"]
 Direction = Literal["over", "under", "long", "short", "yes", "no"]
-LegResult = Literal["hit", "miss", "push", "void"]
+#: `settled` = the venue paid out a value strictly between 0 and 1 — a tie at
+#: $0.50, or Kalshi's "last fair price" for a long postponement or an inactive
+#: prop player (db/008). Not a push (no stake came back) and never a void.
+LegResult = Literal["hit", "miss", "push", "void", "settled"]
 Outcome = Literal["hit", "miss", "partial", "push", "void"]
 RunStatus = Literal["ok", "error"]
 EventKind = Literal[
@@ -751,6 +757,89 @@ def record_selection(
         ).fetchone()
     assert row is not None
     return row[0]
+
+
+# ---------------------------------------------------------------------------
+# Model versions — append-only fits (db/010). Written by a weekly fit job, read
+# by `form_thesis()`. Never edited: a bad fit is superseded, not repaired.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True, slots=True)
+class ModelVersion:
+    """One fitted model, exactly as the fit job recorded it."""
+
+    id: int
+    agent_id: int
+    model: str
+    fitted_at: datetime
+    data_through: datetime
+    params: dict[str, Any]
+    diagnostics: dict[str, Any]
+
+
+def record_model_version(
+    *,
+    agent_id: int,
+    model: str,
+    data_through: datetime,
+    params: dict[str, Any],
+    diagnostics: dict[str, Any] | None = None,
+    usable: bool = True,
+    reason: str | None = None,
+) -> int:
+    """Append one fit. `fitted_at` is the database's; `data_through` is the fence.
+
+    `data_through` is the latest kickoff whose data the fit saw. The database
+    refuses a fit whose fence is later than the moment it was recorded, and a
+    fit marked unusable without a reason (db/010).
+    """
+    if data_through.tzinfo is None:
+        raise LedgerError("data_through must be timezone-aware.")
+    with _pool().connection() as conn:
+        row = conn.execute(
+            """
+            INSERT INTO model_versions
+                (agent_id, model, data_through, params, diagnostics, usable, reason)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (agent_id, model, data_through, Jsonb(params),
+             Jsonb(diagnostics or {}), usable, reason),
+        ).fetchone()
+    assert row is not None
+    return row[0]
+
+
+def latest_model_version(
+    agent_id: int, model: str, before: datetime
+) -> ModelVersion | None:
+    """The newest usable fit whose data ends strictly before `before`.
+
+    `before` is the commit instant. Filtering on `data_through < before` is the
+    walk-forward fence at read time: a thesis formed at t can never load a fit
+    that saw t or anything after it (preregistration_nfl.md §4.2). Returns None
+    when no such fit exists; the caller stands down rather than guessing.
+    """
+    if before.tzinfo is None:
+        raise LedgerError("before must be timezone-aware.")
+    with _pool().connection() as conn:
+        row = conn.execute(
+            """
+            SELECT id, agent_id, model, fitted_at, data_through, params, diagnostics
+              FROM model_versions
+             WHERE agent_id = %s AND model = %s AND usable
+               AND data_through < %s
+             ORDER BY data_through DESC, id DESC
+             LIMIT 1
+            """,
+            (agent_id, model, before),
+        ).fetchone()
+    if row is None:
+        return None
+    return ModelVersion(
+        id=row[0], agent_id=row[1], model=row[2], fitted_at=row[3],
+        data_through=row[4], params=row[5], diagnostics=row[6],
+    )
 
 
 def record_resolution_attempt(
