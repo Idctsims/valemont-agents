@@ -30,6 +30,8 @@ wins for anything evaluated.
 | # | Date | Change | Reason |
 |---|---|---|---|
 | A1 | 2026-09-30 | Injury status is the team's final report for the game week, not "reports dated before t's day". | nflverse injury files carry no report date; the day-level rule could not be enforced. Made before any 2026 feature was computed. |
+| A1c | 2026-09-30 | **Owner condition on A1:** publication before t is verified per game against the NFL's latest permitted release (4:00 p.m. ET: Wednesday for Thursday games, Thursday for Saturday, Friday for Sunday, Saturday for Monday). If that deadline is after t, or the game is on another weekday, or `location` is Neutral (international, Super Bowl), the injury factor and prop eligibility-by-report are **missing**, never assumed. | A report that may not have been public at t is a leak. Thanksgiving 12:30 p.m. kickoffs fail the check (commit Wednesday 12:30 < Wednesday 4:00 p.m.). Tested in `tests/test_nfl_injury_timing.py`. |
+| A2 | 2026-09-30 | λ is chosen by **walk-forward, time-ordered validation** on 2025 only: each week from the 5th onward is predicted by a fit on strictly earlier weeks; score = mean squared error over validated rows. Replaces leave-one-week-out. | Leave-one-week-out trains on weeks after the one it validates. Owner-directed; no random folds anywhere. Tested (`LambdaIsChosenWalkForward`). |
 
 ---
 
@@ -64,7 +66,7 @@ may influence a decision at t.
 | Kickoff | nflverse `games.csv` (`gameday` + `gametime`, America/New_York → UTC) | Live: fetched at commit, stored with source and fetch time. Backtest: nflverse's current value (schedule history is not archived; disclosed). |
 | Kalshi prices | 1-minute and hourly candlesticks (live and historical tiers) | Only candles with `end_period_ts ≤ t`. Live commits use the live market snapshot at t. |
 | Rest days | nflverse `away_rest`, `home_rest` | Schedule-derived, known in advance. |
-| Injury status | nflverse injury reports (`injuries_{season}.csv`) | **Amended 2026-09-30 (A1).** The file has no report date, only season and week, so the status used is the team's **final report for that game week** (`report_status`). The NFL publishes that report ≥ ~28 h before kickoff in every standard slot (Friday for Sunday, Saturday for Monday, the day before for Thursday), so it precedes the commit instant kickoff − 24 h. Live: the report as fetched at t. Backtest: week-level; a status changed after publication cannot be distinguished (disclosed). |
+| Injury status | nflverse injury reports (`injuries_{season}.csv`) | **Amended 2026-09-30 (A1).** The file has no report date, only season and week, so the status used is the team's **final report for that game week** (`report_status`), **used only when its publication is verified to precede t (A1c)**: the policy deadline for the game's weekday at 4:00 p.m. ET must be ≤ t; otherwise the value is missing. Live: the report as fetched at t, same check. Backtest: week-level; a status changed after publication cannot be distinguished (disclosed). |
 | Player stats, snaps | nflverse weekly/player stats | Games with kickoff < t. |
 | Fees | `GET /series/{s}` + `GET /series/fee_changes?show_historical=true` | The fee regime in force at t (e.g., `KXNFLGAME` became `quadratic_with_maker_fees` on 2026-01-01; before that date its maker fee is 0). |
 
@@ -186,8 +188,8 @@ Each factor row's `value` is `β_i · x_i` in probability points. A NULL factor
 contributes nothing and gets no row.
 
 **Fitting.** Target `y = close_mid_home − mid_home(t)`. Ridge regression, no
-intercept, λ chosen by leave-one-week-out on development data and then fixed
-(recorded here by amendment before the holdout). Rows with a NULL x are
+intercept, λ chosen by walk-forward validation on 2025 development data (A2)
+and then fixed (recorded here by amendment before the holdout). Rows with a NULL x are
 dropped from that coefficient's fit (per-factor complete cases). **Refit
 weekly**, walk-forward, on every game with kickoff before the refit instant.
 
@@ -243,7 +245,7 @@ the largest edge per (player, stat) passing §2.2. Slate cap raised to 150.
 
 ### 3.4 Left open for development data, to be fixed by amendment before the holdout
 
-1. Ridge λ for §3.1 and §3.2.
+1. Ridge λ for §3.1 and §3.2 (walk-forward, A2).
 2. Yards family per stat (negative binomial vs gamma) and prop dispersions.
 3. Nothing else. Margins, timing, factors, gates, series and evaluation are
    fixed now.

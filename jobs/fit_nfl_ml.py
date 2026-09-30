@@ -13,7 +13,8 @@ has seen it (preregistration_nfl.md §1.1, §5); forward fits may include those
 weeks only after that evaluation. The flag exists so crossing that line is a
 deliberate, visible act.
 
-**λ.** `--choose-lambda` runs leave-one-week-out over `LAMBDA_GRID` and prints
+**λ.** `--choose-lambda` runs walk-forward, time-ordered validation over `LAMBDA_GRID` (each week
+fitted on strictly earlier weeks only, amendment A2) and prints
 the scores — a development-data step whose result is then recorded in the
 pre-registration by amendment. Every later fit passes `--lambda` explicitly.
 """
@@ -77,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
     scores = None
     if args.choose_lambda:
         lam, scores = choose_lambda([(r.week_key, r.features.values, r.y) for r in rows])
-        log.info("leave-one-week-out scores: %s → λ=%s", scores, lam)
+        log.info("walk-forward scores: %s → λ=%s", scores, lam)
     else:
         lam = args.lam
     model = fit_ridge(as_fit_rows(rows), lam)

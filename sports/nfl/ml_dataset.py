@@ -33,7 +33,7 @@ CLOSE_LOOKBACK = timedelta(hours=3)
 @dataclass(frozen=True, slots=True)
 class TrainingRow:
     game_id: str
-    week_key: int              # season * 100 + week, for leave-one-week-out
+    week_key: int              # season * 100 + week: orders time for walk-forward validation
     kickoff: datetime
     features: Features
     y: float
@@ -90,8 +90,8 @@ def build_rows(
         features = features_asof(
             t=t, kickoff=game.kickoff, hourly=hourly, minute=minute,
             home_rest=game.home_rest, away_rest=game.away_rest,
-            qb_out_home=injuries.qb_out(game.home, game.season, game.week, t, reports, passing, schedule),
-            qb_out_away=injuries.qb_out(game.away, game.season, game.week, t, reports, passing, schedule),
+            qb_out_home=injuries.qb_out(game, game.home, t, reports, passing, schedule),
+            qb_out_away=injuries.qb_out(game, game.away, t, reports, passing, schedule),
         )
         if features.mid_t is None:
             skipped[game.game_id] = "stale price at t"

@@ -11,7 +11,8 @@
 - `maker_share` comes from the series' `fee_type`: `quadratic` charges makers
   nothing; `quadratic_with_maker_fees` charges a quarter of the taker rate
   (0.0175); `quadratic_with_combo_maker_fees` a half (docs.kalshi.com
-  get-series). `flat` uses a different table and is refused rather than
+  get-series). **Confirmed by the owner 2026-09-30** against multiple
+  sources; the per-series API data remains authoritative. `flat` uses a different table and is refused rather than
   guessed.
 - `fee_type` and `fee_multiplier` are **never hard-coded per series**: they are
   read from `GET /series/{ticker}`, with their history from

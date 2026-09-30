@@ -18,8 +18,11 @@ checks exactly that (§4).
 Fitting is ridge regression with **per-factor complete cases**: a row missing
 factor i contributes nothing to the equations involving i (pairwise deletion in
 the normal equations), which is the pre-registered reading of "rows with a NULL
-x are dropped from that coefficient's fit". λ is chosen by leave-one-week-out
-on development data, then fixed by amendment.
+x are dropped from that coefficient's fit". λ is chosen by **walk-forward,
+time-ordered validation** on development data (amendment A2): every validated
+week is predicted by a fit on strictly earlier weeks only, never on a later
+one. No random folds, no leave-one-out across time. The chosen λ is then fixed
+by amendment.
 """
 
 from __future__ import annotations
@@ -51,9 +54,12 @@ STALE_AFTER: Final = timedelta(minutes=30)
 MIN_ANCHOR_VOLUME: Final = Decimal(100)
 REST_CLIP: Final = 7
 
-#: The leave-one-week-out search space for λ. Fixed here so the choice is
+#: The walk-forward search space for λ. Fixed here so the choice is
 #: reproducible; the chosen value is recorded in the pre-registration.
 LAMBDA_GRID: Final = (0.01, 0.1, 1.0, 10.0, 100.0)
+
+#: Validation starts once this many distinct weeks are available to train on.
+MIN_TRAIN_WEEKS: Final = 4
 
 
 def mid_at(
@@ -210,19 +216,31 @@ def _solve(a: list[list[float]], b: list[float]) -> list[float]:
 def choose_lambda(
     rows: Sequence[tuple[int, Mapping[str, Decimal | None], float]],
     grid: Iterable[float] = LAMBDA_GRID,
+    *,
+    min_train_weeks: int = MIN_TRAIN_WEEKS,
+    fit=None,
 ) -> tuple[float, dict[float, float]]:
-    """Leave-one-week-out: fit on every other week, score squared error on the
-    held-out week, pick the λ with the lowest mean. Rows are (week_key, x, y)."""
+    """Walk-forward λ selection. Rows are (week_key, x, y); week_key orders
+    time (season * 100 + week).
+
+    For each week w after the first `min_train_weeks`, fit on every row with
+    week_key < w and score squared error on week w. A λ's score is the mean
+    over all validated rows. Nothing from week w or later ever reaches the fit
+    that predicts week w. `fit` is injectable so a test can prove it.
+    """
+    fit = fit or fit_ridge
     weeks = sorted({w for w, _, _ in rows})
-    if len(weeks) < 2:
-        raise ValueError("leave-one-week-out needs at least two weeks")
+    if len(weeks) <= min_train_weeks:
+        raise ValueError(
+            f"walk-forward needs more than {min_train_weeks} weeks, got {len(weeks)}"
+        )
     scores: dict[float, float] = {}
     for lam in grid:
         err, n = 0.0, 0
-        for held in weeks:
-            model = fit_ridge([(x, y) for w, x, y in rows if w != held], lam)
-            for w, x, y in rows:
-                if w != held:
+        for w in weeks[min_train_weeks:]:
+            model = fit([(x, y) for wk, x, y in rows if wk < w], lam)
+            for wk, x, y in rows:
+                if wk != w:
                     continue
                 pred = sum(float(model.betas[f]) * float(v)
                            for f, v in x.items() if v is not None)

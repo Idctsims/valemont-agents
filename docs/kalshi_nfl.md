@@ -349,10 +349,10 @@ pnl             = return_on_risk(capital_at_risk, proceeds)
 
 | Policy | Measured from | `max_overdue` | Reason |
 |---|---|---|---|
-| resolution | `resolves_after` (≈ kickoff + 6 h) | **7 days** | 48 h postponement window + game length + fair-price determination + possible `disputed`/`amended` status. Worst legitimate delay, not convenience (§9.3). |
+| resolution | `resolves_after` (≈ kickoff + 6 h) | **10 days** (`nfl_ml`); **17 days** (`nfl_spread`, `nfl_props`) | From the contract terms (read 2026-09-30): FOOTBALLGAMEWIN expires ≤ one week after the game, FOOTBALLSPREAD and FOOTBALLENTITYSTAT ≤ the 15th day; settlement the next day; plus possible outcome review. Worst legitimate delay, not convenience (§9.3). Matches `preregistration_nfl.md` §2.7. |
 | capture | `closes_at` (scheduled kickoff) | **72 hours** | a postponed game that starts within Kalshi's 48 h, plus margin. Beyond that the game is fair-priced and capture raises `CloseUnavailable`. |
 
-`max_attempts` is sized to the sweep cadence (hourly sweep → 7 × 24 = 168+).
+`max_attempts` is sized to the sweep cadence (hourly sweep → 24 per day: 264 for 10 days, ~430 for 17).
 Both set in each `Registration`, never inherited (§9.3).
 
 ### Selections — your picks
@@ -492,8 +492,10 @@ peripheral, and none requires a fifth hook:
 
 ## 10. Open items
 
-1. **Maker fee coefficient** — from you; §7's maker model is incomplete
-   without it.
+1. ~~Maker fee coefficient~~ **Confirmed (owner, 2026-09-30):** maker
+   0.0175 = 0.25 × taker on `quadratic_with_maker_fees` series, 0 on
+   `quadratic`. The per-series `fee_type` fetched from the API is
+   authoritative (`venues/kalshi/fees.py`).
 2. Paste `db/007`; then `db/008` (collector tables, `kalshi_benchmark.md` §4),
    `model_versions`, and `agents` rows for `nfl_ml`, `nfl_spread`, `nfl_props`
    (and `kalshi_benchmark` for the collector) with `enabled = false` until each

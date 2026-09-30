@@ -272,3 +272,35 @@ class EndToEnd(LedgerTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LambdaIsChosenWalkForward(unittest.TestCase):
+    """Amendment A2: every validated week is fitted on strictly earlier weeks."""
+
+    def test_no_fit_ever_sees_the_week_it_predicts_or_later(self) -> None:
+        weeks = list(range(202501, 202519))
+        # Stamp each row's week into a feature so the spy can read it back.
+        rows = [(w, {"line_movement": D("0.01"), "line_movement_late": D("0.02"),
+                     "rest": D(w), "injury": D(0)}, 0.001)
+                for w in weeks for _ in range(3)]
+        trained_on: list[set[int]] = []
+
+        def spy(train, lam):
+            trained_on.append({int(x["rest"]) for x, _ in train})
+            return fit_ridge(train, lam)
+
+        choose_lambda(rows, grid=(1.0,), min_train_weeks=4, fit=spy)
+        validated = weeks[4:]
+        self.assertEqual(len(trained_on), len(validated))
+        for w, seen in zip(validated, trained_on):
+            self.assertEqual(seen, {x for x in weeks if x < w},
+                             f"fit predicting week {w} trained on {sorted(seen)}")
+
+    def test_the_first_weeks_are_never_validated_on_an_empty_past(self) -> None:
+        rows = [(w, {f: D("0.01") for f in FACTORS}, 0.0) for w in range(4)]
+        with self.assertRaises(ValueError):
+            choose_lambda(rows, min_train_weeks=4)
+
+    def test_it_is_not_random(self) -> None:
+        rows = [(w, {f: D(str(w / 100)) for f in FACTORS}, w / 1000) for w in range(12)]
+        self.assertEqual(choose_lambda(rows), choose_lambda(rows))

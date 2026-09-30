@@ -203,9 +203,9 @@ class NflMoneylineAgent(KalshiContractAgent[Observation, Thesis]):
             observed.append(GameObservation(
                 game=game, home=home, away=suffix[away_code],
                 hourly=tuple(hourly), minute=tuple(minute),
-                qb_out_home=injuries.qb_out(game.home, game.season, game.week, now,
+                qb_out_home=injuries.qb_out(game, game.home, now,
                                             reports, passing, schedule),
-                qb_out_away=injuries.qb_out(game.away, game.season, game.week, now,
+                qb_out_away=injuries.qb_out(game, game.away, now,
                                             reports, passing, schedule),
             ))
         return Observation(at=now, games=tuple(observed), model_version=fit.id,

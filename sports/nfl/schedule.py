@@ -81,6 +81,9 @@ class Game:
     kickoff: datetime          # UTC, aware
     away_rest: int | None
     home_rest: int | None
+    #: nflverse `location`: 'Home', or 'Neutral' for international and other
+    #: neutral-site games (London, the Super Bowl, a season opener abroad).
+    location: str = "Home"
 
     def kalshi_spellings(self) -> set[str]:
         return {a + h for a in kalshi_codes(self.away) for h in kalshi_codes(self.home)}
@@ -127,6 +130,7 @@ class NflSchedule:
                 kickoff=_kickoff(row["gameday"], row["gametime"]),
                 away_rest=_int_or_none(row.get("away_rest")),
                 home_rest=_int_or_none(row.get("home_rest")),
+                location=row.get("location") or "Home",
             ))
         if not games:
             raise ScheduleError(f"no games for seasons {sorted(wanted)} in the schedule")
