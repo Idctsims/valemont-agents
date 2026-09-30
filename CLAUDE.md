@@ -708,10 +708,10 @@ absent row as "I never looked."
 
 - **Migrations:** `db/007` applied (confirmed live). **`db/008`–`db/011` written, not pasted** (`settled` leg outcome, NFL agent rows, `model_versions`, candle archive). Next file `db/012`.
 - **Six append-only tables, not five:** commitments, events, resolution_attempts, closing_snapshots, commitment_factors, selections (plus `model_versions` and the candle archive once pasted).
-- **Tests:** `tests/` 208, `tests_live/` 63 (6 skip until 008/010 are pasted). Run both with **`venv/Scripts/python.exe`**; bare `python` has no psycopg. The live quarantine check counts non-test rows globally, so a production write mid-run trips it: expected, rerun.
+- **Tests:** `tests/` 246, `tests_live/` 63 (6 skip until 008/010 are pasted). Run both with **`venv/Scripts/python.exe`**; bare `python` has no psycopg. The live quarantine check counts non-test rows globally, so a production write mid-run trips it: expected, rerun.
 - **Agents:** step 4 done (`_fake` canary). No real agent enabled; one runs only with BOTH a `Registration` AND `agents.enabled = true`. `nfl_ml` is registered, not enabled, and has no model fit.
 - **Kalshi pillar (§8, owner decision):** ML, spreads, props as separate agents, net of fees. Design `docs/kalshi_nfl.md`; pre-registration `docs/preregistration_nfl.md` (v1 + A1), holdout 2026 weeks 1–3 minus three games (45). **No 2026 feature computed yet.** Maker fees derive from each series' fetched `fee_type`.
 - **Built, awaiting review:** `venues/kalshi/`, `sports/nfl/`, `adapters/nfl_ml.py`, `jobs/fit_nfl_ml.py`.
 - **Open:** crypto and `_fake` still derive `resolves_after` from the worker clock (harmless at their margins; Kalshi agents use kickoff + API expiry).
-- **`nfl_ml` dev fit done (A3, λ = 10):** coefficients near zero; max adjustment ≈ 1.6¢ vs ≥ 3.1¢ needed, so **it is expected to commit ~never**. Holdout runner next (built, committed before any run).
-- **Next:** review the holdout runner; paste 008–011 (in progress).
+- **`nfl_ml` dev fit done (A3, λ = 10):** coefficients near zero; max adjustment ≈ 1.6¢ vs ≥ 3.1¢ needed, so **it is expected to commit ~never**. Holdout runner `jobs/holdout_nfl_ml.py` committed, **never executed** (runs once, needs `--execute`).
+- **Next:** owner review of the runner, then execute the holdout once; 008–011 being pasted.
