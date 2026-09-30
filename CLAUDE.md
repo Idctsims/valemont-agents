@@ -249,6 +249,14 @@ there's one agent to debug, not four.
   chart. The dashboard (step 10) surfaces per-agent void rate over time as a
   first-class number, not buried in the event stream — and `resolution_attempts`
   is the table that feeds it. Treat a rising line as an outage, not as data.
+- **Per-game exposure across all agents is a first-class dashboard view.**
+  `nfl_ml` on CHI, `nfl_spread` on CHI −3.5 and `nfl_props` on CHI's QB overs
+  are correlated positions in three separate records. Per-agent scoring
+  cannot see that, and §9.2 forbids netting them into one number. So the
+  dashboard (step 10) shows, per game, every open commitment from every agent
+  (side, entry, size, capital at risk) side by side, **without** summing them
+  into a blended figure. The same correlation is why evaluation clusters
+  standard errors by game (`docs/preregistration_nfl.md` §2.5).
 - **Scoring methodology: CLV is the best available signal, and it is NOT
   profit.** Read both halves of that sentence before quoting either.
 
@@ -692,7 +700,7 @@ absent row as "I never looked."
 
 ## Current State (2026-09-30)
 
-- **Last migration applied: `db/006`.** `db/007` (disable crypto/equities/prizepicks) is written, **not yet pasted**. Next new file is `db/008`.
+- **Last migration applied: `db/007`** (confirmed live: real agents disabled). **`db/008`–`db/011` written, not yet pasted**: `settled` leg outcome, Kalshi NFL agent rows, `model_versions`, candle archive. Next new file is `db/012`.
 - **Six append-only tables, not five:** commitments, events, resolution_attempts, closing_snapshots, commitment_factors, selections.
 - **Tests:** `tests/` 124 (stub), `tests_live/` 57 (§2 triggers, UNIQUE, CHECKs, atomicity, attempt budgets). Run both with **`venv/Scripts/python.exe`**; the bare `python` has no psycopg.
 - **Step 4 done** (`_fake` canary). No real agent enabled yet; zero real-agent rows is expected. An agent runs only with BOTH a `Registration` AND `agents.enabled = true` (read at boot); `start()` refuses if nothing passes.
@@ -700,4 +708,4 @@ absent row as "I never looked."
 - **`tests_live` quarantine check counts non-test rows globally**, so a production agent writing during a run trips it. Expected, not a bug: rerun.
 - **Kalshi pillar (§8, owner decision):** commits into ML, spreads and props as separate agents, scored net of fees. Design `docs/kalshi_nfl.md`; candle collector `docs/kalshi_benchmark.md`. Roadmap NFL → CFB → NHL → tennis → MLB. **Maker fee coefficient pending from owner.**
 - **Pre-registration v1** `docs/preregistration_nfl.md` committed before any 2026 feature: holdout = 2026 weeks 1–3 minus BAL@DAL, LA@DEN, PHI@CHI (45 games). Fees per series from the API (makers charged on GAME/SPREAD/TOTAL/ANYTD only); inactive prop players settle at fair price.
-- **Next:** migrations from `db/008`, then the shared Kalshi layer and `nfl_ml`.
+- **Next:** paste `db/008`–`db/011`; build the shared Kalshi layer and `nfl_ml`.
