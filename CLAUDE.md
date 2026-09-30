@@ -717,7 +717,7 @@ absent row as "I never looked."
 ## Current State (2026-09-30)
 
 - **Migrations:** `db/007`–`db/011` being pasted by the owner. Next file `db/012`.
-- **Tests:** `tests/` 268, `tests_live/` 63 (6 skip until 008/010 are pasted). Run both with **`venv/Scripts/python.exe`**; bare `python` has no psycopg. The live quarantine check counts non-test rows globally: a production write mid-run trips it, rerun.
+- **Tests:** `tests/` 267, `tests_live/` 63 (6 skip until 008/010 are pasted). Run both with **`venv/Scripts/python.exe`**; bare `python` has no psycopg. The live quarantine check counts non-test rows globally: a production write mid-run trips it, rerun.
 - **Kalshi jobs run one at a time.** Concurrent jobs exhausted the 429 backoff once (logged in the pre-registration); backoff is now ~4 min total.
 - **Agents:** step 4 done (`_fake` canary). No real agent enabled; one runs only with BOTH a `Registration` AND `agents.enabled = true`.
 - **`nfl_ml`:** no dev signal (A3); holdout **PASS 0/45** (`docs/backtests/`), a plumbing check only; `resolve`/`capture_close` not yet exercised on real data. Kept as a forward live-pipeline test (§8); factors not revisited.
