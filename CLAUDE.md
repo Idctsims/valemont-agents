@@ -312,6 +312,15 @@ there's one agent to debug, not four.
   contracts and player props, and treat a liquid game market as a benchmark to
   measure against rather than a market to commit into.
 
+  **Decision (2026-09-30): Kalshi NFL game-winner markets are a BENCHMARK,
+  not a commit target.** v1 of the Kalshi work records their price paths,
+  closes and settlements, and commits nothing. Purpose: test `line_movement`
+  as a factor walk-forward on real data (design in `docs/kalshi_benchmark.md`).
+  **Committing into game markets requires recorded evidence of signal from
+  this data first**: a pre-registered walk-forward result, not an
+  impression. Until that exists, a session proposing game-market commitments
+  is proposing exactly what this section says to stop.
+
 ---
 
 ## 9. The pnl contract
@@ -659,8 +668,7 @@ absent row as "I never looked."
 - **Last migration applied: `db/006`.** `db/007` (disable crypto/equities/prizepicks) is written, **not yet pasted**. Next new file is `db/008`.
 - **Six append-only tables, not five:** commitments, events, resolution_attempts, closing_snapshots, commitment_factors, selections.
 - **Tests:** `tests/` 124 (stub), `tests_live/` 57 (§2 triggers, UNIQUE, CHECKs, atomicity, attempt budgets). Run both with **`venv/Scripts/python.exe`**; the bare `python` has no psycopg.
-- **Step 4 done** (Railway 24/7 proven by the `_fake` canary). No real agent is enabled yet, so zero real-agent rows is expected.
-- **An agent runs only with BOTH a `Registration` AND `agents.enabled = true`** (read at boot); `start()` refuses if that leaves nothing to schedule.
+- **Step 4 done** (`_fake` canary). No real agent enabled yet; zero real-agent rows is expected. An agent runs only with BOTH a `Registration` AND `agents.enabled = true` (read at boot); `start()` refuses if nothing passes.
 - **Open:** adapters compute `resolves_after`/`closes_at` from the worker clock while the DB compares against its own; harmless at current margins (crypto 6h, `_fake` 15s vs ~2s skew). Not yet fixed; see Kalshi adapter notes.
 - **`tests_live` quarantine check counts non-test rows globally**, so a production agent writing during a run trips it. Expected, not a bug: rerun.
-- **Next:** continue step 5.
+- **Next:** review `docs/kalshi_benchmark.md` (Kalshi v1 = NFL game-winner BENCHMARK per §8: weekly backfill collector, not a `BaseAgent`, tables in `db/008`). No code until reviewed.
