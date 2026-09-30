@@ -1,0 +1,179 @@
+{
+  "skipped": {
+    "player not matched to nflverse": 214,
+    "report publication unverifiable (A1c): ineligible": 108,
+    "fewer than 2 of last 4 team games active": 139,
+    "no report filed or listed Out/Doubtful": 8
+  },
+  "n_rungs": 15902,
+  "n_player_games": 2951,
+  "mae": {
+    "pass": {
+      "n": 350,
+      "mae_model": 59.04921507937803,
+      "anchor": 27.0,
+      "n_with_market_median": 333,
+      "mae_model_same_games": 59.1572641853104,
+      "mae_market_median": 55.86784174497792
+    },
+    "rush": {
+      "n": 797,
+      "mae_model": 21.994399242985534,
+      "anchor": 27.0,
+      "n_with_market_median": 663,
+      "mae_model_same_games": 22.762114640102975,
+      "mae_market_median": 21.777239232612708
+    },
+    "rec": {
+      "n": 1756,
+      "mae_model": 21.740410143773637,
+      "anchor": 27.0,
+      "n_with_market_median": 1265,
+      "mae_model_same_games": 22.766038846529487,
+      "mae_market_median": 21.87184949702317
+    }
+  },
+  "fair_value_rungs_excluded_from_calibration": 55,
+  "calibration": {
+    "n": 15847,
+    "brier_model": 0.21397767751077817,
+    "brier_market_mid": 0.20543684135798573,
+    "mean_abs_model_minus_mid": 0.1110130059378614,
+    "reliability_model": [
+      {
+        "mean_p": 0.0741,
+        "hit_rate": 0.1155,
+        "n": 1584
+      },
+      {
+        "mean_p": 0.1588,
+        "hit_rate": 0.2063,
+        "n": 1585
+      },
+      {
+        "mean_p": 0.2137,
+        "hit_rate": 0.2662,
+        "n": 1585
+      },
+      {
+        "mean_p": 0.263,
+        "hit_rate": 0.3163,
+        "n": 1584
+      },
+      {
+        "mean_p": 0.3127,
+        "hit_rate": 0.3785,
+        "n": 1585
+      },
+      {
+        "mean_p": 0.3645,
+        "hit_rate": 0.4347,
+        "n": 1585
+      },
+      {
+        "mean_p": 0.4228,
+        "hit_rate": 0.4741,
+        "n": 1584
+      },
+      {
+        "mean_p": 0.4905,
+        "hit_rate": 0.5426,
+        "n": 1585
+      },
+      {
+        "mean_p": 0.5805,
+        "hit_rate": 0.5861,
+        "n": 1585
+      },
+      {
+        "mean_p": 0.7499,
+        "hit_rate": 0.6978,
+        "n": 1585
+      }
+    ],
+    "reliability_market": [
+      {
+        "mean_p": 0.0772,
+        "hit_rate": 0.0928,
+        "n": 1584
+      },
+      {
+        "mean_p": 0.1556,
+        "hit_rate": 0.1855,
+        "n": 1585
+      },
+      {
+        "mean_p": 0.2218,
+        "hit_rate": 0.2423,
+        "n": 1585
+      },
+      {
+        "mean_p": 0.2822,
+        "hit_rate": 0.3359,
+        "n": 1584
+      },
+      {
+        "mean_p": 0.3442,
+        "hit_rate": 0.3924,
+        "n": 1585
+      },
+      {
+        "mean_p": 0.418,
+        "hit_rate": 0.4454,
+        "n": 1585
+      },
+      {
+        "mean_p": 0.4809,
+        "hit_rate": 0.4628,
+        "n": 1584
+      },
+      {
+        "mean_p": 0.5334,
+        "hit_rate": 0.5104,
+        "n": 1585
+      },
+      {
+        "mean_p": 0.6229,
+        "hit_rate": 0.6082,
+        "n": 1585
+      },
+      {
+        "mean_p": 0.7564,
+        "hit_rate": 0.7426,
+        "n": 1585
+      }
+    ]
+  },
+  "edge": {
+    "taker": {
+      "n_rungs": 15096,
+      "edge_max": 0.5076525604419723,
+      "edge_p99": 0.29580819398687813,
+      "edge_p90": 0.16293864390964252,
+      "share_rungs_edge_ge_margin": 0.445217276099629,
+      "gated_candidates_one_per_player_stat": 1777,
+      "gated_mean_R": -0.007801442358098458,
+      "gated_mean_R_game_bootstrap_95ci": [
+        -0.07340372537975969,
+        0.057707989338227336
+      ],
+      "note": "taker at the ask plus the quadratic fee"
+    },
+    "maker": {
+      "n_rungs": 15096,
+      "edge_max": 0.99,
+      "edge_p99": 0.7634421861779312,
+      "edge_p90": 0.333045099348266,
+      "share_rungs_edge_ge_margin": 0.9095786963434023,
+      "gated_candidates_one_per_player_stat": 2341,
+      "gated_mean_R": 0.19643177473930878,
+      "gated_mean_R_game_bootstrap_95ci": [
+        0.11841120832052272,
+        0.2779166602597304
+      ],
+      "note": "maker assumes a fill at the bid; adverse selection is NOT modelled here"
+    }
+  },
+  "margin": 0.04,
+  "max_spread": 0.08
+}

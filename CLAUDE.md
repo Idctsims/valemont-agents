@@ -717,10 +717,10 @@ absent row as "I never looked."
 ## Current State (2026-09-30)
 
 - **Migrations:** `db/007`–`db/011` being pasted by the owner. Next file `db/012`.
-- **Tests:** `tests/` 267, `tests_live/` 63 (6 skip until 008/010 are pasted). Run both with **`venv/Scripts/python.exe`**; bare `python` has no psycopg. The live quarantine check counts non-test rows globally: a production write mid-run trips it, rerun.
+- **Tests:** `tests/` 268, `tests_live/` 63 (6 skip until 008/010 are pasted). Run both with **`venv/Scripts/python.exe`**; bare `python` has no psycopg. The live quarantine check counts non-test rows globally: a production write mid-run trips it, rerun.
 - **Kalshi jobs run one at a time.** Concurrent jobs exhausted the 429 backoff once (logged in the pre-registration); backoff is now ~4 min total.
 - **Agents:** step 4 done (`_fake` canary). No real agent enabled; one runs only with BOTH a `Registration` AND `agents.enabled = true`.
 - **`nfl_ml`:** no dev signal (A3); holdout **PASS 0/45** (`docs/backtests/`), a plumbing check only; `resolve`/`capture_close` not yet exercised on real data. Kept as a forward live-pipeline test (§8); factors not revisited.
 - **`nfl_spread`:** dev fit shows no signal (λ at grid max, out-of-sample worse than zero, max ≈ 0.3pp vs 5.75pp needed); not built further.
-- **`nfl_props`:** dev phase running (2025 yardage props, NB, walk-forward); awaiting owner review. No 2026 data touched.
+- **`nfl_props` dev (2025, 2,951 player-games):** model MAE ≈ market-implied median (rush 22.8 vs 21.8, rec 22.8 vs 21.9 yds, same games), Brier worse than the market (0.2140 vs 0.2054, biased low); taker gated mean R −0.8% (CI −7.3…+5.8%). The maker +19.6% is a fill-at-bid artifact, not skill. Awaiting owner review. No 2026 data touched.
 - **Next:** owner review of the props dev report; paste 008–011.
