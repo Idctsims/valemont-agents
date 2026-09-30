@@ -640,3 +640,14 @@ selection cannot land too *late*.
 `selected` is an explicit boolean rather than presence-means-yes, because
 declining is a decision. "I looked and passed" must not collapse into the same
 absent row as "I never looked."
+
+---
+
+## Current State (2026-09-30)
+
+- **Last migration applied: `db/006`** (`_test` agent). Next new file is `db/007`.
+- **Six append-only tables, not five:** commitments, events, resolution_attempts, closing_snapshots, commitment_factors, selections.
+- **Tests:** `tests/` 118 (stub), `tests_live/` 57 (§2 triggers, UNIQUE, CHECKs, atomicity, attempt budgets). Run both with **`venv/Scripts/python.exe`**; the bare `python` has no psycopg.
+- **Open:** crypto has written zero commitments, and no real agent has any runs or events either. Cause unknown; step 4 is unproven.
+- **Open:** adapters compute `resolves_after`/`closes_at` from the worker clock while the DB compares against its own; harmless at current margins (crypto 6h, `_fake` 15s vs ~2s skew). Not yet fixed.
+- **Next:** diagnose why crypto isn't writing, then continue step 5.
