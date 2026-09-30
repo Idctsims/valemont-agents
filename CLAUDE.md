@@ -220,7 +220,8 @@ Do not skip ahead. Each step is cheap to change; the ones before it are not.
 1. Ledger schema + connection proven ✓
 2. `core/` loop with a fake agent writing real rows ✓
 3. `crypto` adapter, live data, paper positions ✓
-4. Deploy to Railway — prove the 24/7 path with ONE agent running
+4. Deploy to Railway — prove the 24/7 path with ONE agent running ✓
+   (proven by the `_fake` canary)
 5. CLV machinery: closing snapshots, factors, selections (core + schema)
    ← **you are here**
 6. `equities` adapter
@@ -643,11 +644,22 @@ absent row as "I never looked."
 
 ---
 
+## Kalshi adapter notes
+
+- **`closes_at` comes from the market's close time in the Kalshi API, never
+  local `now()` + offset.** The 2026-09-30 skew audit found adapters deriving
+  deadlines from the worker clock while the database compares against its own;
+  harmless on crypto's 6h horizon, a real risk on short deadlines like a
+  contract close. The same goes for `resolves_after`.
+
+---
+
 ## Current State (2026-09-30)
 
 - **Last migration applied: `db/006`** (`_test` agent). Next new file is `db/007`.
 - **Six append-only tables, not five:** commitments, events, resolution_attempts, closing_snapshots, commitment_factors, selections.
 - **Tests:** `tests/` 118 (stub), `tests_live/` 57 (§2 triggers, UNIQUE, CHECKs, atomicity, attempt budgets). Run both with **`venv/Scripts/python.exe`**; the bare `python` has no psycopg.
-- **Open:** crypto has written zero commitments, and no real agent has any runs or events either. Cause unknown; step 4 is unproven.
-- **Open:** adapters compute `resolves_after`/`closes_at` from the worker clock while the DB compares against its own; harmless at current margins (crypto 6h, `_fake` 15s vs ~2s skew). Not yet fixed.
-- **Next:** diagnose why crypto isn't writing, then continue step 5.
+- **Step 4 done** (Railway 24/7 proven by the `_fake` canary). No real agent is enabled yet, so zero real-agent rows is expected.
+- **Open:** adapters compute `resolves_after`/`closes_at` from the worker clock while the DB compares against its own; harmless at current margins (crypto 6h, `_fake` 15s vs ~2s skew). Not yet fixed; see Kalshi adapter notes.
+- **`tests_live` quarantine check counts non-test rows globally**, so a production agent writing during a run trips it. Expected, not a bug: rerun.
+- **Next:** continue step 5.
