@@ -1,10 +1,18 @@
-# Kalshi NFL game-winner benchmark: design
+# Kalshi candle collector and `line_movement` test: design
 
 **Status:** design only, 2026-09-30. No code until reviewed.
-**Decision this implements:** CLAUDE.md §8. NFL game-winner markets are a
-**benchmark, not a commit target.** We record their price paths, closes and
-settlements so `line_movement` can be tested walk-forward. Committing into game
-markets requires recorded evidence of signal from this data first.
+
+> **Superseded scope (owner decision, CLAUDE.md §8, 2026-09-30).** This was
+> written when game markets were benchmark-only. They are now commit targets:
+> `nfl_ml`, `nfl_spread` and `nfl_props` commit and are judged by their own
+> net-of-fee records (`docs/kalshi_nfl.md`). **What still stands here:** the
+> API facts (§1), the weekly backfill collector (§2–§4), now the **shared
+> candlestick layer** every Kalshi agent reads, extended from `KXNFLGAME` to
+> the spread, total and prop series; the reference-repo lessons (§5); and the
+> `line_movement` walk-forward test (§6), now a **factor validation** for the
+> §10.1 attribution rather than a gate on committing. Where the text below
+> says "commits nothing" or "requires evidence before committing", read it as
+> history.
 
 ---
 
@@ -415,9 +423,10 @@ All of the following, on 2026 out-of-sample predictions:
    `clv_L` in the predicted direction exceeds that cost, with a CI excluding
    zero.
 
-Pass all three and the recorded evidence exists that §8 requires, making a
-commit adapter a legitimate proposal. Fail and `line_movement` is cut on
-evidence (§10.1). Either result gets written into CLAUDE.md.
+Pass all three and `line_movement` has earned its place as a factor in
+`nfl_ml` / `nfl_spread`. Fail and it is cut on evidence (§10.1). Either result
+gets written into CLAUDE.md. (Originally this was the gate on committing into
+game markets at all; the owner decision in §8 removed that gate.)
 
 ### Sample size
 
@@ -453,14 +462,14 @@ the forking-paths error.
 
 ## 7. What is deliberately not in v1
 
-- **No commitments, no `selections`.** Operator picks attach to commitments
-  (§10.2); there are none to pick. If you want your own picks on these games
-  recorded as a benchmark, that needs its own design, not a column here.
-- **No `rest` or `injury` factors.** They belong to a model of the game, not
-  of the price path. `line_movement` is tested alone so a result is
-  attributable to it.
-- **No other Kalshi series.** Props and thin contracts come later as separate
-  agents, per the original scope.
+- **The collector itself commits nothing and takes no `selections`.** The
+  agents in `docs/kalshi_nfl.md` do both.
+- **No `rest` or `injury` in this test.** `line_movement` is tested alone so a
+  result is attributable to it; the agents combine factors.
+- **Series coverage:** originally `KXNFLGAME` only. The collector now also
+  stores the spread, total and prop series the agents trade (`docs/kalshi_nfl.md`
+  §0); prop ladders multiply row volume, so §4's estimate is re-sized when
+  `db/008` is written.
 
 ## Open items before build
 

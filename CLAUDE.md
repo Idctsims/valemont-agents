@@ -17,7 +17,7 @@ Four worker agents, one supervisor:
 | `crypto` | Crypto markets | Simulated positions, long and short | None. Paper only. |
 | `equities` | US stocks | Simulated positions | None. Paper only. |
 | `prizepicks` | Player props | Proposed slips, handed to the operator | None. Never places bets. |
-| `kalshi` | CFTC-regulated event contracts | Shadow positions | None. Never places orders. |
+| `kalshi` pillar | CFTC-regulated event contracts: one agent per sport × market type (`nfl_ml`, `nfl_spread`, `nfl_props`, …; §8) | Shadow positions | None. Never places orders. |
 | `chief_of_staff` | Supervision | Nothing. Writes briefs. | None. |
 
 **No component of this system moves real money, ever.** There is no broker
@@ -285,41 +285,53 @@ there's one agent to debug, not four.
   horizon reference price, perhaps — is the part of §8 that remains open.
 
 - **Three independent builders lost to the market on liquid game lines. We
-  target thin markets and player props instead.** If a session proposes betting
-  game moneylines or spreads, stop here.
+  commit into them anyway, deliberately, and let the ledger judge.**
 
-  Nobody coordinated; all three landed in the same place (full detail in
-  `docs/reference-analysis.md` §1):
+  **Decision (owner, 2026-09-30):** the Kalshi pillar commits into
+  **moneylines, spreads and player props**, each as a **separate agent with
+  its own track record** (`nfl_ml`, `nfl_spread`, `nfl_props`, then the same
+  split per sport). This supersedes the earlier ruling that game markets are
+  benchmark-only. It was made with the evidence below in full view, not in
+  ignorance of it. A session that finds the evidence alarming should re-read
+  this paragraph, not re-open the decision.
+
+  The evidence (full detail in `docs/reference-analysis.md` §1):
 
   - A real LOOCV search over Vegas/Elo blend weights chose **100% Vegas at
-    every one of five checkpoints**, contradicting the builder's own hypothesis
-    that his model would take over late in the season. Betting his own
-    disagreements with Vegas returned **−36% ROI** — "actively harmful, not
-    just unhelpful."
+    every one of five checkpoints**. Betting the builder's own disagreements
+    with Vegas returned **−36% ROI**: "actively harmful, not just unhelpful."
   - A second builder's pre-registered holdout produced **no profitable-clean
     target**, with the spread target at **−5.3%**.
   - A third, across six sports: **"no model beats the closing point spread
     reliably."**
 
-  These are hobby-scale models and so are ours. Three independent measurements
-  against an efficient market, three losses, is the strongest evidence in the
-  reference set and it points one way. The defensible ground is **thin,
-  low-liquidity markets and player props**, which is where both prop-focused
-  repositories went — not because props are easy, but because a market with
-  less money policing it is the only place a model this size has a chance.
+  Three independent hobby-scale measurements against an efficient market,
+  three losses. Ours are hobby-scale too. **The prior for `nfl_ml` and
+  `nfl_spread` is that they lose**, and a losing record from them is the
+  expected outcome, not a bug report. Props and thin markets remain where a
+  model this size has the better chance.
 
-  This constrains `kalshi` and `prizepicks` when they land: target thin
-  contracts and player props, and treat a liquid game market as a benchmark to
-  measure against rather than a market to commit into.
+  **What makes this defensible is the scoring, which is binding:**
 
-  **Decision (2026-09-30): Kalshi NFL game-winner markets are a BENCHMARK,
-  not a commit target.** v1 of the Kalshi work records their price paths,
-  closes and settlements, and commits nothing. Purpose: test `line_movement`
-  as a factor walk-forward on real data (design in `docs/kalshi_benchmark.md`).
-  **Committing into game markets requires recorded evidence of signal from
-  this data first**: a pre-registered walk-forward result, not an
-  impression. Until that exists, a session proposing game-market commitments
-  is proposing exactly what this section says to stop.
+  - **The ledger is the judge.** Each agent's own record, **net of fees**,
+    decides whether it survives. No agent is kept on narrative, and none is
+    cut before its record says so.
+  - **Scored on edge against price plus fees, never on win rate alone.** A
+    favourite-backing agent can hit 70% and lose money. `pnl` is the §9
+    R-multiple with the fee inside `capital_at_risk`, and CLV (§10) is the
+    early signal. Win rate may be reported, never as the headline.
+  - **Separate track records, no blending** (§9.2). `nfl_ml` losing must not
+    be hidden by `nfl_props` winning, or the reverse.
+  - **A commitment fires only when the model beats price plus fees by that
+    agent's stated margin.** Disagreeing with the market is not enough; the
+    disagreement has to pay for its own costs.
+  - **Pre-registered backtests first, wherever history exists** (Kalshi keeps
+    settled-market candlesticks), and a profitability claim still needs its
+    own pre-registered measurement, as the scoring bullet above says.
+
+  Design: `docs/kalshi_nfl.md`. The NFL game-market price-path collector in
+  `docs/kalshi_benchmark.md` becomes the shared candlestick layer those
+  agents read.
 
 ---
 
@@ -372,6 +384,12 @@ than an order of magnitude for identical moves.
 | prop slip | stake | `0` — the stake is the stop | `stake` | `multiplier − 1`, or `−1` |
 | event contract YES | price | `0` — settles worthless | `price × contracts` | `(settlement − price) / price` |
 | event contract NO | `1 − price` | `0` — settles worthless | `(1 − price) × contracts` | `(price − settlement) / (1 − price)` |
+
+**Fees are inside the risk (owner decision, §8).** For Kalshi contracts,
+`capital_at_risk = (price + entry_fee) × contracts` and
+`proceeds = settlement × contracts`: the fee is lost along with the stake, and
+a record that left it out would overstate every R-multiple. The rows above
+show the fee-free shape; the stop is still structural `0`.
 
 Long and short are now the **same expression with a sign**:
 
@@ -655,11 +673,20 @@ absent row as "I never looked."
 
 ## Kalshi adapter notes
 
-- **`closes_at` comes from the market's close time in the Kalshi API, never
-  local `now()` + offset.** The 2026-09-30 skew audit found adapters deriving
-  deadlines from the worker clock while the database compares against its own;
-  harmless on crypto's 6h horizon, a real risk on short deadlines like a
-  contract close. The same goes for `resolves_after`.
+- **Never local `now()` + offset for `closes_at` or `resolves_after`.** The
+  2026-09-30 skew audit found adapters deriving deadlines from the worker clock
+  while the database compares against its own; harmless on crypto's 6h
+  horizon, a real risk on short deadlines like a contract close.
+- **`closes_at` = scheduled kickoff, as-of commit, from the sport's schedule
+  source (nflverse for NFL), stored with source and fetch time. NOT Kalshi's
+  `close_time`.** Verified 2026-09-30: sports markets trade in-play and
+  `close_time` is the final whistle (props: two days later), so a snapshot
+  there is the settled 0/1 price and CLV becomes the outcome. `occurrence_datetime`
+  is not kickoff either. **`resolves_after` = the API's
+  `expected_expiration_time`.** Detail: `docs/kalshi_nfl.md` §6.
+- **Nothing on Kalshi voids.** Postponed > 48 h settles at a "fair price", a
+  tie at $0.50, a prop player active-but-no-snap at the pre-game fair price.
+  Score them as real settlements, never as `void`.
 
 ---
 
@@ -671,4 +698,5 @@ absent row as "I never looked."
 - **Step 4 done** (`_fake` canary). No real agent enabled yet; zero real-agent rows is expected. An agent runs only with BOTH a `Registration` AND `agents.enabled = true` (read at boot); `start()` refuses if nothing passes.
 - **Open:** adapters compute `resolves_after`/`closes_at` from the worker clock while the DB compares against its own; harmless at current margins (crypto 6h, `_fake` 15s vs ~2s skew). Not yet fixed; see Kalshi adapter notes.
 - **`tests_live` quarantine check counts non-test rows globally**, so a production agent writing during a run trips it. Expected, not a bug: rerun.
-- **Next:** review `docs/kalshi_benchmark.md` (Kalshi v1 = NFL game-winner BENCHMARK per §8: weekly backfill collector, not a `BaseAgent`, tables in `db/008`). No code until reviewed.
+- **Kalshi pillar (§8, owner decision):** commits into ML, spreads and props as separate agents, scored net of fees. Design `docs/kalshi_nfl.md`; candle collector `docs/kalshi_benchmark.md`. Roadmap NFL → CFB → NHL → tennis → MLB. **Maker fee coefficient pending from owner.**
+- **Next:** review `docs/kalshi_nfl.md`. No code until reviewed.
