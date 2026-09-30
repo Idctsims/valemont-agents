@@ -25,6 +25,12 @@ wins for anything evaluated.
 - A pass/fail rule may not be reinterpreted after the result is known. If a
   rule turns out ambiguous, the stricter reading applies.
 
+### Amendments
+
+| # | Date | Change | Reason |
+|---|---|---|---|
+| A1 | 2026-09-30 | Injury status is the team's final report for the game week, not "reports dated before t's day". | nflverse injury files carry no report date; the day-level rule could not be enforced. Made before any 2026 feature was computed. |
+
 ---
 
 ## 1. Data
@@ -58,7 +64,7 @@ may influence a decision at t.
 | Kickoff | nflverse `games.csv` (`gameday` + `gametime`, America/New_York → UTC) | Live: fetched at commit, stored with source and fetch time. Backtest: nflverse's current value (schedule history is not archived; disclosed). |
 | Kalshi prices | 1-minute and hourly candlesticks (live and historical tiers) | Only candles with `end_period_ts ≤ t`. Live commits use the live market snapshot at t. |
 | Rest days | nflverse `away_rest`, `home_rest` | Schedule-derived, known in advance. |
-| Injury status | nflverse injury reports | Reports dated **strictly before** t's calendar day (ET). |
+| Injury status | nflverse injury reports (`injuries_{season}.csv`) | **Amended 2026-09-30 (A1).** The file has no report date, only season and week, so the status used is the team's **final report for that game week** (`report_status`). The NFL publishes that report ≥ ~28 h before kickoff in every standard slot (Friday for Sunday, Saturday for Monday, the day before for Thursday), so it precedes the commit instant kickoff − 24 h. Live: the report as fetched at t. Backtest: week-level; a status changed after publication cannot be distinguished (disclosed). |
 | Player stats, snaps | nflverse weekly/player stats | Games with kickoff < t. |
 | Fees | `GET /series/{s}` + `GET /series/fee_changes?show_historical=true` | The fee regime in force at t (e.g., `KXNFLGAME` became `quadratic_with_maker_fees` on 2026-01-01; before that date its maker fee is 0). |
 
@@ -174,7 +180,7 @@ No intercept: a constant home drift is not a named factor and gets no credit.
 | `line_movement` | `mid_home(t) − mid_home(kickoff − 6 d)` | NULL if no candle at or before kickoff − 6 d, or < 100 contracts traded between kickoff − 6 d and t |
 | `line_movement_late` | `mid_home(t) − mid_home(t − 24 h)` | NULL if either candle is stale |
 | `rest` | `clip(home_rest − away_rest, −7, 7)` | days |
-| `injury` | `qb_out(away) − qb_out(home)` | `qb_out(team) = 1` if that team's starting QB is listed Out or Doubtful on the last report dated before t's day, else 0. Starting QB = most pass attempts over the team's previous 3 games with kickoff < t (week 1: previous season's final 3). NULL if the team has no report that week. |
+| `injury` | `qb_out(away) − qb_out(home)` | `qb_out(team) = 1` if that team's starting QB is listed Out or Doubtful on the team's final report for the game week (§1.2, A1), else 0. Starting QB = most pass attempts over the team's previous 3 games with kickoff < t (week 1: previous season's final 3). NULL if the team has no report that week. |
 
 Each factor row's `value` is `β_i · x_i` in probability points. A NULL factor
 contributes nothing and gets no row.
@@ -207,7 +213,7 @@ weekly**, walk-forward, on every game with kickoff before the refit instant.
 `KXNFLPASSTDS`, `KXNFLANYTD`.
 
 **Eligibility at t** (a player failing any of these is not evaluated):
-- Not listed Out or Doubtful on the last report dated before t's day.
+- Not listed Out or Doubtful on the team's final report for the game week (§1.2, A1).
 - Live: on the game's active list at t. **A player ruled out is never
   committed on**, because Kalshi settles such markets at a pre-news fair price
   (FOOTBALLENTITYSTAT, entity withdrawal clause).
