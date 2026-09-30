@@ -296,18 +296,18 @@ def _num(value: Numeric | None) -> Decimal | None:
 # Agents
 # ---------------------------------------------------------------------------
 
-_AGENTS: dict[str, tuple[int, bool]] = {}
+_AGENTS: dict[str, tuple[int, bool, bool]] = {}
 
 
-def _agent(slug: str) -> tuple[int, bool]:
-    """(id, is_test) for a slug. Cached; the roster does not change at runtime."""
+def _agent(slug: str) -> tuple[int, bool, bool]:
+    """(id, is_test, enabled) for a slug. Cached; the roster does not change at runtime."""
     cached = _AGENTS.get(slug)
     if cached is not None:
         return cached
 
     with _pool().connection() as conn:
         row = conn.execute(
-            "SELECT id, is_test FROM agents WHERE slug = %s", (slug,)
+            "SELECT id, is_test, enabled FROM agents WHERE slug = %s", (slug,)
         ).fetchone()
 
     if row is None:
@@ -315,7 +315,7 @@ def _agent(slug: str) -> tuple[int, bool]:
             f"No agent registered with slug {slug!r}. Add it to the agents "
             f"table via a numbered migration in db/, not by hand."
         )
-    _AGENTS[slug] = (row[0], row[1])
+    _AGENTS[slug] = (row[0], row[1], row[2])
     return _AGENTS[slug]
 
 
@@ -333,6 +333,17 @@ def agent_is_test(slug: str) -> bool:
     the first write, not after.
     """
     return _agent(slug)[1]
+
+
+def agent_enabled(slug: str) -> bool:
+    """Whether the database permits this agent to be scheduled.
+
+    One of two gates; the orchestrator requires both (a `Registration` in code,
+    and this flag). Read once at boot and cached with the rest of the roster,
+    so flipping it in the database takes effect on the next worker restart,
+    not mid-run.
+    """
+    return _agent(slug)[2]
 
 
 # ---------------------------------------------------------------------------

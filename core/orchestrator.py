@@ -270,11 +270,30 @@ class Orchestrator:
 
     # -- lifecycle ----------------------------------------------------------
 
-    def _wire(self) -> None:
+    def _wire(self) -> int:
+        """Schedule every agent that passes BOTH gates. Returns how many did.
+
+        Gate 1 is code: a `Registration` exists and its `enabled` is True.
+        Gate 2 is data: `agents.enabled` is true in the database. Either can
+        stop an agent; neither alone can start one. That lets an agent be
+        parked with a pasted migration, without a deploy, and stops a
+        registration that shipped early from trading until the row says so.
+        """
+        wired = 0
         for slug, registration in self._registry.items():
             if not registration.enabled:
-                log.warning("%s is registered but disabled — not scheduling", slug)
+                log.warning(
+                    "%s is registered but disabled in its Registration — "
+                    "not scheduling", slug,
+                )
                 continue
+            if not ledger.agent_enabled(slug):
+                log.warning(
+                    "%s is registered but agents.enabled is false in the "
+                    "database — not scheduling", slug,
+                )
+                continue
+            wired += 1
 
             schedule = registration.schedule
             if schedule.run is not None:
@@ -310,6 +329,7 @@ class Orchestrator:
                     misfire_grace_time=schedule.misfire_grace,
                     replace_existing=True,
                 )
+        return wired
 
     def start(self) -> None:
         """Prove the database works, wire the jobs, then start ticking.
@@ -327,7 +347,14 @@ class Orchestrator:
             # whose migration was never pasted) fails here, at boot, by name.
             self._registry[slug].agent.agent_id
 
-        self._wire()
+        if self._wire() == 0:
+            # A worker with no jobs would sit "up" forever doing nothing, and
+            # look healthy while doing it. Refuse instead, by name.
+            raise RuntimeError(
+                "Every registered agent is disabled "
+                f"({', '.join(self._registry)}) — in its Registration or in "
+                "agents.enabled. Nothing to schedule; refusing to start idle."
+            )
         self._scheduler.start()
         log.info(
             "orchestrator up — %d agent(s), %d job(s)",

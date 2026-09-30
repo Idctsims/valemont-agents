@@ -37,7 +37,8 @@ WRITES = frozenset({
     "record_resolution_attempt", "add_closing_snapshot", "record_selection",
 })
 READS = frozenset({
-    "agent_id", "agent_is_test", "due_for_resolution", "due_for_capture",
+    "agent_id", "agent_is_test", "agent_enabled", "due_for_resolution",
+    "due_for_capture",
     "open_commitments",
 })
 
@@ -64,6 +65,8 @@ class LedgerStub:
     capture: list[PendingCommitment] = field(default_factory=list)
     open: list[PendingCommitment] = field(default_factory=list)
     agents: dict[str, tuple[int, bool]] = field(default_factory=dict)
+    #: Slugs whose `agents.enabled` is false. Everything else reads as enabled.
+    disabled: set[str] = field(default_factory=set)
     _failures: dict[str, list[tuple[Callable[[Call], bool], BaseException]]] = (
         field(default_factory=dict)
     )
@@ -142,6 +145,12 @@ class LedgerStub:
         if slug not in self.agents:
             raise ledger.LedgerError(f"No agent registered with slug {slug!r}.")
         return self.agents[slug][1]
+
+    def agent_enabled(self, slug: str) -> bool:
+        self._record("agent_enabled", (slug,), {}, None)
+        if slug not in self.agents:
+            raise ledger.LedgerError(f"No agent registered with slug {slug!r}.")
+        return slug not in self.disabled
 
     def start_run(self, agent_id: int, notes: str | None = None) -> int:
         self._record("start_run", (agent_id,), {"notes": notes}, agent_id)

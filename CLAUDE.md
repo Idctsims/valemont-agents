@@ -656,10 +656,11 @@ absent row as "I never looked."
 
 ## Current State (2026-09-30)
 
-- **Last migration applied: `db/006`** (`_test` agent). Next new file is `db/007`.
+- **Last migration applied: `db/006`.** `db/007` (disable crypto/equities/prizepicks) is written, **not yet pasted**. Next new file is `db/008`.
 - **Six append-only tables, not five:** commitments, events, resolution_attempts, closing_snapshots, commitment_factors, selections.
-- **Tests:** `tests/` 118 (stub), `tests_live/` 57 (§2 triggers, UNIQUE, CHECKs, atomicity, attempt budgets). Run both with **`venv/Scripts/python.exe`**; the bare `python` has no psycopg.
+- **Tests:** `tests/` 124 (stub), `tests_live/` 57 (§2 triggers, UNIQUE, CHECKs, atomicity, attempt budgets). Run both with **`venv/Scripts/python.exe`**; the bare `python` has no psycopg.
 - **Step 4 done** (Railway 24/7 proven by the `_fake` canary). No real agent is enabled yet, so zero real-agent rows is expected.
+- **An agent runs only with BOTH a `Registration` AND `agents.enabled = true`** (read at boot); `start()` refuses if that leaves nothing to schedule.
 - **Open:** adapters compute `resolves_after`/`closes_at` from the worker clock while the DB compares against its own; harmless at current margins (crypto 6h, `_fake` 15s vs ~2s skew). Not yet fixed; see Kalshi adapter notes.
 - **`tests_live` quarantine check counts non-test rows globally**, so a production agent writing during a run trips it. Expected, not a bug: rerun.
 - **Next:** continue step 5.
