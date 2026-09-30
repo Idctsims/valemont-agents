@@ -1,0 +1,103 @@
+{
+  "params": {
+    "betas": {
+      "line_movement": "0.0011606232868073053",
+      "line_movement_late": "0.0004635407666277444",
+      "rest": "-0.0012967218627632018",
+      "injury": "-0.006320897296829202"
+    },
+    "lambda": 10.0,
+    "factors": [
+      "line_movement",
+      "line_movement_late",
+      "rest",
+      "injury"
+    ],
+    "intercept": false
+  },
+  "data_through": "2026-01-18T23:30:00+00:00",
+  "diagnostics": {
+    "n_rows": 282,
+    "n_skipped": 3,
+    "skipped": {
+      "2025_21_NE_DEN": "no Kalshi event",
+      "2025_21_LA_SEA": "stale price at t",
+      "2025_22_SEA_NE": "no Kalshi event"
+    },
+    "lambda_scores": {
+      "0.01": 0.0006720033183627301,
+      "0.1": 0.000660989803881003,
+      "1.0": 0.0006536311619439613,
+      "10.0": 0.0006529550235871182,
+      "100.0": 0.000655380340207913
+    },
+    "through_arg": "2026-02-15T00:00:00+00:00",
+    "calibration_walk_forward": {
+      "n_out_of_sample": 218,
+      "n_scored_outcomes": 218,
+      "close_move_mse_model": 0.0006529550235871182,
+      "close_move_mse_zero": 0.0006629587155963303,
+      "brier_model": 0.21793165439769854,
+      "brier_mid": 0.21795951834862384,
+      "brier_model_minus_mid": -2.7863950925299807e-05,
+      "reliability_deciles": [
+        {
+          "mean_p_model": 0.194,
+          "hit_rate": 0.1905,
+          "n": 21
+        },
+        {
+          "mean_p_model": 0.2905,
+          "hit_rate": 0.2727,
+          "n": 22
+        },
+        {
+          "mean_p_model": 0.3814,
+          "hit_rate": 0.4545,
+          "n": 22
+        },
+        {
+          "mean_p_model": 0.4374,
+          "hit_rate": 0.4091,
+          "n": 22
+        },
+        {
+          "mean_p_model": 0.5194,
+          "hit_rate": 0.5,
+          "n": 22
+        },
+        {
+          "mean_p_model": 0.5879,
+          "hit_rate": 0.619,
+          "n": 21
+        },
+        {
+          "mean_p_model": 0.6454,
+          "hit_rate": 0.5455,
+          "n": 22
+        },
+        {
+          "mean_p_model": 0.7085,
+          "hit_rate": 0.5455,
+          "n": 22
+        },
+        {
+          "mean_p_model": 0.7683,
+          "hit_rate": 0.6364,
+          "n": 22
+        },
+        {
+          "mean_p_model": 0.8619,
+          "hit_rate": 0.9545,
+          "n": 22
+        }
+      ]
+    },
+    "coverage": {
+      "line_movement": 275,
+      "line_movement_late": 282,
+      "rest": 282,
+      "injury": 272
+    }
+  }
+}

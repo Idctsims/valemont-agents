@@ -713,4 +713,5 @@ absent row as "I never looked."
 - **Kalshi pillar (§8, owner decision):** ML, spreads, props as separate agents, net of fees. Design `docs/kalshi_nfl.md`; pre-registration `docs/preregistration_nfl.md` (v1 + A1), holdout 2026 weeks 1–3 minus three games (45). **No 2026 feature computed yet.** Maker fees derive from each series' fetched `fee_type`.
 - **Built, awaiting review:** `venues/kalshi/`, `sports/nfl/`, `adapters/nfl_ml.py`, `jobs/fit_nfl_ml.py`.
 - **Open:** crypto and `_fake` still derive `resolves_after` from the worker clock (harmless at their margins; Kalshi agents use kickoff + API expiry).
-- **Next:** paste 008–011; `python -m jobs.fit_nfl_ml --through 2026-02-15T00:00:00Z --choose-lambda --dry-run` on 2025 dev, record λ by amendment; run the holdout (prereg §5).
+- **`nfl_ml` dev fit done (A3, λ = 10):** coefficients near zero; max adjustment ≈ 1.6¢ vs ≥ 3.1¢ needed, so **it is expected to commit ~never**. Holdout runner next (built, committed before any run).
+- **Next:** review the holdout runner; paste 008–011 (in progress).

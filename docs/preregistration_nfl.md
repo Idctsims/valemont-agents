@@ -31,7 +31,21 @@ wins for anything evaluated.
 |---|---|---|---|
 | A1 | 2026-09-30 | Injury status is the team's final report for the game week, not "reports dated before t's day". | nflverse injury files carry no report date; the day-level rule could not be enforced. Made before any 2026 feature was computed. |
 | A1c | 2026-09-30 | **Owner condition on A1:** publication before t is verified per game against the NFL's latest permitted release (4:00 p.m. ET: Wednesday for Thursday games, Thursday for Saturday, Friday for Sunday, Saturday for Monday). If that deadline is after t, or the game is on another weekday, or `location` is Neutral (international, Super Bowl), the injury factor and prop eligibility-by-report are **missing**, never assumed. | A report that may not have been public at t is a leak. Thanksgiving 12:30 p.m. kickoffs fail the check (commit Wednesday 12:30 < Wednesday 4:00 p.m.). Tested in `tests/test_nfl_injury_timing.py`. |
+| A3 | 2026-09-30 | **`nfl_ml` λ = 10.0** (§3.1, §3.4 item 1). Walk-forward on 2025 only (282 of 285 games; weeks validated from the 5th on, 218 out-of-sample rows). MSE by λ: 0.01 → 6.720e-4, 0.1 → 6.610e-4, 1 → 6.536e-4, **10 → 6.530e-4**, 100 → 6.554e-4. Full output: `docs/dev/nfl_ml-dev-fit-2026-09-30.json`. | Development-data result, recorded before any 2026 feature is computed. See the development note below the table. |
 | A2 | 2026-09-30 | λ is chosen by **walk-forward, time-ordered validation** on 2025 only: each week from the 5th onward is predicted by a fit on strictly earlier weeks; score = mean squared error over validated rows. Replaces leave-one-week-out. | Leave-one-week-out trains on weeks after the one it validates. Owner-directed; no random folds anywhere. Tested (`LambdaIsChosenWalkForward`). |
+
+**Development note on A3 (not a rule change).** The 2025 walk-forward fit
+at λ = 10 has coefficients line_movement +0.00116, line_movement_late +0.00046,
+rest −0.00130 per day, injury −0.00632. Out of sample it improves close-move
+MSE over predicting zero by 1.5% (6.530e-4 vs 6.630e-4) and Brier over the mid
+by 0.00003 (0.21793 vs 0.21796): no meaningful signal. The largest adjustment
+these coefficients can produce with extreme feature values is ≈ 1.6¢, below the
+3.1–4.3¢ a commitment needs (fee + half-spread + 2¢ margin). **Consequence,
+stated in advance: `nfl_ml` is expected to make zero or near-zero commitments
+on the holdout and forward, and H2, H3 and H5 are expected to pass trivially.**
+A pass will mean the plumbing is sound, not that the agent does anything. This
+is the §8 prior showing up in the fit, and it is recorded here so the holdout
+result cannot be read as more than that.
 
 ---
 
