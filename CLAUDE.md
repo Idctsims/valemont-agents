@@ -716,12 +716,11 @@ absent row as "I never looked."
 
 ## Current State (2026-09-30)
 
-- **Migrations:** `db/007` applied (confirmed live). **`db/008`–`db/011` written, not pasted** (`settled` leg outcome, NFL agent rows, `model_versions`, candle archive). Next file `db/012`.
-- **Six append-only tables, not five:** commitments, events, resolution_attempts, closing_snapshots, commitment_factors, selections (plus `model_versions` and the candle archive once pasted).
-- **Tests:** `tests/` 246, `tests_live/` 63 (6 skip until 008/010 are pasted). Run both with **`venv/Scripts/python.exe`**; bare `python` has no psycopg. The live quarantine check counts non-test rows globally, so a production write mid-run trips it: expected, rerun.
-- **Agents:** step 4 done (`_fake` canary). No real agent enabled; one runs only with BOTH a `Registration` AND `agents.enabled = true`. `nfl_ml` is registered, not enabled, and has no model fit.
-- **Kalshi pillar (§8, owner decision):** ML, spreads, props as separate agents, net of fees. Design `docs/kalshi_nfl.md`; pre-registration `docs/preregistration_nfl.md` (v1 + A1), holdout 2026 weeks 1–3 minus three games (45). **No 2026 feature computed yet.** Maker fees derive from each series' fetched `fee_type`.
-- **Built, awaiting review:** `venues/kalshi/`, `sports/nfl/`, `adapters/nfl_ml.py`, `jobs/fit_nfl_ml.py`.
-- **Open:** crypto and `_fake` still derive `resolves_after` from the worker clock (harmless at their margins; Kalshi agents use kickoff + API expiry).
-- **`nfl_ml` dev fit done (A3, λ = 10):** coefficients near zero; max adjustment ≈ 1.6¢ vs ≥ 3.1¢ needed, so **it is expected to commit ~never**. Holdout runner `jobs/holdout_nfl_ml.py` committed, **never executed** (runs once, needs `--execute`).
-- **Next:** owner review of the runner, then execute the holdout once; 008–011 being pasted.
+- **Migrations:** `db/007`–`db/011` being pasted by the owner. Next file `db/012`.
+- **Tests:** `tests/` 267, `tests_live/` 63 (6 skip until 008/010 are pasted). Run both with **`venv/Scripts/python.exe`**; bare `python` has no psycopg. The live quarantine check counts non-test rows globally: a production write mid-run trips it, rerun.
+- **Kalshi jobs run one at a time.** Concurrent jobs exhausted the 429 backoff once (logged in the pre-registration); backoff is now ~4 min total.
+- **Agents:** step 4 done (`_fake` canary). No real agent enabled; one runs only with BOTH a `Registration` AND `agents.enabled = true`.
+- **`nfl_ml`:** no dev signal (A3); holdout **PASS 0/45** (`docs/backtests/`), a plumbing check only; `resolve`/`capture_close` not yet exercised on real data. Kept as a forward live-pipeline test (§8); factors not revisited.
+- **`nfl_spread`:** dev fit shows no signal (λ at grid max, out-of-sample worse than zero, max ≈ 0.3pp vs 5.75pp needed); not built further.
+- **`nfl_props`:** dev phase running (2025 yardage props, NB, walk-forward); awaiting owner review. No 2026 data touched.
+- **Next:** owner review of the props dev report; paste 008–011.

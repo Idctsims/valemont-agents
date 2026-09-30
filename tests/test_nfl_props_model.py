@@ -6,7 +6,7 @@ import math
 import unittest
 from datetime import timedelta
 
-from jobs.dev_nfl_props import market_median, team_code_of
+from jobs.dev_nfl_props import market_median, player_name_from_title, team_code_of
 from sports.nfl.props_model import (
     LeagueContext, PlayerGame, PlayerHistory, estimate_mean, fit_size, nb_logpmf, nb_sf,
     normalize_name,
@@ -85,6 +85,13 @@ class Matching(unittest.TestCase):
         g = game(T0, away="LA", home="LAC")
         self.assertEqual(team_code_of("LACJHERBERT10", g), "LAC")
         self.assertEqual(team_code_of("LARPNACUA17", g), "LA")
+
+    def test_both_title_formats_yield_the_name(self) -> None:
+        self.assertEqual(player_name_from_title("Nico Collins: 50+ receiving yards"), "Nico Collins")
+        self.assertEqual(player_name_from_title("TreVeyon Henderson records 30+ receiving yards"),
+                         "TreVeyon Henderson")
+        self.assertEqual(player_name_from_title("Brian Thomas Jr. records 70+ receiving yards"),
+                         "Brian Thomas Jr.")
 
     def test_market_median_interpolates_the_half_crossing(self) -> None:
         self.assertAlmostEqual(market_median([(24.5, 0.8), (49.5, 0.6), (74.5, 0.4)]), 62.0)

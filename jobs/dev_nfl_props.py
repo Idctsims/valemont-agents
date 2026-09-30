@@ -32,6 +32,7 @@ import io
 import json
 import logging
 import random
+import re
 import statistics
 import sys
 from dataclasses import dataclass
@@ -101,6 +102,16 @@ def load_player_games(schedule: NflSchedule, seasons: list[int]) -> dict[str, li
     return out
 
 
+_TITLE_NAME = re.compile(r"^(.*?)(?::| records? )")
+
+
+def player_name_from_title(title: str) -> str:
+    """'Nico Collins: 50+ receiving yards' and the older 'TreVeyon Henderson
+    records 30+ receiving yards' both → the player's name."""
+    m = _TITLE_NAME.match(title)
+    return (m.group(1) if m else title).strip()
+
+
 def team_code_of(suffix: str, game: Game) -> str | None:
     """`LACJHERBERT10` → the team whose Kalshi code prefixes it (longest wins:
     LAC before LA)."""
@@ -163,8 +174,10 @@ def main() -> int:
                 skip("market without a 2025 game or rung")
                 continue
             parts = q.ticker.split("-")
-            team = team_code_of(parts[2], game) if len(parts) >= 4 else None
-            name = q.title.split(":", 1)[0].strip()
+            # Older tickers glue the rung onto the player (…-JACBTHOMAS770), so
+            # the player part is always the third, whatever follows it.
+            team = team_code_of(parts[2], game) if len(parts) >= 3 else None
+            name = player_name_from_title(q.title)
             pid = match_player(name, roster.get(team, {})) if team else None
             if pid is None:
                 skip("player not matched to nflverse")
