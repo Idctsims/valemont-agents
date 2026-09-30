@@ -55,7 +55,7 @@ MAX_CANDLES_PER_REQUEST: Final = 5000
 
 #: Backoff schedule for 429s. Unauthenticated limits are undocumented, so the
 #: client paces itself and backs off rather than assuming a budget.
-_BACKOFF_SECONDS: Final = (2.0, 5.0, 10.0, 20.0)
+_BACKOFF_SECONDS: Final = (2.0, 5.0, 10.0, 20.0, 40.0, 60.0, 120.0)
 
 #: Transport signature: URL in, (HTTP status, parsed JSON or None) out.
 Transport = Callable[[str], tuple[int, Any]]
@@ -201,6 +201,9 @@ class Quote:
     expected_expiration: datetime | None
     close_time: datetime | None
     fetched_at: datetime
+    #: The rung of a ladder market ("wins by over 3.5" → 3.5); None otherwise.
+    floor_strike: Decimal | None = None
+    title: str = ""
 
     @property
     def finalized(self) -> bool:
@@ -227,6 +230,8 @@ class Quote:
             expected_expiration=ts(market.get("expected_expiration_time")),
             close_time=ts(market.get("close_time")),
             fetched_at=fetched_at,
+            floor_strike=dec(market.get("floor_strike")),
+            title=market.get("title") or "",
         )
 
 

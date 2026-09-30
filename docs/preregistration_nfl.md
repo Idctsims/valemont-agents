@@ -34,6 +34,14 @@ wins for anything evaluated.
 | A3 | 2026-09-30 | **`nfl_ml` λ = 10.0** (§3.1, §3.4 item 1). Walk-forward on 2025 only (282 of 285 games; weeks validated from the 5th on, 218 out-of-sample rows). MSE by λ: 0.01 → 6.720e-4, 0.1 → 6.610e-4, 1 → 6.536e-4, **10 → 6.530e-4**, 100 → 6.554e-4. Full output: `docs/dev/nfl_ml-dev-fit-2026-09-30.json`. | Development-data result, recorded before any 2026 feature is computed. See the development note below the table. |
 | A2 | 2026-09-30 | λ is chosen by **walk-forward, time-ordered validation** on 2025 only: each week from the 5th onward is predicted by a fit on strictly earlier weeks; score = mean squared error over validated rows. Replaces leave-one-week-out. | Leave-one-week-out trains on weeks after the one it validates. Owner-directed; no random folds anywhere. Tested (`LambdaIsChosenWalkForward`). |
 
+**Execution log (not a rule change).** 2026-09-30 ~16:40 CT: the first
+`python -m jobs.holdout_nfl_ml --execute` passed H1, then aborted while
+building walk-forward training rows, when a Kalshi request stayed rate-limited
+through all backoffs (three Kalshi-heavy jobs had been started concurrently).
+It scored no holdout game, produced no output, and no result was seen. The
+client's backoff was lengthened and the holdout was re-executed alone; that
+re-execution is the one run.
+
 **Development note on A3 (not a rule change).** The 2025 walk-forward fit
 at λ = 10 has coefficients line_movement +0.00116, line_movement_late +0.00046,
 rest −0.00130 per day, injury −0.00632. Out of sample it improves close-move

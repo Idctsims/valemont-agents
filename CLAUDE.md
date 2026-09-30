@@ -347,6 +347,16 @@ there's one agent to debug, not four.
   `docs/kalshi_benchmark.md` becomes the shared candlestick layer those
   agents read.
 
+  **`nfl_ml` result (owner decision, 2026-09-30).** The 2025 walk-forward
+  dev fit found **no signal** (`docs/preregistration_nfl.md` A3): the
+  largest adjustment its coefficients can produce is ≈ 1.6¢ against the
+  3.1–4.3¢ a commitment needs. Its factors are **not** revisited. It stays
+  registered as a **forward live-pipeline test** and will rarely, if ever,
+  commit; a quiet `nfl_ml` is the expected state, not an outage. **Any new
+  game-line idea requires a new pre-registration and forward-only
+  validation**: no re-fitting the 2025 or holdout data until something
+  appears.
+
 ---
 
 ## 9. The pnl contract
