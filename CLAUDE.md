@@ -699,4 +699,5 @@ absent row as "I never looked."
 - **Open:** adapters compute `resolves_after`/`closes_at` from the worker clock while the DB compares against its own; harmless at current margins (crypto 6h, `_fake` 15s vs ~2s skew). Not yet fixed; see Kalshi adapter notes.
 - **`tests_live` quarantine check counts non-test rows globally**, so a production agent writing during a run trips it. Expected, not a bug: rerun.
 - **Kalshi pillar (§8, owner decision):** commits into ML, spreads and props as separate agents, scored net of fees. Design `docs/kalshi_nfl.md`; candle collector `docs/kalshi_benchmark.md`. Roadmap NFL → CFB → NHL → tennis → MLB. **Maker fee coefficient pending from owner.**
-- **Next:** review `docs/kalshi_nfl.md`. No code until reviewed.
+- **Pre-registration v1** `docs/preregistration_nfl.md` committed before any 2026 feature: holdout = 2026 weeks 1–3 minus BAL@DAL, LA@DEN, PHI@CHI (45 games). Fees per series from the API (makers charged on GAME/SPREAD/TOTAL/ANYTD only); inactive prop players settle at fair price.
+- **Next:** migrations from `db/008`, then the shared Kalshi layer and `nfl_ml`.
