@@ -114,6 +114,10 @@ class NflMoneylineAgent(KalshiContractAgent[Observation, Thesis]):
     default_capture_policy: ClassVar[DeferPolicy] = NFL_ML_CAPTURE_POLICY
     #: One commitment per game; a full NFL window holds at most 16.
     max_slate_size: ClassVar[int] = 16
+    #: Live commits require displayed depth. A backtest replay sets this False:
+    #: candles carry no book sizes, and preregistration §2.2.4 discloses that
+    #: replay assumes the displayed size was sufficient.
+    check_depth: bool = True
 
     def __init__(
         self,
@@ -235,8 +239,8 @@ class NflMoneylineAgent(KalshiContractAgent[Observation, Thesis]):
             # Four ways to hold a team: YES on its book or NO on the other's.
             # Same position, two prices; the gate picks the cheaper by edge.
             candidates = (
-                evaluate(g.home, p_home, observation.regime, GATE)
-                + evaluate(g.away, 1 - p_home, observation.regime, GATE)
+                evaluate(g.home, p_home, observation.regime, GATE, check_depth=self.check_depth)
+                + evaluate(g.away, 1 - p_home, observation.regime, GATE, check_depth=self.check_depth)
             )
             passing = [c for c in candidates if c.passes]
             if not passing:

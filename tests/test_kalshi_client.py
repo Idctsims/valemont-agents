@@ -8,7 +8,9 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal as D
 from typing import Any
 
-from venues.kalshi.client import Candle, KalshiClient, KalshiError, KalshiNotFound
+from venues.kalshi.client import (
+    Candle, KalshiClient, KalshiError, KalshiNotFound, KalshiUnreachable,
+)
 
 UTC = timezone.utc
 T = datetime(2026, 9, 27, 20, 0, tzinfo=UTC)
@@ -116,6 +118,26 @@ class Errors(unittest.TestCase):
         c, _, _ = client({})
         with self.assertRaises(KalshiNotFound):
             c.series("NOPE")
+
+    def test_a_network_blip_is_retried_not_fatal(self) -> None:
+        """A single TLS handshake timeout killed a 12-minute fit before this."""
+        attempts = []
+        def flaky(url: str):
+            attempts.append(url)
+            if len(attempts) < 3:
+                raise KalshiUnreachable("handshake timed out")
+            return 200, {"series": {"ok": True}}
+        sleeps: list[float] = []
+        c = KalshiClient(transport=flaky, min_interval=0, sleep=sleeps.append)
+        self.assertEqual(c.series("S"), {"ok": True})
+        self.assertEqual(sleeps, [2.0, 5.0])
+
+    def test_a_persistent_outage_still_raises(self) -> None:
+        def down(url: str):
+            raise KalshiUnreachable("down")
+        c = KalshiClient(transport=down, min_interval=0, sleep=lambda s: None)
+        with self.assertRaises(KalshiUnreachable):
+            c.series("S")
 
     def test_500_raises_loudly(self) -> None:
         c, _, _ = client({"/series/S": [(500, None)]})

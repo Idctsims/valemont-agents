@@ -43,6 +43,7 @@ __all__ = [
     "fit_ridge",
     "choose_lambda",
     "LAMBDA_GRID",
+    "walk_forward_predictions",
 ]
 
 #: Names are the `commitment_factors.name` values (snake_case by CHECK).
@@ -211,6 +212,25 @@ def _solve(a: list[list[float]], b: list[float]) -> list[float]:
                 factor = m[r][col] / m[col][col]
                 m[r] = [rv - factor * cv for rv, cv in zip(m[r], m[col])]
     return [m[i][n] / m[i][i] for i in range(n)]
+
+
+def walk_forward_predictions(
+    rows: Sequence[tuple[int, Mapping[str, Decimal | None], float]],
+    lam: float,
+    *,
+    min_train_weeks: int = MIN_TRAIN_WEEKS,
+) -> list[tuple[int, float]]:
+    """Out-of-sample predictions: (row index, predicted y) for every row in a
+    week after the first `min_train_weeks`, each from a fit on earlier weeks."""
+    weeks = sorted({w for w, _, _ in rows})
+    out: list[tuple[int, float]] = []
+    for w in weeks[min_train_weeks:]:
+        model = fit_ridge([(x, y) for wk, x, y in rows if wk < w], lam)
+        for i, (wk, x, _) in enumerate(rows):
+            if wk == w:
+                out.append((i, sum(float(model.betas[f]) * float(v)
+                                   for f, v in x.items() if v is not None)))
+    return out
 
 
 def choose_lambda(

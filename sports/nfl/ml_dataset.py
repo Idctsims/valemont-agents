@@ -37,6 +37,9 @@ class TrainingRow:
     kickoff: datetime
     features: Features
     y: float
+    #: Home YES settlement value (1, 0, or 0.5 on a tie). For calibration
+    #: reporting only; never a feature.
+    outcome: Decimal | None = None
 
 
 def _close_mid(client: KalshiClient, series: str, home: Quote, kickoff: datetime) -> Decimal | None:
@@ -103,6 +106,7 @@ def build_rows(
         rows.append(TrainingRow(
             game_id=game.game_id, week_key=game.season * 100 + game.week,
             kickoff=game.kickoff, features=features, y=float(close - features.mid_t),
+            outcome=home.settlement_value,
         ))
     return rows, skipped
 

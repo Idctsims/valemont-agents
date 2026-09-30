@@ -39,6 +39,7 @@ __all__ = [
     "KalshiClient",
     "KalshiError",
     "KalshiNotFound",
+    "KalshiUnreachable",
     "Candle",
     "Quote",
     "Transport",
@@ -68,6 +69,11 @@ class KalshiNotFound(KalshiError):
     """HTTP 404. Normal for a market not listed; the caller decides."""
 
 
+class KalshiUnreachable(KalshiError):
+    """The request never got an HTTP answer (DNS, TLS, timeout). Retried with
+    the same backoff as a 429 before it is raised."""
+
+
 def _http_transport(url: str, timeout: float = 20.0) -> tuple[int, Any]:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
@@ -77,9 +83,9 @@ def _http_transport(url: str, timeout: float = 20.0) -> tuple[int, Any]:
     except urllib.error.HTTPError as exc:
         return exc.code, None
     except urllib.error.URLError as exc:
-        raise KalshiError(f"{url} unreachable: {exc.reason}") from exc
-    except TimeoutError as exc:
-        raise KalshiError(f"{url} timed out after {timeout}s") from exc
+        raise KalshiUnreachable(f"{url} unreachable: {exc.reason}") from exc
+    except (TimeoutError, OSError) as exc:
+        raise KalshiUnreachable(f"{url} failed: {exc}") from exc
     try:
         return status, json.loads(raw)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
@@ -254,15 +260,22 @@ class KalshiClient:
         """GET one endpoint, paced, with 429 backoff. Raises on anything off."""
         query = {k: v for k, v in params.items() if v is not None}
         url = f"{self.base}{path}" + (f"?{urllib.parse.urlencode(query)}" if query else "")
+        last_error: KalshiUnreachable | None = None
         for attempt, wait in enumerate((0.0, *_BACKOFF_SECONDS)):
             if wait:
-                log.warning("kalshi 429 on %s — backing off %.0fs", path, wait)
+                log.warning("kalshi %s on %s — backing off %.0fs",
+                            "unreachable" if last_error else "429", path, wait)
                 self._sleep(wait)
             gap = time.monotonic() - self._last_request
             if gap < self._min_interval:
                 self._sleep(self._min_interval - gap)
             self._last_request = time.monotonic()
-            status, body = self._transport(url)
+            try:
+                status, body = self._transport(url)
+            except KalshiUnreachable as exc:
+                last_error = exc
+                continue
+            last_error = None
             if status == 200:
                 if body is None:
                     raise KalshiError(f"{path} returned 200 with no body")
@@ -271,6 +284,8 @@ class KalshiClient:
                 raise KalshiNotFound(f"{path} returned 404")
             if status != 429:
                 raise KalshiError(f"{path} returned HTTP {status}")
+        if last_error is not None:
+            raise last_error
         raise KalshiError(f"{path} still rate-limited after {len(_BACKOFF_SECONDS)} backoffs")
 
     # -- metadata -----------------------------------------------------------
