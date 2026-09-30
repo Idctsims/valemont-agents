@@ -1,0 +1,34 @@
+{
+  "lambda": 100.0,
+  "lambda_scores": {
+    "0.01": 0.8661337862402418,
+    "0.1": 0.803734412290838,
+    "1.0": 0.8010683522213214,
+    "10.0": 0.7995887315544866,
+    "100.0": 0.7935279468386416
+  },
+  "betas_points": {
+    "line_movement": "0.009369118600528479",
+    "line_movement_late": "0.008000891316488826",
+    "rest": "-0.012234336996625758",
+    "injury": "0.003869231545734936"
+  },
+  "n_rows": 278,
+  "n_skipped": 7,
+  "skipped_reasons": [
+    "ladder unfittable at t or close",
+    "no ml features"
+  ],
+  "walk_forward": {
+    "n_out_of_sample": 218,
+    "mse_model": 0.7935279468386414,
+    "mse_zero": 0.7883994180956702,
+    "improvement_pct": -0.6504987986113431
+  },
+  "target_sd_points": 7.231411419271225,
+  "sigma_median_points": 11.941302607024788,
+  "max_adjustment_points": 0.09352045979974712,
+  "max_adjustment_prob_at_median_rung": 0.003124388245111003,
+  "median_spread_near_50c": 0.02,
+  "needed_prob_at_50c": 0.0575
+}
