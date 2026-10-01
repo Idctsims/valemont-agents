@@ -1,0 +1,87 @@
+{
+  "run_utc": "2026-10-01T23:36:22.797388+00:00",
+  "frozen": {
+    "w": 0.625,
+    "margin": 0.03,
+    "max_spread": 0.06,
+    "window": 3.0,
+    "lead_min": 60,
+    "seed": 20261002,
+    "holdout": [
+      "2026-07-01",
+      "2026-09-27"
+    ]
+  },
+  "coverage": {
+    "holdout_events": 540,
+    "start_matched": 276,
+    "events_priced": 276,
+    "rungs_priced": 5235,
+    "binary_rungs": 5235,
+    "fair_value_rungs": 0,
+    "skipped": {
+      "start unmatched": 264,
+      "no fresh two-sided quote at t": 415
+    },
+    "pool_rungs_before_holdout": 7777,
+    "base_fallback_share": 0.005157593123209169,
+    "inplay_share_moved_gt_25c": 0.0
+  },
+  "sanity_w0_commitments": 0,
+  "taker": {
+    "n": 276,
+    "games": 276,
+    "mean_R": 0.15958494603003426,
+    "ci95": [
+      -0.14554248677867224,
+      0.5083167927567441
+    ],
+    "win_rate": 0.15579710144927536,
+    "yes": 126,
+    "no": 150,
+    "mean_clv": -0.003333333333333335,
+    "clv_ci95": [
+      -0.00489130434782609,
+      -0.0011956521739130439
+    ]
+  },
+  "maker": {
+    "orders": 276,
+    "filled": 8,
+    "fill_rate": 0.028985507246376812,
+    "n": 8,
+    "games": 8,
+    "mean_R": -1.0,
+    "ci95": [
+      -1.0,
+      -1.0
+    ],
+    "win_rate": 0.0
+  },
+  "brier": {
+    "mid": 0.1854889446036294,
+    "base": 0.200988082769015,
+    "p": 0.19120124425900273
+  },
+  "replicated_weight": {
+    "w": 0.0430289690633516,
+    "ci95": [
+      0.0,
+      0.25900751477999995
+    ],
+    "n_events": 276,
+    "positive": false
+  },
+  "capacity": {
+    "per_trade_contracts_median": 7.1000000000000005,
+    "per_trade_contracts_p90": 319.107,
+    "per_trade_dollars_median": 0.7232029000000002,
+    "per_trade_dollars_p90": 39.664511488,
+    "daily_dollars_median": 142.20909511550005,
+    "daily_dollars_max": 1190.936758224,
+    "share_trades_rung_volume_lt_100": 0.5217391304347826,
+    "research_only": false
+  },
+  "void": false,
+  "pass": false
+}

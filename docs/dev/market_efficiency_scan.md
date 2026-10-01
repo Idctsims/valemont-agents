@@ -248,3 +248,8 @@ floor, so its w says little).
 - **The required next step is a pre-registration, not code.** It needs the
   frozen base-rate rule, t, the edge gate net of fees, the holdout (2026
   weeks 1–5) and a pass rule, written before any 2026 CFB price is read.
+
+**Outcome (2026-10-01):** CFB totals **failed** their pre-registered
+holdout. The base-rate weight was 0.04 out of sample against 0.63 here, and
+the blend lost to the mid on Brier (`docs/preregistration_cfb_totals.md`
+§9). This scan's one candidate did not replicate.

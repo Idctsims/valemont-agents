@@ -724,19 +724,24 @@ absent row as "I never looked."
 
 ## Current State (2026-10-01)
 
-- **Migrations:** **`db/001`–`db/012` applied** (007–012 verified live by `scripts/verify_migrations_007_012.sql`, 20/20). **`db/013` (enable roster) is on `main`, to be pasted at go-live.** Next new file `db/014`.
-- **Tests:** `tests/` 320, `tests_live/` 63/63, no skips. Run both with **`venv/Scripts/python.exe`**. Kalshi jobs run one at a time.
+- **Migrations:** **`db/001`–`db/012` applied** (007–012 verified live by `scripts/verify_migrations_007_012.sql`, 20/20). **To paste:** `db/013` (enable roster) at go-live; `db/014` (trade and settlement archive) before the first archive run. Next new file `db/015`.
+- **Tests:** `tests/` 340, `tests_live/` 63/63, no skips. Run both with **`venv/Scripts/python.exe`**. Kalshi jobs run one at a time. The archive's SQL path has no live test, because a test row would be permanent in the real archive; its first real run is the test.
 - **Game lines:** `nfl_ml` no dev signal, holdout PASS 0/45 (plumbing only), kept as a forward pipeline test; `nfl_spread` no signal, not built.
 - **Props:** frozen V1 blend and P2 both **FAILED** the holdout (§7.4); **props do not continue** (§8).
+- **CFB totals: FAILED its pre-registered holdout** (2026-10-01, `docs/preregistration_cfb_totals.md` §9).
+  - Taker R +16%, CI −15%…+51% (n = 276). CLV negative. The blend's Brier is worse than the mid's.
+  - The scan's base-rate weight did not replicate (0.04 vs 0.63).
+  - **CFB totals stop.** The 2026 CFB data through 2026-09-27 is spent.
 - **`_kalshi_probe`:** one real contract per NFL week (is_test) to exercise settlement and close capture, which have never run on real data.
 - **Deploy: owner GO (2026-10-01); `prod-roster` merged to `main`.** Railway keeps booting the canary until its env changes. Go-live:
   1. paste `db/013`;
   2. record an `nfl_ml` fit (production has **no** `model_versions` row for it, so it stands down every window until one exists);
   3. set `ROSTER=production` and delete `CANARY` in the same change.
-
-  **The weekly refit that preregistration §3.1 requires is not scheduled anywhere.** Run `jobs.fit_nfl_ml` by hand weekly, or schedule it.
-- **Forward-only F1 (vacated usage) and F2 (longshots under P2)** are pre-registered in `docs/preregistration_nfl.md` §8, evaluated on 2026 weeks 5–18. **No interim look.**
-- **⏰ JANUARY REMINDER — on or after 2027-01-20:** write the F1/F2 runner exactly to §8, commit it, then execute it **once**. It must refuse before 2027-01-20 and refuse if output exists. If Kalshi's 2026 candles or trade prints are gone by then, record the hypothesis as unevaluable, which is a fail.
-- **Market-efficiency scan done** (`docs/dev/market_efficiency_scan.md`, run #3). Liquid markets show no base-rate weight. Positive weight appears only on books that don't trade (NHL goals, MLB H+R+RBI) or as flattening (ATP match), with one exception: **CFB totals**. That is the candidate next build.
-- **The reserve:** every Kalshi event dated **2026-07-01 onward is unread** and kept for that build's holdout. Do not read it in exploration.
-- **Next:** owner go-live (above). Owner decision on CFB totals. If yes, pre-register before reading any 2026 CFB price.
+- **🔁 RECURRING, weekly, by hand:**
+  - **Archive.** Every Tuesday after Monday night's game, run `python -m jobs.archive_nfl_props --week N` for the week just played, weeks 5–18 (first: week 5 on Tuesday 2026-10-13). Run weeks 1–4 once, any time, for F2's settlement pool. Rerun a week later if it logged unsettled markets. Store-only; never query the archive before January (§8.1). Estimate for weeks 5–18: ~0.6–1.1M candle rows, ~0.1–0.4M prints, ~150–250 MB of the 500 MB tier.
+  - **`nfl_ml` refit** (`jobs.fit_nfl_ml --lambda 10`). Preregistration §3.1 requires it and nothing schedules it.
+- **Forward-only F1 (vacated usage, as amended by F1a: Questionable + game-day `INA`) and F2 (longshots under P2)** are pre-registered in `docs/preregistration_nfl.md` §8 and evaluated on 2026 weeks 5–18. **No interim look.**
+- **⏰ JANUARY REMINDER — on or after 2027-01-20:** write the F1/F2 runner exactly to §8, commit it, then execute it **once**, reading the archive. It must refuse before 2027-01-20 and refuse if output exists. If data are missing from both the archive and Kalshi, record the hypothesis as unevaluable, which is a fail.
+- **Market-efficiency scan** (`docs/dev/market_efficiency_scan.md`, run #3): no base-rate weight in liquid markets. Its one candidate, CFB totals, failed out of sample. **No current build candidate.**
+- **The reserve:** Kalshi events dated **2026-07-01 onward** are unread, **except `KXNCAAFTOTAL` through 2026-09-27**, now spent on the CFB holdout. Do not read the reserve in exploration.
+- **Next:** owner go-live (above), `db/014` paste, the weekly archive. Any new idea needs a new pre-registration and forward-only validation.

@@ -158,3 +158,43 @@ result may never be cited as a strategy that scales.
    holdout. Pool events are dated on or before 2026-06-30.
 4. The runner refuses without `--execute`, refuses if any output exists, and
    is committed before it runs.
+
+---
+
+## 9. Execution log
+
+2026-10-01 23:36 UTC, `python -m jobs.holdout_cfb_totals --execute`, run
+once, alone (`docs/backtests/cfb_totals-holdout-20261001T233623Z.json`, with
+CSV). Tests passed before scoring. The w = 0 sanity check made **0**
+commitments, so the run is valid.
+
+**Result: FAIL.** CFB totals stop under this design (§6).
+
+| | |
+|---|---|
+| Taker | n = 276 trades in 276 games (126 YES / 150 NO). Mean R **+16%**, 95% CI **−15% … +51%**. The lower bound is not above 0. Win rate 16%. |
+| CLV | **−0.33¢**, CI −0.49¢ … −0.12¢. The market moved *against* the entries. |
+| Maker shadow | 276 orders, 8 filled (2.9%), all 8 lost (R −1.0). |
+| Brier (5,235 binary rungs) | mid **0.1855**, base rate 0.2010, blend 0.1912. The blend is worse than the mid. |
+| Replicated weight | base rate vs mid **0.04**, CI 0.00 … 0.26. Scan estimate 0.63, CI 0.21 … 1.00. **The signal did not replicate.** |
+| Capacity | per trade: median 7.1 contracts / **$0.72**, p90 $40. Daily: median **$142**, max $1,191. 52% of trades were on rungs that traded fewer than 100 contracts in the 24 h before t. |
+
+**Reading.**
+
+- **The gate fired in every priced game.** With w = 0.625, a base rate that
+  ignores the matchup pulls tail rungs a long way from the mid. That makes
+  large paper "edges" on cheap contracts: a 16% win rate and a $0.72 median
+  stake.
+- The positive point estimate is longshot variance, not edge. The CI spans
+  zero, CLV is negative with a CI below zero, and the blend's Brier is worse
+  than the mid's.
+- The scan's CFB-total cell was probably the about-one-in-22 false positive
+  that its spec warned of, or a 2025-specific effect.
+
+**Disclosed: coverage.** ESPN start-time matching dropped **264 of 540**
+holdout events (49%; the scan dropped 16–19% on 2025 data). The likely
+cause is team abbreviations for smaller programs. These events were dropped
+by name-matching before any price was read, so the drop cannot depend on
+outcomes. It may still tilt the sample toward larger programs. **Under §0's
+stricter reading, this cannot rescue the result:** the verdict stands, and
+the remaining 276 games were the evaluation.
