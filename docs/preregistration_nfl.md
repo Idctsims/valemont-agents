@@ -36,6 +36,8 @@ wins for anything evaluated.
 | A5a | 2026-10-01 | Base-rate pool admits a rung only once its **settlement** was public before t, not once its game had **kicked off**; V1's NB size pairs use strictly earlier weeks. | Found reviewing the runner before any run: a 1 p.m. game has kicked off but not settled at a 4:25 game's commit instant, so "kicked off before t" leaked. Strictly tighter; made before the holdout ran. |
 | A3 | 2026-09-30 | **`nfl_ml` λ = 10.0** (§3.1, §3.4 item 1). Walk-forward on 2025 only (282 of 285 games; weeks validated from the 5th on, 218 out-of-sample rows). MSE by λ: 0.01 → 6.720e-4, 0.1 → 6.610e-4, 1 → 6.536e-4, **10 → 6.530e-4**, 100 → 6.554e-4. Full output: `docs/dev/nfl_ml-dev-fit-2026-09-30.json`. | Development-data result, recorded before any 2026 feature is computed. See the development note below the table. |
 | A2 | 2026-09-30 | λ is chosen by **walk-forward, time-ordered validation** on 2025 only: each week from the 5th onward is predicted by a fit on strictly earlier weeks; score = mean squared error over validated rows. Replaces leave-one-week-out. | Leave-one-week-out trains on weeks after the one it validates. Owner-directed; no random folds anywhere. Tested (`LambdaIsChosenWalkForward`). |
+| F1 | 2026-10-01 | **Forward-only hypothesis F1, vacated usage** (§8.2). Evaluated once on 2026 weeks 5–18, not before 2027-01-20. | Owner decision after the props holdout failed. Frozen before any week-5 game was played and before any analysis; the 2025 and holdout data are spent (CLAUDE.md §8). |
+| F2 | 2026-10-01 | **Forward-only hypothesis F2, longshot rungs under P2** (§8.3). Same window and date. | Owner decision. **Post-hoc subgroup** of the A5 holdout; the favourite-longshot bias predicts the opposite sign. Frozen before any analysis. |
 
 **Execution log (not a rule change).** 2026-09-30 ~16:40 CT: the first
 `python -m jobs.holdout_nfl_ml --execute` passed H1, then aborted while
@@ -423,3 +425,147 @@ priced props, 4,731 rungs (4,692 binary).
   above 0. Brier 0.1566 vs mid 0.1554. Nearly all taker trades fall in the
   [0, 0.2) bucket (n = 115, +54%, CI −53%…+169%): buying cheap longshots,
   high variance, not significant. Maker: 3% filled.
+
+---
+
+## 8. Forward-only hypotheses F1, F2 — committed 2026-10-01, before any analysis
+
+**Status at commit:** props have stopped (§7.4). Nothing here restarts them or
+enables an agent. F1 and F2 are two new, narrow claims, frozen now and tested
+**once**, retrospectively, on games that had not been played when this section
+was committed. The 2025 development data and the 2026 weeks 1–3 holdout are
+spent and are not evaluation data for either hypothesis.
+
+### 8.1 Shared rules
+
+- **Evaluation games:** every 2026 regular-season game in **weeks 5–18**. No
+  exclusions: no week-5+ game had been played or displayed when this was
+  committed (week 5 opens Thursday 2026-10-08). Week 4 is not used.
+- **Run once, not early.** The runner executes **once**, **not before
+  2027-01-20** (week 18 ends 2027-01-03; FOOTBALLENTITYSTAT settles by the 15th
+  day after the game, §2.7). It refuses to run before that date, refuses if any
+  F1/F2 output exists, and is committed to git before it executes. **No interim
+  look:** no F1 or F2 quantity is computed on weeks 5–18 before then, by anyone,
+  for any reason. A partial look burns the hypothesis, as §0 burns a holdout.
+- **Commit instant, prices, staleness, fees, scoring:** as §7: t = kickoff −
+  75 min; the latest 1-minute candle with `end_period_ts ≤ t`, at most 60 min
+  old; spread ≤ 8¢; the series' fee regime in force at t (§1.2); R per §2.4 with
+  the fee inside the risk. **Fair-value settlements are scored at their value
+  and kept** (§2.4), counted separately.
+- **Report timing:** a status is used only when the A1c check passes for that
+  game; otherwise the player-game is skipped and counted.
+- **Taker R** (gating) and **maker R** (reported, never gating), each with a
+  **95% bootstrap CI over whole games** (2,000 draws, seed **20261001**). The
+  game is the unit of independence (§2.5). Maker fills use the §7
+  trade-through rule (prints strictly through the limit totalling ≥ 200
+  contracts in [t, kickoff)), and the maker fee in force at t (0 for
+  `quadratic`).
+- **Minimum sample:** a hypothesis with fewer than **20 taker trades** or fewer
+  than **10 games** carrying a trade is **not passed**. Inconclusive is a fail
+  (§7.3).
+- **Also reported, never as the headline:** mean CLV (§2.4) with a game CI, win
+  rate, fair-value count, skip counts by reason.
+- **Two hypotheses, two separate verdicts.** No pooling, no multiplicity
+  correction, and neither result is read as support for the other.
+- **What a pass licenses:** the same as §7.3. A paper agent may be specified,
+  under its own new pre-registration, and run forward. It is not a
+  profitability claim (CLAUDE.md §8).
+- **Disclosed data risk:** both runs need 2026 1-minute candles and trade
+  prints from Kalshi's historical tier in January. Kalshi does not document
+  how long it keeps them. If the data are gone, the hypothesis is
+  **unevaluable**, which is recorded as a fail, not deferred.
+
+### 8.2 F1 — vacated usage
+
+**Claim:** when a team's starter is ruled out, the remaining players in that
+starter's opportunity pool are underpriced on Kalshi's yardage props at t.
+Buying their YES side earns positive net R.
+
+**Ruled out — proxy, disclosed.** Game-day inactive lists are not in nflverse.
+"Ruled out" therefore means **listed Out or Doubtful on the team's final
+injury report, A1c-verified as public before t.** That is the same proxy as
+V4 (`docs/dev/props_variants.md`). It catches news the market has had at least
+a day to absorb. That makes the test harder, not easier. Surprise game-day
+inactives (Questionable → inactive) are invisible to it.
+
+**Pools and shares.** Per stat, the pool is `rec`: WR, TE, RB, by targets;
+`rush`: RB, by carries; `pass`: QB, by pass attempts. A player's **share** is
+`sports.nfl.props_variants.opportunity_shares`: each player's opportunities
+weighted `0.5^(days/90)`, over the team's player-games with kickoff < t in the
+2025 and 2026 seasons, divided by the pool total. The `pass` pool is added for
+F1; the function is otherwise unchanged.
+
+**Trigger.** For game g, team T, stat s: **triggered** iff at least one pool
+player listed Out or Doubtful (A1c-verified) has a share ≥ **0.15**
+(`VACATED_MIN_SHARE`). The magnitude of the vacated share selects nothing
+beyond that.
+
+**Beneficiaries.** Every other pool player of T who:
+
+- has a Kalshi market for stat s in g at t (`KXNFLPASSYDS`, `KXNFLRSHYDS`,
+  `KXNFLRECYDS`);
+- is **not** listed Out or Doubtful;
+- is matched to an nflverse player ID by the existing title matcher.
+
+There is **no** history requirement: a backup with no prior opportunities is
+exactly the case F1 is about.
+
+**Trade, one per (g, beneficiary, s):**
+
+- *Taker:* among the beneficiary's rungs for s with a fresh quote and spread
+  ≤ 8¢, the rung whose YES mid at t is closest to 0.50 (tie → lower floor).
+  **Buy YES at the ask.** Cost = ask + taker fee.
+- *Maker:* a resting YES bid at that rung's `yes_bid` at t, filled only under
+  the trade-through rule.
+- There is no model and no edge gate. F1 is a directional claim, and
+  vacated usage is the only input.
+
+**Pass rule (F1):** the taker mean R's game-clustered 95% CI has a **lower
+bound above 0**, subject to the minimum sample (§8.1).
+
+**Reported, not gating:** maker fill rate and maker R on fills with CI, and a
+**control**: the same rung rule, buying YES, applied to every pool player-stat
+in the same games whose pool was **not** triggered, with the same quote
+filters. The control's taker R and the difference F1 − control (games
+resampled jointly) are reported with CIs. If F1 passes but the difference CI
+includes 0, the result is "overs were cheap", not "vacated usage is
+mispriced", and it is written up that way.
+
+### 8.3 F2 — longshot rungs under P2's frozen flattening
+
+**Origin, stated plainly:** in the A5 holdout (§7.4), almost all P2 taker
+trades fell in the [0, 0.2) bucket: n = 115, +54%, CI −53%…+169%. **That is a
+post-hoc subgroup of a failed test, picked out after seeing it.** The
+favourite-longshot bias, documented across betting and prediction markets,
+predicts that cheap YES contracts are **overpriced**: **negative** R for
+buying them. **The stated prior for F2 is that it fails, probably with a
+negative point estimate.**
+
+**Universe:** every eligible yardage-prop player-game in the evaluation games,
+under §3.3 / §7 eligibility: A1c-verified report; not Out or Doubtful; ≥ 2 of
+the team's last 4 games with an opportunity. Series as §7.
+
+**Forecast, frozen from A5:** `p_P2 = 0.855 · mid + 0.145 · b(rung)`. `b` is
+the §7 base rate: the mean binary settlement of same-stat rungs within ±5
+yards whose settlement was public before t. The pool is every 2025
+development rung plus every 2026 rung (any week) meeting that condition, with
+0.5 below 20 rungs.
+
+**Selection, frozen so that F2 is exactly the observed subgroup:**
+
+1. Run the A5 taker selection unchanged over **all** rungs: per (player,
+   stat), the (rung, side) with the largest `p_side − (ask + fee)`, kept if ≥
+   4¢ and spread ≤ 8¢.
+2. F2's trades are the selections whose rung has **YES mid at t < 0.20**.
+   Either side counts, as in A5; the YES/NO split is reported.
+
+Maker: the A5 maker selection, filtered the same way.
+
+**Pass rule (F2):** the taker mean R's game-clustered 95% CI has a **lower
+bound above 0**, subject to the minimum sample (§8.1).
+
+**Reported, not gating:** maker fill rate and maker R; and a
+**favourite-longshot baseline**: buy YES at the ask on **every** universe rung
+with YES mid < 0.20 and spread ≤ 8¢, with taker R and CI. That baseline
+measures the bias directly. It is the number the literature predicts, and it
+is what P2's flattening has to beat to mean anything.
