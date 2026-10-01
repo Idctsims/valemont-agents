@@ -109,3 +109,11 @@ report.
 
 | # | When (UTC) | Run | Result | Notes |
 |---|---|---|---|---|
+| 1 | 2026-10-01 04:04 | V0 | ran | Brier 0.21299 vs mid 0.20434 (n=13014); taker R -0.008 CI [-0.0778, 0.0647] (n=1476); `props-V0-20261001T040404Z.json` |
+| 2 | 2026-10-01 04:04 | V1 | ran | Brier 0.21120 vs mid 0.20434 (n=13014); taker R -0.0624 CI [-0.1359, 0.0173] (n=1431); `props-V1-20261001T040419Z.json` |
+| 3 | 2026-10-01 04:04 | V2 | ran | Brier 0.21149 vs mid 0.20434 (n=13014); taker R -0.0919 CI [-0.1785, -0.0112] (n=1808); `props-V2-20261001T040434Z.json` |
+| 4 | 2026-10-01 04:04 | V3 | ran | Brier 0.21381 vs mid 0.20434 (n=13014); taker R -0.0713 CI [-0.1459, 0.003] (n=1858); `props-V3-20261001T040449Z.json` |
+| 5 | 2026-10-01 04:05 | V4 | ran | Brier 0.21343 vs mid 0.20434 (n=13014); taker R -0.0632 CI [-0.1379, 0.0137] (n=1857); `props-V4-20261001T040506Z.json` |
+| 6 | 2026-10-01 04:06 | blend(V1) | ran | pooled w 0.299 CI [0.187, 0.407]; walk-forward Brier blend 0.20292 vs mid 0.20434; `props-blend-V1-20261001T040600Z.json` |
+| 7 | 2026-10-01 04:16 | blend null check (V1) | ran (ad hoc, not pre-specified) | same closed-form pooled w vs mid: V1 0.299 [0.187, 0.407]; constant 0.5 0.080 [0.037, 0.122]; player-agnostic base rate (earlier weeks, same stat, floor ±5) 0.145 [0.080, 0.208]. The mid is somewhat noisy/overconfident; part of V1 weight is flattening, not player information. |
+| 8 | 2026-10-01 04:21 | maker(V1) | ran | model: fill 0.0809, R 0.1902 CI [-0.0129, 0.4138]; random: fill 0.0956, R 0.0717 CI [-0.0958, 0.2277]; `props-maker-V1-20261001T042137Z.json` |

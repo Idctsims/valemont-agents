@@ -1,0 +1,39 @@
+{
+  "variant": "V1",
+  "model": {
+    "n_orders": 1966,
+    "n_filled": 159,
+    "fill_rate": 0.08087487283825025,
+    "maker_R_on_fills": 0.19018865132837368,
+    "maker_R_ci95_game_clustered": [
+      -0.012864180809070508,
+      0.41375816633824014
+    ],
+    "adverse_selection": {
+      "filled_mean_side_outcome": 0.4025157232704403,
+      "unfilled_mean_side_outcome": 0.375207526286663,
+      "filled_mean_would_be_R": 0.19018865132837368,
+      "unfilled_mean_would_be_R": 0.1975322284296173,
+      "filled_mean_limit": 0.3440251572327044,
+      "unfilled_mean_limit": 0.32593248478140563
+    }
+  },
+  "random": {
+    "n_orders": 1966,
+    "n_filled": 188,
+    "fill_rate": 0.09562563580874874,
+    "maker_R_on_fills": 0.07172545563504205,
+    "maker_R_ci95_game_clustered": [
+      -0.0957675957510925,
+      0.2277218647032474
+    ],
+    "adverse_selection": {
+      "filled_mean_side_outcome": 0.5691489361702128,
+      "unfilled_mean_side_outcome": 0.5039370078740157,
+      "filled_mean_would_be_R": 0.07172545563504205,
+      "unfilled_mean_would_be_R": 0.15634957756667725,
+      "filled_mean_limit": 0.5511170212765958,
+      "unfilled_mean_limit": 0.4667660292463442
+    }
+  }
+}
