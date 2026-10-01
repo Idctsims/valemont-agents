@@ -6,3 +6,4 @@ reference/
 node_modules/
 .next/
 .DS_Store
+.cache/

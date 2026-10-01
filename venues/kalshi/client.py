@@ -42,6 +42,7 @@ __all__ = [
     "KalshiUnreachable",
     "Candle",
     "Quote",
+    "Trade",
     "Transport",
 ]
 
@@ -176,6 +177,24 @@ class Candle:
             volume=dec(raw.get("volume_fp", raw.get("volume"))) or Decimal(0),
             open_interest=dec(raw.get("open_interest_fp", raw.get("open_interest"))),
         )
+
+
+@dataclass(frozen=True, slots=True)
+class Trade:
+    """One print. `yes_price` is the YES side's price, whatever the taker did."""
+
+    at: datetime
+    yes_price: Decimal
+    count: Decimal
+
+    @classmethod
+    def from_api(cls, raw: dict[str, Any]) -> "Trade":
+        at = ts(raw.get("created_time"))
+        price = dec(raw.get("yes_price_dollars", raw.get("yes_price")))
+        count = dec(raw.get("count_fp", raw.get("count")))
+        if at is None or price is None or count is None:
+            raise KalshiError(f"unusable trade print: {raw!r}")
+        return cls(at=at, yes_price=price, count=count)
 
 
 @dataclass(frozen=True, slots=True)
@@ -370,6 +389,25 @@ class KalshiClient:
             cursor = body.get("cursor") if isinstance(body, dict) else None
             if not cursor or not page:
                 return out
+
+    def trades(
+        self, ticker: str, start: datetime, end: datetime, *, settled_at: datetime | None = None,
+    ) -> list[Trade]:
+        """Every print on `ticker` with start <= created_time < end, oldest
+        first, from whichever tier holds the market."""
+        historical = settled_at is not None and settled_at < self.historical_cutoff()
+        path = "/historical/trades" if historical else "/markets/trades"
+        out: list[Trade] = []
+        cursor: str | None = None
+        while True:
+            body = self.get(path, ticker=ticker, min_ts=int(start.timestamp()),
+                            max_ts=int(end.timestamp()), limit=1000, cursor=cursor)
+            page = body.get("trades", []) if isinstance(body, dict) else []
+            out.extend(Trade.from_api(t) for t in page)
+            cursor = body.get("cursor") if isinstance(body, dict) else None
+            if not cursor or not page:
+                break
+        return sorted((t for t in out if start <= t.at < end), key=lambda t: t.at)
 
     # -- history ------------------------------------------------------------
 
