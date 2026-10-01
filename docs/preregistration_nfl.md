@@ -31,6 +31,8 @@ wins for anything evaluated.
 |---|---|---|---|
 | A1 | 2026-09-30 | Injury status is the team's final report for the game week, not "reports dated before t's day". | nflverse injury files carry no report date; the day-level rule could not be enforced. Made before any 2026 feature was computed. |
 | A1c | 2026-09-30 | **Owner condition on A1:** publication before t is verified per game against the NFL's latest permitted release (4:00 p.m. ET: Wednesday for Thursday games, Thursday for Saturday, Friday for Sunday, Saturday for Monday). If that deadline is after t, or the game is on another weekday, or `location` is Neutral (international, Super Bowl), the injury factor and prop eligibility-by-report are **missing**, never assumed. | A report that may not have been public at t is a leak. Thanksgiving 12:30 p.m. kickoffs fail the check (commit Wednesday 12:30 < Wednesday 4:00 p.m.). Tested in `tests/test_nfl_injury_timing.py`. |
+| A4 | 2026-10-01 | **Props: V1 frozen, blend w = 0.30 frozen, stricter continue rule** (§7.1). | Owner decision after the dev variants (`docs/dev/props_variants.md`). Committed before any further analysis. |
+| A5 | 2026-10-01 | **Props: P2 (ladder overconfidence) pre-registered** (§7.2). **Discovered on 2025 dev data** (run log #7), so 2025 cannot test it; holdout and forward only. | Owner decision. Committed before any further analysis. |
 | A3 | 2026-09-30 | **`nfl_ml` λ = 10.0** (§3.1, §3.4 item 1). Walk-forward on 2025 only (282 of 285 games; weeks validated from the 5th on, 218 out-of-sample rows). MSE by λ: 0.01 → 6.720e-4, 0.1 → 6.610e-4, 1 → 6.536e-4, **10 → 6.530e-4**, 100 → 6.554e-4. Full output: `docs/dev/nfl_ml-dev-fit-2026-09-30.json`. | Development-data result, recorded before any 2026 feature is computed. See the development note below the table. |
 | A2 | 2026-09-30 | λ is chosen by **walk-forward, time-ordered validation** on 2025 only: each week from the 5th onward is predicted by a fit on strictly earlier weeks; score = mean squared error over validated rows. Replaces leave-one-week-out. | Leave-one-week-out trains on weeks after the one it validates. Owner-directed; no random folds anywhere. Tested (`LambdaIsChosenWalkForward`). |
 
@@ -331,3 +333,74 @@ live under this version:
 
 Selections (`selections`, owner picks before kickoff) are evaluated as a
 separate record per agent under the same metrics.
+
+---
+
+## 7. Props amendments (A4, A5) — committed 2026-10-01 before further analysis
+
+Both strategies are evaluated on the **same holdout as `nfl_ml`**: 2026 weeks
+1–3 minus BAL@DAL, LA@DEN and PHI@CHI (45 games; §1.1), every eligible
+yardage-prop player-game in those games (`KXNFLPASSYDS`, `KXNFLRSHYDS`,
+`KXNFLRECYDS`). Commit instant, eligibility, price convention, fees and
+scoring as in §2 and §3.3 (t = kickoff − 75 min; quotes ≤ 60 min old; A1c
+report check; ≥ 2 of the last 4 team games active). One runner, run once,
+results to `docs/backtests/`.
+
+**Shared definitions.**
+- *Taker selection:* per (player, stat), the (rung, side) with the largest
+  `p_side − (ask + taker_fee)`, kept if ≥ 4¢ and spread ≤ 8¢. Entry at the
+  ask; R per §2.4, fee inside the risk.
+- *Maker selection:* per (player, stat), the largest `p_side − limit`, limit =
+  that side's bid at t, kept if ≥ 4¢ and spread ≤ 8¢. **Filled only under the
+  trade-through rule:** Kalshi prints strictly through the limit totalling
+  ≥ 200 contracts (2 × 100) in [t, kickoff). Fee 0 (props are `quadratic`).
+  R on fills.
+- *Uncertainty:* every CI is a 95% bootstrap over whole games (2,000 draws,
+  seed 20260930).
+- *Base rate* `b(rung)`: the mean binary settlement of eligible rungs of the
+  same stat with |floor − f| ≤ 5 yards among rungs whose game kicked off
+  before t (2025 development rungs plus earlier holdout weeks); 0.5 when fewer
+  than 20 such rungs. Exactly the forecaster of run log #7.
+
+### 7.1 A4 — V1 and the frozen blend
+
+- **Model frozen:** V1 as specified in `docs/dev/props_variants.md` and
+  implemented in `sports.nfl.props_variants.usage_mean` (half-life 90 days,
+  20 pseudo-opportunities, 6-game opponent pseudo-count), negative binomial
+  with size per stat × position fitted on all earlier player-games (2025 plus
+  earlier holdout weeks). No calibration layer.
+- **Blend frozen:** `p_blend = 0.30 · p_V1 + 0.70 · p_mid`.
+- **Continue rule (owner, stricter):** on the holdout, compute the pooled
+  closed-form weight against the mid for V1 (`w_V1`) and for the base rate
+  (`w_base`). **Props continue iff the game-clustered 95% CI of
+  `w_V1 − w_base` (paired bootstrap: the same resampled games for both) has a
+  lower bound above 0.** This is the stricter reading of "the model's weight
+  exceeds the base rate's" (§0); the point comparison is reported alongside.
+- **Reported:** Brier of the blend vs the mid; `w_V1`, `w_base` and the
+  difference with CIs; taker R and maker R of blend-selected trades.
+
+### 7.2 A5 — P2, ladder overconfidence
+
+**Discovered on 2025 development data:** a constant 0.5 and a player-agnostic
+base rate both earned positive blend weight against the Kalshi mid (run log
+#7), suggesting the mid at t is overconfident. The 2025 data that suggested
+it cannot test it.
+
+- **Forecast:** `p_P2 = 0.855 · p_mid + 0.145 · b(rung)`. The weight 0.145 is
+  frozen from run log #7.
+- **Trades:** taker and maker selections as above, using `p_P2`.
+- **Extremity buckets** by the rung's YES mid at t: [0, 0.2), [0.2, 0.4),
+  [0.4, 0.6), [0.6, 0.8), [0.8, 1]. Taker and maker R are reported per
+  bucket.
+- **Pass rule:** P2 passes iff the **taker** R's game-clustered 95% CI has a
+  lower bound above 0. Maker R is reported, not gating (secondary; it uses
+  the same selection idea and would otherwise be a second bite). Too few
+  trades to compute a CI = not passed.
+- **Reported:** Brier of `p_P2` vs the mid; taker and maker R overall and per
+  bucket; fill rate.
+
+### 7.3 What a pass licenses
+
+As in §5: running forward on paper under a frozen version, scored by its own
+net-of-fee record. With ~45 games, a fail is far more likely than a pass,
+and **an inconclusive result is a fail.**
