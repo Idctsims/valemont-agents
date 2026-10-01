@@ -57,6 +57,10 @@ __all__ = [
     "ModelVersion",
     "record_model_version",
     "latest_model_version",
+    "archive_market",
+    "archive_settlement",
+    "archive_candles",
+    "archive_trades",
     "close_pool",
 ]
 
@@ -840,6 +844,83 @@ def latest_model_version(
         id=row[0], agent_id=row[1], model=row[2], fitted_at=row[3],
         data_through=row[4], params=row[5], diagnostics=row[6],
     )
+
+
+# ---------------------------------------------------------------------------
+# Kalshi archive (db/011, db/014): store-only. Nothing here reads archived
+# prices back; every insert is ON CONFLICT DO NOTHING so a rerun is harmless,
+# and the database refuses in-play candles and prints.
+# ---------------------------------------------------------------------------
+
+def archive_market(
+    *, ticker: str, event_ticker: str, series_ticker: str, sport: str, game_id: str | None,
+    kickoff: datetime, kickoff_source: str, floor_strike: Numeric | None, title: str | None,
+) -> None:
+    if kickoff.tzinfo is None:
+        raise LedgerError("kickoff must be timezone-aware.")
+    with _pool().connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO kalshi_markets
+                (ticker, event_ticker, series_ticker, sport, game_id, kickoff,
+                 kickoff_source, floor_strike, title)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (ticker) DO NOTHING
+            """,
+            (ticker, event_ticker, series_ticker, sport, game_id, kickoff,
+             kickoff_source, _num(floor_strike), title),
+        )
+
+
+def archive_settlement(*, ticker: str, result: str, value: Numeric, settled_at: datetime) -> None:
+    if settled_at.tzinfo is None:
+        raise LedgerError("settled_at must be timezone-aware.")
+    with _pool().connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO kalshi_settlements (market_id, result, settlement_value, settlement_ts)
+            SELECT id, %s, %s, %s FROM kalshi_markets WHERE ticker = %s
+            ON CONFLICT (market_id) DO NOTHING
+            """,
+            (result, _num(value), settled_at, ticker),
+        )
+
+
+def archive_candles(*, ticker: str, candles: Sequence[Any], source: str) -> None:
+    """1-minute candles: closes, volume and open interest only (the fields
+    F1/F2 read). Open/high/low stay NULL to keep the archive small."""
+    rows = [(c.end, _num(c.yes_bid_close), _num(c.yes_ask_close), _num(c.trade_close),
+             _num(c.volume), _num(c.open_interest), source, ticker) for c in candles]
+    if not rows:
+        return
+    with _pool().connection() as conn, conn.cursor() as cur:
+        cur.executemany(
+            """
+            INSERT INTO kalshi_candles
+                (market_id, period_minutes, end_period_ts, yes_bid_close, yes_ask_close,
+                 trade_close, volume, open_interest, source)
+            SELECT id, 1, %s, %s, %s, %s, %s, %s, %s FROM kalshi_markets WHERE ticker = %s
+            ON CONFLICT (market_id, period_minutes, end_period_ts) DO NOTHING
+            """,
+            rows,
+        )
+
+
+def archive_trades(*, ticker: str, trades: Sequence[Any], source: str) -> None:
+    rows = [(t.trade_id, t.at, _num(t.yes_price), _num(t.count), t.taker_side, source, ticker)
+            for t in trades if t.trade_id]
+    if not rows:
+        return
+    with _pool().connection() as conn, conn.cursor() as cur:
+        cur.executemany(
+            """
+            INSERT INTO kalshi_trades
+                (market_id, trade_id, created_time, yes_price, count, taker_side, source)
+            SELECT id, %s, %s, %s, %s, %s, %s FROM kalshi_markets WHERE ticker = %s
+            ON CONFLICT (trade_id) DO NOTHING
+            """,
+            rows,
+        )
 
 
 def record_resolution_attempt(

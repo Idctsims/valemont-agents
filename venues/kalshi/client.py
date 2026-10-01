@@ -186,6 +186,9 @@ class Trade:
     at: datetime
     yes_price: Decimal
     count: Decimal
+    #: Kalshi's own id and the taker's side, kept for the archive (db/014).
+    trade_id: str | None = None
+    taker_side: str | None = None
 
     @classmethod
     def from_api(cls, raw: dict[str, Any]) -> "Trade":
@@ -194,7 +197,8 @@ class Trade:
         count = dec(raw.get("count_fp", raw.get("count")))
         if at is None or price is None or count is None:
             raise KalshiError(f"unusable trade print: {raw!r}")
-        return cls(at=at, yes_price=price, count=count)
+        return cls(at=at, yes_price=price, count=count,
+                   trade_id=raw.get("trade_id"), taker_side=raw.get("taker_side"))
 
 
 @dataclass(frozen=True, slots=True)
