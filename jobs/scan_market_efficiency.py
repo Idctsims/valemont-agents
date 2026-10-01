@@ -231,7 +231,9 @@ def match_tennis(code: GameCode, matches: Sequence[Scheduled]) -> Scheduled | No
         return None
     a, b = code.teams[:3], code.teams[3:]
     has = lambda name, p: any(f.startswith(p) for f in surname_forms(name))
-    hits = [m for m in matches
+    # ESPN answers every date with the whole tournament, so the same match
+    # arrives once per day queried: de-duplicate before judging ambiguity.
+    hits = [m for m in dict.fromkeys(matches)
             if abs((m.start.date() - code.day).days) <= 2
             and ((has(m.first, a) and has(m.second, b)) or (has(m.first, b) and has(m.second, a)))]
     return hits[0] if len(hits) == 1 else None

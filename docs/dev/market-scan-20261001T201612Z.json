@@ -1,0 +1,1107 @@
+{
+  "run_utc": "2026-10-01T20:16:12.278657+00:00",
+  "window_end": "2026-06-30",
+  "lead_minutes": 60.0,
+  "seed": 20261001,
+  "rows_sha256": "50e26209e071a3fa6908870e673486aed91ddf75a94862fb0f66592789d2bb36",
+  "cells": [
+    {
+      "sport": "CFB",
+      "market": "game",
+      "series": "KXNCAAFGAME",
+      "kind": "winner",
+      "window_events": 936,
+      "pool_events": 300,
+      "pool_rungs": 600,
+      "priced_events": 150,
+      "rungs": 126,
+      "binary_rungs": 126,
+      "fair_value_rungs": 0,
+      "base_fallback_share": 0.047619047619047616,
+      "skipped": {
+        "start unmatched": 20,
+        "no fresh two-sided quote at t": 4
+      },
+      "brier": {
+        "mid": 0.1597843253968254,
+        "base": 0.23680080875281717,
+        "half": 0.25
+      },
+      "weight_base": {
+        "w": 0.05959081552900044,
+        "ci95": [
+          0.0,
+          0.28905213836746046
+        ],
+        "n_events": 126,
+        "positive": false
+      },
+      "weight_half": {
+        "w": 0.0,
+        "ci95": [
+          0.0,
+          0.10935595217822616
+        ],
+        "n_events": 126,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 130,
+        "quoted_share": 0.9692307692307692,
+        "median_spread": 0.010000000000000009,
+        "share_spread_le_3c": 1.0,
+        "share_spread_le_8c": 1.0,
+        "median_volume_24h": 63939.0,
+        "median_open_interest": 79818.5
+      },
+      "inplay_check_share_moved_gt_25c": 0.0,
+      "fee_type": "quadratic_with_maker_fees"
+    },
+    {
+      "sport": "CFB",
+      "market": "spread",
+      "series": "KXNCAAFSPREAD",
+      "kind": "margin",
+      "window_events": 766,
+      "pool_events": 300,
+      "pool_rungs": 3942,
+      "priced_events": 150,
+      "rungs": 554,
+      "binary_rungs": 554,
+      "fair_value_rungs": 0,
+      "base_fallback_share": 0.11371841155234658,
+      "skipped": {
+        "start unmatched": 18,
+        "no fresh two-sided quote at t": 105
+      },
+      "brier": {
+        "mid": 0.22974828519855595,
+        "base": 0.25056317268185624,
+        "half": 0.25
+      },
+      "weight_base": {
+        "w": 0.16239733907509882,
+        "ci95": [
+          0.0,
+          0.5457914598457791
+        ],
+        "n_events": 131,
+        "positive": false
+      },
+      "weight_half": {
+        "w": 0.23414318584112734,
+        "ci95": [
+          0.0,
+          0.49337912352032753
+        ],
+        "n_events": 131,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 659,
+        "quoted_share": 0.8406676783004552,
+        "median_spread": 0.039999999999999925,
+        "share_spread_le_3c": 0.4963898916967509,
+        "share_spread_le_8c": 0.8447653429602888,
+        "median_volume_24h": 55.5,
+        "median_open_interest": 81.5
+      },
+      "inplay_check_share_moved_gt_25c": 0.0,
+      "fee_type": "quadratic_with_maker_fees"
+    },
+    {
+      "sport": "CFB",
+      "market": "total",
+      "series": "KXNCAAFTOTAL",
+      "kind": "total",
+      "window_events": 769,
+      "pool_events": 300,
+      "pool_rungs": 2986,
+      "priced_events": 150,
+      "rungs": 558,
+      "binary_rungs": 558,
+      "fair_value_rungs": 0,
+      "base_fallback_share": 0.0913978494623656,
+      "skipped": {
+        "start unmatched": 24,
+        "no fresh two-sided quote at t": 72
+      },
+      "brier": {
+        "mid": 0.23113086917562725,
+        "base": 0.22513950374212008,
+        "half": 0.25
+      },
+      "weight_base": {
+        "w": 0.6252363929356611,
+        "ci95": [
+          0.20656430372902837,
+          1.0
+        ],
+        "n_events": 125,
+        "positive": true
+      },
+      "weight_half": {
+        "w": 0.15761713446745831,
+        "ci95": [
+          0.0,
+          0.42608234011999335
+        ],
+        "n_events": 125,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 630,
+        "quoted_share": 0.8857142857142857,
+        "median_spread": 0.030000000000000027,
+        "share_spread_le_3c": 0.5860215053763441,
+        "share_spread_le_8c": 0.8942652329749103,
+        "median_volume_24h": 71.5,
+        "median_open_interest": 84.0
+      },
+      "inplay_check_share_moved_gt_25c": 0.0,
+      "fee_type": "quadratic_with_maker_fees"
+    },
+    {
+      "sport": "NHL",
+      "market": "game",
+      "series": "KXNHLGAME",
+      "kind": "winner",
+      "window_events": 1538,
+      "pool_events": 300,
+      "pool_rungs": 600,
+      "priced_events": 150,
+      "rungs": 150,
+      "binary_rungs": 150,
+      "fair_value_rungs": 0,
+      "base_fallback_share": 0.06,
+      "skipped": {},
+      "brier": {
+        "mid": 0.2502086666666667,
+        "base": 0.24604866714425858,
+        "half": 0.25
+      },
+      "weight_base": {
+        "w": 0.648901338324042,
+        "ci95": [
+          0.0,
+          1.0
+        ],
+        "n_events": 150,
+        "positive": false
+      },
+      "weight_half": {
+        "w": 0.511011046225287,
+        "ci95": [
+          0.0,
+          1.0
+        ],
+        "n_events": 150,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 150,
+        "quoted_share": 1.0,
+        "median_spread": 0.010000000000000009,
+        "share_spread_le_3c": 0.9733333333333334,
+        "share_spread_le_8c": 0.9866666666666667,
+        "median_volume_24h": 34157.0,
+        "median_open_interest": 32290.0
+      },
+      "inplay_check_share_moved_gt_25c": 0.0,
+      "fee_type": "quadratic_with_maker_fees"
+    },
+    {
+      "sport": "NHL",
+      "market": "spread",
+      "series": "KXNHLSPREAD",
+      "kind": "margin",
+      "window_events": 1284,
+      "pool_events": 300,
+      "pool_rungs": 1202,
+      "priced_events": 150,
+      "rungs": 591,
+      "binary_rungs": 591,
+      "fair_value_rungs": 0,
+      "base_fallback_share": 0.05414551607445008,
+      "skipped": {
+        "no fresh two-sided quote at t": 10
+      },
+      "brier": {
+        "mid": 0.1959651861252115,
+        "base": 0.2032267671615288,
+        "half": 0.25
+      },
+      "weight_base": {
+        "w": 0.12342165231436925,
+        "ci95": [
+          0.0,
+          0.6016701071072214
+        ],
+        "n_events": 150,
+        "positive": false
+      },
+      "weight_half": {
+        "w": 0.12019205324399074,
+        "ci95": [
+          0.0,
+          0.24602787825224842
+        ],
+        "n_events": 150,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 601,
+        "quoted_share": 0.9833610648918469,
+        "median_spread": 0.020000000000000018,
+        "share_spread_le_3c": 0.7191201353637902,
+        "share_spread_le_8c": 0.9847715736040609,
+        "median_volume_24h": 374.17,
+        "median_open_interest": 373.17
+      },
+      "inplay_check_share_moved_gt_25c": 0.0,
+      "fee_type": "quadratic"
+    },
+    {
+      "sport": "NHL",
+      "market": "total",
+      "series": "KXNHLTOTAL",
+      "kind": "total",
+      "window_events": 1284,
+      "pool_events": 300,
+      "pool_rungs": 1806,
+      "priced_events": 150,
+      "rungs": 729,
+      "binary_rungs": 729,
+      "fair_value_rungs": 0,
+      "base_fallback_share": 0.08367626886145405,
+      "skipped": {
+        "no fresh two-sided quote at t": 21
+      },
+      "brier": {
+        "mid": 0.1839099794238683,
+        "base": 0.19461122388822563,
+        "half": 0.25
+      },
+      "weight_base": {
+        "w": 0.0,
+        "ci95": [
+          0.0,
+          0.3959296544792792
+        ],
+        "n_events": 150,
+        "positive": false
+      },
+      "weight_half": {
+        "w": 0.024999815144815557,
+        "ci95": [
+          0.0,
+          0.14486530021082272
+        ],
+        "n_events": 150,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 750,
+        "quoted_share": 0.972,
+        "median_spread": 0.020000000000000018,
+        "share_spread_le_3c": 0.7421124828532236,
+        "share_spread_le_8c": 0.9355281207133059,
+        "median_volume_24h": 434.0,
+        "median_open_interest": 424.0
+      },
+      "inplay_check_share_moved_gt_25c": 0.002861230329041488,
+      "fee_type": "quadratic"
+    },
+    {
+      "sport": "NHL",
+      "market": "player goals",
+      "series": "KXNHLGOAL",
+      "kind": "prop",
+      "window_events": 989,
+      "pool_events": 300,
+      "pool_rungs": 11262,
+      "priced_events": 150,
+      "rungs": 160,
+      "binary_rungs": 158,
+      "fair_value_rungs": 2,
+      "base_fallback_share": 0.2,
+      "skipped": {
+        "no fresh two-sided quote at t": 590
+      },
+      "brier": {
+        "mid": 0.16044066455696201,
+        "base": 0.15519920547095167,
+        "half": 0.25
+      },
+      "weight_base": {
+        "w": 0.6057656292590445,
+        "ci95": [
+          0.227629694919231,
+          0.9960707292013667
+        ],
+        "n_events": 73,
+        "positive": true
+      },
+      "weight_half": {
+        "w": 0.0334413149022808,
+        "ci95": [
+          0.0,
+          0.22932052394354274
+        ],
+        "n_events": 73,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 750,
+        "quoted_share": 0.21333333333333335,
+        "median_spread": 0.07500000000000001,
+        "share_spread_le_3c": 0.13125,
+        "share_spread_le_8c": 0.53125,
+        "median_volume_24h": 0.0,
+        "median_open_interest": 0.0
+      },
+      "inplay_check_share_moved_gt_25c": 0.0,
+      "fee_type": "quadratic"
+    },
+    {
+      "sport": "NHL",
+      "market": "player points",
+      "series": "KXNHLPTS",
+      "kind": "prop",
+      "window_events": 970,
+      "pool_events": 300,
+      "pool_rungs": 13026,
+      "priced_events": 150,
+      "rungs": 113,
+      "binary_rungs": 112,
+      "fair_value_rungs": 1,
+      "base_fallback_share": 0.0,
+      "skipped": {
+        "no fresh two-sided quote at t": 637
+      },
+      "brier": {
+        "mid": 0.20392723214285713,
+        "base": 0.20555685203566867,
+        "half": 0.25
+      },
+      "weight_base": {
+        "w": 0.4582140811791244,
+        "ci95": [
+          0.0,
+          1.0
+        ],
+        "n_events": 51,
+        "positive": false
+      },
+      "weight_half": {
+        "w": 0.0057185551308945315,
+        "ci95": [
+          0.0,
+          0.26566441895579923
+        ],
+        "n_events": 51,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 750,
+        "quoted_share": 0.15066666666666667,
+        "median_spread": 0.07,
+        "share_spread_le_3c": 0.17699115044247787,
+        "share_spread_le_8c": 0.6106194690265486,
+        "median_volume_24h": 0.0,
+        "median_open_interest": 0.0
+      },
+      "inplay_check_share_moved_gt_25c": 0.0,
+      "fee_type": "quadratic"
+    },
+    {
+      "sport": "NHL",
+      "market": "player assists",
+      "series": "KXNHLAST",
+      "kind": "prop",
+      "window_events": 974,
+      "pool_events": 300,
+      "pool_rungs": 8976,
+      "priced_events": 150,
+      "rungs": 181,
+      "binary_rungs": 181,
+      "fair_value_rungs": 0,
+      "base_fallback_share": 0.0,
+      "skipped": {
+        "no fresh two-sided quote at t": 564,
+        "start unmatched": 1
+      },
+      "brier": {
+        "mid": 0.20738066298342542,
+        "base": 0.22435813794037876,
+        "half": 0.25
+      },
+      "weight_base": {
+        "w": 0.0,
+        "ci95": [
+          0.0,
+          0.44560171407084787
+        ],
+        "n_events": 66,
+        "positive": false
+      },
+      "weight_half": {
+        "w": 0.07076642295151292,
+        "ci95": [
+          0.0,
+          0.27861887746957914
+        ],
+        "n_events": 66,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 745,
+        "quoted_share": 0.24295302013422818,
+        "median_spread": 0.06999999999999998,
+        "share_spread_le_3c": 0.08839779005524862,
+        "share_spread_le_8c": 0.7348066298342542,
+        "median_volume_24h": 0.0,
+        "median_open_interest": 0.0
+      },
+      "inplay_check_share_moved_gt_25c": 0.0,
+      "fee_type": "quadratic"
+    },
+    {
+      "sport": "MLB",
+      "market": "game",
+      "series": "KXMLBGAME",
+      "kind": "winner",
+      "window_events": 3494,
+      "pool_events": 300,
+      "pool_rungs": 596,
+      "priced_events": 150,
+      "rungs": 147,
+      "binary_rungs": 146,
+      "fair_value_rungs": 1,
+      "base_fallback_share": 0.07482993197278912,
+      "skipped": {
+        "start unmatched": 2,
+        "no fresh two-sided quote at t": 1
+      },
+      "brier": {
+        "mid": 0.23833749999999998,
+        "base": 0.2500963034528833,
+        "half": 0.25
+      },
+      "weight_base": {
+        "w": 0.0,
+        "ci95": [
+          0.0,
+          0.7169337113785988
+        ],
+        "n_events": 146,
+        "positive": false
+      },
+      "weight_half": {
+        "w": 0.0,
+        "ci95": [
+          0.0,
+          0.612329202414998
+        ],
+        "n_events": 146,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 148,
+        "quoted_share": 0.9932432432432432,
+        "median_spread": 0.010000000000000009,
+        "share_spread_le_3c": 1.0,
+        "share_spread_le_8c": 1.0,
+        "median_volume_24h": 15894.0,
+        "median_open_interest": 15410.0
+      },
+      "inplay_check_share_moved_gt_25c": 0.0,
+      "fee_type": "quadratic_with_maker_fees"
+    },
+    {
+      "sport": "MLB",
+      "market": "spread",
+      "series": "KXMLBSPREAD",
+      "kind": "margin",
+      "window_events": 1330,
+      "pool_events": 300,
+      "pool_rungs": 2561,
+      "priced_events": 150,
+      "rungs": 567,
+      "binary_rungs": 567,
+      "fair_value_rungs": 0,
+      "base_fallback_share": 0.09876543209876543,
+      "skipped": {
+        "no fresh two-sided quote at t": 183
+      },
+      "brier": {
+        "mid": 0.18063743386243386,
+        "base": 0.20099582332664653,
+        "half": 0.25
+      },
+      "weight_base": {
+        "w": 0.0,
+        "ci95": [
+          0.0,
+          0.0855025389681097
+        ],
+        "n_events": 150,
+        "positive": false
+      },
+      "weight_half": {
+        "w": 0.0,
+        "ci95": [
+          0.0,
+          0.08905512093888263
+        ],
+        "n_events": 150,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 750,
+        "quoted_share": 0.756,
+        "median_spread": 0.010000000000000009,
+        "share_spread_le_3c": 0.9858906525573192,
+        "share_spread_le_8c": 0.9982363315696648,
+        "median_volume_24h": 1703.1,
+        "median_open_interest": 1603.5
+      },
+      "inplay_check_share_moved_gt_25c": 0.0,
+      "fee_type": "quadratic"
+    },
+    {
+      "sport": "MLB",
+      "market": "total",
+      "series": "KXMLBTOTAL",
+      "kind": "total",
+      "window_events": 1330,
+      "pool_events": 300,
+      "pool_rungs": 3619,
+      "priced_events": 150,
+      "rungs": 683,
+      "binary_rungs": 683,
+      "fair_value_rungs": 0,
+      "base_fallback_share": 0.05710102489019034,
+      "skipped": {
+        "no fresh two-sided quote at t": 62,
+        "start unmatched": 1
+      },
+      "brier": {
+        "mid": 0.16441138360175694,
+        "base": 0.17743870983838636,
+        "half": 0.25
+      },
+      "weight_base": {
+        "w": 0.0,
+        "ci95": [
+          0.0,
+          0.33161546285652777
+        ],
+        "n_events": 149,
+        "positive": false
+      },
+      "weight_half": {
+        "w": 0.0,
+        "ci95": [
+          0.0,
+          0.03933175073800914
+        ],
+        "n_events": 149,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 745,
+        "quoted_share": 0.9167785234899329,
+        "median_spread": 0.010000000000000009,
+        "share_spread_le_3c": 0.9472913616398243,
+        "share_spread_le_8c": 0.9838945827232797,
+        "median_volume_24h": 1171.0,
+        "median_open_interest": 1127.18
+      },
+      "inplay_check_share_moved_gt_25c": 0.0,
+      "fee_type": "quadratic"
+    },
+    {
+      "sport": "MLB",
+      "market": "hits",
+      "series": "KXMLBHIT",
+      "kind": "prop",
+      "window_events": 1291,
+      "pool_events": 300,
+      "pool_rungs": 17126,
+      "priced_events": 150,
+      "rungs": 572,
+      "binary_rungs": 570,
+      "fair_value_rungs": 2,
+      "base_fallback_share": 0.015734265734265736,
+      "skipped": {
+        "no fresh two-sided quote at t": 178
+      },
+      "brier": {
+        "mid": 0.16952162280701755,
+        "base": 0.17270781116352418,
+        "half": 0.25
+      },
+      "weight_base": {
+        "w": 0.17134892544926372,
+        "ci95": [
+          0.0,
+          0.7601448234158034
+        ],
+        "n_events": 146,
+        "positive": false
+      },
+      "weight_half": {
+        "w": 0.06421576474153479,
+        "ci95": [
+          0.0,
+          0.1484659125158232
+        ],
+        "n_events": 146,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 750,
+        "quoted_share": 0.7626666666666667,
+        "median_spread": 0.020000000000000018,
+        "share_spread_le_3c": 0.7097902097902098,
+        "share_spread_le_8c": 0.9423076923076923,
+        "median_volume_24h": 0.0,
+        "median_open_interest": 0.0
+      },
+      "inplay_check_share_moved_gt_25c": 0.017543859649122806,
+      "fee_type": "quadratic"
+    },
+    {
+      "sport": "MLB",
+      "market": "strikeouts",
+      "series": "KXMLBKS",
+      "kind": "prop",
+      "window_events": 1285,
+      "pool_events": 300,
+      "pool_rungs": 4089,
+      "priced_events": 150,
+      "rungs": 655,
+      "binary_rungs": 655,
+      "fair_value_rungs": 0,
+      "base_fallback_share": 0.05343511450381679,
+      "skipped": {
+        "no fresh two-sided quote at t": 85,
+        "start unmatched": 2
+      },
+      "brier": {
+        "mid": 0.15470022900763358,
+        "base": 0.1804188554938828,
+        "half": 0.25
+      },
+      "weight_base": {
+        "w": 0.0,
+        "ci95": [
+          0.0,
+          0.1570958480427106
+        ],
+        "n_events": 145,
+        "positive": false
+      },
+      "weight_half": {
+        "w": 0.0,
+        "ci95": [
+          0.0,
+          0.04658096426404581
+        ],
+        "n_events": 145,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 740,
+        "quoted_share": 0.8851351351351351,
+        "median_spread": 0.020000000000000018,
+        "share_spread_le_3c": 0.6717557251908397,
+        "share_spread_le_8c": 0.9358778625954198,
+        "median_volume_24h": 340.9,
+        "median_open_interest": 330.02
+      },
+      "inplay_check_share_moved_gt_25c": 0.0,
+      "fee_type": "quadratic"
+    },
+    {
+      "sport": "MLB",
+      "market": "total bases",
+      "series": "KXMLBTB",
+      "kind": "prop",
+      "window_events": 1291,
+      "pool_events": 300,
+      "pool_rungs": 20085,
+      "priced_events": 150,
+      "rungs": 564,
+      "binary_rungs": 558,
+      "fair_value_rungs": 6,
+      "base_fallback_share": 0.008865248226950355,
+      "skipped": {
+        "no fresh two-sided quote at t": 171,
+        "start unmatched": 3
+      },
+      "brier": {
+        "mid": 0.16401675627240142,
+        "base": 0.17028940322860936,
+        "half": 0.25
+      },
+      "weight_base": {
+        "w": 0.0,
+        "ci95": [
+          0.0,
+          0.3205510395382487
+        ],
+        "n_events": 144,
+        "positive": false
+      },
+      "weight_half": {
+        "w": 0.058055851595437476,
+        "ci95": [
+          0.0,
+          0.1604535091502867
+        ],
+        "n_events": 144,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 735,
+        "quoted_share": 0.7673469387755102,
+        "median_spread": 0.04,
+        "share_spread_le_3c": 0.4397163120567376,
+        "share_spread_le_8c": 0.8156028368794326,
+        "median_volume_24h": 0.0,
+        "median_open_interest": 0.0
+      },
+      "inplay_check_share_moved_gt_25c": 0.013215859030837005,
+      "fee_type": "quadratic"
+    },
+    {
+      "sport": "MLB",
+      "market": "home runs",
+      "series": "KXMLBHR",
+      "kind": "prop",
+      "window_events": 1290,
+      "pool_events": 300,
+      "pool_rungs": 9905,
+      "priced_events": 150,
+      "rungs": 404,
+      "binary_rungs": 396,
+      "fair_value_rungs": 8,
+      "base_fallback_share": 0.007425742574257425,
+      "skipped": {
+        "no fresh two-sided quote at t": 340,
+        "start unmatched": 1
+      },
+      "brier": {
+        "mid": 0.10828440656565656,
+        "base": 0.10947810731494084,
+        "half": 0.25
+      },
+      "weight_base": {
+        "w": 0.349335646758025,
+        "ci95": [
+          0.0,
+          1.0
+        ],
+        "n_events": 140,
+        "positive": false
+      },
+      "weight_half": {
+        "w": 0.04371245921965994,
+        "ci95": [
+          0.0,
+          0.12189898125511009
+        ],
+        "n_events": 140,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 744,
+        "quoted_share": 0.543010752688172,
+        "median_spread": 0.010000000000000009,
+        "share_spread_le_3c": 0.9282178217821783,
+        "share_spread_le_8c": 0.995049504950495,
+        "median_volume_24h": 446.36,
+        "median_open_interest": 446.36
+      },
+      "inplay_check_share_moved_gt_25c": 0.0,
+      "fee_type": "quadratic"
+    },
+    {
+      "sport": "MLB",
+      "market": "hits+runs+RBIs",
+      "series": "KXMLBHRR",
+      "kind": "prop",
+      "window_events": 1291,
+      "pool_events": 300,
+      "pool_rungs": 25085,
+      "priced_events": 150,
+      "rungs": 574,
+      "binary_rungs": 570,
+      "fair_value_rungs": 4,
+      "base_fallback_share": 0.013937282229965157,
+      "skipped": {
+        "no fresh two-sided quote at t": 161,
+        "start unmatched": 3
+      },
+      "brier": {
+        "mid": 0.1845178947368421,
+        "base": 0.1814156235396845,
+        "half": 0.25
+      },
+      "weight_base": {
+        "w": 0.707435314482724,
+        "ci95": [
+          0.25765734673598656,
+          1.0
+        ],
+        "n_events": 140,
+        "positive": true
+      },
+      "weight_half": {
+        "w": 0.010881871933576544,
+        "ci95": [
+          0.0,
+          0.1286134927482014
+        ],
+        "n_events": 140,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 735,
+        "quoted_share": 0.780952380952381,
+        "median_spread": 0.05,
+        "share_spread_le_3c": 0.3048780487804878,
+        "share_spread_le_8c": 0.7526132404181185,
+        "median_volume_24h": 0.0,
+        "median_open_interest": 0.0
+      },
+      "inplay_check_share_moved_gt_25c": 0.029556650246305417,
+      "fee_type": "quadratic"
+    },
+    {
+      "sport": "Tennis",
+      "market": "ATP match",
+      "series": "KXATPMATCH",
+      "kind": "winner",
+      "window_events": 3715,
+      "pool_events": 300,
+      "pool_rungs": 580,
+      "priced_events": 150,
+      "rungs": 0,
+      "binary_rungs": 0,
+      "fair_value_rungs": 0,
+      "base_fallback_share": null,
+      "skipped": {
+        "start unmatched": 150
+      },
+      "brier": {
+        "mid": null,
+        "base": null,
+        "half": null
+      },
+      "weight_base": {
+        "w": null,
+        "ci95": null,
+        "n_events": 0,
+        "positive": false
+      },
+      "weight_half": {
+        "w": null,
+        "ci95": null,
+        "n_events": 0,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 0,
+        "quoted_share": null,
+        "median_spread": null,
+        "share_spread_le_3c": null,
+        "share_spread_le_8c": null,
+        "median_volume_24h": null,
+        "median_open_interest": null
+      },
+      "inplay_check_share_moved_gt_25c": null,
+      "fee_type": "quadratic_with_maker_fees"
+    },
+    {
+      "sport": "Tennis",
+      "market": "WTA match",
+      "series": "KXWTAMATCH",
+      "kind": "winner",
+      "window_events": 3596,
+      "pool_events": 300,
+      "pool_rungs": 586,
+      "priced_events": 150,
+      "rungs": 0,
+      "binary_rungs": 0,
+      "fair_value_rungs": 0,
+      "base_fallback_share": null,
+      "skipped": {
+        "start unmatched": 150
+      },
+      "brier": {
+        "mid": null,
+        "base": null,
+        "half": null
+      },
+      "weight_base": {
+        "w": null,
+        "ci95": null,
+        "n_events": 0,
+        "positive": false
+      },
+      "weight_half": {
+        "w": null,
+        "ci95": null,
+        "n_events": 0,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 0,
+        "quoted_share": null,
+        "median_spread": null,
+        "share_spread_le_3c": null,
+        "share_spread_le_8c": null,
+        "median_volume_24h": null,
+        "median_open_interest": null
+      },
+      "inplay_check_share_moved_gt_25c": null,
+      "fee_type": "quadratic_with_maker_fees"
+    },
+    {
+      "sport": "Tennis",
+      "market": "ATP total games",
+      "series": "KXATPGTOTAL",
+      "kind": "total",
+      "window_events": 806,
+      "pool_events": 300,
+      "pool_rungs": 862,
+      "priced_events": 150,
+      "rungs": 0,
+      "binary_rungs": 0,
+      "fair_value_rungs": 0,
+      "base_fallback_share": null,
+      "skipped": {
+        "start unmatched": 150
+      },
+      "brier": {
+        "mid": null,
+        "base": null,
+        "half": null
+      },
+      "weight_base": {
+        "w": null,
+        "ci95": null,
+        "n_events": 0,
+        "positive": false
+      },
+      "weight_half": {
+        "w": null,
+        "ci95": null,
+        "n_events": 0,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 0,
+        "quoted_share": null,
+        "median_spread": null,
+        "share_spread_le_3c": null,
+        "share_spread_le_8c": null,
+        "median_volume_24h": null,
+        "median_open_interest": null
+      },
+      "inplay_check_share_moved_gt_25c": null,
+      "fee_type": "quadratic"
+    },
+    {
+      "sport": "Tennis",
+      "market": "WTA total games",
+      "series": "KXWTAGTOTAL",
+      "kind": "total",
+      "window_events": 0,
+      "pool_events": 0,
+      "pool_rungs": 0,
+      "priced_events": 0,
+      "rungs": 0,
+      "binary_rungs": 0,
+      "fair_value_rungs": 0,
+      "base_fallback_share": null,
+      "skipped": {},
+      "brier": {
+        "mid": null,
+        "base": null,
+        "half": null
+      },
+      "weight_base": {
+        "w": null,
+        "ci95": null,
+        "n_events": 0,
+        "positive": false
+      },
+      "weight_half": {
+        "w": null,
+        "ci95": null,
+        "n_events": 0,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 0,
+        "quoted_share": null,
+        "median_spread": null,
+        "share_spread_le_3c": null,
+        "share_spread_le_8c": null,
+        "median_volume_24h": null,
+        "median_open_interest": null
+      },
+      "inplay_check_share_moved_gt_25c": null,
+      "fee_type": "quadratic"
+    },
+    {
+      "sport": "Tennis",
+      "market": "ATP game spread",
+      "series": "KXATPGSPREAD",
+      "kind": "margin",
+      "window_events": 868,
+      "pool_events": 300,
+      "pool_rungs": 964,
+      "priced_events": 150,
+      "rungs": 0,
+      "binary_rungs": 0,
+      "fair_value_rungs": 0,
+      "base_fallback_share": null,
+      "skipped": {
+        "start unmatched": 150
+      },
+      "brier": {
+        "mid": null,
+        "base": null,
+        "half": null
+      },
+      "weight_base": {
+        "w": null,
+        "ci95": null,
+        "n_events": 0,
+        "positive": false
+      },
+      "weight_half": {
+        "w": null,
+        "ci95": null,
+        "n_events": 0,
+        "positive": false
+      },
+      "liquidity": {
+        "rungs_attempted": 0,
+        "quoted_share": null,
+        "median_spread": null,
+        "share_spread_le_3c": null,
+        "share_spread_le_8c": null,
+        "median_volume_24h": null,
+        "median_open_interest": null
+      },
+      "inplay_check_share_moved_gt_25c": null,
+      "fee_type": "quadratic"
+    }
+  ]
+}

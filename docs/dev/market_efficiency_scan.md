@@ -165,3 +165,86 @@ settlements; share of b at the 0.5 fallback; Brier of mid and of b; coverage.
 
 | # | When (UTC) | Run | Result | Notes |
 |---|---|---|---|---|
+| 1 | 2026-10-01 18:42 | smoke, `KXNHLGAME` only | ran | Checked coverage and runtime before the runner was committed. Output deleted; the cell is reproduced exactly from cache in #2 and #3. Pacing raised 0.2 → 0.3 s after 429s. |
+| 2 | 2026-10-01 18:46 | all cells | ran; **tennis broken** | Every tennis event "start unmatched". ESPN answers each queried date with the whole tournament, so one match arrived five times and the matcher read it as ambiguous. Fixed (de-duplicate, tested); no threshold or rule changed. `market-scan-20261001T201612Z.json` kept as the record; its CSV, a subset of #3's, was dropped. |
+| 3 | 2026-10-01 20:16 | all cells, after the fix | ran | **The result below.** The 17 non-tennis cells are identical to #2 field for field (all cached). `market-scan-20261001T202546Z.json` / `.csv`. |
+
+## Result (run #3)
+
+**w** = the base rate's blend weight against the mid, with 95% CI clustered by
+event. **w½** = the same for the constant 0.5. When w½ is close to w, the
+"signal" is only flattening an overconfident mid. **Vol** = median contracts
+traded in the 24 h before t. **OI** = median open interest at t. **≤3¢** =
+share of quoted rungs with spread ≤ 3¢. **Quoted** = share of sampled rungs
+with a fresh two-sided quote at t.
+
+| Sport | Market | Rungs (events) | w [95% CI] | w½ | Brier mid / base | Quoted | Median spread | ≤3¢ | Vol 24h | OI |
+|---|---|---|---|---|---|---|---|---|---|---|
+| CFB | game | 126 (126) | 0.06 [0.00, 0.29] | 0.00 | 0.160 / 0.237 | 97% | 1¢ | 100% | 63,939 | 79,819 |
+| CFB | spread | 554 (131) | 0.16 [0.00, 0.55] | 0.23 | 0.230 / 0.251 | 84% | 4¢ | 50% | 56 | 82 |
+| **CFB** | **total** | 558 (125) | **0.63 [0.21, 1.00]** | 0.16 | 0.231 / **0.225** | 89% | 3¢ | 59% | 72 | 84 |
+| NHL | game | 150 (150) | 0.65 [0.00, 1.00] | 0.51 | 0.250 / 0.246 | 100% | 1¢ | 97% | 34,157 | 32,290 |
+| NHL | spread | 591 (150) | 0.12 [0.00, 0.60] | 0.12 | 0.196 / 0.203 | 98% | 2¢ | 72% | 374 | 373 |
+| NHL | total | 729 (150) | 0.00 [0.00, 0.40] | 0.03 | 0.184 / 0.195 | 97% | 2¢ | 74% | 434 | 424 |
+| **NHL** | **player goals** | 160 (73) | **0.61 [0.23, 1.00]** | 0.03 | 0.160 / 0.155 | **21%** | 7.5¢ | 13% | **0** | **0** |
+| NHL | player points | 113 (51) | 0.46 [0.00, 1.00] | 0.01 | 0.204 / 0.206 | 15% | 7¢ | 18% | 0 | 0 |
+| NHL | player assists | 181 (66) | 0.00 [0.00, 0.45] | 0.07 | 0.207 / 0.224 | 24% | 7¢ | 9% | 0 | 0 |
+| MLB | game | 147 (146) | 0.00 [0.00, 0.72] | 0.00 | 0.238 / 0.250 | 99% | 1¢ | 100% | 15,894 | 15,410 |
+| MLB | spread | 567 (150) | 0.00 [0.00, 0.09] | 0.00 | 0.181 / 0.201 | 76% | 1¢ | 99% | 1,703 | 1,604 |
+| MLB | total | 683 (149) | 0.00 [0.00, 0.33] | 0.00 | 0.164 / 0.177 | 92% | 1¢ | 95% | 1,171 | 1,127 |
+| MLB | hits | 572 (146) | 0.17 [0.00, 0.76] | 0.06 | 0.170 / 0.173 | 76% | 2¢ | 71% | 0 | 0 |
+| MLB | strikeouts | 655 (145) | 0.00 [0.00, 0.16] | 0.00 | 0.155 / 0.180 | 89% | 2¢ | 67% | 341 | 330 |
+| MLB | total bases | 564 (144) | 0.00 [0.00, 0.32] | 0.06 | 0.164 / 0.170 | 77% | 4¢ | 44% | 0 | 0 |
+| MLB | home runs | 404 (140) | 0.35 [0.00, 1.00] | 0.04 | 0.108 / 0.109 | 54% | 1¢ | 93% | 446 | 446 |
+| **MLB** | **hits+runs+RBIs** | 574 (140) | **0.71 [0.26, 1.00]** | 0.01 | 0.185 / 0.181 | 78% | 5¢ | 31% | **0** | **0** |
+| **Tennis** | **ATP match** | 136 (136) | **0.34 [0.005, 0.73]** | **0.35** | 0.239 / 0.252 | 96% | 1¢ | 93% | 9,404 | 8,589 |
+| Tennis | WTA match | 128 (128) | 0.15 [0.00, 0.46] | 0.16 | 0.212 / 0.252 | 95% | 1¢ | 91% | 4,584 | 4,525 |
+| Tennis | ATP total games | 206 (110) | 0.44 [0.00, 0.94] | 0.18 | 0.245 / 0.246 | 51% | 30¢ | 22% | 2 | 4 |
+| Tennis | WTA total games | — | no events in the window (series starts 2026-08) | | | | | | | |
+| Tennis | ATP game spread | 234 (112) | 0.25 [0.00, 0.59] | 0.04 | 0.226 / 0.240 | 55% | 17.5¢ | 21% | 0 | 0 |
+
+Coverage: start-time matching dropped 0–24 of 150 events per cell (CFB
+worst, 18–24; ESPN abbreviations). The in-play check (mid moved > 25¢ in the
+2 h before t) was 0–3% everywhere, so t was pre-game. Base-rate fallback to
+0.5 was under 12% except ATP total games (68%: too few prior rungs per
+floor, so its w says little).
+
+### Reading
+
+1. **The liquid markets show no base-rate weight.** That covers every game
+   line, MLB spreads and totals, MLB strikeouts and NHL totals: four- to
+   five-figure daily volume, 1–2¢ spreads, w at or near 0. A
+   team-agnostic prior adds nothing there, which agrees with §8's three
+   builders.
+2. **Four cells clear zero, and liquidity divides them:**
+   - **NHL player goals** and **MLB hits+runs+RBIs** are positive on paper
+     on books that **do not trade**: median 24 h volume 0, open interest 0,
+     and only 21% of NHL goal rungs quoted at all. A stale quote nobody
+     trades is easy to beat and impossible to fill. **Not builds.**
+   - **ATP match** clears by 0.005, and its constant-0.5 weight is the same
+     (0.35 vs 0.34). That is flattening an overconfident mid, not
+     information in the base rate, and the bound is fragile. **Not a
+     build.**
+   - **CFB total** (w 0.63, CI 0.21–1.00) is the only cell where **the base
+     rate alone beats the mid** (Brier 0.225 vs 0.231) and where w is well
+     above w½ (0.63 vs 0.16), so it is not just flattening. It also has a
+     book that trades: 3¢ median spread, ~70 contracts a day, OI ~80. That
+     is thin, but real.
+3. With 21 cells at 95%, about one false positive is expected. Four cleared,
+   and on inspection two are untradeable and one is flattening.
+
+### Candidate for the next build: CFB totals (owner decides)
+
+- **Why:** the one cell with base-rate information beyond flattening on a
+  book that trades.
+- **Untouched data exists now.** The 2026 CFB season (August onward) is in
+  the reserve and unread: about five settled weeks for a pre-registered
+  holdout, then forward through the bowls.
+- **Against it:** about 70 contracts a day is tiny capacity, so it is fine
+  for paper and a question for anything more. `KXNCAAFTOTAL` is
+  `quadratic_with_maker_fees`, so the taker fee is paid in full. This scan
+  priced no fee and no spread, and a 3¢ spread plus the fee may exceed
+  whatever the blend moves.
+- **The required next step is a pre-registration, not code.** It needs the
+  frozen base-rate rule, t, the edge gate net of fees, the holdout (2026
+  weeks 1–5) and a pass rule, written before any 2026 CFB price is read.

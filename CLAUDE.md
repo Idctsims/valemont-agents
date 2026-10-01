@@ -724,10 +724,19 @@ absent row as "I never looked."
 
 ## Current State (2026-10-01)
 
-- **Migrations:** **`db/001`–`db/012` applied** (007–012 verified live by `scripts/verify_migrations_007_012.sql`, 20/20). `db/013` (enable roster) is on the `prod-roster` branch only. Next new file `db/014`.
-- **Tests:** `tests/` 294 on `main` (296 on `prod-roster`), `tests_live/` 63/63, no skips. Run both with **`venv/Scripts/python.exe`**. Kalshi jobs run one at a time.
+- **Migrations:** **`db/001`–`db/012` applied** (007–012 verified live by `scripts/verify_migrations_007_012.sql`, 20/20). **`db/013` (enable roster) is on `main`, to be pasted at go-live.** Next new file `db/014`.
+- **Tests:** `tests/` 320, `tests_live/` 63/63, no skips. Run both with **`venv/Scripts/python.exe`**. Kalshi jobs run one at a time.
 - **Game lines:** `nfl_ml` no dev signal, holdout PASS 0/45 (plumbing only), kept as a forward pipeline test; `nfl_spread` no signal, not built.
 - **Props:** frozen V1 blend and P2 both **FAILED** the holdout (§7.4); **props do not continue** (§8).
 - **`_kalshi_probe`:** one real contract per NFL week (is_test) to exercise settlement and close capture, which have never run on real data.
-- **Deploy prepared, not done:** branch `prod-roster` makes `main.py` boot `_kalshi_probe` + `nfl_ml` with `ROSTER=production`. Go-live = paste 013, merge, set `ROSTER=production`, unset `CANARY`.
-- **Next:** owner go/no-go on deploying `prod-roster`.
+- **Deploy: owner GO (2026-10-01); `prod-roster` merged to `main`.** Railway keeps booting the canary until its env changes. Go-live:
+  1. paste `db/013`;
+  2. record an `nfl_ml` fit (production has **no** `model_versions` row for it, so it stands down every window until one exists);
+  3. set `ROSTER=production` and delete `CANARY` in the same change.
+
+  **The weekly refit that preregistration §3.1 requires is not scheduled anywhere.** Run `jobs.fit_nfl_ml` by hand weekly, or schedule it.
+- **Forward-only F1 (vacated usage) and F2 (longshots under P2)** are pre-registered in `docs/preregistration_nfl.md` §8, evaluated on 2026 weeks 5–18. **No interim look.**
+- **⏰ JANUARY REMINDER — on or after 2027-01-20:** write the F1/F2 runner exactly to §8, commit it, then execute it **once**. It must refuse before 2027-01-20 and refuse if output exists. If Kalshi's 2026 candles or trade prints are gone by then, record the hypothesis as unevaluable, which is a fail.
+- **Market-efficiency scan done** (`docs/dev/market_efficiency_scan.md`, run #3). Liquid markets show no base-rate weight. Positive weight appears only on books that don't trade (NHL goals, MLB H+R+RBI) or as flattening (ATP match), with one exception: **CFB totals**. That is the candidate next build.
+- **The reserve:** every Kalshi event dated **2026-07-01 onward is unread** and kept for that build's holdout. Do not read it in exploration.
+- **Next:** owner go-live (above). Owner decision on CFB totals. If yes, pre-register before reading any 2026 CFB price.

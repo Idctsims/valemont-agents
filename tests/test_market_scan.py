@@ -91,6 +91,11 @@ class Tennis(unittest.TestCase):
         m = s.Scheduled(datetime(2025, 7, 5, 12, tzinfo=timezone.utc), "Keegan Rice", "Stefanos Tsitsipas")
         self.assertEqual(s.match_tennis(code, [m]), m)
 
+    def test_the_same_match_seen_on_several_query_days_is_not_ambiguous(self) -> None:
+        code = s.parse_game_code("KXATPMATCH-25AUG10COMDAR")
+        m = s.Scheduled(datetime(2025, 8, 10, 15, 5, tzinfo=timezone.utc), "Luciano Darderi", "Francisco Comesana")
+        self.assertEqual(s.match_tennis(code, [m] * 5), m)
+
     def test_a_given_name_never_stands_in_for_a_surname(self) -> None:
         code = s.parse_game_code("KXATPMATCH-25JUL05STERIC")
         m = s.Scheduled(datetime(2025, 7, 5, 12, tzinfo=timezone.utc), "Keegan Rice", "Stefanos Tsitsipas")
