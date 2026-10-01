@@ -724,10 +724,10 @@ absent row as "I never looked."
 
 ## Current State (2026-10-01)
 
-- **Migrations:** `db/007`–`db/011` being pasted; `db/012` (probe agent) written. `db/013` (enable roster) is on the `prod-roster` branch only. Next new file `db/014`.
-- **Tests:** `tests/` 294 on `main` (296 on `prod-roster`), `tests_live/` 63. Run both with **`venv/Scripts/python.exe`**. Kalshi jobs run one at a time.
+- **Migrations:** **`db/001`–`db/012` applied** (007–012 verified live by `scripts/verify_migrations_007_012.sql`, 20/20). `db/013` (enable roster) is on the `prod-roster` branch only. Next new file `db/014`.
+- **Tests:** `tests/` 294 on `main` (296 on `prod-roster`), `tests_live/` 63/63, no skips. Run both with **`venv/Scripts/python.exe`**. Kalshi jobs run one at a time.
 - **Game lines:** `nfl_ml` no dev signal, holdout PASS 0/45 (plumbing only), kept as a forward pipeline test; `nfl_spread` no signal, not built.
 - **Props:** frozen V1 blend and P2 both **FAILED** the holdout (§7.4); **props do not continue** (§8).
 - **`_kalshi_probe`:** one real contract per NFL week (is_test) to exercise settlement and close capture, which have never run on real data.
-- **Deploy prepared, not done:** branch `prod-roster` makes `main.py` boot `_kalshi_probe` + `nfl_ml` with `ROSTER=production`. Go-live = merge, set `ROSTER=production`, unset `CANARY`, paste 009/012/013.
-- **Next:** owner go/no-go on deploying `prod-roster`; finish pasting migrations.
+- **Deploy prepared, not done:** branch `prod-roster` makes `main.py` boot `_kalshi_probe` + `nfl_ml` with `ROSTER=production`. Go-live = paste 013, merge, set `ROSTER=production`, unset `CANARY`.
+- **Next:** owner go/no-go on deploying `prod-roster`.
