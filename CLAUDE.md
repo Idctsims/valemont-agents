@@ -724,7 +724,18 @@ absent row as "I never looked."
 
 ## Current State (2026-10-01)
 
-- **Migrations:** **`db/001`–`db/012` applied** (007–012 verified live by `scripts/verify_migrations_007_012.sql`, 20/20). **To paste:** `db/013` (enable roster) at go-live; `db/014` (trade and settlement archive) before the first archive run. Next new file `db/015`.
+- **Migrations:** **`db/001`–`db/012` applied** (007–012 verified live by `scripts/verify_migrations_007_012.sql`, 20/20). **To paste:** `db/013` (enable roster) at go-live; `db/014` (trade and settlement archive) before the first archive run. `db/015` (close mutation gaps) to paste. Next new file `db/016`.
+- **Immutability audit (2026-10-01, empirical).** UPDATE and DELETE were attempted on a `_test` row of every table, rolled back.
+  - **Refused by trigger:** `commitments`, `events`, `resolution_attempts`, `commitment_factors`, `closing_snapshots`, `selections`, `model_versions`, `kalshi_markets`, `kalshi_candles`. `legs` UPDATE was refused too, by `legs_frozen`.
+  - **ACCEPTED:**
+    - `resolutions` UPDATE and DELETE: outcomes and pnl were rewritable;
+    - `legs` DELETE;
+    - `briefs` UPDATE and DELETE;
+    - `runs` UPDATE on any row;
+    - `agents` UPDATE on any column, including `is_test`.
+  - **Refused only by a foreign key**, so not protected: `runs` and `agents` DELETE.
+  - **Fix:** `db/015_close_mutation_gaps.sql`, plus `tests_live/test_mutation_gaps.py`, which skips until pasted.
+  - **⚠ `db/015` applied_at: PENDING PASTE.** Fill this in from `migration_log` once pasted. **Rows written before that timestamp in `resolutions`, `legs`, `briefs`, `runs` and `agents` were protected by convention only.** There is no history to prove none was altered.
 - **Tests:** `tests/` 340, `tests_live/` 63/63, no skips. Run both with **`venv/Scripts/python.exe`**. Kalshi jobs run one at a time. The archive's SQL path has no live test, because a test row would be permanent in the real archive; its first real run is the test.
 - **Game lines:** `nfl_ml` no dev signal, holdout PASS 0/45 (plumbing only), kept as a forward pipeline test; `nfl_spread` no signal, not built.
 - **Props:** frozen V1 blend and P2 both **FAILED** the holdout (§7.4); **props do not continue** (§8).

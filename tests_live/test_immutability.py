@@ -358,21 +358,18 @@ class LegsFreezeAtCommitTime(LiveLedgerTestCase):
         )
 
     def test_legs_cannot_be_deleted(self) -> None:
-        """`legs` carries no reject_mutation trigger — DELETE is not blocked.
-
-        Recorded as a limit, not asserted as a guarantee. `legs_frozen` is
-        BEFORE UPDATE only (db/001). A leg is reachable only through its
-        commitment, which cannot be deleted, so nothing in the application can
-        orphan one — but the table itself would accept a raw DELETE.
-        """
-        triggers = self.scalar(
+        """Before db/015, `legs` accepted a raw DELETE (the 2026-10-01 audit
+        confirmed it empirically). db/015 adds `legs_no_delete`. The trigger
+        list is pinned to whichever state the database is in; the refusal
+        itself is tested in test_mutation_gaps.py."""
+        triggers = list(self.scalar(
             """
             SELECT coalesce(array_agg(tgname ORDER BY tgname), '{}')
               FROM pg_trigger WHERE NOT tgisinternal
                AND tgrelid = 'legs'::regclass
             """
-        )
-        self.assertEqual(list(triggers), ["legs_frozen"])
+        ))
+        self.assertIn(triggers, (["legs_frozen"], ["legs_frozen", "legs_no_delete"]))
 
 
 class ResolutionsCannotLandEarly(LiveLedgerTestCase):
