@@ -33,6 +33,7 @@ wins for anything evaluated.
 | A1c | 2026-09-30 | **Owner condition on A1:** publication before t is verified per game against the NFL's latest permitted release (4:00 p.m. ET: Wednesday for Thursday games, Thursday for Saturday, Friday for Sunday, Saturday for Monday). If that deadline is after t, or the game is on another weekday, or `location` is Neutral (international, Super Bowl), the injury factor and prop eligibility-by-report are **missing**, never assumed. | A report that may not have been public at t is a leak. Thanksgiving 12:30 p.m. kickoffs fail the check (commit Wednesday 12:30 < Wednesday 4:00 p.m.). Tested in `tests/test_nfl_injury_timing.py`. |
 | A4 | 2026-10-01 | **Props: V1 frozen, blend w = 0.30 frozen, stricter continue rule** (§7.1). | Owner decision after the dev variants (`docs/dev/props_variants.md`). Committed before any further analysis. |
 | A5 | 2026-10-01 | **Props: P2 (ladder overconfidence) pre-registered** (§7.2). **Discovered on 2025 dev data** (run log #7), so 2025 cannot test it; holdout and forward only. | Owner decision. Committed before any further analysis. |
+| A5a | 2026-10-01 | Base-rate pool admits a rung only once its **settlement** was public before t, not once its game had **kicked off**; V1's NB size pairs use strictly earlier weeks. | Found reviewing the runner before any run: a 1 p.m. game has kicked off but not settled at a 4:25 game's commit instant, so "kicked off before t" leaked. Strictly tighter; made before the holdout ran. |
 | A3 | 2026-09-30 | **`nfl_ml` λ = 10.0** (§3.1, §3.4 item 1). Walk-forward on 2025 only (282 of 285 games; weeks validated from the 5th on, 218 out-of-sample rows). MSE by λ: 0.01 → 6.720e-4, 0.1 → 6.610e-4, 1 → 6.536e-4, **10 → 6.530e-4**, 100 → 6.554e-4. Full output: `docs/dev/nfl_ml-dev-fit-2026-09-30.json`. | Development-data result, recorded before any 2026 feature is computed. See the development note below the table. |
 | A2 | 2026-09-30 | λ is chosen by **walk-forward, time-ordered validation** on 2025 only: each week from the 5th onward is predicted by a fit on strictly earlier weeks; score = mean squared error over validated rows. Replaces leave-one-week-out. | Leave-one-week-out trains on weeks after the one it validates. Owner-directed; no random folds anywhere. Tested (`LambdaIsChosenWalkForward`). |
 
@@ -358,9 +359,10 @@ results to `docs/backtests/`.
 - *Uncertainty:* every CI is a 95% bootstrap over whole games (2,000 draws,
   seed 20260930).
 - *Base rate* `b(rung)`: the mean binary settlement of eligible rungs of the
-  same stat with |floor − f| ≤ 5 yards among rungs whose game kicked off
-  before t (2025 development rungs plus earlier holdout weeks); 0.5 when fewer
-  than 20 such rungs. Exactly the forecaster of run log #7.
+  same stat with |floor − f| ≤ 5 yards among rungs **whose Kalshi settlement
+  was public before t** (2025 development rungs plus holdout rungs; A5a);
+  0.5 when fewer than 20 such rungs. The forecaster of run log #7 (which
+  used earlier weeks only, so it never met the case A5a closes).
 
 ### 7.1 A4 — V1 and the frozen blend
 
