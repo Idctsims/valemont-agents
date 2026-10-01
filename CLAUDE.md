@@ -357,6 +357,14 @@ there's one agent to debug, not four.
   validation**: no re-fitting the 2025 or holdout data until something
   appears.
 
+  **Props result (2026-10-01).** Both pre-registered props strategies failed
+  their one holdout run (`docs/preregistration_nfl.md` §7.4): the frozen V1
+  blend earned zero weight against the Kalshi mid (as did the base rate), and
+  P2's taker R interval spanned zero. **By the owner's rule, props do not
+  continue.** As with game lines, any new props idea needs a new
+  pre-registration and forward-only validation; the 2025 and holdout data are
+  spent.
+
 ---
 
 ## 9. The pnl contract
@@ -714,13 +722,12 @@ absent row as "I never looked."
 
 ---
 
-## Current State (2026-09-30)
+## Current State (2026-10-01)
 
-- **Migrations:** `db/007`–`db/011` being pasted by the owner. Next file `db/013` (`db/012` written: probe agent).
-- **Tests:** `tests/` 282, `tests_live/` 63 (6 skip until 008/010 are pasted). Run both with **`venv/Scripts/python.exe`**; bare `python` has no psycopg. The live quarantine check counts non-test rows globally: a production write mid-run trips it, rerun.
-- **Kalshi jobs run one at a time.** Concurrent jobs exhausted the 429 backoff once (logged in the pre-registration); backoff is now ~4 min total.
-- **Agents:** step 4 done (`_fake` canary). No real agent enabled; one runs only with BOTH a `Registration` AND `agents.enabled = true`.
-- **Game lines:** `nfl_ml` no dev signal (A3), holdout **PASS 0/45** (plumbing only), kept as a forward pipeline test (§8); `nfl_spread` dev fit no signal, not built.
-- **`_kalshi_probe`** (db/012, is_test): one real contract per NFL week to exercise settlement/capture; registered, not enabled; `main.py` still boots only the canary, so neither it nor `nfl_ml` runs on Railway yet.
-- **`nfl_props` variants** (`docs/dev/props_variants.md`, 8 logged runs): best V1 (usage prior), still worse than the mid alone (Brier 0.2112 vs 0.2043), taker R negative for all. Blend w = 0.30 [0.19, 0.41] beats the mid out of sample, but null forecasters also earn weight (base rate 0.145 [0.08, 0.21]). Maker trade-through: fills 8%; model R +19% [−1%, +41%] vs random +7% [−10%, +23%]. Awaiting owner decision.
-- **Next:** owner review of the props diagnostics; paste 008–012.
+- **Migrations:** `db/007`–`db/011` being pasted; `db/012` (probe agent) written. `db/013` (enable roster) is on the `prod-roster` branch only. Next new file `db/014`.
+- **Tests:** `tests/` 294 on `main` (296 on `prod-roster`), `tests_live/` 63. Run both with **`venv/Scripts/python.exe`**. Kalshi jobs run one at a time.
+- **Game lines:** `nfl_ml` no dev signal, holdout PASS 0/45 (plumbing only), kept as a forward pipeline test; `nfl_spread` no signal, not built.
+- **Props:** frozen V1 blend and P2 both **FAILED** the holdout (§7.4); **props do not continue** (§8).
+- **`_kalshi_probe`:** one real contract per NFL week (is_test) to exercise settlement and close capture, which have never run on real data.
+- **Deploy prepared, not done:** branch `prod-roster` makes `main.py` boot `_kalshi_probe` + `nfl_ml` with `ROSTER=production`. Go-live = merge, set `ROSTER=production`, unset `CANARY`, paste 009/012/013.
+- **Next:** owner go/no-go on deploying `prod-roster`; finish pasting migrations.
