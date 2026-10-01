@@ -1,0 +1,163 @@
+{
+  "run_utc": "2026-10-01T05:22:32.800091+00:00",
+  "games": 45,
+  "rungs": 4731,
+  "binary_rungs": 4692,
+  "skipped": {
+    "player not matched": 49,
+    "A1c unverifiable": 47,
+    "not recently active": 218,
+    "stale quote": 509,
+    "no report / Out / Doubtful": 4
+  },
+  "dev_input_sha256": {
+    ".cache\\props_2025.json": "bbe0585fc5adfa82a584e13603e4b64a341707821889661af20974b00d990727",
+    ".cache\\props_pred_V1.json": "8c15f5f69df57774e76d2159d29eda5a2409042ab854c0973d5fbae7067814dc"
+  },
+  "brier": {
+    "mid": 0.15537048167092923,
+    "blend": 0.1579167465035995,
+    "p2": 0.15658595195230093,
+    "v1_alone": 0.17128494012231962
+  },
+  "A4_blend": {
+    "weights": {
+      "n_games": 43,
+      "w_v1": 0.0,
+      "w_base": 0.0,
+      "w_diff": 0.0,
+      "w_diff_ci95": [
+        -0.045128484828550204,
+        0.0
+      ],
+      "continue": false
+    },
+    "taker": {
+      "n": 102,
+      "mean_R": -0.4711917360107681,
+      "ci95": [
+        -0.7181825206065925,
+        -0.21151684450084884
+      ]
+    },
+    "maker": {
+      "n_orders": 387,
+      "n_filled": 44,
+      "fill_rate": 0.11369509043927649,
+      "mean_R_on_fills": 0.6047462617184189,
+      "ci95": [
+        -0.17101459358789087,
+        1.5364311513453968
+      ]
+    },
+    "pass_continue_rule": false
+  },
+  "A5_P2": {
+    "taker": {
+      "n": 150,
+      "mean_R": 0.2913065638797643,
+      "ci95": [
+        -0.5129885097006435,
+        1.1737868144517958
+      ]
+    },
+    "maker": {
+      "n_orders": 553,
+      "n_filled": 18,
+      "fill_rate": 0.0325497287522604,
+      "mean_R_on_fills": -0.10656270305393105,
+      "ci95": [
+        -1.0,
+        1.0102339181286553
+      ]
+    },
+    "by_bucket": {
+      "[0.0, 0.2)": {
+        "taker": {
+          "n": 115,
+          "mean_R": 0.5404810277395787,
+          "ci95": [
+            -0.528539784591827,
+            1.6908302204154009
+          ]
+        },
+        "maker": {
+          "n_orders": 405,
+          "n_filled": 2,
+          "fill_rate": 0.0049382716049382715,
+          "mean_R_on_fills": -1.0,
+          "ci95": [
+            -1.0,
+            -1.0
+          ]
+        }
+      },
+      "[0.2, 0.4)": {
+        "taker": {
+          "n": 0,
+          "mean_R": null,
+          "ci95": null
+        },
+        "maker": {
+          "n_orders": 6,
+          "n_filled": 2,
+          "fill_rate": 0.3333333333333333,
+          "mean_R_on_fills": -1.0,
+          "ci95": [
+            -1.0,
+            -1.0
+          ]
+        }
+      },
+      "[0.4, 0.6)": {
+        "taker": {
+          "n": 0,
+          "mean_R": null,
+          "ci95": null
+        },
+        "maker": {
+          "n_orders": 1,
+          "n_filled": 1,
+          "fill_rate": 1.0,
+          "mean_R_on_fills": -1.0,
+          "ci95": null
+        }
+      },
+      "[0.6, 0.8)": {
+        "taker": {
+          "n": 1,
+          "mean_R": -1.0,
+          "ci95": null
+        },
+        "maker": {
+          "n_orders": 42,
+          "n_filled": 1,
+          "fill_rate": 0.023809523809523808,
+          "mean_R_on_fills": -1.0,
+          "ci95": null
+        }
+      },
+      "[0.8, 1.0]": {
+        "taker": {
+          "n": 34,
+          "mean_R": -0.5135098120025563,
+          "ci95": [
+            -1.0,
+            0.007335095662058327
+          ]
+        },
+        "maker": {
+          "n_orders": 99,
+          "n_filled": 12,
+          "fill_rate": 0.12121212121212122,
+          "mean_R_on_fills": 0.34015594541910343,
+          "ci95": [
+            -1.0,
+            1.7046783625730992
+          ]
+        }
+      }
+    },
+    "pass": false
+  }
+}

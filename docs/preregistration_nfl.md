@@ -406,3 +406,20 @@ it cannot test it.
 As in §5: running forward on paper under a frozen version, scored by its own
 net-of-fee record. With ~45 games, a fail is far more likely than a pass,
 and **an inconclusive result is a fail.**
+
+### 7.4 Execution log
+
+2026-10-01 05:26 UTC, `python -m jobs.holdout_nfl_props --execute`, run once
+(`docs/backtests/nfl_props-holdout-20261001T052631Z.json`): 45 games, 43 with
+priced props, 4,731 rungs (4,692 binary).
+
+- **A4 (frozen V1 blend): FAIL.** Pooled blend weight against the mid:
+  V1 0.00, base rate 0.00 (both clipped at zero; neither improves the mid);
+  difference CI [−0.045, 0.000], lower bound not above 0. Brier: mid 0.1554,
+  blend 0.1579, V1 alone 0.1713. Taker R −47% (CI −72%…−21%, n = 102).
+  Maker: 11% filled, R on fills +60% (CI −17%…+154%, n = 44).
+  **Per the continue rule, props do not continue.**
+- **A5 (P2): FAIL.** Taker R +29% (CI −51%…+117%, n = 150), lower bound not
+  above 0. Brier 0.1566 vs mid 0.1554. Nearly all taker trades fall in the
+  [0, 0.2) bucket (n = 115, +54%, CI −53%…+169%): buying cheap longshots,
+  high variance, not significant. Maker: 3% filled.
