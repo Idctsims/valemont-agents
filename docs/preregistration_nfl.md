@@ -38,6 +38,7 @@ wins for anything evaluated.
 | A2 | 2026-09-30 | λ is chosen by **walk-forward, time-ordered validation** on 2025 only: each week from the 5th onward is predicted by a fit on strictly earlier weeks; score = mean squared error over validated rows. Replaces leave-one-week-out. | Leave-one-week-out trains on weeks after the one it validates. Owner-directed; no random folds anywhere. Tested (`LambdaIsChosenWalkForward`). |
 | F1 | 2026-10-01 | **Forward-only hypothesis F1, vacated usage** (§8.2). Evaluated once on 2026 weeks 5–18, not before 2027-01-20. | Owner decision after the props holdout failed. Frozen before any week-5 game was played and before any analysis; the 2025 and holdout data are spent (CLAUDE.md §8). |
 | F2 | 2026-10-01 | **Forward-only hypothesis F2, longshot rungs under P2** (§8.3). Same window and date. | Owner decision. **Post-hoc subgroup** of the A5 holdout; the favourite-longshot bias predicts the opposite sign. Frozen before any analysis. |
+| F1a | 2026-10-01 | **F1 redefined:** treated starter = Questionable on the A1c-verified final report **and** `INA` on the nflverse weekly roster; beneficiaries must be `ACT`; control excludes every pool with an absent ≥ 0.15-share player (§8.2). Source verified on 2025 data. | Owner: the Out/Doubtful proxy tests news the market absorbed days earlier, which contradicts F1's information-speed claim. Made before any week-5 game (week 5 opens 2026-10-08) and before any F1 quantity was computed. |
 
 **Execution log (not a rule change).** 2026-09-30 ~16:40 CT: the first
 `python -m jobs.holdout_nfl_ml --execute` passed H1, then aborted while
@@ -477,16 +478,41 @@ spent and are not evaluation data for either hypothesis.
 
 ### 8.2 F1 — vacated usage
 
-**Claim:** when a team's starter is ruled out, the remaining players in that
-starter's opportunity pool are underpriced on Kalshi's yardage props at t.
-Buying their YES side earns positive net R.
+**Claim (amended F1a):** when a starter becomes unavailable **late**, the
+remaining players in that starter's opportunity pool are underpriced on
+Kalshi's yardage props at t. "Late" means Questionable on the final report,
+then inactive on game day. Buying the remaining players' YES side earns
+positive net R. This is an information-speed claim: the news is at most
+about 90 minutes old at t.
 
-**Ruled out — proxy, disclosed.** Game-day inactive lists are not in nflverse.
-"Ruled out" therefore means **listed Out or Doubtful on the team's final
-injury report, A1c-verified as public before t.** That is the same proxy as
-V4 (`docs/dev/props_variants.md`). It catches news the market has had at least
-a day to absorb. That makes the test harder, not easier. Surprise game-day
-inactives (Questionable → inactive) are invisible to it.
+**Treated starter (F1a).** A pool player who meets both of these:
+
+1. is listed **Questionable** on the team's final injury report for the
+   game week, A1c-verified as public before t;
+2. is **inactive** for the game. This means `status = "INA"` in nflverse
+   **weekly rosters** (`weekly_rosters/roster_weekly_{season}.csv`) for that
+   team, season and week, regular season (`game_type = "REG"`).
+
+**Source, verified 2026-10-01 on 2025 data (development season, already
+spent):**
+
+- Of 2,523 regular-season player-weeks with `status = "INA"` and
+  `status_description_abbr = "A01"`, **1** logged any offensive, defensive or
+  special-teams snap in nflverse snap counts. Of 21,016 with `ACT`/`A01`,
+  20,459 did.
+- Of players listed Questionable on the final report, 324 were `INA`, 821
+  `ACT` and 72 `RES`.
+- Of players listed Out, 988 were `INA` and 350 `RES`.
+
+`INA` is therefore the game-day inactive designation. The NFL publishes
+inactives about 90 minutes before kickoff, before t = kickoff − 75 min, so
+the status was public at t. A player moved to a reserve list (`RES`) before
+game day is **not** treated: that news is public a day or more before t.
+The snap-count fallback is not used, because "0 snaps" also catches players
+who were active and simply did not play, which was not knowable at t.
+**Disclosed:** the roster file is read in January, not at t. A status
+corrected after kickoff cannot be told apart, and 1 in 2,523 inactive
+players played in 2025.
 
 **Pools and shares.** Per stat, the pool is `rec`: WR, TE, RB, by targets;
 `rush`: RB, by carries; `pass`: QB, by pass attempts. A player's **share** is
@@ -495,15 +521,15 @@ weighted `0.5^(days/90)`, over the team's player-games with kickoff < t in the
 2025 and 2026 seasons, divided by the pool total. The `pass` pool is added for
 F1; the function is otherwise unchanged.
 
-**Trigger.** For game g, team T, stat s: **triggered** iff at least one pool
-player listed Out or Doubtful (A1c-verified) has a share ≥ **0.15**
-(`VACATED_MIN_SHARE`). The magnitude of the vacated share selects nothing
-beyond that.
+**Trigger (F1a).** For game g, team T, stat s: **triggered** iff at least one
+**treated starter** in the pool has a share ≥ **0.15** (`VACATED_MIN_SHARE`).
+The magnitude of the vacated share selects nothing beyond that.
 
-**Beneficiaries.** Every other pool player of T who:
+**Beneficiaries (F1a).** Every other pool player of T who:
 
 - has a Kalshi market for stat s in g at t (`KXNFLPASSYDS`, `KXNFLRSHYDS`,
   `KXNFLRECYDS`);
+- is `ACT` on the weekly roster for that week (active at t);
 - is **not** listed Out or Doubtful;
 - is matched to an nflverse player ID by the existing title matcher.
 
@@ -523,13 +549,18 @@ exactly the case F1 is about.
 **Pass rule (F1):** the taker mean R's game-clustered 95% CI has a **lower
 bound above 0**, subject to the minimum sample (§8.1).
 
-**Reported, not gating:** maker fill rate and maker R on fills with CI, and a
-**control**: the same rung rule, buying YES, applied to every pool player-stat
-in the same games whose pool was **not** triggered, with the same quote
-filters. The control's taker R and the difference F1 − control (games
-resampled jointly) are reported with CIs. If F1 passes but the difference CI
-includes 0, the result is "overs were cheap", not "vacated usage is
-mispriced", and it is written up that way.
+**Reported, not gating:**
+
+- maker fill rate and maker R on fills, with CI;
+- a **control**: the same rung rule, buying YES, applied to every `ACT` pool
+  player-stat in the same games whose pool had **no** player with share
+  ≥ 0.15 who was Out, Doubtful, `RES`, or Questionable and not `ACT`. The
+  control's taker R and the difference F1 − control (games resampled
+  jointly) are reported with CIs. If F1 passes but the difference CI includes
+  0, the result is "overs were cheap", not "vacated usage is mispriced", and
+  it is written up that way;
+- **the original Out/Doubtful trigger** (the pre-F1a definition), as a
+  descriptive comparison only. It is never a second bite at the pass rule.
 
 ### 8.3 F2 — longshot rungs under P2's frozen flattening
 
