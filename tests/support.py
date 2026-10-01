@@ -31,7 +31,7 @@ REAL_AGENTS: dict[str, int] = {
 }
 #: Harness agents the suites run as. is_test = true.
 TEST_AGENTS: dict[str, int] = {"_fake": 4, "_test": 90, "_test_crypto": 91,
-                               "_test_nfl_ml": 92}
+                               "_test_nfl_ml": 92, "_kalshi_probe": 93}
 
 WRITES = frozenset({
     "start_run", "end_run", "commit", "add_resolution", "emit_event",

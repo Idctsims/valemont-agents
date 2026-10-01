@@ -493,6 +493,25 @@ def build_default() -> Orchestrator:
     )
     # Scheduled only once agents.enabled is true for nfl_ml (db/009 seeds it
     # false; a later migration enables it after the holdout passes).
+
+    # The one harness agent in the live roster, deliberately: it is the only
+    # way to exercise Kalshi settlement and close capture on real markets.
+    # is_test = true (db/012), so nothing it writes reaches a track record.
+    from adapters._kalshi_probe import KalshiProbe
+
+    orchestrator.register(
+        Registration(
+            agent=KalshiProbe(),
+            schedule=Schedule(
+                run=every(minutes=15, jitter=30),
+                sweep=every(hours=1, jitter=120),
+                capture=every(minutes=10, jitter=30),
+                misfire_grace=300,
+            ),
+            defer_policy=NFL_ML_DEFER_POLICY,
+            capture_policy=NFL_ML_CAPTURE_POLICY,
+        )
+    )
     return orchestrator
 
 
