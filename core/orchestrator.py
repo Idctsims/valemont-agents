@@ -515,6 +515,39 @@ def build_default() -> Orchestrator:
     return orchestrator
 
 
+def build_production() -> Orchestrator:
+    """The roster `main.py` boots with ROSTER=production.
+
+    Exactly the agents the owner has approved to run on Railway, and nothing
+    else: crypto, equities and prizepicks stay out until approved. Each is
+    still two-gated: it is scheduled only if its `agents.enabled` is true
+    (db/013 enables these two).
+
+      _kalshi_probe   is_test; one real contract per NFL week to exercise
+                      Kalshi settlement and close capture on real data
+      nfl_ml          forward live-pipeline test; expected to commit ~never (A3)
+
+    A props strategy is added here only if it passes its pre-registered
+    holdout (docs/preregistration_nfl.md §7).
+    """
+    from adapters._kalshi_probe import KalshiProbe
+    from adapters.nfl_ml import NFL_ML_CAPTURE_POLICY, NFL_ML_DEFER_POLICY, NflMoneylineAgent
+
+    kalshi_schedule = Schedule(
+        run=every(minutes=15, jitter=30),
+        sweep=every(hours=1, jitter=120),
+        capture=every(minutes=10, jitter=30),
+        misfire_grace=300,
+    )
+    orchestrator = Orchestrator()
+    for agent in (KalshiProbe(), NflMoneylineAgent()):
+        orchestrator.register(Registration(
+            agent=agent, schedule=kalshi_schedule,
+            defer_policy=NFL_ML_DEFER_POLICY, capture_policy=NFL_ML_CAPTURE_POLICY,
+        ))
+    return orchestrator
+
+
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,

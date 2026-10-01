@@ -47,12 +47,20 @@ def main() -> None:
     )
     log = logging.getLogger("valemont.main")
 
-    if os.getenv("CANARY", "").strip().lower() != "true":
+    canary = os.getenv("CANARY", "").strip().lower() == "true"
+    roster = os.getenv("ROSTER", "").strip().lower()
+    if canary and roster:
+        _refuse(log, "Both CANARY=true and ROSTER are set. Pick one: the canary "
+                     "and the production roster never share a worker.")
+    if roster and roster != "production":
+        _refuse(log, f"ROSTER={roster!r} is not recognised. The only value is "
+                     "'production'.")
+    if not canary and roster != "production":
         _refuse(
             log,
-            "No agents registered. Set CANARY=true to run the fake canary "
-            "agent on this worker. Refusing to start empty — the canary must "
-            "not be able to ship by accident.",
+            "No agents registered. Set CANARY=true to run the fake canary, or "
+            "ROSTER=production to run the approved roster. Refusing to start "
+            "empty — neither may ship by accident.",
         )
 
     if not os.getenv("DATABASE_URL", "").strip():
@@ -61,6 +69,13 @@ def main() -> None:
             "DATABASE_URL is not set. Add the Supabase Session pooler string "
             "to this service's environment variables.",
         )
+
+    if roster == "production":
+        from core.orchestrator import build_production
+
+        log.info("production roster — _kalshi_probe, nfl_ml (each two-gated)")
+        build_production().run_forever()
+        return
 
     from adapters._fake import build
     from core.orchestrator import Orchestrator, Registration, Schedule, every
