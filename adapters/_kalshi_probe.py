@@ -135,6 +135,7 @@ class KalshiProbe(KalshiContractAgent[Observation, Observation]):
         )
         return Proposal(
             kind="event_contract",
+            quote_fetched_at=home.fetched_at,
             thesis=f"Plumbing probe, week {game.week}: 1 YES {home.ticker} at {yes.entry_price}. "
                    "No edge claimed; exercises settlement and close capture.",
             payload=payload, resolves_after=home.expected_expiration, legs=[leg],

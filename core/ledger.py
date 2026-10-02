@@ -23,14 +23,19 @@ Numerics are `Decimal` end to end. Floats are accepted and converted via
 
 from __future__ import annotations
 
+import logging
 import os
+import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Final, Literal, Sequence
 
+import psycopg
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
+
+log = logging.getLogger("valemont.ledger")
 
 __all__ = [
     "Leg",
@@ -41,6 +46,8 @@ __all__ = [
     "TRACK_RECORD_FILTER",
     "agent_id",
     "agent_is_test",
+    "ClockSample",
+    "measure_clock",
     "start_run",
     "end_run",
     "commit",
@@ -360,8 +367,66 @@ def agent_enabled(slug: str) -> bool:
 # Runs — one row per agent wake-up.
 # ---------------------------------------------------------------------------
 
-def start_run(agent_id: int, notes: str | None = None) -> int:
-    """Open a run. `started_at` is the database's now(), as everything is."""
+@dataclass(frozen=True, slots=True)
+class ClockSample:
+    """The worker-to-database clock offset, measured once per tick.
+
+    `offset_ms` = database time − worker time at the midpoint of a timed
+    `SELECT clock_timestamp()` round trip. Positive means the database clock
+    is ahead. Uncertainty is ± `rtt_ms` / 2. A worker timestamp `w`
+    corresponds to roughly `w + offset_ms` on the database's clock. That
+    figure is an **estimate**, and is always labelled one: worker time is
+    never presented as database time.
+    """
+
+    offset_ms: Decimal
+    rtt_ms: Decimal
+    worker_mid: datetime
+    db_time: datetime
+
+    def to_db_estimate(self, worker_time: datetime) -> datetime:
+        return worker_time + timedelta(milliseconds=float(self.offset_ms))
+
+
+def measure_clock() -> ClockSample:
+    """`clock_timestamp()`, not `now()`: `now()` is frozen at transaction
+    start. In this fresh, one-statement transaction the two agree to
+    microseconds, but clock_timestamp() is the reading taken in flight."""
+    with _pool().connection() as conn:
+        t0 = time.time()
+        row = conn.execute("SELECT clock_timestamp()").fetchone()
+        t1 = time.time()
+    assert row is not None
+    db_time: datetime = row[0]
+    worker_mid = datetime.fromtimestamp((t0 + t1) / 2, timezone.utc)
+    offset = Decimal(str(round((db_time - worker_mid).total_seconds() * 1000, 3)))
+    rtt = Decimal(str(round((t1 - t0) * 1000, 3)))
+    return ClockSample(offset_ms=offset, rtt_ms=rtt, worker_mid=worker_mid, db_time=db_time)
+
+
+def start_run(agent_id: int, notes: str | None = None, clock: ClockSample | None = None) -> int:
+    """Open a run. `started_at` is the database's now(), as everything is.
+
+    `clock`, when given, is stored on the row (db/016). If db/016 is not
+    pasted yet, the run still opens without it and the omission is logged
+    at ERROR. A worker that cannot start runs records nothing at all, which
+    is worse than a run missing its clock reading.
+    """
+    if clock is not None:
+        try:
+            with _pool().connection() as conn:
+                row = conn.execute(
+                    """
+                    INSERT INTO runs (agent_id, status, notes, clock_offset_ms, clock_rtt_ms)
+                    VALUES (%s, 'running', %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (agent_id, notes, clock.offset_ms, clock.rtt_ms),
+                ).fetchone()
+            assert row is not None
+            return row[0]
+        except psycopg.errors.UndefinedColumn:
+            log.error("runs has no clock columns — paste db/016; clock offset NOT stored on this run")
     with _pool().connection() as conn:
         row = conn.execute(
             """

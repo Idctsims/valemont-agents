@@ -104,6 +104,12 @@ class Proposal:
     confidence: Numeric | None = None
     closes_at: datetime | None = None
     factors: Sequence[Factor] = ()
+    #: When the adapter's worker received the price it is committing at, on
+    #: the WORKER's clock (timezone-aware). Required: core refuses a commitment
+    #: without it. Core stores it as worker time, together with a
+    #: database-clock estimate from the tick's measured offset, under
+    #: `payload.quote_provenance`. It is never relabelled as database time.
+    quote_fetched_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -345,6 +351,31 @@ def declared_risk(
             )
 
     return distance * Decimal(str(size))
+
+
+def with_quote_provenance(proposal: Proposal, clock: ledger.ClockSample | None) -> dict[str, Any]:
+    """The payload as committed: the adapter's, plus `quote_provenance`.
+
+    Worker time and the database-clock estimate are stored side by side and
+    named for what they are. Without a clock sample the estimate is null,
+    with the reason; it is never filled with the worker time.
+    """
+    fetched = proposal.quote_fetched_at
+    if fetched is None:
+        raise ValueError("Proposal.quote_fetched_at is required: record when the quote was received.")
+    if fetched.tzinfo is None:
+        raise ValueError("Proposal.quote_fetched_at must be timezone-aware.")
+    if "quote_provenance" in proposal.payload:
+        raise ValueError("payload.quote_provenance is reserved for core.")
+    provenance: dict[str, Any] = {
+        "fetched_at_worker": fetched.isoformat(),
+        "fetched_at_db_estimate": None if clock is None else clock.to_db_estimate(fetched).isoformat(),
+        "clock_offset_ms": None if clock is None else str(clock.offset_ms),
+        "clock_rtt_ms": None if clock is None else str(clock.rtt_ms),
+    }
+    if clock is None:
+        provenance["note"] = "no clock sample this tick; database-clock estimate unavailable"
+    return {**proposal.payload, "quote_provenance": provenance}
 
 
 def _as_slate(
@@ -759,7 +790,8 @@ class BaseAgent[Obs, Th](ABC):
         Swallowed is not silent: three separate places record it.
         """
         agent_id = self.agent_id
-        run_id = ledger.start_run(agent_id)
+        clock = self._measure_clock()
+        run_id = ledger.start_run(agent_id, clock=clock)
         self._event("woke", run_id=run_id)
 
         try:
@@ -791,7 +823,7 @@ class BaseAgent[Obs, Th](ABC):
             failed = 0
             for index, proposal in enumerate(slate):
                 try:
-                    written.append(self._write(proposal, agent_id, run_id))
+                    written.append(self._write(proposal, agent_id, run_id, clock))
                 except Exception as exc:
                     failed += 1
                     # One bad proposal must not strand the rest of the slate.
@@ -870,14 +902,24 @@ class BaseAgent[Obs, Th](ABC):
                     )
                 seen[identity] = index
 
-    def _write(self, proposal: Proposal, agent_id: int, run_id: int) -> int:
+    def _measure_clock(self) -> ledger.ClockSample | None:
+        """One timed round trip per tick. A failure here costs the reading,
+        not the tick: it is logged, and the run opens without an offset."""
+        try:
+            return ledger.measure_clock()
+        except Exception:
+            self.log.error("clock offset measurement failed", exc_info=True)
+            return None
+
+    def _write(self, proposal: Proposal, agent_id: int, run_id: int,
+               clock: ledger.ClockSample | None = None) -> int:
         """Persist one proposal. Raises on failure; the caller isolates it."""
         committed = ledger.commit(
             agent_id=agent_id,
             run_id=run_id,
             kind=proposal.kind,
             thesis=proposal.thesis,
-            payload=proposal.payload,
+            payload=with_quote_provenance(proposal, clock),
             resolves_after=proposal.resolves_after,
             legs=proposal.legs,
             confidence=proposal.confidence,
@@ -980,7 +1022,7 @@ class BaseAgent[Obs, Th](ABC):
         if not pending:
             return SweepOutcome(run_id=None)
 
-        run_id = ledger.start_run(agent_id, notes="resolution sweep")
+        run_id = ledger.start_run(agent_id, notes="resolution sweep", clock=self._measure_clock())
         self._event(
             "resolving", f"{len(pending)} due", run_id=run_id,
             detail={"due": len(pending)},
@@ -1102,7 +1144,7 @@ class BaseAgent[Obs, Th](ABC):
         if not pending:
             return CaptureOutcome(run_id=None)
 
-        run_id = ledger.start_run(agent_id, notes="close capture")
+        run_id = ledger.start_run(agent_id, notes="close capture", clock=self._measure_clock())
         self._event(
             "capturing", f"{len(pending)} due", run_id=run_id,
             detail={"due": len(pending)},

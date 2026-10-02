@@ -41,7 +41,7 @@ WRITES = frozenset({
 READS = frozenset({
     "agent_id", "agent_is_test", "agent_enabled", "due_for_resolution",
     "due_for_capture",
-    "open_commitments", "latest_model_version",
+    "open_commitments", "latest_model_version", "measure_clock",
 })
 
 
@@ -73,6 +73,11 @@ class LedgerStub:
     _failures: dict[str, list[tuple[Callable[[Call], bool], BaseException]]] = (
         field(default_factory=dict)
     )
+    #: What `measure_clock` serves: DB 250 ms ahead of the worker, 40 ms RTT.
+    clock: ledger.ClockSample = field(default_factory=lambda: ledger.ClockSample(
+        offset_ms=Decimal("250"), rtt_ms=Decimal("40"),
+        worker_mid=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        db_time=datetime(2026, 10, 1, 0, 0, 0, 250000, tzinfo=timezone.utc)))
     _runs: dict[int, int] = field(default_factory=dict)
     _commitments: dict[int, int] = field(default_factory=dict)
     _ids: Any = field(default_factory=lambda: itertools.count(1000))
@@ -166,8 +171,13 @@ class LedgerStub:
         self._record("record_model_version", (), kwargs, kwargs.get("agent_id"))
         return next(self._ids)
 
-    def start_run(self, agent_id: int, notes: str | None = None) -> int:
-        self._record("start_run", (agent_id,), {"notes": notes}, agent_id)
+    def measure_clock(self) -> ledger.ClockSample:
+        self._record("measure_clock", (), {}, None)
+        return self.clock
+
+    def start_run(self, agent_id: int, notes: str | None = None,
+                  clock: ledger.ClockSample | None = None) -> int:
+        self._record("start_run", (agent_id,), {"notes": notes, "clock": clock}, agent_id)
         run_id = next(self._ids)
         self._runs[run_id] = agent_id
         return run_id
@@ -312,6 +322,7 @@ def proposal(
         thesis=thesis or f"{subject} {market} {direction} {line}",
         payload={"stake": "1", "invalidation": "0"},
         resolves_after=now() + timedelta(hours=1),
+        quote_fetched_at=now(),
         legs=[Leg(subject, market, line, direction, Decimal("1")), *extra_legs],
     )
 

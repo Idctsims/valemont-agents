@@ -263,6 +263,7 @@ class FakeAgent(BaseAgent[int, Spec]):
         now = datetime.now(timezone.utc)
         return Proposal(
             kind=thesis.kind,
+            quote_fetched_at=now,
             thesis=thesis.thesis,
             confidence=thesis.confidence,
             legs=thesis.legs,

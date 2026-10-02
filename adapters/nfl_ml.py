@@ -277,7 +277,7 @@ class NflMoneylineAgent(KalshiContractAgent[Observation, Thesis]):
                                  for k, v in pick.features.values.items()},
                     "quote": {"yes_bid": str(quote.yes_bid), "yes_ask": str(quote.yes_ask),
                               "no_bid": str(quote.no_bid), "no_ask": str(quote.no_ask),
-                              "fetched_at": quote.fetched_at.isoformat()},
+                              "fetched_at_worker": quote.fetched_at.isoformat()},
                 },
             )
             # Factors are signed toward HOME in the model; flip when the position
@@ -287,6 +287,7 @@ class NflMoneylineAgent(KalshiContractAgent[Observation, Thesis]):
                        if value != 0]
             proposals.append(Proposal(
                 kind="event_contract",
+                quote_fetched_at=quote.fetched_at,
                 thesis=(f"{game.away}@{game.home} {game.game_id}: {cand.side.upper()} {cand.ticker} at "
                         f"{cand.entry_price} (+{cand.fee} fee); p_model {cand.p_model} vs "
                         f"cost {cand.entry_cost}, edge {cand.edge}"),

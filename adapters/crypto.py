@@ -186,6 +186,9 @@ class Snapshot:
     symbol: str
     price: Decimal
     price_at: datetime
+    #: When this worker received the price, on the worker's clock. `price_at`
+    #: is the venue's own timestamp; they are different clocks.
+    fetched_at: datetime
     sma: Decimal
     sigma: Decimal
     atr: Decimal
@@ -244,6 +247,7 @@ class Thesis:
     atr: Decimal
     confidence: Decimal
     rationale: str
+    quote_fetched_at: datetime | None = None
 
     @property
     def market(self) -> str:
@@ -455,6 +459,7 @@ class CryptoAgent(BaseAgent[Observation, Thesis]):
         traded at.
         """
         price, price_at = self.feed.ticker(symbol)
+        fetched_at = datetime.now(timezone.utc)
 
         age = datetime.now(timezone.utc) - price_at
         if age > MAX_PRICE_AGE:
@@ -495,6 +500,7 @@ class CryptoAgent(BaseAgent[Observation, Thesis]):
             symbol=symbol,
             price=price,
             price_at=price_at,
+            fetched_at=fetched_at,
             sma=sma,
             sigma=sigma,
             atr=_atr(candles, ATR_PERIOD),
@@ -572,6 +578,7 @@ class CryptoAgent(BaseAgent[Observation, Thesis]):
             stop=stop,
             z=pick.z,
             atr=pick.atr,
+            quote_fetched_at=pick.fetched_at,
             confidence=_confidence(pick.z),
             rationale=(
                 f"{pick.symbol} at {pick.price} is {abs(pick.z):.2f}σ {side} its "
@@ -594,6 +601,7 @@ class CryptoAgent(BaseAgent[Observation, Thesis]):
         """
         return Proposal(
             kind="paper_position",
+            quote_fetched_at=thesis.quote_fetched_at,
             thesis=thesis.rationale,
             confidence=thesis.confidence,
             resolves_after=datetime.now(timezone.utc) + HORIZON,
