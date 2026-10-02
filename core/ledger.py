@@ -102,6 +102,7 @@ EventKind = Literal[
     "captured",
     "close_missed",
     "selected",
+    "gate_evaluated",
     "error",
 ]
 

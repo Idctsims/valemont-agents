@@ -26,7 +26,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Callable, ClassVar, Final, Sequence
+from typing import Any, Callable, ClassVar, Final, Sequence
 
 from core import ledger
 from core.agent import DeferPolicy, Proposal
@@ -229,8 +229,10 @@ class NflMoneylineAgent(KalshiContractAgent[Observation, Thesis]):
             )
             if features.mid_t is None:
                 log.info("%s: stale or missing price at t — no commitment", g.game.game_id)
+                self._record_gate(observation, g, None, None, None, "stale or missing price at t")
                 continue
             if g.home.yes_bid is None or g.home.yes_ask is None:
+                self._record_gate(observation, g, None, None, None, "no two-sided home quote")
                 continue
             p_market = (g.home.yes_bid + g.home.yes_ask) / 2
             contributions = observation.model.contributions(features)
@@ -243,6 +245,8 @@ class NflMoneylineAgent(KalshiContractAgent[Observation, Thesis]):
                 + evaluate(g.away, 1 - p_home, observation.regime, GATE, check_depth=self.check_depth)
             )
             passing = [c for c in candidates if c.passes]
+            nearest = max(passing or candidates, key=lambda c: c.edge)
+            self._record_gate(observation, g, nearest, p_market, contributions, None)
             if not passing:
                 continue
             best = max(passing, key=lambda c: c.edge)
@@ -254,6 +258,33 @@ class NflMoneylineAgent(KalshiContractAgent[Observation, Thesis]):
                       model_version=observation.model_version,
                       regime=observation.regime,
                       schedule_fetched_at=observation.schedule_fetched_at)
+
+    def _record_gate(self, observation: Observation, g: Any, cand: Any, p_market: Decimal | None,
+                     contributions: dict[str, Decimal] | None, skipped: str | None) -> None:
+        """One `gate_evaluated` event per game per tick in the commit window:
+        the best candidate (passing if any, else the nearest miss), the model
+        probability on that side, the mid, the model's adjustment, the
+        threshold, and the verdict. Home-signed adjustment and mid are kept
+        alongside the side-held values, so the row cannot be misread."""
+        adjustment = None if contributions is None else sum(contributions.values(), Decimal(0))
+        holds_home = None if cand is None else ((cand.ticker == g.home.ticker) == (cand.side == "yes"))
+        side_mid = None if p_market is None or holds_home is None else (p_market if holds_home else 1 - p_market)
+        s = lambda x: None if x is None else str(x)
+        self.record_gate_evaluation({
+            "game_id": g.game.game_id, "kickoff": g.game.kickoff.isoformat(),
+            "model_version": observation.model_version,
+            "ticker": None if cand is None else cand.ticker, "side": None if cand is None else cand.side,
+            "holds_home": holds_home,
+            "p_model_side": None if cand is None else s(cand.p_model),
+            "mid_side": s(side_mid), "mid_home": s(p_market),
+            "adjustment_home": s(adjustment),
+            "contributions_home": None if contributions is None else {k: str(v) for k, v in contributions.items()},
+            "edge": None if cand is None else s(cand.edge),
+            "threshold_margin": str(GATE.margin), "max_spread": str(GATE.max_spread),
+            "spread": None if cand is None else s(cand.spread),
+            "passes": False if cand is None else cand.passes,
+            "reason": skipped if cand is None else cand.reason,
+        }, message=f"{g.game.game_id}: {'PASS' if cand is not None and cand.passes else 'fail'}")
 
     def build_commitment(self, thesis: Thesis) -> list[Proposal]:
         proposals: list[Proposal] = []

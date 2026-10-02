@@ -792,6 +792,7 @@ class BaseAgent[Obs, Th](ABC):
         agent_id = self.agent_id
         clock = self._measure_clock()
         run_id = ledger.start_run(agent_id, clock=clock)
+        self._tick_run_id = run_id
         self._event("woke", run_id=run_id)
 
         try:
@@ -1402,6 +1403,20 @@ class BaseAgent[Obs, Th](ABC):
         return True
 
     # -- plumbing -----------------------------------------------------------
+
+    def record_gate_evaluation(self, detail: dict[str, Any], message: str | None = None) -> None:
+        """A capability for adapters: one `gate_evaluated` event for the tick
+        in progress, DB-stamped like every event.
+
+        Call it once per evaluated game inside a commit window, pass or fail.
+        A record of only the passes cannot tell a gate that is never close
+        from one that misses by a cent. Outside a tick it is a no-op, logged.
+        """
+        run_id = getattr(self, "_tick_run_id", None)
+        if run_id is None:
+            self.log.error("record_gate_evaluation called outside a tick — not recorded")
+            return
+        self._event("gate_evaluated", message, run_id=run_id, detail=detail)
 
     def _event(
         self,

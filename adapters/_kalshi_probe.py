@@ -124,6 +124,12 @@ class KalshiProbe(KalshiContractAgent[Observation, Observation]):
             return None
         mid = (home.yes_bid + home.yes_ask) / 2
         yes = next(c for c in evaluate(home, mid, regime, PROBE_GATE) if c.side == "yes")
+        self.record_gate_evaluation({
+            "game_id": game.game_id, "kickoff": game.kickoff.isoformat(), "ticker": yes.ticker,
+            "side": yes.side, "p_model_side": str(yes.p_model), "mid_side": str(mid), "adjustment": "0",
+            "edge": str(yes.edge), "threshold_margin": str(PROBE_GATE.margin), "spread": str(yes.spread),
+            "passes": yes.passes, "reason": yes.reason, "purpose": "plumbing_probe",
+        }, message=f"{game.game_id}: probe {'PASS' if yes.passes else 'fail'}")
         if not yes.passes:
             log.warning("%s: probe could not price (%s)", home.ticker, yes.reason)
             return None

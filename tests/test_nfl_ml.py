@@ -257,6 +257,43 @@ class EndToEnd(LedgerTestCase):
         agent.run_once()
         self.assertEqual(self.commits(), [])
 
+    def gate_events(self) -> list[dict]:
+        return [d for k, d in self.ledger.events() if k == "gate_evaluated"]
+
+    def test_a_failing_gate_still_records_one_evaluation(self) -> None:
+        self.build(betas={"injury": "0.03"}).run_once()
+        [ev] = self.gate_events()
+        self.assertFalse(ev["passes"])
+        self.assertEqual(ev["threshold_margin"], "0.02")
+        self.assertEqual(ev["mid_home"], "0.495")
+        self.assertEqual(D(ev["adjustment_home"]), D("0.03"))
+        self.assertIsNotNone(ev["edge"])
+        self.assertTrue(ev["reason"])
+
+    def test_a_passing_gate_records_the_side_held(self) -> None:
+        self.build(betas={"injury": "0.10"}).run_once()
+        [ev] = self.gate_events()
+        self.assertTrue(ev["passes"])
+        self.assertTrue(ev["holds_home"])
+        self.assertEqual(ev["side"], "yes")
+        self.assertEqual(D(ev["p_model_side"]), D("0.595"))
+
+    def test_a_stale_price_is_recorded_as_skipped_not_absent(self) -> None:
+        agent = self.build(betas={"injury": "0.10"})
+        agent.client.candle_map.clear()
+        agent.run_once()
+        [ev] = self.gate_events()
+        self.assertFalse(ev["passes"])
+        self.assertIsNone(ev["edge"])
+        self.assertIn("stale", ev["reason"])
+        self.assertEqual(self.commits(), [])
+
+    def test_no_model_means_no_evaluation_recorded(self) -> None:
+        agent = self.build()
+        self.ledger.model_versions.clear()
+        agent.run_once()
+        self.assertEqual(self.gate_events(), [])
+
     def test_a_game_already_held_is_not_committed_again(self) -> None:
         agent = self.build(betas={"injury": "0.10"})
         self.ledger.open.append(pending(

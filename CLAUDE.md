@@ -738,7 +738,7 @@ absent row as "I never looked."
 
 ## Current State (2026-10-01)
 
-- **Migrations:** **`db/001`–`db/012` applied** (007–012 verified live by `scripts/verify_migrations_007_012.sql`, 20/20). **To paste:** `db/013` (enable roster) at go-live; `db/014` (trade and settlement archive) before the first archive run. `db/015` (close mutation gaps) to paste. Next new file `db/016`.
+- **Migrations:** **`db/001`–`db/012` applied** (007–012 verified live by `scripts/verify_migrations_007_012.sql`, 20/20). **To paste:** `db/013` (enable roster) at go-live; `db/014` (trade and settlement archive) before the first archive run. To paste, **in order**: `db/015` (close mutation gaps), `db/016` (run clock offset), `db/017` (pre-registration stamps). Each depends on the one before. Next new file `db/018`.
 - **Immutability audit (2026-10-01, empirical).** UPDATE and DELETE were attempted on a `_test` row of every table, rolled back.
   - **Refused by trigger:** `commitments`, `events`, `resolution_attempts`, `commitment_factors`, `closing_snapshots`, `selections`, `model_versions`, `kalshi_markets`, `kalshi_candles`. `legs` UPDATE was refused too, by `legs_frozen`.
   - **ACCEPTED:**
@@ -750,7 +750,19 @@ absent row as "I never looked."
   - **Refused only by a foreign key**, so not protected: `runs` and `agents` DELETE.
   - **Fix:** `db/015_close_mutation_gaps.sql`, plus `tests_live/test_mutation_gaps.py`, which skips until pasted.
   - **⚠ `db/015` applied_at: PENDING PASTE.** Fill this in from `migration_log` once pasted. **Rows written before that timestamp in `resolutions`, `legs`, `briefs`, `runs` and `agents` were protected by convention only.** There is no history to prove none was altered.
-- **Tests:** `tests/` 340, `tests_live/` 63/63, no skips. Run both with **`venv/Scripts/python.exe`**. Kalshi jobs run one at a time. The archive's SQL path has no live test, because a test row would be permanent in the real archive; its first real run is the test.
+- **Tests:** `tests/` 361, `tests_live/` 63 run, 3 skipped (the db/015, db/016, db/017 classes, until pasted). Run both with **`venv/Scripts/python.exe`**. Kalshi jobs run one at a time. The archive's SQL path has no live test, because a test row would be permanent in the real archive; its first real run is the test.
+- **Quote provenance and clock (2026-10-02):**
+  - Every tick stores its worker→DB clock offset on the run row (`db/016`).
+  - Every commitment carries `payload.quote_provenance`: `fetched_at_worker`, plus a separately named `fetched_at_db_estimate`. Worker time is never labelled DB time.
+  - Local machine: the DB is ~373 ms behind it (RTT ~55 ms).
+  - **Railway's offset is unmeasured: no canary run has been written since 2026-09-29 23:35 UTC.** Check whether the service is up.
+  - The dashboard's "#9076" matches no row in production. Its source is unknown.
+- **Pre-registration stamps (`db/017`):**
+  - The holdout runners refuse unless their section's hash was DB-stamped before they run.
+  - F1/F2 (§8) and CFB totals are registered by the migration itself. The CFB stamp postdates its run; the git commit is its pre-run evidence.
+  - `tests/test_preregistration.py` fails if a registered text is edited.
+- **Gate evaluations:** nfl_ml (and the probe) write one `gate_evaluated` event per game per tick inside the commit window. Each records side, model probability, mid, adjustment, threshold, edge and pass/fail, DB-stamped. Estimate ~1,250–1,550 rows a week, ~27 MB a season.
+  - **⚠ Open for the owner:** nfl_ml's commit window is the whole 24 h before kickoff and it ticks every 15 min. It therefore takes ~96 looks per game and commits on the first pass. Preregistration §2.6 states a single instant, t = kickoff − 24 h. Repeated looks inflate false passes. These events now make it measurable; the code is unchanged pending a decision.
 - **Game lines:** `nfl_ml` no dev signal, holdout PASS 0/45 (plumbing only), kept as a forward pipeline test; `nfl_spread` no signal, not built.
 - **Props:** frozen V1 blend and P2 both **FAILED** the holdout (§7.4); **props do not continue** (§8).
 - **CFB totals: FAILED its pre-registered holdout** (2026-10-01, `docs/preregistration_cfb_totals.md` §9).
