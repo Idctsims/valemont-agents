@@ -33,8 +33,13 @@ from jobs import scan_market_efficiency as scan
 from jobs.dev_props_maker import fill
 from venues.kalshi.client import Candle, KalshiClient, Quote
 from venues.kalshi.fees import fetch_schedule
+from core.preregistration import PreregistrationMissing, require_registered
 
 log = logging.getLogger("valemont.holdout_cfb_totals")
+
+#: The frozen text this runner executes; it refuses unless DB-stamped first (db/017).
+PREREG_DOC: Final = "docs/preregistration_cfb_totals.md"
+PREREG_SECTION: Final = "BEFORE ## 9. Execution log"
 
 # --- frozen by preregistration_cfb_totals.md -----------------------------------
 SERIES: Final = "KXNCAAFTOTAL"
@@ -226,6 +231,11 @@ def main(argv: list[str] | None = None) -> int:
         for r in reasons:
             log.error("refusing: %s", r)
         return 2
+    try:
+        prereg = require_registered(PREREG_DOC, PREREG_SECTION)
+    except PreregistrationMissing as exc:
+        log.error("refusing: %s", exc)
+        return 2
     suite = unittest.defaultTestLoader.loadTestsFromNames(list(TESTS))
     if not unittest.TextTestRunner(verbosity=0, stream=sys.stderr).run(suite).wasSuccessful():
         log.error("tests failed before scoring")
@@ -342,6 +352,7 @@ def main(argv: list[str] | None = None) -> int:
     passed = verdict(taker_result["n"], taker_result["games"], taker_result["ci95"])
     report = {
         "run_utc": datetime.now(timezone.utc).isoformat(),
+        "preregistration": prereg,
         "frozen": {"w": W_BLEND, "margin": MARGIN, "max_spread": MAX_SPREAD, "window": WINDOW,
                    "lead_min": 60, "seed": SEED, "holdout": [HOLDOUT_START.isoformat(), HOLDOUT_END.isoformat()]},
         "coverage": {"holdout_events": len(events), "start_matched": matched,

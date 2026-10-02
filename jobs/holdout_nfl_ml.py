@@ -57,11 +57,16 @@ from sports.nfl.ml_model import (
 from sports.nfl.schedule import Game, NflSchedule
 from venues.kalshi.client import Candle, KalshiClient, Quote
 from venues.kalshi.fees import FeeRegime, fetch_schedule
+from core.preregistration import PreregistrationMissing, require_registered
 
 __all__ = ["main", "HOLDOUT_SEASON", "HOLDOUT_WEEKS", "EXCLUDED_GAMES", "PREREG_LAMBDA",
            "quote_at", "check_h2", "check_h3", "check_h5", "GameResult"]
 
 log = logging.getLogger("valemont.holdout_nfl_ml")
+
+#: The frozen text this runner executes; it refuses unless DB-stamped first (db/017).
+PREREG_DOC: Final = "docs/preregistration_nfl.md"
+PREREG_SECTION: Final = "## 5. Holdout evaluation (45 games, run once)"
 
 HOLDOUT_SEASON: Final = 2026
 HOLDOUT_WEEKS: Final = (1, 2, 3)
@@ -271,6 +276,11 @@ def main(argv: list[str] | None = None) -> int:
         for r in reasons:
             log.error("refusing: %s", r)
         return 2
+    try:
+        prereg = require_registered(PREREG_DOC, PREREG_SECTION)
+    except PreregistrationMissing as exc:
+        log.error("refusing: %s", exc)
+        return 2
 
     h1_ok, h1_detail = run_h1_tests()
     if not h1_ok:
@@ -413,6 +423,9 @@ def write_report(results: list[GameResult], checks: dict[str, tuple[bool, str]],
         "",
         f"Run {stamp} under docs/preregistration_nfl.md (λ = {PREREG_LAMBDA}). "
         "A bug and calibration filter: passing licenses running forward on paper, nothing else.",
+        "",
+        f"Pre-registration stamp: {prereg['document']} [{prereg['section']}] sha256 {prereg['sha256']}, "
+        f"registered {prereg['registered_at']} (database clock).",
         "",
         "| Check | Result | Detail |", "|---|---|---|",
         *[f"| {k} | {'pass' if ok else 'FAIL'} | {d} |" for k, (ok, d) in checks.items()],

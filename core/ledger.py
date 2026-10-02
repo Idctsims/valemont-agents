@@ -68,6 +68,8 @@ __all__ = [
     "archive_settlement",
     "archive_candles",
     "archive_trades",
+    "register_preregistration",
+    "preregistration_stamp",
     "close_pool",
 ]
 
@@ -909,6 +911,37 @@ def latest_model_version(
         id=row[0], agent_id=row[1], model=row[2], fitted_at=row[3],
         data_through=row[4], params=row[5], diagnostics=row[6],
     )
+
+
+# ---------------------------------------------------------------------------
+# Pre-registration stamps (db/017). Append-only; the database sets the time.
+# ---------------------------------------------------------------------------
+
+def register_preregistration(*, document: str, section: str, content_sha256: str,
+                             note: str | None = None) -> None:
+    with _pool().connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO preregistrations (document, section, content_sha256, note)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (document, section, content_sha256) DO NOTHING
+            """,
+            (document, section, content_sha256, note),
+        )
+
+
+def preregistration_stamp(*, document: str, section: str,
+                          content_sha256: str) -> tuple[datetime, datetime] | None:
+    """(registered_at, the database's now()) for this exact text, or None."""
+    with _pool().connection() as conn:
+        row = conn.execute(
+            """
+            SELECT registered_at, now() FROM preregistrations
+             WHERE document = %s AND section = %s AND content_sha256 = %s
+            """,
+            (document, section, content_sha256),
+        ).fetchone()
+    return None if row is None else (row[0], row[1])
 
 
 # ---------------------------------------------------------------------------

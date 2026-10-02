@@ -47,8 +47,13 @@ from sports.nfl.props_model import LeagueContext, PlayerHistory, fit_size, match
 from sports.nfl.props_variants import usage_mean
 from sports.nfl.schedule import NflSchedule
 from venues.kalshi.client import KalshiClient
+from core.preregistration import PreregistrationMissing, require_registered
 
 log = logging.getLogger("valemont.holdout_nfl_props")
+
+#: The frozen text this runner executes; it refuses unless DB-stamped first (db/017).
+PREREG_DOC: Final = "docs/preregistration_nfl.md"
+PREREG_SECTION: Final = "## 7. Props amendments (A4, A5) — committed 2026-10-01 before further analysis"
 
 # --- frozen by A4 / A5 -------------------------------------------------------
 W_BLEND: Final = 0.30
@@ -214,6 +219,11 @@ def main(argv: list[str] | None = None) -> int:
         for r in reasons:
             log.error("refusing: %s", r)
         return 2
+    try:
+        prereg = require_registered(PREREG_DOC, PREREG_SECTION)
+    except PreregistrationMissing as exc:
+        log.error("refusing: %s", exc)
+        return 2
     suite = unittest.defaultTestLoader.loadTestsFromNames(list(H1_TESTS))
     h1 = unittest.TextTestRunner(verbosity=0, stream=sys.stderr).run(suite)
     if not h1.wasSuccessful():
@@ -356,7 +366,7 @@ def main(argv: list[str] | None = None) -> int:
                             "maker": maker([x for x in p2_maker if x[0]["bucket"] == label])}
     p2_ci = p2_taker_result["ci95"]
     report = {
-        "run_utc": datetime.now(timezone.utc).isoformat(), "games": len(games),
+        "run_utc": datetime.now(timezone.utc).isoformat(), "preregistration": prereg, "games": len(games),
         "rungs": len(rows), "binary_rungs": len(binary), "skipped": skipped,
         "dev_input_sha256": hashes,
         "brier": {"mid": brier("mid"), "blend": brier("p_blend"), "p2": brier("p_p2"),

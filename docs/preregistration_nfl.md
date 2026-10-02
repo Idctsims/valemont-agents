@@ -427,6 +427,16 @@ priced props, 4,731 rungs (4,692 binary).
   [0, 0.2) bucket (n = 115, +54%, CI −53%…+169%): buying cheap longshots,
   high variance, not significant. Maker: 3% filled.
 
+**Disclosed ordering (recorded 2026-10-02).**
+
+- A4, A5 and A5a were committed 04:55–04:57 UTC on 2026-10-01. That is after
+  the `nfl_ml` holdout output on the same 45 games (22:24 UTC on 2026-09-30).
+- That output contains each game's home result and moneyline mid at t, which
+  is game-level outcome information correlated with player yardage. The props
+  freeze was therefore not blind to the holdout's outcomes.
+- The verdicts are unchanged: A4 and A5 both failed, and a contamination that
+  could only help them does not explain a fail.
+
 ---
 
 ## 8. Forward-only hypotheses F1, F2 — committed 2026-10-01, before any analysis

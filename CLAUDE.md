@@ -365,6 +365,20 @@ there's one agent to debug, not four.
   pre-registration and forward-only validation; the 2025 and holdout data are
   spent.
 
+  **Disclosed ordering (recorded 2026-10-02):**
+
+  - A4, A5 and A5a were committed at 04:55–04:57 UTC on 2026-10-01. That is
+    *after* the `nfl_ml` holdout output on **the same 45 games**
+    (`docs/backtests/nfl_ml-holdout-20260930T222441Z`, written 22:24 UTC on
+    2026-09-30).
+  - That output shows every game's home result and moneyline mid at t. It shows
+    no player stats, but game script is correlated with yardage, so the props
+    freeze was **not blind** to the holdout games' outcomes.
+  - **The verdicts are unchanged.** Both props strategies failed. A
+    contamination that could only have flattered them cannot explain a fail.
+  - From db/017 onward, every runner refuses to write output unless its
+    pre-registration's hash was DB-stamped first.
+
 ---
 
 ## 9. The pnl contract
