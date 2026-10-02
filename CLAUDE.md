@@ -763,6 +763,15 @@ absent row as "I never looked."
   - `tests/test_preregistration.py` fails if a registered text is edited.
 - **Gate evaluations:** nfl_ml (and the probe) write one `gate_evaluated` event per game per tick inside the commit window. Each records side, model probability, mid, adjustment, threshold, edge and pass/fail, DB-stamped. Estimate ~1,250–1,550 rows a week, ~27 MB a season.
   - **⚠ Open for the owner:** nfl_ml's commit window is the whole 24 h before kickoff and it ticks every 15 min. It therefore takes ~96 looks per game and commits on the first pass. Preregistration §2.6 states a single instant, t = kickoff − 24 h. Repeated looks inflate false passes. These events now make it measurable; the code is unchanged pending a decision.
+- **Kalshi crypto research track (2026-10-02), research only, no adapter code:**
+  - **Analysis:** `docs/reference-analysis-crypto.md`. Eight repos in `reference/crypto/`. Only mrose105 measured against settlements, and **the market mid beat every model**, including a learned recalibration out of sample. Four backtests are circular. The two DVOL-benchmark studies have, respectively, a selection-on-outcome leak and no outcome scoring.
+  - **Verified:**
+    - `KXBTCD`/`KXETHD`/`KXBTC`/`KXETH` are hourly, `quadratic` (maker 0), from ~2024-10-28. 15-min from ~2025-12-09.
+    - Settlement is the 60 s simple average of CF BRTI/ERTI. **It was a trimmed mean (top and bottom 20% dropped) until 2025-03-21; simple from 2025-03-22.**
+    - Kalshi candles and prints are served back to Jan 2025.
+    - **1-min DVOL covers only the last ~185 days, on a rolling window** (hourly back to 2021).
+    - Free historical option IV exists per trade (history.deribit.com).
+  - **Scan designed, NOT run:** `docs/dev/crypto_efficiency_scan.md`. Reserve: events closing ≥ 2026-08-03, unread. **Awaiting owner review.** 1-min DVOL ages out daily: run soon or archive it first.
 - **Game lines:** `nfl_ml` no dev signal, holdout PASS 0/45 (plumbing only), kept as a forward pipeline test; `nfl_spread` no signal, not built.
 - **Props:** frozen V1 blend and P2 both **FAILED** the holdout (§7.4); **props do not continue** (§8).
 - **CFB totals: FAILED its pre-registered holdout** (2026-10-01, `docs/preregistration_cfb_totals.md` §9).
@@ -781,4 +790,4 @@ absent row as "I never looked."
 - **⏰ JANUARY REMINDER — on or after 2027-01-20:** write the F1/F2 runner exactly to §8, commit it, then execute it **once**, reading the archive. It must refuse before 2027-01-20 and refuse if output exists. If data are missing from both the archive and Kalshi, record the hypothesis as unevaluable, which is a fail.
 - **Market-efficiency scan** (`docs/dev/market_efficiency_scan.md`, run #3): no base-rate weight in liquid markets. Its one candidate, CFB totals, failed out of sample. **No current build candidate.**
 - **The reserve:** Kalshi events dated **2026-07-01 onward** are unread, **except `KXNCAAFTOTAL` through 2026-09-27**, now spent on the CFB holdout. Do not read the reserve in exploration.
-- **Next:** owner go-live (above), `db/014` paste, the weekly archive. Any new idea needs a new pre-registration and forward-only validation.
+- **Next:** owner review of the crypto track (above); owner go-live; `db/014`–`db/017` pastes; the weekly archive. Any new idea needs a new pre-registration and forward-only validation.
