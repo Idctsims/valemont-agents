@@ -2,14 +2,16 @@ import Link from "next/link";
 
 import type { Theme } from "@/lib/theme";
 
+import { AccountMenu } from "./account-menu";
 import { LogoutButton } from "./logout-button";
 import { RailNav } from "./rail-nav";
 import { TabBar } from "./tab-bar";
 import { ThemeToggle } from "./theme-toggle";
 
 /**
- * Phone: a slim top bar (wordmark, theme, log out) and a bottom tab bar under
- * the thumb. Desktop (lg+): a fixed left rail with every pillar.
+ * Phone: a slim top bar (wordmark, theme, account menu holding log out) and a
+ * bottom tab bar under the thumb. Desktop (lg+): a fixed left rail with every
+ * pillar, theme and log out.
  */
 export function AppShell({ theme, children }: { theme: Theme; children: React.ReactNode }) {
   return (
@@ -33,7 +35,7 @@ export function AppShell({ theme, children }: { theme: Theme; children: React.Re
         </div>
         <div className="flex items-center justify-between border-t border-border px-3 py-3">
           <ThemeToggle initial={theme} withLabel />
-          <LogoutButton withLabel />
+          <LogoutButton />
         </div>
       </aside>
 
@@ -44,7 +46,9 @@ export function AppShell({ theme, children }: { theme: Theme; children: React.Re
           </Link>
           <div className="-mr-2 flex items-center">
             <ThemeToggle initial={theme} />
-            <LogoutButton />
+            <AccountMenu>
+              <LogoutButton menuItem />
+            </AccountMenu>
           </div>
         </div>
       </header>

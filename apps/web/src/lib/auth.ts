@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 
 import { isOwner } from "@/lib/owner";
-import { LOGIN_PATH, UNAUTHORIZED } from "@/lib/routes";
+import { LOGIN_PATH } from "@/lib/routes";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -24,8 +24,8 @@ export const requireOwner = cache(async (): Promise<User> => {
   } = await supabase.auth.getUser();
 
   if (!user) redirect(LOGIN_PATH);
-  // A Server Component cannot clear cookies; the proxy signs the session out
-  // when it sees this redirect target with a non-owner session.
-  if (!isOwner(user.id)) redirect(`${LOGIN_PATH}?error=${UNAUTHORIZED}`);
+  // A Server Component cannot clear cookies; the proxy signs a non-owner
+  // session out when it reaches /login.
+  if (!isOwner(user.id)) redirect(LOGIN_PATH);
   return user;
 });

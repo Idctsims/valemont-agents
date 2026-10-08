@@ -44,6 +44,13 @@
   --vm-dead: #a39a8d; /* spec #7D7468 is 3.49:1 on surface; lifted for AA */
   --vm-live: #f06a6e; /* spec #E5484D is 4.10:1 on surface; lifted for AA */
 
+  /* Status chip fills: 10% status over surface, opaque so contrast is exact. */
+  --vm-hit-fill: #233130;
+  --vm-on-pace-fill: #30302b;
+  --vm-danger-fill: #312b2d;
+  --vm-dead-fill: #2a2e32;
+  --vm-live-fill: #31292f;
+
   /* PAPER badge: accent on surface-3, per spec. Night accent on surface-3
      is 3.35:1, so the badge text is a lighter step of the accent. */
   --vm-paper-fg: #f0cf96;
@@ -73,6 +80,15 @@
   --vm-danger: #ad3a17;
   --vm-dead: #6e6559;
   --vm-live: #bb2227;
+
+  /* Status chip fills: 16% status over surface, the strongest tint at which
+     every status text still clears 4.5:1 on its own fill (hit 4.54, dead
+     4.51). Chips add a full-strength status border for the rest. */
+  --vm-hit-fill: #dee7d9; /* 15.5%: at 16% hit is 4.4998:1 */
+  --vm-on-pace-fill: #ebe1cd;
+  --vm-danger-fill: #f2ddd1;
+  --vm-dead-fill: #e8e4db;
+  --vm-live-fill: #f4d9d3;
 
   --vm-paper-fg: #4a3622;
   --vm-paper-bg: #e2d6bc;
@@ -107,6 +123,11 @@
   --color-on-pace: var(--vm-on-pace);
   --color-danger: var(--vm-danger);
   --color-dead: var(--vm-dead);
+  --color-hit-fill: var(--vm-hit-fill);
+  --color-on-pace-fill: var(--vm-on-pace-fill);
+  --color-danger-fill: var(--vm-danger-fill);
+  --color-dead-fill: var(--vm-dead-fill);
+  --color-live-fill: var(--vm-live-fill);
   --color-live: var(--vm-live);
   --color-paper-fg: var(--vm-paper-fg);
   --color-paper-bg: var(--vm-paper-bg);
@@ -287,5 +308,39 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+}
+
+/* ----------------------------------------------------------- boot splash */
+
+/* Installed-PWA cold start only. Hidden everywhere else; in standalone mode
+   it covers the first paint and fades out by 600ms on its own, with no JS
+   and pointer-events: none, so it can never block a tap or a navigation.
+   An inline script in the root layout sets data-booted once per app
+   session, so a reload inside the running app skips it. Reduced motion
+   removes it immediately. */
+.boot-splash {
+  display: none;
+}
+
+@media (display-mode: standalone) {
+  :root:not([data-booted]) .boot-splash {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    pointer-events: none;
+    animation: vm-boot-out 600ms var(--ease-standard) forwards;
+  }
+}
+
+@keyframes vm-boot-out {
+  0%,
+  65% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    visibility: hidden;
   }
 }

@@ -7,7 +7,10 @@ import { SECTIONS } from "@/lib/sitemap";
 
 import { SectionIcon } from "./section-icon";
 
-/** Phone navigation: the five sections, under the thumb. */
+/**
+ * Phone navigation: the five sections, under the thumb. The current section
+ * gets accent text, a filled icon and an accent bar along the top edge.
+ */
 export function TabBar() {
   const pathname = usePathname();
 
@@ -25,17 +28,17 @@ export function TabBar() {
                 href={`/${s.key}`}
                 aria-current={active ? "page" : undefined}
                 className={`tap relative flex flex-1 flex-col items-center justify-center gap-1 rounded-inner transition-colors ${
-                  active ? "text-text" : "text-text-muted hover:text-text"
+                  active ? "text-accent" : "text-text-muted hover:text-text"
                 }`}
               >
                 <span
                   aria-hidden
-                  className={`absolute top-0 h-0.5 w-7 rounded-pill transition-colors ${
+                  className={`absolute -top-px h-1 w-8 rounded-pill transition-colors ${
                     active ? "bg-accent" : "bg-transparent"
                   }`}
                 />
                 <SectionIcon section={s.key} size={24} weight={active ? "fill" : "regular"} />
-                <span className="label-mono">{s.name}</span>
+                <span className={`label-mono ${active ? "font-semibold" : ""}`}>{s.name}</span>
               </Link>
             </li>
           );

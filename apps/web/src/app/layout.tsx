@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
+import { BOOT_GATE_SCRIPT, BootSplash } from "@/components/boot-splash";
 import { THEME_COOKIE, parseTheme } from "@/lib/theme";
 
 import { display, mono, ui } from "./fonts";
@@ -22,14 +23,31 @@ export const viewport: Viewport = {
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   // Applied on the server, so the first paint is already in the right theme.
   const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
+  // Set by src/proxy.ts with the CSP; without it the script is not rendered,
+  // and the splash still fades itself out.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
 
   return (
     <html
       lang="en"
       data-theme={theme}
       className={`${display.variable} ${ui.variable} ${mono.variable}`}
+      // The boot gate may add data-booted before hydration.
+      suppressHydrationWarning
     >
-      <body className="min-h-dvh bg-bg text-text">{children}</body>
+      <head>
+        {nonce && (
+          <script
+            nonce={nonce}
+            suppressHydrationWarning
+            dangerouslySetInnerHTML={{ __html: BOOT_GATE_SCRIPT }}
+          />
+        )}
+      </head>
+      <body className="min-h-dvh bg-bg text-text">
+        <BootSplash />
+        {children}
+      </body>
     </html>
   );
 }

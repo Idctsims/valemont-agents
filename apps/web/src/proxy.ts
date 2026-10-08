@@ -2,18 +2,21 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { buildCsp, newNonce } from "@/lib/csp";
 import { isOwner } from "@/lib/owner";
-import { LOGIN_PATH, UNAUTHORIZED, isPublicPath } from "@/lib/routes";
+import { LOGIN_PATH, isPublicPath } from "@/lib/routes";
 import { updateSession } from "@/lib/supabase/proxy";
 
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
-  const csp = buildCsp(newNonce(), {
+  const nonce = newNonce();
+  const csp = buildCsp(nonce, {
     dev: process.env.NODE_ENV === "development",
     https: request.nextUrl.protocol === "https:",
   });
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("Content-Security-Policy", csp);
+  // For the root layout's one inline script (boot splash gate).
+  requestHeaders.set("x-nonce", nonce);
   const withCsp = (res: NextResponse) => {
     res.headers.set("Content-Security-Policy", csp);
     return res;
@@ -29,19 +32,12 @@ export async function proxy(request: NextRequest) {
   const { user } = session;
 
   // A valid session that is not the owner's is ended, not merely bounced.
+  // Quietly: "Not authorized." is shown only by a rejected sign-in attempt
+  // (login/actions.ts), never on a page load.
   if (user && !isOwner(user.id)) {
     await session.signOut();
-    // Already on that exact URL: render it (cookies now cleared) rather than
-    // redirect to itself.
-    if (
-      pathname === LOGIN_PATH &&
-      request.nextUrl.searchParams.get("error") === UNAUTHORIZED
-    ) {
-      return withCsp(session.response);
-    }
-    const to = new URL(LOGIN_PATH, request.url);
-    to.searchParams.set("error", UNAUTHORIZED);
-    return session.redirect(to);
+    if (pathname === LOGIN_PATH) return withCsp(session.response);
+    return session.redirect(new URL(LOGIN_PATH, request.url));
   }
 
   if (pathname === LOGIN_PATH) {

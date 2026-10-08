@@ -9,8 +9,6 @@ export function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-export const UNAUTHORIZED = "unauthorized";
-
 /**
  * Where to send the owner after login. Only same-origin absolute paths are
  * accepted, so `?next=` cannot be used as an open redirect.

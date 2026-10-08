@@ -262,7 +262,7 @@ export default function DesignPage() {
             switch both off.
           </p>
           <p className="mt-4 text-sm text-text-muted">
-            The pixel signature face appears only on the boot screen and the{" "}
+            The pixel signature face appears only on the installed app&apos;s cold-start splash screen and the{" "}
             <Link href="/nowhere" className="text-accent underline underline-offset-4">
               404 page
             </Link>

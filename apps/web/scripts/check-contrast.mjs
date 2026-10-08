@@ -46,6 +46,7 @@ const pairs = [
     ["dead", s, 4.5],
     ["live", s, 4.5],
   ]),
+  ...["hit", "on-pace", "danger", "dead", "live"].map((s) => [s, `${s}-fill`, 4.5]),
   ["text", "surface-3", 4.5],
   ["on-accent", "accent", 4.5],
   ["on-accent-strong", "accent-strong", 4.5],

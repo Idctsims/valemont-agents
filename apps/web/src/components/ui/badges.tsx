@@ -1,11 +1,14 @@
 export type LegStatus = "hit" | "on-pace" | "danger" | "dead" | "live";
 
+// Opaque *-fill tokens, not opacity modifiers, so check:contrast measures the
+// exact background the label sits on. The full-strength border carries the
+// at-a-glance signal.
 const STATUS: Record<LegStatus, { label: string; className: string }> = {
-  hit: { label: "Hit", className: "text-hit border-hit/40 bg-hit/10" },
-  "on-pace": { label: "On pace", className: "text-on-pace border-on-pace/40 bg-on-pace/10" },
-  danger: { label: "In danger", className: "text-danger border-danger/40 bg-danger/10" },
-  dead: { label: "Dead", className: "text-dead border-dead/40 bg-dead/10" },
-  live: { label: "Live", className: "text-live border-live/40 bg-live/10" },
+  hit: { label: "Hit", className: "text-hit border-hit bg-hit-fill" },
+  "on-pace": { label: "On pace", className: "text-on-pace border-on-pace bg-on-pace-fill" },
+  danger: { label: "In danger", className: "text-danger border-danger bg-danger-fill" },
+  dead: { label: "Dead", className: "text-dead border-dead bg-dead-fill" },
+  live: { label: "Live", className: "text-live border-live bg-live-fill" },
 };
 
 export function StatusChip({ status, label }: { status: LegStatus; label?: string }) {

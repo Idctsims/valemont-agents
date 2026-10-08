@@ -6,7 +6,7 @@ import { isOwner } from "@/lib/owner";
 import { safeNext } from "@/lib/routes";
 import { createClient } from "@/lib/supabase/server";
 
-export type LoginState = { error: string | null };
+export type LoginState = { error: string | null; email: string };
 
 // One message for every credential failure, so the form never reveals
 // whether an email has an account.
@@ -15,21 +15,23 @@ const BAD_CREDENTIALS = "Email or password is incorrect.";
 export async function login(_prev: LoginState, form: FormData): Promise<LoginState> {
   const email = String(form.get("email") ?? "").trim();
   const password = String(form.get("password") ?? "");
-  if (!email || !password) return { error: "Enter your email and password." };
+  if (!email || !password) return { error: "Enter your email and password.", email };
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
     if (error.status === 429) {
-      return { error: "Too many attempts. Wait a minute, then try again." };
+      return { error: "Too many attempts. Wait a minute, then try again.", email };
     }
-    return { error: BAD_CREDENTIALS };
+    return { error: BAD_CREDENTIALS, email };
   }
 
+  // Correct credentials for an account that is not the owner's: end that
+  // session at once. This is the only path that says "Not authorized."
   if (!isOwner(data.user?.id)) {
     await supabase.auth.signOut({ scope: "local" });
-    return { error: "Not authorized." };
+    return { error: "Not authorized.", email };
   }
 
   redirect(safeNext(form.get("next")));

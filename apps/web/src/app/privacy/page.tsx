@@ -25,8 +25,9 @@ export default function PrivacyPage() {
         <p className="label-mono text-text-muted">Valemont Command · updated {UPDATED}</p>
         <h1 className="mt-3 font-display text-4xl text-text">Privacy policy</h1>
         <p className="mt-4 text-lg text-text-muted text-pretty">
-          Valemont Command is a private dashboard built and used by one person, its owner. There
-          are no public accounts and no sign-up: only the owner can sign in.
+          Valemont Command is a single-user personal tool, a private dashboard operated by
+          Terrell Sims, Valemont Group. It is not a public service: there are no public accounts
+          and no sign-up, and only the owner can sign in.
         </p>
       </header>
 
@@ -60,16 +61,16 @@ export default function PrivacyPage() {
 
         <Section title="What is never done">
           <p>
-            Data is not sold, rented or shared with anyone for advertising or any other purpose. The
-            app carries no ads and no third-party analytics or tracking.
+            No data is sold, rented, shared or shown to anyone other than the owner, and none is
+            used for advertising. The app carries no ads and no third-party analytics or tracking.
           </p>
         </Section>
 
         <Section title="Service providers">
           <p>
             The app runs on Vercel (web hosting), Supabase (database and sign-in) and Railway
-            (background jobs), and uses Anthropic (image tagging). Each processes data only to run
-            the app.
+            (background jobs), and uses Anthropic (image tagging). They host and run the app on the
+            owner&apos;s behalf; none is given data for its own use.
           </p>
         </Section>
 
@@ -82,14 +83,26 @@ export default function PrivacyPage() {
 
         <Section title="Retention and deletion">
           <p>
-            Access can be revoked at any time from Pinterest&apos;s settings under connected apps.
-            On disconnection, stored tokens are deleted, and Pinterest data is deleted on request.
+            Access can be revoked at any time from Pinterest&apos;s settings, which stops the app
+            reading anything further. Stored tokens and Pinterest data are deleted on request.
           </p>
         </Section>
 
         <Section title="Changes">
           <p>
             If this policy changes, the date at the top of this page changes with it.
+          </p>
+        </Section>
+
+        <Section title="Contact">
+          <p>
+            Questions about this policy or a deletion request:{" "}
+            <a
+              href="mailto:duckfanboy@gmail.com"
+              className="text-accent underline underline-offset-4"
+            >
+              duckfanboy@gmail.com
+            </a>
           </p>
         </Section>
       </div>
