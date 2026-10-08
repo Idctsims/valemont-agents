@@ -17,6 +17,34 @@ pnpm --filter web dev
 
 `pnpm --filter web lint` runs ESLint plus the design-token and contrast checks.
 
+## Tests (Playwright, native Windows)
+
+From `apps\web`. One-time browser install, then the suite. It builds and
+starts a production server on port 3100 itself (or reuses one already there),
+reading `.env.local` like the real app.
+
+```
+pnpm exec playwright install chromium
+pnpm test:e2e
+```
+
+Two projects run every test: `desktop` and `phone` (390px). The smoke suite
+needs no credentials and makes one deliberately failing sign-in per run.
+
+The owner suite (`e2e/owner.spec.ts`: sign in, active pillar, theme
+screenshots, log out) skips unless the owner's credentials are set **in the
+shell session only**, never in a file:
+
+```
+$env:E2E_OWNER_EMAIL = 'you@example.com'
+$env:E2E_OWNER_PASSWORD = '...'
+pnpm test:e2e
+Remove-Item Env:E2E_OWNER_EMAIL, Env:E2E_OWNER_PASSWORD
+```
+
+Its screenshots land in `e2e-screenshots/` (gitignored). The HTML report:
+`pnpm exec playwright show-report`.
+
 ## Layout
 
 - `src/proxy.ts`: session refresh, owner gate and CSP nonce on every request
