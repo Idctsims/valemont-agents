@@ -1,5 +1,7 @@
 # Valemont Agents — Architecture Contract
 
+Approved build plan: docs/MASTER_PLAN.md. Product brief: docs/BUILD_BRIEF.md. Read both at the start of every session.
+
 Read this at the start of every session. It is the reason the codebase is shaped
 the way it is. If a request in a session conflicts with something here, say so
 before writing code.
