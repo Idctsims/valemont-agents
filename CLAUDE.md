@@ -241,6 +241,13 @@ policies arrive in db/019+ before apps/web reads any table.
 - Every agent action emits an event row. The dashboard is a consumer of that
   stream — build the stream first, the visuals last.
 - Secrets in `.env`, which is gitignored. `.env.example` documents the keys.
+- **Never print a secret value.** No unredacted variables, no connection
+  strings, no keys or tokens in any output. Never run
+  `railway environment config --json`; it echoes variable values. List
+  Railway variables by name only, with values redacted. If a command can echo
+  a secret, pipe it through redaction or don't run it. Why: on 2026-10-08 that
+  command printed `DATABASE_URL` with its password into a session transcript,
+  and the password had to be rotated.
 - Fail loudly. A silent exception in a worker that runs at 3am is the single
   most likely way this project quietly dies.
 - **Run the suite before and after touching `core/` or an adapter.** From
