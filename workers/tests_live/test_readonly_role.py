@@ -47,6 +47,11 @@ class ReadonlyRole(unittest.TestCase):
             conn.rollback()
             self.fail(f"valemont_readonly was ALLOWED: {sql}")
 
+    def _exists(self, table: str) -> bool:
+        with psycopg.connect(self.url) as conn, conn.cursor() as cur:
+            cur.execute("SELECT to_regclass(%s) IS NOT NULL", (f"public.{table}",))
+            return cur.fetchone()[0]
+
     def test_it_connects_as_the_readonly_role(self) -> None:
         with psycopg.connect(self.url) as conn, conn.cursor() as cur:
             cur.execute("SELECT current_user")
@@ -75,8 +80,12 @@ class ReadonlyRole(unittest.TestCase):
         self.assertEqual([r[0] for r in rows if r[2]], [], "tables valemont_readonly can WRITE")
 
     def test_it_sees_the_same_rows_as_the_worker(self) -> None:
-        # RLS is on with no policies: without BYPASSRLS this would be 0 vs N.
-        for table in ("agents", "runs", "commitments", "migration_log", "preregistrations"):
+        # Ledger tables have RLS on with no policies, and the db/019 app tables
+        # have owner-only policies that do not name this role: without
+        # BYPASSRLS either would read as 0 vs N.
+        tables = ["agents", "runs", "commitments", "migration_log", "preregistrations"]
+        tables += [t for t in ("push_subscriptions", "notifications") if self._exists(t)]
+        for table in tables:
             with self.subTest(table=table):
                 self.assertEqual(_count(self.url, table),
                                  _count(os.environ["DATABASE_URL"], table))

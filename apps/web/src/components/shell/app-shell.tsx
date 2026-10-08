@@ -1,3 +1,4 @@
+import { DeviceMobile } from "@phosphor-icons/react/ssr";
 import Link from "next/link";
 
 import type { Theme } from "@/lib/theme";
@@ -33,9 +34,18 @@ export function AppShell({ theme, children }: { theme: Theme; children: React.Re
         <div className="flex-1 overflow-y-auto px-3 pb-6">
           <RailNav />
         </div>
-        <div className="flex items-center justify-between border-t border-border px-3 py-3">
-          <ThemeToggle initial={theme} withLabel />
-          <LogoutButton />
+        <div className="border-t border-border px-3 py-3">
+          <Link
+            href="/onboarding"
+            className="tap flex items-center gap-2 rounded-pill px-3 text-sm text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
+          >
+            <DeviceMobile size={20} aria-hidden />
+            Phone setup
+          </Link>
+          <div className="flex items-center justify-between">
+            <ThemeToggle initial={theme} withLabel />
+            <LogoutButton />
+          </div>
         </div>
       </aside>
 
@@ -47,6 +57,13 @@ export function AppShell({ theme, children }: { theme: Theme; children: React.Re
           <div className="-mr-2 flex items-center">
             <ThemeToggle initial={theme} />
             <AccountMenu>
+              <Link
+                href="/onboarding"
+                className="tap flex w-full items-center gap-3 rounded-inner px-3 text-sm text-text transition-colors hover:bg-surface-2"
+              >
+                <DeviceMobile size={20} aria-hidden />
+                Set up this phone
+              </Link>
               <LogoutButton menuItem />
             </AccountMenu>
           </div>

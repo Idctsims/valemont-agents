@@ -17,6 +17,22 @@ pnpm --filter web dev
 
 `pnpm --filter web lint` runs ESLint plus the design-token and contrast checks.
 
+## Generated files and keys (from `apps\web`)
+
+- `src/generated/theme-colors.ts`: written from `tokens.css` before every
+  dev, build and lint run (`scripts/gen-theme-colors.mjs`). Gitignored.
+- `pnpm gen:icons`: re-renders the app icons from the tokens and Instrument
+  Serif. Rerun after a token or design change, and commit the PNGs.
+- `pnpm gen:vapid`: writes a VAPID key pair into `.env.local` and the root
+  `.env`, printing no values. It refuses to rotate an existing pair, because
+  that orphans every push subscription (`-- --force` to mean it).
+
+## PWA
+
+The service worker is `src/app/sw.ts`, served at `/serwist/sw.js`. It is off
+in `pnpm dev`, so test it against `pnpm build; pnpm start`. It never caches
+pages or data: only static build files, icons and `/offline`.
+
 ## Tests (Playwright, native Windows)
 
 From `apps\web`. One-time browser install, then the suite. It builds and
