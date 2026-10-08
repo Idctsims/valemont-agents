@@ -15,7 +15,13 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const src = join(root, "src");
-const EXEMPT = new Set([join(src, "styles", "tokens.css")]);
+// tokens.css is the source. theme-colors.ts is generated FROM it at build time
+// (scripts/gen-theme-colors.mjs) for the manifest and viewport, which need
+// literal values; it is gitignored and cannot drift. Nothing else is exempt.
+const EXEMPT = new Set([
+  join(src, "styles", "tokens.css"),
+  join(src, "generated", "theme-colors.ts"),
+]);
 const EXTENSIONS = /\.(tsx?|jsx?|mjs|cjs|css)$/;
 
 export const RULES = [

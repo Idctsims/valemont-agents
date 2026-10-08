@@ -3,22 +3,27 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "node scripts/gen-theme-colors.mjs && next dev",
+    "build": "node scripts/gen-theme-colors.mjs && next build",
     "start": "next start",
-    "lint": "eslint && node scripts/check-tokens.mjs && node scripts/check-contrast.mjs",
+    "lint": "node scripts/gen-theme-colors.mjs && eslint && node scripts/check-tokens.mjs && node scripts/check-contrast.mjs",
     "check:tokens": "node scripts/check-tokens.mjs",
     "check:contrast": "node scripts/check-contrast.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "gen:icons": "node scripts/gen-icons.mjs",
+    "gen:vapid": "node scripts/gen-vapid.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "2.1.10",
+    "@serwist/turbopack": "9.5.13",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.117.3",
     "next": "16.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "serwist": "9.5.13",
+    "web-push": "3.6.7"
   },
   "devDependencies": {
     "@playwright/test": "1.64.0",
@@ -26,6 +31,8 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "3.6.4",
+    "esbuild": "^0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
     "tailwindcss": "^4",

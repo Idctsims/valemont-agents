@@ -1,3 +1,4 @@
+import { withSerwist } from "@serwist/turbopack";
 import type { NextConfig } from "next";
 
 // Static security headers. The Content-Security-Policy is per-request (it
@@ -41,4 +42,6 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// withSerwist keeps esbuild (which bundles the service worker) out of the
+// server bundle.
+export default withSerwist(nextConfig);
