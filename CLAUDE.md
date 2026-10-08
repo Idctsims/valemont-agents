@@ -835,7 +835,7 @@ absent row as "I never looked."
   - Every tick stores its worker→DB clock offset on the run row (`db/016`).
   - Every commitment carries `payload.quote_provenance`: `fetched_at_worker`, plus a separately named `fetched_at_db_estimate`. Worker time is never labelled DB time.
   - Local machine: the DB is ~373 ms behind it (RTT ~55 ms).
-  - **Railway's offset is unmeasured: no canary run has been written since 2026-09-29 23:35 UTC** (see Deploy below for why).
+  - **Railway: the DB is +29.9 ms ahead of the worker (RTT 139.6 ms)**, measured by the first canary run on the `workers/` path (run 1688, 2026-10-08 05:37:14 UTC). The service is in region sfo; the pooler is aws-0-us-east-1.
   - The dashboard's "#9076" matches no row in production. Its source is unknown.
 - **Pre-registration stamps (`db/017`):**
   - The holdout runners refuse unless their section's hash was DB-stamped before they run.
@@ -862,7 +862,7 @@ absent row as "I never looked."
 - **Railway (verified 2026-10-08):** service `valemont-agents`, project `accomplished-heart`, environment `production`. **Trial plan: $5 credit, ends ~2026-10-18.** Decision due by 2026-10-16: stay on Railway's free plan if the 24 h usage check says the worker fits its $1/month credit, otherwise move to an Oracle Cloud Always Free VM before Chat 1 Phase 4. No payment method on file.
   - **`CANARY` was removed at an unknown time, and `ROSTER` was never set.** With neither set, `main.py` refuses ("No agents registered"), sleeps 60 s and exits 78, in a loop. The last canary run was 2026-09-29 23:35 UTC.
   - Restart policy is ON_FAILURE with 10 retries, so the dashboard showed "Online" while nothing ran.
-  - The loop continues until Chat 1 Phase 1, Step 3 restores `CANARY` on the new `workers/` build path. `ROSTER` stays unset and `db/013` unpasted.
+  - **Restored 2026-10-08 05:36 UTC on the `workers/` path.** The service builds from Root Directory `/workers` with config file `/workers/railway.json` (merge `8ae8f14`, deployment `fba3fb6b`). `CANARY=true` was set and deployment `8adfc44d` booted. The first canary run was 1688 at 05:37:14 UTC, carrying a clock offset. `ROSTER` stays unset and `db/013` unpasted.
   - **The canary path could not boot from `a7733ac` (2026-09-29 23:02 UTC) until Chat 1 Phase 1.** `_fake` opted in to close capture, and `main.py` gave it no capture trigger, so `register()` raised. The 09-29 23:xx `_fake` runs postdate that commit, so they most likely came from `scripts/run_fake.py` locally, not Railway. Now covered by `tests/test_canary.py`.
   - **Canary cadence: 60 s** (`CANARY_INTERVAL_S`, default 60, minimum 5, applied to run, sweep and capture). That is about 1,440 runs and 4,300 events a day, **~1 MB/day of permanent `is_test` rows**.
   - It stays on until the 2026-10-16 Railway decision. It is retired in Chat 1 Phase 4, when the scheduler and `job_health` heartbeats replace it.
@@ -881,4 +881,4 @@ absent row as "I never looked."
   - Python moved under `workers/` with `git mv`. `db/`, `docs/`, `.env` and `venv/` stay at the root.
   - Repo-root paths go through `core/paths.py`. Every frozen pre-registration text hashes identically to before the move.
   - Inspection goes only through `db_inspect.py` (§5).
-- **Next:** finish Chat 1 Phase 1 (Railway redeploy from `workers/`, canary restored, 24 h usage check against the free plan). Then MASTER_PLAN §6. Still pending from before: owner review of the crypto track, owner go-live, the weekly archive. Any new idea needs a new pre-registration and forward-only validation.
+- **Next:** Chat 1 Phase 1, Steps 1–7 are done (restructure, CLAUDE.md, Railway from `workers/`, canary restored). **Step 8 is due after 2026-10-09 05:36 UTC:** 24 h RAM, CPU and projected cost against the free plan's $1/month credit, feeding the 2026-10-16 Railway decision. Then MASTER_PLAN §6. Still pending from before: owner review of the crypto track, owner go-live, the weekly archive. Any new idea needs a new pre-registration and forward-only validation.
