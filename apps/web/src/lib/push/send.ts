@@ -53,9 +53,12 @@ export async function pushToOwner(
 ): Promise<PushSummary> {
   const details = vapid();
 
+  // Owner filter stated explicitly, not left to RLS: the watchdog calls this
+  // with the secret-key client, which bypasses RLS.
   const { data: subs, error: readError } = await supabase
     .from("push_subscriptions")
     .select("id, endpoint, p256dh, auth")
+    .eq("owner_id", ownerId)
     .eq("active", true);
   if (readError) throw new Error(`Could not read subscriptions: ${readError.message}`);
   if (!subs?.length) return { status: "no_devices", delivered: 0, total: 0 };
