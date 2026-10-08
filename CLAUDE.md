@@ -312,7 +312,7 @@ each in phases with a "done when" checklist). It supersedes the former steps
 - **Chat 1, Phase 1** (repo restructure, CLAUDE.md amendments, Railway redeploy
   from `workers/`) ✓, except Step 8 (24 h Railway usage check)
 - **Chat 1, Phase 2** (Next.js app, owner-only auth, design tokens, Vercel) ✓
-- **Chat 1, Phase 3** (PWA shell and push) ← **you are here**
+- **Chat 1, Phase 3** (PWA shell and push) ← **you are here** (PR open; phone check after merge)
 
 Reason for deploying at step 4 and not at the end: "works locally, dies
 silently at 3am in production" is the classic failure here. Hit it while
@@ -819,7 +819,7 @@ absent row as "I never looked."
 - **Migrations:** **`db/001`–`db/012` and `db/014`–`db/018` applied.** 007–012 verified live by `workers/scripts/verify_migrations_007_012.sql` (20/20). 014–018 were pasted 2026-10-08 and verified by read-only SELECTs. `migration_log` (UTC): 015 04:41:03, 016 04:41:16, 017 04:41:30, 018 04:50:35. 014 predates the log; its tables and triggers are present.
   - **`db/013` (enable the production roster) stays unpasted.** It is go-live and out of scope until the owner says so.
   - Real dependencies: 016, 017 and 018 each need only 015 (`migration_log`). 014 needs only 011.
-  - `db/019_push.sql` (Chat 1 Phase 3): written, **awaiting paste**. Next new file after it: `db/020`, the shared tables (MASTER_PLAN §3).
+  - **`db/019_push.sql` applied 2026-10-08 20:06:52 UTC** (`migration_log`; owner-verified: RLS on, one policy per table, anon none, readonly SELECT). Next new file: `db/020`, the shared tables (MASTER_PLAN §3).
 - **Immutability audit (2026-10-01, empirical).** UPDATE and DELETE were attempted on a `_test` row of every table, rolled back.
   - **Refused by trigger:** `commitments`, `events`, `resolution_attempts`, `commitment_factors`, `closing_snapshots`, `selections`, `model_versions`, `kalshi_markets`, `kalshi_candles`. `legs` UPDATE was refused too, by `legs_frozen`.
   - **ACCEPTED:**
@@ -831,7 +831,8 @@ absent row as "I never looked."
   - **Refused only by a foreign key**, so not protected: `runs` and `agents` DELETE.
   - **Fix:** `db/015_close_mutation_gaps.sql`, pasted. `tests_live/test_mutation_gaps.py` now runs and passes.
   - **`db/015` applied_at: 2026-10-08 04:41:03.069615 UTC** (from `migration_log`). **Rows written before that timestamp in `resolutions`, `legs`, `briefs`, `runs` and `agents` were protected by convention only.** There is no history to prove none was altered.
-- **Tests:** `tests/` **366** (360, plus 6 in `test_canary.py` from Chat 1 Phase 1, Step 3), and `tests_live/` 88 run, 0 skipped. Run both from `workers/` with **`..\venv\Scripts\python.exe`**.
+- **Tests:** `tests/` **380** (366, plus 14 in `test_push.py` from Chat 1 Phase 3), and `tests_live/` **101** run, 0 skipped (88, plus 8 in `test_push_rls.py` and 5 in `test_push_ledger.py`). Run both from `workers/` with **`..\venv\Scripts\python.exe`**.
+  - The push live tests touch app tables, not the ledger. `test_push_rls` runs every case in one rolled-back transaction. `test_push_ledger` deletes its `.invalid` fixture afterwards. Neither leaves a row: a leftover subscription would be a live push target.
   - The earlier "361" was a typo made in `cf18f9d`. That commit took the suite from 356 to 360 (4 tests in `test_nfl_ml.py`), and nothing has changed `tests/` since.
   - Kalshi jobs run one at a time. The archive's SQL path has no live test, because a test row would be permanent in the real archive; its first real run is the test.
 - **Quote provenance and clock (2026-10-02):**
@@ -910,13 +911,34 @@ absent row as "I never looked."
     - `check:tokens` fails on any raw hex, colour function, Tailwind arbitrary value, property or variable, or default grey anywhere under `src/` except `tokens.css`.
     - `check:contrast` reads `tokens.css` and holds every text pair, including each status on its chip fill, to AA.
     - A new colour or size goes into `tokens.css` as a token or an `@utility`, never as an exception.
-  - **Tests:** `pnpm test:e2e` runs Playwright against a local production build on port 3100, in desktop and 390px phone projects. Result: 27 pass, 5 skip by design.
+  - **Tests:** `pnpm test:e2e` runs Playwright against a local production build on port 3100, in desktop and 390px phone projects. Result after Phase 3: 41 pass, 9 skip by design (6 owner-only, 3 run-once).
     - `e2e/owner.spec.ts` runs only with `E2E_OWNER_EMAIL` and `E2E_OWNER_PASSWORD` set in the shell session. Never put them in a file.
   - **Deploy isolation, verified with the docs-only commit that recorded this:**
     - Vercel builds only when `apps/web` or the root lockfile/workspace changes (`apps/web/vercel.json` `ignoreCommand`).
     - Railway rebuilds only on `/workers/**` (`workers/railway.json` `watchPatterns`); the PR #2 merge showed SKIPPED there.
+- **PWA and push (Chat 1 Phase 3, 2026-10-08; branch `chat1/phase3-pwa`, PR open, not merged):**
+  - **Service worker:** `@serwist/turbopack` 9.5.13 (Turbopack-native, no `--webpack`).
+    - `src/app/sw.ts` is bundled by esbuild into a static route at `/serwist/sw.js` with `Service-Worker-Allowed: /`, as a classic IIFE script for iOS 16.4+.
+    - Registration is off in `next dev`.
+  - **Never cache private data:**
+    - The precache is only hashed `/_next/static` files, `public/icons` and `/offline`.
+    - Runtime caching applies only to same-origin GETs under `/_next/static/` and `/icons/`.
+    - Navigations are NetworkOnly, with the precached `/offline` as fallback.
+    - `SerwistProvider`'s `cacheOnNavigation` (on by default) is OFF.
+    - Playwright audits every cache after browsing.
+  - **Manifest:** colours come from `tokens.css` through `scripts/gen-theme-colors.mjs`. It writes `src/generated/theme-colors.ts`, which is gitignored and regenerated before dev, build and lint. That file is the only `check:tokens` exemption besides `tokens.css`.
+  - **Icons:** `pnpm gen:icons` renders a "V" in Instrument Serif, colours from tokens, with Playwright Chromium. Outputs are committed.
+  - **Push:** two senders, one pair of tables, the same JSON payload (`{title, body, url, tag}`) rendered by `sw.ts`.
+    - **Web:** the owner session through RLS (`(app)/onboarding/actions.ts`, `lib/push/send.ts`, `web-push`).
+    - **Worker:** `workers/core/push.py` (`pywebpush==2.5.0`). Its SQL is in `core/ledger.py`. It is not scheduled until Phase 4.
+    - **Both:** 404/410 marks a device inactive, endpoints are logged truncated, and keys are never logged.
+    - Local worker proof: `..\venv\Scripts\python.exe -m scripts.send_test_push` from `workers/`.
+  - **VAPID:** `pnpm gen:vapid` (apps/web) writes both env files without printing values. It refuses to rotate without `--force`, because rotating orphans every subscription.
+    - Set in Vercel (Production and Preview, private key Sensitive) and Railway (dashboard), 2026-10-08.
+  - **`/onboarding`** (account menu, desktop rail): Add to Home Screen steps on iPhone Safari (iOS 16.4+), then enable notifications (permission requested only from that tap), then send a test push. On desktop it shows a phone-only note.
 - **Next:**
   - **Chat 1 Phase 1, Step 8** is due after 2026-10-09 05:36 UTC: 24 h RAM, CPU and projected cost against the free plan's $1/month credit, feeding the 2026-10-16 Railway decision.
-  - **Chat 1 Phase 3:** PWA shell and push (manifest, Serwist, VAPID). The manifest's `theme_color` will need a sanctioned way to read `tokens.css`, not a hex literal.
+  - **Chat 1 Phase 3, after merge (owner, on the phone):** install to the Home Screen, enable notifications, send the test push from `/onboarding` with the phone locked, then run `scripts.send_test_push` locally to prove the worker path.
+  - **Chat 1 Phase 4:** `db/020` shared tables, the consolidated scheduler, `job_health` and its push alerts (wiring `core/push.py` in).
   - Still pending from before: owner review of the crypto track, owner go-live, and the weekly archive.
   - Any new idea needs a new pre-registration and forward-only validation.

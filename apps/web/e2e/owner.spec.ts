@@ -26,6 +26,46 @@ async function setTheme(page: Page, theme: "night" | "day") {
   await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
 }
 
+test("onboarding renders for the owner on this device", async ({ page }, testInfo) => {
+  await signIn(page, "/onboarding");
+  await expect(page.getByRole("heading", { level: 1, name: "Set up your phone" })).toBeVisible();
+  if (testInfo.project.name === "phone") {
+    // Pixel 7 profile: Android, push supported, not installed.
+    await expect(page.getByRole("heading", { name: "Install the app" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible();
+    await expect(page.getByText("Step 3 of 3")).toBeVisible();
+  } else {
+    await expect(page.getByRole("heading", { name: "Set this up on your phone" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Enable notifications" })).toHaveCount(0);
+  }
+  await page.screenshot({
+    path: `e2e-screenshots/onboarding-${testInfo.project.name}.png`,
+    fullPage: true,
+  });
+});
+
+test("onboarding on an iPhone in Safari shows Add to Home Screen", async ({ browser }, testInfo) => {
+  test.skip(testInfo.project.name !== "phone", "one iPhone run");
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    userAgent:
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1",
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  try {
+    await signIn(page, "/onboarding");
+    await expect(page.getByRole("heading", { name: "Add to Home Screen" })).toBeVisible();
+    await expect(page.getByText("Needs iOS 16.4 or later.")).toBeVisible();
+    // Locked until installed: no permission button in a Safari tab.
+    await expect(page.getByRole("button", { name: "Enable notifications" })).toHaveCount(0);
+    await page.screenshot({ path: "e2e-screenshots/onboarding-iphone-safari.png", fullPage: true });
+  } finally {
+    await context.close();
+  }
+});
+
 test("owner signs in, sees the active pillar, and logs out", async ({ page }, testInfo) => {
   await signIn(page);
   await expect(page.getByRole("heading", { level: 1, name: "Betting" })).toBeVisible();
