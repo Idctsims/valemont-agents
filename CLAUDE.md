@@ -86,8 +86,9 @@ A monorepo. Python lives under `workers/`; module paths elsewhere in this file
 
 ```
 apps/
-  web/           Next.js (Phase 2). Reads Supabase server-side (§5). Never
-                 writes ledger tables.
+  web/           Next.js 16 on Vercel (Chat 1 Phase 2). Reads Supabase
+                 server-side (§5). Never writes ledger tables. Its own
+                 README covers run, lint and Playwright.
 workers/         Everything Python. The Railway image is built from here.
   core/            The shared machinery. Agents do not own logic.
     ledger.py         All database writes. Nothing else touches SQL.
@@ -208,7 +209,7 @@ immutability triggers unchanged. Workers remain the only writers to ledger
 tables, via `DATABASE_URL` (bypasses RLS). The secret/service-role key never
 reaches the browser. Migrations stay numbered files in `db/`, pasted by hand.
 
-**Status 2026-10-08: none of these policies exist yet.** Every table still has
+**Status 2026-10-08 (apps/web live, see Current State): none of these policies exist yet.** Every table still has
 RLS on with NO policies, so anon and authenticated see nothing. The owner
 policies arrive in db/019+ before apps/web reads any table.
 
@@ -309,7 +310,9 @@ each in phases with a "done when" checklist). It supersedes the former steps
 5–10.
 
 - **Chat 1, Phase 1** (repo restructure, CLAUDE.md amendments, Railway redeploy
-  from `workers/`) ← **you are here**
+  from `workers/`) ✓, except Step 8 (24 h Railway usage check)
+- **Chat 1, Phase 2** (Next.js app, owner-only auth, design tokens, Vercel) ✓
+- **Chat 1, Phase 3** (PWA shell and push) ← **you are here**
 
 Reason for deploying at step 4 and not at the end: "works locally, dies
 silently at 3am in production" is the classic failure here. Hit it while
@@ -881,4 +884,39 @@ absent row as "I never looked."
   - Python moved under `workers/` with `git mv`. `db/`, `docs/`, `.env` and `venv/` stay at the root.
   - Repo-root paths go through `core/paths.py`. Every frozen pre-registration text hashes identically to before the move.
   - Inspection goes only through `db_inspect.py` (§5).
-- **Next:** Chat 1 Phase 1, Steps 1–7 are done (restructure, CLAUDE.md, Railway from `workers/`, canary restored). **Step 8 is due after 2026-10-09 05:36 UTC:** 24 h RAM, CPU and projected cost against the free plan's $1/month credit, feeding the 2026-10-16 Railway decision. Then MASTER_PLAN §6. Still pending from before: owner review of the crypto track, owner go-live, the weekly archive. Any new idea needs a new pre-registration and forward-only validation.
+- **Web app (Chat 1 Phase 2, 2026-10-08; PR #2, merge `7e01970`):**
+  - **Production: https://valemont-agents.vercel.app** (Vercel project `valemont-agents`, Root Directory `apps/web`, production branch `main`). Public privacy policy at `/privacy`; that is the URL for the Pinterest app.
+  - **Stack:** Next.js 16.4 (`src/proxy.ts`, which replaces `middleware.ts`), TypeScript strict, Tailwind 4.3, `@supabase/ssr` 0.12.7, pnpm workspace. `cacheComponents` is off: every route is per-request.
+  - **Env (Vercel and `apps/web/.env.local`):** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `OWNER_USER_ID` (server-only, marked Sensitive).
+  - **Auth model:**
+    - Email and password only. Supabase sign-ups are **OFF**.
+    - Every route except `/login`, `/privacy` and `/offline` needs a session verified with `getUser()` whose `user.id === OWNER_USER_ID`.
+    - It is checked twice: in `proxy.ts` and again in `requireOwner()` in the `(app)` layout. A missing `OWNER_USER_ID` fails closed.
+    - A valid non-owner session is signed out. "Not authorized." shows only after a rejected sign-in. Verified on production with a stranger account, which was then deleted.
+    - Public pages never call Supabase, so `/privacy` survives an auth outage.
+  - **Data:** no ledger or app-data reads yet. RLS has no policies until db/019+ (§5).
+  - **Headers:**
+    - A per-request CSP: script nonce plus `strict-dynamic`, and `connect-src` limited to self and the Supabase origin.
+    - X-Frame-Options DENY, Referrer-Policy same-origin, HSTS, nosniff.
+    - `X-Robots-Tag: noindex` on everything except `/privacy`, and `robots.txt` allows `/privacy` only.
+  - **Token system:**
+    - `apps/web/src/styles/tokens.css` is the single source of truth. NIGHT (default) and DAY are `--vm-*` properties on `[data-theme]`, mapped to semantic Tailwind utilities via `@theme inline`.
+    - Tailwind's default palette, radii, shadows and type scale are cleared, so `gray-*` and `shadow-md` cannot be generated.
+    - The theme cookie `vm-theme` is applied server-side, so there is no flash.
+    - Fonts are self-hosted via next/font: Instrument Serif, Geist and Geist Mono. Silkscreen is used only on the installed-PWA cold-start splash and the 404.
+    - `/design` is the owner-approved showcase.
+    - Several brief colours were adjusted for WCAG AA. The measured before and after values are in commits `7b09e51` and `f35cf19`.
+  - **`pnpm lint` (in `apps/web`) = ESLint + `check:tokens` + `check:contrast`:**
+    - `check:tokens` fails on any raw hex, colour function, Tailwind arbitrary value, property or variable, or default grey anywhere under `src/` except `tokens.css`.
+    - `check:contrast` reads `tokens.css` and holds every text pair, including each status on its chip fill, to AA.
+    - A new colour or size goes into `tokens.css` as a token or an `@utility`, never as an exception.
+  - **Tests:** `pnpm test:e2e` runs Playwright against a local production build on port 3100, in desktop and 390px phone projects. Result: 27 pass, 5 skip by design.
+    - `e2e/owner.spec.ts` runs only with `E2E_OWNER_EMAIL` and `E2E_OWNER_PASSWORD` set in the shell session. Never put them in a file.
+  - **Deploy isolation, verified with the docs-only commit that recorded this:**
+    - Vercel builds only when `apps/web` or the root lockfile/workspace changes (`apps/web/vercel.json` `ignoreCommand`).
+    - Railway rebuilds only on `/workers/**` (`workers/railway.json` `watchPatterns`); the PR #2 merge showed SKIPPED there.
+- **Next:**
+  - **Chat 1 Phase 1, Step 8** is due after 2026-10-09 05:36 UTC: 24 h RAM, CPU and projected cost against the free plan's $1/month credit, feeding the 2026-10-16 Railway decision.
+  - **Chat 1 Phase 3:** PWA shell and push (manifest, Serwist, VAPID). The manifest's `theme_color` will need a sanctioned way to read `tokens.css`, not a hex literal.
+  - Still pending from before: owner review of the crypto track, owner go-live, and the weekly archive.
+  - Any new idea needs a new pre-registration and forward-only validation.
