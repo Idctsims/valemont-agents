@@ -5,5 +5,7 @@ __pycache__/
 reference/
 node_modules/
 .next/
+.vercel/
+.env*.local
 .DS_Store
 .cache/

@@ -26,7 +26,7 @@ Build on `valemont-agents` and turn it into a monorepo: `apps/web` (Next.js) and
 | --- | --- | --- |
 | `core/` (ledger, BaseAgent loop, orchestrator) | Keep as-is | Commit-before-outcome ledger becomes the backbone for bets, bot trades and 15-min BTC calls |
 | `venues/kalshi/` (read-only client, fees, edge gate) | Keep, extend | Add combo/multivariate reads, sport discovery across all series, optional authenticated RFQ later |
-| `db/001–017` migrations | Keep, continue numbering at 018 | Paper/live separation and immutability triggers already exist for ledger tables |
+| `db/001–017` migrations | Keep, continue numbering at 018 (018 is the read-only inspection role; shared tables start at 019) | Paper/live separation and immutability triggers already exist for ledger tables |
 | `sports/nfl/` models | Keep as research only | Failed holdout; kept registered as forward tests, not used for picks |
 | `adapters/crypto.py` | Replace strategy, keep plumbing | Mechanical placeholder rule; core bot gets a real strategy on Alpaca |
 | `adapters/prizepicks.py` | Fold into Manual Slip Entry | No public PrizePicks API; screenshot parsing replaces the fragile fetch |
@@ -63,7 +63,7 @@ flowchart TB
 
 ## 3. Data model
 
-One Supabase Postgres database, `public` schema, migrations continuing at `db/018`. The existing ledger tables stay the single source of truth for anything that wins or loses: generated parlays, played slips, bot trades and 15-minute BTC calls are all `commitments` with `legs` and `resolutions`. Everything else is ordinary app data.
+One Supabase Postgres database, `public` schema, migrations continuing at `db/019` (`db/018` is the `valemont_readonly` inspection role, Chat 1 Phase 1). The existing ledger tables stay the single source of truth for anything that wins or loses: generated parlays, played slips, bot trades and 15-minute BTC calls are all `commitments` with `legs` and `resolutions`. Everything else is ordinary app data.
 
 **Paper vs live, from day one.** Every money table carries `mode text not null check (mode in ('paper','live'))` with default `'paper'`, alongside the existing `is_test`. Capital Tracker, model stats and bot stats always group by `mode`, so live money never mixes with paper numbers and flipping a bot to live needs no schema change.
 
@@ -227,7 +227,7 @@ Thirteen build chats after this one, each split into phases with a test you run 
    - [ ] Tokens file drives every color, font and spacing value; no default shadcn grays
 3. PWA shell and push: manifest, service worker (Serwist), VAPID keys, onboarding screen.
    - [ ] Installed to iPhone Home Screen; test push arrives with the phone locked
-4. Shared tables (db/018), consolidated worker scheduler, `job_health`, `ai_usage`, budget guard.
+4. Shared tables (db/019; shifted from 018, which became the read-only role in Phase 1), consolidated worker scheduler, `job_health`, `ai_usage`, budget guard.
    - [ ] A deliberately failing test job triggers a push after two misses
 
 ### Chat 2 — Command core

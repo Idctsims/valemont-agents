@@ -1,0 +1,14 @@
+# Build context is workers/ (Railway root directory /workers), so the repo-root
+# .env, venv/, reference/, .cache/, apps/ and .git/ are outside the context
+# already. They are listed anyway so this file stays safe if the context ever
+# widens: no secret and no local junk may enter the image.
+.env
+.env*
+venv/
+reference/
+.cache/
+node_modules/
+apps/
+.git/
+__pycache__/
+*.pyc
