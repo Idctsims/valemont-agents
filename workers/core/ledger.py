@@ -77,6 +77,9 @@ __all__ = [
     "mark_push_delivered",
     "mark_push_failed",
     "notification_sent_since",
+    "notification_sent_this_month",
+    "record_ai_usage",
+    "ai_spend_month_to_date",
     "JobHealth",
     "job_register",
     "job_started",
@@ -1062,6 +1065,59 @@ def notification_sent_since(kind: str, hours: int) -> bool:
             (kind, hours),
         ).fetchone()
     return bool(row[0])
+
+
+#: The owner's month, not UTC's: budgets and "once a month" alerts reset at
+#: local midnight on the 1st (app_settings.timezone, America/Chicago default).
+_LOCAL_MONTH_START = """
+    (date_trunc('month', now() AT TIME ZONE coalesce(
+        (SELECT timezone FROM app_settings), 'America/Chicago'))
+     AT TIME ZONE coalesce((SELECT timezone FROM app_settings), 'America/Chicago'))
+"""
+
+
+def notification_sent_this_month(kind: str) -> bool:
+    """Has a `kind` notification left `queued` since the 1st, owner's time?"""
+    with _pool().connection() as conn:
+        row = conn.execute(
+            f"""
+            SELECT EXISTS (
+                SELECT 1 FROM notifications
+                 WHERE kind = %s AND status <> 'queued'
+                   AND created_at >= {_LOCAL_MONTH_START})
+            """,
+            (kind,),
+        ).fetchone()
+    return bool(row[0])
+
+
+# ---------------------------------------------------------------------------
+# AI usage (db/020): append-only. core/ai.py is the only writer here; the web
+# twin (Chat 2) writes as the owner through RLS.
+# ---------------------------------------------------------------------------
+
+def record_ai_usage(*, purpose: str, model: str, tokens_in: int, tokens_out: int,
+                    cache_read_tokens: int, cache_write_tokens: int, batch: bool,
+                    cost_usd: Decimal, critical: bool) -> None:
+    with _pool().connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO ai_usage (purpose, model, tokens_in, tokens_out, cache_read_tokens,
+                                  cache_write_tokens, batch, cost_usd, critical)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (purpose, model, tokens_in, tokens_out, cache_read_tokens, cache_write_tokens,
+             batch, cost_usd, critical),
+        )
+
+
+def ai_spend_month_to_date() -> Decimal:
+    """Sum of ai_usage.cost_usd since the 1st of the owner's month."""
+    with _pool().connection() as conn:
+        row = conn.execute(
+            f"SELECT coalesce(sum(cost_usd), 0) FROM ai_usage WHERE created_at >= {_LOCAL_MONTH_START}"
+        ).fetchone()
+    return Decimal(row[0])
 
 
 # ---------------------------------------------------------------------------
