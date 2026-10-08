@@ -1,0 +1,282 @@
+/*
+ * Valemont Command design tokens. The single source of truth.
+ *
+ * This is the only file under src/ allowed to hold a raw colour, a pixel
+ * size or a font stack. `pnpm check:tokens` enforces that, and
+ * `pnpm check:contrast` checks the colour pairs below against WCAG AA.
+ *
+ * Two layers:
+ *   1. Raw values per theme, as --vm-* custom properties on [data-theme].
+ *      NIGHT is the default (also applied on :root).
+ *   2. Tailwind v4 @theme inline, which maps semantic utility names
+ *      (bg-surface, text-text-muted, border-border, rounded-card ...) onto
+ *      those properties, so one class works in both themes.
+ *
+ * Tailwind's default palette, radii and shadows are cleared, so gray-*,
+ * slate-*, shadow-md and the rest cannot be generated at all.
+ */
+
+/* ---------------------------------------------------------------- themes */
+
+:root,
+[data-theme="night"] {
+  color-scheme: dark;
+
+  --vm-bg: #13191f;
+  --vm-surface: #1c2228;
+  --vm-surface-2: #2b2f2e;
+  --vm-surface-3: #594c3d;
+  --vm-border: #3a3833;
+  --vm-text: #f2ece1;
+  --vm-text-muted: #a89f90;
+  --vm-accent: #ca9c68;
+  --vm-accent-strong: #e8b04a;
+  --vm-wood: #906d4b;
+
+  /* Text on a filled accent. */
+  --vm-on-accent: #13191f;
+  --vm-on-accent-strong: #13191f;
+
+  /* Status. Used as text on surfaces, so each clears 4.5:1. */
+  --vm-hit: #5fb97a;
+  --vm-on-pace: #e8b04a;
+  --vm-danger: #ee7f5c; /* spec #E5704B is 4.36:1 on surface-2; lifted for AA */
+  --vm-dead: #a39a8d; /* spec #7D7468 is 3.49:1 on surface; lifted for AA */
+  --vm-live: #f06a6e; /* spec #E5484D is 4.10:1 on surface; lifted for AA */
+
+  /* PAPER badge: accent on surface-3, per spec. Night accent on surface-3
+     is 3.35:1, so the badge text is a lighter step of the accent. */
+  --vm-paper-fg: #f0cf96;
+  --vm-paper-bg: #594c3d;
+}
+
+[data-theme="day"] {
+  color-scheme: light;
+
+  --vm-bg: #f7f3e8;
+  --vm-surface: #fffcf4;
+  --vm-surface-2: #efe7d3;
+  --vm-surface-3: #e2d6bc;
+  --vm-border: #e2d6bc;
+  --vm-text: #3f2f1c;
+  --vm-text-muted: #6e5e4a; /* spec #7A6A55 is 4.24:1 on surface-2; darkened */
+  --vm-accent: #4a3622;
+  --vm-accent-strong: #ffe08a;
+  --vm-wood: #906d4b;
+
+  --vm-on-accent: #fffcf4;
+  --vm-on-accent-strong: #3f2f1c;
+
+  /* Status, darkened for light surfaces: the spec values are 1.6–3.8:1 here. */
+  --vm-hit: #2c7344;
+  --vm-on-pace: #835600;
+  --vm-danger: #ad3a17;
+  --vm-dead: #6e6559;
+  --vm-live: #bb2227;
+
+  --vm-paper-fg: #4a3622;
+  --vm-paper-bg: #e2d6bc;
+}
+
+/* ------------------------------------------------------- tailwind theme */
+
+@theme inline {
+  /* Clear Tailwind's defaults: only the tokens below exist. */
+  --color-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --text-*: initial;
+  --font-*: initial;
+
+  /* Colour, semantic. */
+  --color-bg: var(--vm-bg);
+  --color-surface: var(--vm-surface);
+  --color-surface-2: var(--vm-surface-2);
+  --color-surface-3: var(--vm-surface-3);
+  --color-border: var(--vm-border);
+  --color-text: var(--vm-text);
+  --color-text-muted: var(--vm-text-muted);
+  --color-accent: var(--vm-accent);
+  --color-accent-strong: var(--vm-accent-strong);
+  --color-wood: var(--vm-wood);
+  --color-on-accent: var(--vm-on-accent);
+  --color-on-accent-strong: var(--vm-on-accent-strong);
+  --color-hit: var(--vm-hit);
+  --color-on-pace: var(--vm-on-pace);
+  --color-danger: var(--vm-danger);
+  --color-dead: var(--vm-dead);
+  --color-live: var(--vm-live);
+  --color-paper-fg: var(--vm-paper-fg);
+  --color-paper-bg: var(--vm-paper-bg);
+
+  /* Type. Families come from next/font (src/app/fonts.ts) as variables. */
+  --font-display: var(--font-instrument-serif), "Iowan Old Style", Georgia, serif;
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "Cascadia Mono", monospace;
+  /* Splash/boot screen and 404 only. */
+  --font-signature: var(--font-silkscreen), var(--font-geist-mono), monospace;
+
+  /* Fluid scale. Fixed below lg, fluid above; ratio ~1.25, steeper at display. */
+  --text-label: 0.6875rem;
+  --text-label--line-height: 1rem;
+  --text-label--letter-spacing: 0.14em;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.35rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.6rem;
+  --text-lg: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
+  --text-lg--line-height: 1.55;
+  --text-xl: clamp(1.25rem, 1.15rem + 0.45vw, 1.5rem);
+  --text-xl--line-height: 1.35;
+  --text-2xl: clamp(1.5rem, 1.3rem + 0.9vw, 2rem);
+  --text-2xl--line-height: 1.2;
+  --text-3xl: clamp(2rem, 1.6rem + 1.75vw, 3rem);
+  --text-3xl--line-height: 1.08;
+  --text-4xl: clamp(2.5rem, 1.85rem + 2.9vw, 4.25rem);
+  --text-4xl--line-height: 1.02;
+  --text-display: clamp(3.25rem, 2rem + 5.5vw, 6.5rem);
+  --text-display--line-height: 0.95;
+  --text-display--letter-spacing: -0.01em;
+
+  /* Shape. */
+  --radius-card: 1.75rem; /* 28px */
+  --radius-inner: 1rem; /* 16px */
+  --radius-pill: 999px;
+
+  /* 4-pt spacing: p-1 = 4px, p-4 = 16px. */
+  --spacing: 0.25rem;
+
+  /* Fixed sizes that are not on the spacing scale. */
+  --container-measure: 40rem; /* body copy, ~70ch */
+  --container-shell: 76rem;
+
+  /* Motion. Every transition-* utility inherits the standard step. */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --default-transition-duration: 180ms;
+  --default-transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Motion steps not expressible as Tailwind defaults. */
+:root {
+  --vm-duration-std: 180ms;
+  --vm-duration-card: 320ms;
+  --vm-target-min: 2.75rem; /* 44px touch target */
+  --vm-rail-width: 16.5rem;
+  --vm-tabbar-height: 4.25rem;
+}
+
+/* ------------------------------------------------------------ utilities */
+
+/* Card and page transitions: the 320ms step. */
+@utility motion-card {
+  --tw-duration: var(--vm-duration-card);
+  transition-duration: var(--vm-duration-card);
+  transition-timing-function: var(--ease-standard);
+}
+
+/* 44px minimum touch target, either axis. */
+@utility tap {
+  min-height: var(--vm-target-min);
+  min-width: var(--vm-target-min);
+}
+
+/* Glass: hero cards over imagery only. Never on plain surfaces. */
+@utility glass {
+  background-color: color-mix(in oklab, var(--vm-surface) 62%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: blur(18px) saturate(1.15);
+  border: 1px solid color-mix(in oklab, var(--vm-text) 14%, transparent);
+}
+
+/* Safe-area insets for the installed PWA (notch, home indicator). */
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+@utility px-safe {
+  padding-left: max(1rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+}
+
+/* Shell geometry. */
+@utility w-rail {
+  width: var(--vm-rail-width);
+}
+@utility pl-rail {
+  padding-left: var(--vm-rail-width);
+}
+@utility h-tabbar {
+  height: var(--vm-tabbar-height);
+}
+@utility pb-tabbar {
+  padding-bottom: calc(var(--vm-tabbar-height) + env(safe-area-inset-bottom, 0px) + 1.5rem);
+}
+
+/* Uppercase tracked mono label: numbers, odds, stats and labels. */
+@utility label-mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  line-height: var(--text-label--line-height);
+  letter-spacing: var(--text-label--letter-spacing);
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hairline rule in wood, for the one place a divider carries meaning. */
+@utility rule-wood {
+  border-color: color-mix(in oklab, var(--vm-wood) 55%, transparent);
+}
+
+/* ----------------------------------------------------------------- base */
+
+@layer base {
+  html {
+    background-color: var(--vm-bg);
+    color: var(--vm-text);
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  [data-theme] {
+    color: var(--vm-text);
+  }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+    -webkit-font-smoothing: antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  ::selection {
+    background-color: var(--vm-accent-strong);
+    color: var(--vm-on-accent-strong);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--vm-accent-strong);
+    outline-offset: 2px;
+  }
+
+  [data-theme="day"] :focus-visible {
+    outline-color: var(--vm-accent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
