@@ -312,7 +312,8 @@ each in phases with a "done when" checklist). It supersedes the former steps
 - **Chat 1, Phase 1** (repo restructure, CLAUDE.md amendments, Railway redeploy
   from `workers/`) ✓, except Step 8 (24 h Railway usage check)
 - **Chat 1, Phase 2** (Next.js app, owner-only auth, design tokens, Vercel) ✓
-- **Chat 1, Phase 3** (PWA shell and push) ← **you are here** (PR open; phone check after merge)
+- **Chat 1, Phase 3** (PWA shell and push) ✓ (phone-verified 2026-10-08)
+- **Chat 1, Phase 4** (db/020 shared tables, scheduler, `job_health`, push alerts) ← **you are here**
 
 Reason for deploying at step 4 and not at the end: "works locally, dies
 silently at 3am in production" is the classic failure here. Hit it while
@@ -868,7 +869,13 @@ absent row as "I never looked."
   - Restart policy is ON_FAILURE with 10 retries, so the dashboard showed "Online" while nothing ran.
   - **Restored 2026-10-08 05:36 UTC on the `workers/` path.** The service builds from Root Directory `/workers` with config file `/workers/railway.json` (merge `8ae8f14`, deployment `fba3fb6b`). `CANARY=true` was set and deployment `8adfc44d` booted. The first canary run was 1688 at 05:37:14 UTC, carrying a clock offset. `ROSTER` stays unset and `db/013` unpasted.
   - **The canary path could not boot from `a7733ac` (2026-09-29 23:02 UTC) until Chat 1 Phase 1.** `_fake` opted in to close capture, and `main.py` gave it no capture trigger, so `register()` raised. The 09-29 23:xx `_fake` runs postdate that commit, so they most likely came from `scripts/run_fake.py` locally, not Railway. Now covered by `tests/test_canary.py`.
-  - **Canary cadence: 60 s** (`CANARY_INTERVAL_S`, default 60, minimum 5, applied to run, sweep and capture). That is about 1,440 runs and 4,300 events a day, **~1 MB/day of permanent `is_test` rows**.
+  - **Canary cadence: 60 s** (`CANARY_INTERVAL_S`, default 60, minimum 5, applied to run, sweep and capture). **~1 MB/day of permanent `is_test` rows**.
+    - Each minute writes one tick run, plus a `resolution sweep` run and a `close capture` run whenever something is due. That is 2–3 `runs` rows per minute, within the same second, or ~2,900–4,300 a day, not 1,440.
+    - Measured 2026-10-08 20:14–20:36 UTC. Clustered rows at one timestamp are these jobs, not a second worker: the `notes` column says which.
+  - **PR #3 merge rebuilt the worker (`workers/requirements.txt` changed): deployment `5bdbc069` SUCCESS at 20:29 UTC.**
+    - The earlier `209f58a8` (20:12 UTC, REMOVED) was most likely the redeploy from adding the VAPID variables.
+    - The canary kept its cadence across the switch: every gap 58.3–60.0 s between tick runs (max 69.6 s since 19:30 UTC), 0 error runs in 2 h.
+    - The new instance's worker→DB clock offset is ~33 ms (it was ~90 ms on the previous one).
   - It stays on until the 2026-10-16 Railway decision. It is retired in Chat 1 Phase 4, when the scheduler and `job_health` heartbeats replace it.
 - **Deploy: owner GO (2026-10-01); `prod-roster` merged to `main`.** Go-live (out of scope until the owner says so):
   1. paste `db/013`;
@@ -916,7 +923,17 @@ absent row as "I never looked."
   - **Deploy isolation, verified with the docs-only commit that recorded this:**
     - Vercel builds only when `apps/web` or the root lockfile/workspace changes (`apps/web/vercel.json` `ignoreCommand`).
     - Railway rebuilds only on `/workers/**` (`workers/railway.json` `watchPatterns`); the PR #2 merge showed SKIPPED there.
-- **PWA and push (Chat 1 Phase 3, 2026-10-08; branch `chat1/phase3-pwa`, PR open, not merged):**
+- **PWA and push (Chat 1 Phase 3, 2026-10-08; PR #3, merge `860aa0a`; phone-verified the same day):**
+  - **Owner's phone check, all pass:**
+    - installed from the Home Screen, full screen, V icon;
+    - notifications enabled, device shown as subscribed;
+    - web test push arrived both locked and unlocked;
+    - worker test push (`scripts.send_test_push`) arrived with the phone locked;
+    - tapping the notification opened `/onboarding`;
+    - airplane mode shows `/offline`.
+  - **Database record (read via `db_inspect`):**
+    - `notifications` #7 and #8 are the web sends (20:32:22, 20:33:03 UTC) and #9 is the worker send (20:33:22 UTC), all `sent` with no error. IDs 1–6 were tests_live fixtures, deleted as designed.
+    - One subscription: `iPhone · Home Screen app`, active, never failed, last success 20:33:22 (the worker send).
   - **Service worker:** `@serwist/turbopack` 9.5.13 (Turbopack-native, no `--webpack`).
     - `src/app/sw.ts` is bundled by esbuild into a static route at `/serwist/sw.js` with `Service-Worker-Allowed: /`, as a classic IIFE script for iOS 16.4+.
     - Registration is off in `next dev`.
@@ -938,7 +955,6 @@ absent row as "I never looked."
   - **`/onboarding`** (account menu, desktop rail): Add to Home Screen steps on iPhone Safari (iOS 16.4+), then enable notifications (permission requested only from that tap), then send a test push. On desktop it shows a phone-only note.
 - **Next:**
   - **Chat 1 Phase 1, Step 8** is due after 2026-10-09 05:36 UTC: 24 h RAM, CPU and projected cost against the free plan's $1/month credit, feeding the 2026-10-16 Railway decision.
-  - **Chat 1 Phase 3, after merge (owner, on the phone):** install to the Home Screen, enable notifications, send the test push from `/onboarding` with the phone locked, then run `scripts.send_test_push` locally to prove the worker path.
   - **Chat 1 Phase 4:** `db/020` shared tables, the consolidated scheduler, `job_health` and its push alerts (wiring `core/push.py` in).
   - Still pending from before: owner review of the crypto track, owner go-live, and the weekly archive.
   - Any new idea needs a new pre-registration and forward-only validation.
