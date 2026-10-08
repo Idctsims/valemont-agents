@@ -1,6 +1,7 @@
 """Railway entry point. Canary-gated so the fake agent cannot ship by accident.
 
-Set CANARY=true in the environment to register `_fake` and run forever.
+Set CANARY=true in the environment to register `_fake` and run forever, every
+CANARY_INTERVAL_S seconds (default 60, minimum 5; anything else refuses).
 Anything else — unset, false, misspelled — refuses to start with a clear
 message and an empty registry. The live roster belongs in
 `core.orchestrator.build_default()` later; it is not wired here.
@@ -77,23 +78,21 @@ def main() -> None:
         build_production().run_forever()
         return
 
-    from adapters._fake import build
-    from core.orchestrator import Orchestrator, Registration, Schedule, every
+    from adapters._fake import CanaryConfigError, build, canary_interval_s, canary_schedule
+    from core.orchestrator import Orchestrator, Registration
+
+    # Validated before build(), which is the first database call.
+    try:
+        interval_s = canary_interval_s()
+    except CanaryConfigError as exc:
+        _refuse(log, str(exc))
 
     agent = build()
     orchestrator = Orchestrator()
-    # Fast timers: the scripted horizon is ~45s and abandonment is watchable
-    # in under a minute. This is a canary schedule, not a production one.
-    orchestrator.register(
-        Registration(
-            agent=agent,
-            schedule=Schedule(
-                run=every(seconds=5),
-                sweep=every(seconds=10),
-            ),
-        )
-    )
-    log.info("canary mode — registering %s only", agent.slug)
+    # One cadence for run, sweep and capture (CANARY_INTERVAL_S, default 60 s).
+    # This is a canary schedule, not a production one.
+    orchestrator.register(Registration(agent=agent, schedule=canary_schedule(interval_s)))
+    log.info("canary mode — registering %s only, every %ds", agent.slug, interval_s)
     orchestrator.run_forever()
 
 

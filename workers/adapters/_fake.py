@@ -45,18 +45,24 @@ contaminate the track record. The check happens before the first write.
 
 from __future__ import annotations
 
+import os
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, ClassVar, Final, Sequence
+from typing import Any, ClassVar, Final, Mapping, Sequence
 
 from core import ledger
 from core.agent import (
     BaseAgent, ClosePrice, DeferPolicy, Proposal, Verdict, return_on_risk,
 )
 from core.ledger import Kind, Leg, LegOutcome, Numeric, Outcome, PendingCommitment
+from core.orchestrator import Schedule, every
 
-__all__ = ["FakeAgent", "SCRIPT", "FAKE_DEFER_POLICY"]
+__all__ = [
+    "FakeAgent", "SCRIPT", "FAKE_DEFER_POLICY",
+    "CanaryConfigError", "canary_interval_s", "canary_schedule",
+]
 
 
 #: Tight on purpose so a forced abandonment is watchable in under a minute.
@@ -362,6 +368,48 @@ class FakeAgent(BaseAgent[int, Spec]):
     def _spec_for(pending: PendingCommitment) -> Spec | None:
         label = pending.payload.get("label")
         return next((s for s in SCRIPT if s.label == label), None)
+
+
+#: The Railway canary's cadence (`main.py`, CANARY=true). Every tick writes a
+#: permanent `runs` row and ~3 `events` rows even when idle, so 5 s meant
+#: ~12 MB a day of rows nothing can delete; 60 s is ~1 MB. Run, sweep and
+#: capture all use it: `_fake` opts in to close capture, and an opted-in agent
+#: registered without a capture trigger is refused by the orchestrator.
+CANARY_INTERVAL_ENV: Final = "CANARY_INTERVAL_S"
+CANARY_INTERVAL_DEFAULT_S: Final = 60
+CANARY_INTERVAL_MIN_S: Final = 5
+
+
+class CanaryConfigError(ValueError):
+    """CANARY_INTERVAL_S is set to something the canary must not run with."""
+
+
+def canary_interval_s(environ: Mapping[str, str] = os.environ) -> int:
+    """The canary interval in whole seconds: unset or blank is the default.
+
+    Anything else must be a plain integer of at least CANARY_INTERVAL_MIN_S.
+    `int()` alone would accept "1_0" and "+5"; a config value that means
+    something other than what it looks like is refused instead.
+    """
+    raw = environ.get(CANARY_INTERVAL_ENV, "").strip()
+    if not raw:
+        return CANARY_INTERVAL_DEFAULT_S
+    if not re.fullmatch(r"[0-9]+", raw) or int(raw) < CANARY_INTERVAL_MIN_S:
+        raise CanaryConfigError(
+            f"{CANARY_INTERVAL_ENV}={raw!r} is not a whole number of seconds "
+            f">= {CANARY_INTERVAL_MIN_S}. Unset it for the default "
+            f"({CANARY_INTERVAL_DEFAULT_S})."
+        )
+    return int(raw)
+
+
+def canary_schedule(interval_s: int) -> Schedule:
+    """The canary's one cadence, for run, sweep and capture alike."""
+    return Schedule(
+        run=every(seconds=interval_s),
+        sweep=every(seconds=interval_s),
+        capture=every(seconds=interval_s),
+    )
 
 
 def build() -> FakeAgent:

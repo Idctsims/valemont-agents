@@ -821,7 +821,7 @@ absent row as "I never looked."
   - **Refused only by a foreign key**, so not protected: `runs` and `agents` DELETE.
   - **Fix:** `db/015_close_mutation_gaps.sql`, pasted. `tests_live/test_mutation_gaps.py` now runs and passes.
   - **`db/015` applied_at: 2026-10-08 04:41:03.069615 UTC** (from `migration_log`). **Rows written before that timestamp in `resolutions`, `legs`, `briefs`, `runs` and `agents` were protected by convention only.** There is no history to prove none was altered.
-- **Tests:** `tests/` **360**, and `tests_live/` 88 run, 0 skipped. Run both from `workers/` with **`..\venv\Scripts\python.exe`**.
+- **Tests:** `tests/` **366** (360, plus 6 in `test_canary.py` from Chat 1 Phase 1, Step 3), and `tests_live/` 88 run, 0 skipped. Run both from `workers/` with **`..\venv\Scripts\python.exe`**.
   - The earlier "361" was a typo made in `cf18f9d`. That commit took the suite from 356 to 360 (4 tests in `test_nfl_ml.py`), and nothing has changed `tests/` since.
   - Kalshi jobs run one at a time. The archive's SQL path has no live test, because a test row would be permanent in the real archive; its first real run is the test.
 - **Quote provenance and clock (2026-10-02):**
@@ -856,6 +856,9 @@ absent row as "I never looked."
   - **`CANARY` was removed at an unknown time, and `ROSTER` was never set.** With neither set, `main.py` refuses ("No agents registered"), sleeps 60 s and exits 78, in a loop. The last canary run was 2026-09-29 23:35 UTC.
   - Restart policy is ON_FAILURE with 10 retries, so the dashboard showed "Online" while nothing ran.
   - The loop continues until Chat 1 Phase 1, Step 3 restores `CANARY` on the new `workers/` build path. `ROSTER` stays unset and `db/013` unpasted.
+  - **The canary path could not boot from `a7733ac` (2026-09-29 23:02 UTC) until Chat 1 Phase 1.** `_fake` opted in to close capture, and `main.py` gave it no capture trigger, so `register()` raised. The 09-29 23:xx `_fake` runs postdate that commit, so they most likely came from `scripts/run_fake.py` locally, not Railway. Now covered by `tests/test_canary.py`.
+  - **Canary cadence: 60 s** (`CANARY_INTERVAL_S`, default 60, minimum 5, applied to run, sweep and capture). That is about 1,440 runs and 4,300 events a day, **~1 MB/day of permanent `is_test` rows**.
+  - It stays on until the 2026-10-16 Railway decision. It is retired in Chat 1 Phase 4, when the scheduler and `job_health` heartbeats replace it.
 - **Deploy: owner GO (2026-10-01); `prod-roster` merged to `main`.** Go-live (out of scope until the owner says so):
   1. paste `db/013`;
   2. record an `nfl_ml` fit (production has **no** `model_versions` row for it, so it stands down every window until one exists);
