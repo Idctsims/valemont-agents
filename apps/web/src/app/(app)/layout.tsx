@@ -1,16 +1,12 @@
-import { requireOwner } from "@/lib/auth";
+import { cookies } from "next/headers";
 
-import { logout } from "../login/actions";
+import { AppShell } from "@/components/shell/app-shell";
+import { requireOwner } from "@/lib/auth";
+import { THEME_COOKIE, parseTheme } from "@/lib/theme";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   await requireOwner();
+  const theme = parseTheme((await cookies()).get(THEME_COOKIE)?.value);
 
-  return (
-    <>
-      <form action={logout}>
-        <button type="submit">Log out</button>
-      </form>
-      {children}
-    </>
-  );
+  return <AppShell theme={theme}>{children}</AppShell>;
 }

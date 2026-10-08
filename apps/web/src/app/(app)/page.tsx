@@ -1,3 +1,5 @@
-export default function Home() {
-  return <main>Valemont Command</main>;
+import { redirect } from "next/navigation";
+
+export default function Root() {
+  redirect("/command");
 }

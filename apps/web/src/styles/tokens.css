@@ -192,6 +192,15 @@
   border: 1px solid color-mix(in oklab, var(--vm-text) 14%, transparent);
 }
 
+/* Stand-in for photography under a glass card, until real imagery exists
+   (Lookbook, Screening Room). Built only from theme tokens. */
+@utility imagery-sample {
+  background:
+    radial-gradient(120% 90% at 12% 8%, color-mix(in oklab, var(--vm-accent-strong) 55%, transparent), transparent 60%),
+    radial-gradient(90% 80% at 92% 100%, color-mix(in oklab, var(--vm-wood) 85%, transparent), transparent 65%),
+    linear-gradient(160deg, var(--vm-surface-3), var(--vm-bg));
+}
+
 /* Safe-area insets for the installed PWA (notch, home indicator). */
 @utility pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 0px);
