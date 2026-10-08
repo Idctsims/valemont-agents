@@ -11,6 +11,9 @@ export function AccountMenu({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const panelId = useId();
+  // Opened by keyboard (click event with detail 0): move focus into the menu.
+  // Opened by touch or mouse: leave focus alone, so no ring flashes.
+  const byKeyboard = useRef(false);
 
   useEffect(() => {
     if (!open) return;
@@ -22,7 +25,9 @@ export function AccountMenu({ children }: { children: React.ReactNode }) {
     };
     document.addEventListener("pointerdown", onPointer);
     document.addEventListener("keydown", onKey);
-    root.current?.querySelector<HTMLElement>("[data-menu-panel] button")?.focus();
+    if (byKeyboard.current) {
+      root.current?.querySelector<HTMLElement>("[data-menu-panel] button")?.focus();
+    }
     return () => {
       document.removeEventListener("pointerdown", onPointer);
       document.removeEventListener("keydown", onKey);
@@ -36,7 +41,10 @@ export function AccountMenu({ children }: { children: React.ReactNode }) {
         aria-label="Account"
         aria-expanded={open}
         aria-controls={panelId}
-        onClick={() => setOpen((o) => !o)}
+        onClick={(e) => {
+          byKeyboard.current = e.detail === 0;
+          setOpen((o) => !o);
+        }}
         className={`tap inline-flex items-center justify-center rounded-pill px-3 transition-colors hover:bg-surface-2 hover:text-text ${
           open ? "bg-surface-2 text-text" : "text-text-muted"
         }`}
