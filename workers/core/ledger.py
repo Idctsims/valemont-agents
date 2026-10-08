@@ -70,6 +70,12 @@ __all__ = [
     "archive_trades",
     "register_preregistration",
     "preregistration_stamp",
+    "PushSubscription",
+    "active_push_subscriptions",
+    "record_notification",
+    "finish_notification",
+    "mark_push_delivered",
+    "mark_push_failed",
     "close_pool",
 ]
 
@@ -943,6 +949,88 @@ def preregistration_stamp(*, document: str, section: str,
             (document, section, content_sha256),
         ).fetchone()
     return None if row is None else (row[0], row[1])
+
+
+# ---------------------------------------------------------------------------
+# Web Push (db/019). App tables, not the ledger: mutable by design, owned by
+# an auth.users id. The worker reaches them through DATABASE_URL like every
+# other table (it bypasses RLS); apps/web reaches them as the signed-in owner.
+# workers/core/push.py is the only caller.
+# ---------------------------------------------------------------------------
+
+NotificationStatus = Literal["sent", "partial", "failed"]
+
+
+@dataclass(frozen=True)
+class PushSubscription:
+    """One device. `endpoint`, `p256dh` and `auth` are capabilities: never log
+    them in full (push.py truncates the endpoint)."""
+
+    id: int
+    owner_id: str
+    endpoint: str
+    p256dh: str
+    auth: str
+    device_label: str | None
+
+
+def active_push_subscriptions(owner_id: str | None = None) -> list[PushSubscription]:
+    with _pool().connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, owner_id::text, endpoint, p256dh, auth, device_label
+              FROM push_subscriptions
+             WHERE active AND (%(owner)s::uuid IS NULL OR owner_id = %(owner)s::uuid)
+             ORDER BY owner_id, id
+            """,
+            {"owner": owner_id},
+        ).fetchall()
+    return [PushSubscription(*r) for r in rows]
+
+
+def record_notification(*, owner_id: str, kind: str, title: str, body: str | None,
+                        deep_link: str | None) -> int:
+    """Log a notification as `queued`, before any device is tried."""
+    with _pool().connection() as conn:
+        row = conn.execute(
+            """
+            INSERT INTO notifications (owner_id, kind, title, body, deep_link)
+            VALUES (%s, %s, %s, %s, %s) RETURNING id
+            """,
+            (owner_id, kind, title, body, deep_link),
+        ).fetchone()
+    return int(row[0])
+
+
+def finish_notification(notification_id: int, *, status: NotificationStatus,
+                        error: str | None) -> None:
+    with _pool().connection() as conn:
+        conn.execute(
+            "UPDATE notifications SET status = %s, error = %s, sent_at = now() WHERE id = %s",
+            (status, error, notification_id),
+        )
+
+
+def mark_push_delivered(subscription_id: int) -> None:
+    with _pool().connection() as conn:
+        conn.execute(
+            "UPDATE push_subscriptions SET last_success_at = now() WHERE id = %s",
+            (subscription_id,),
+        )
+
+
+def mark_push_failed(subscription_id: int, *, deactivate: bool) -> None:
+    """Record a failed delivery. `deactivate` for 404/410: the push service
+    says the subscription is gone and will never work again."""
+    with _pool().connection() as conn:
+        conn.execute(
+            """
+            UPDATE push_subscriptions
+               SET failed_at = now(), active = active AND NOT %s
+             WHERE id = %s
+            """,
+            (deactivate, subscription_id),
+        )
 
 
 # ---------------------------------------------------------------------------
