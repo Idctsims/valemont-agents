@@ -2,6 +2,12 @@
 
 Approved build plan: docs/MASTER_PLAN.md. Product brief: docs/BUILD_BRIEF.md. Read both at the start of every session.
 
+**Shell: native Windows PowerShell only. No WSL, no bash-only syntax.** It is
+Windows PowerShell **5.1**: no `&&`, no `||`, no ternaries, no `??`. Chain with
+`;` (or `A; if ($?) { B }`), set variables with `$env:X = 'y'`, and run Python
+as `..\venv\Scripts\python.exe -m ...` from `workers/` (the venv stays at the
+repo root).
+
 Read this at the start of every session. It is the reason the codebase is shaped
 the way it is. If a request in a session conflicts with something here, say so
 before writing code.
@@ -16,18 +22,32 @@ Four worker agents, one supervisor:
 
 | Agent | Domain | What it commits to | Money |
 |---|---|---|---|
-| `crypto` | Crypto markets | Simulated positions, long and short | None. Paper only. |
+| `crypto` | Crypto markets | Simulated positions, long and short | Paper; live only per this section. |
 | `equities` | US stocks | Simulated positions | None. Paper only. |
 | `prizepicks` | Player props | Proposed slips, handed to the operator | None. Never places bets. |
 | `kalshi` pillar | CFTC-regulated event contracts: one agent per sport × market type (`nfl_ml`, `nfl_spread`, `nfl_props`, …; §8) | Shadow positions | None. Never places orders. |
 | `chief_of_staff` | Supervision | Nothing. Writes briefs. | None. |
 
-**No component of this system moves real money, ever.** There is no broker
-credential with trade permission, no exchange key with withdrawal permission,
-and no bookmaker automation. The `prizepicks` agent produces slips for a human
-to enter manually and then tracks whether they would have hit. `kalshi` tracks
-event contracts in shadow only and never places an order. If a session
-proposes adding live execution, stop and flag it.
+**Paper by default, everywhere. Real money moves only where the owner
+explicitly flips one bot to live.**
+
+- Eligible for automated live execution: the core crypto bot on Alpaca, and
+  nothing else.
+- Live requires all of: a separate live key pair that exists only in a
+  separate Railway environment; per-bot `mode='live'` set by a typed owner
+  confirmation in the dashboard; hard limits (daily loss, max position) in
+  `bots.risk_limits`, enforced in core before any order; a kill switch that
+  halts within one cycle. Starting live mode without live keys present must
+  refuse loudly.
+- Never automated: Kalshi bets and combos, PrizePicks or any other slip,
+  memecoin trades (FOMO). The system generates, analyzes and tracks; the owner
+  executes by hand and logs fills.
+- No key with withdrawal or transfer permission is ever stored.
+- Every money table carries `mode` (`'paper'`|`'live'`) — required for every
+  money table created or altered from db/019 onward; existing ledger tables
+  gain it there. Every metric groups by mode; paper and live never blend.
+
+If a session proposes live execution outside these rules, stop and flag it.
 
 ---
 
@@ -61,27 +81,41 @@ wrong. Write a new row instead.
 
 ## 3. Structure: one core loop, four thin adapters
 
+A monorepo. Python lives under `workers/`; module paths elsewhere in this file
+(`core/ledger.py`, `jobs/...`, `tests/...`) are relative to `workers/`.
+
 ```
-core/          The shared machinery. Agents do not own logic.
-  ledger.py       All database writes. Nothing else touches SQL.
-  agent.py        BaseAgent — the observe/thesis/commit/resolve loop.
-  orchestrator.py Scheduler, agent registry, event emission.
-adapters/      Domain specifics ONLY. Thin.
-  crypto.py
-  equities.py
-  prizepicks.py
-  nfl_ml.py       Kalshi NFL moneyline (nfl_spread.py, nfl_props.py to follow)
-venues/kalshi/ Shared by every Kalshi agent: read-only client, per-series fee
-               regimes, the edge gate, KalshiContractAgent (resolve + capture
-               written once). No SQL, no orders.
-sports/nfl/    Everything NFL: nflverse schedule/kickoff, team codes, injuries,
-               models. A new sport is a sibling package, not a rebuild.
-jobs/          Scheduled work that is not an agent (weekly model fits).
-db/            Numbered SQL migrations. Committed to git.
-dashboard/     Next.js. Reads from the API, never from the DB directly.
-scripts/       One-off utilities, health checks.
-tests/         Invariant suite. Stubbed ledger, no DB, no network. See §6.
-reference/     Cloned third-party repos for reading. GITIGNORED.
+apps/
+  web/           Next.js (Phase 2). Reads Supabase server-side (§5). Never
+                 writes ledger tables.
+workers/         Everything Python. The Railway image is built from here.
+  core/            The shared machinery. Agents do not own logic.
+    ledger.py         All database writes. Nothing else touches SQL.
+    agent.py          BaseAgent — the observe/thesis/commit/resolve loop.
+    orchestrator.py   Scheduler, agent registry, event emission.
+    paths.py          REPO_ROOT and the one .env location. Repo-root files
+                      (docs/, db/, .cache/) are reached through it, never
+                      relative to the working directory.
+  adapters/        Domain specifics ONLY. Thin.
+    crypto.py
+    equities.py
+    prizepicks.py
+    nfl_ml.py         Kalshi NFL moneyline (nfl_spread.py, nfl_props.py to follow)
+  venues/kalshi/   Shared by every Kalshi agent: read-only client, per-series fee
+                   regimes, the edge gate, KalshiContractAgent (resolve + capture
+                   written once). No SQL, no orders.
+  sports/nfl/      Everything NFL: nflverse schedule/kickoff, team codes, injuries,
+                   models. A new sport is a sibling package, not a rebuild.
+  jobs/            Scheduled work that is not an agent (weekly model fits).
+  scripts/         One-off utilities, health checks, db_inspect.py (§5).
+  tests/           Invariant suite. Stubbed ledger, no DB, no network. See §6.
+  tests_live/      Live-database suite. See §6.
+  main.py          Railway entry point. Dockerfile, requirements.txt beside it.
+db/              Numbered SQL migrations, shared by app and workers. Committed.
+docs/            Plans, design notes, pre-registrations (frozen texts), results.
+reference/       Cloned third-party repos for reading. GITIGNORED.
+.env             The only .env (gitignored); .env.example documents it.
+venv/            Python 3.12 virtualenv, at the root. GITIGNORED.
 ```
 
 **The smell test:** if an adapter starts growing its own version of something
@@ -142,17 +176,45 @@ a constraint on the brief, not a stylistic preference.
 
 ## 5. Database rules
 
-Supabase Postgres, on a separate account not linked to Cursor. There is no
-Supabase MCP and no CLI access — **the agent writes numbered `.sql` files into
-`db/` and I paste them into the Supabase SQL Editor myself.** Never attempt to
-apply a migration programmatically.
+Supabase Postgres, on a separate account not linked to Cursor or to any MCP.
+**The agent writes numbered `.sql` files into `db/` and I paste them into the
+Supabase SQL Editor myself.** Never attempt to apply a migration
+programmatically.
 
-- Connection **only** from `DATABASE_URL` in `.env`. Never a hardcoded host.
+**The Supabase MCP is never used in this repo**, for anything. The one an
+editor may have connected belongs to a different Supabase account, keeps write
+access for other projects, and cannot see this database (verified 2026-10-08;
+no project-level MCP config exists in this workspace). Do not call it, even to
+read.
+
+**Every database inspection goes through `workers/scripts/db_inspect.py`:**
+
+```
+..\venv\Scripts\python.exe scripts\db_inspect.py "SELECT ..."     (from workers/)
+```
+
+It connects only as `valemont_readonly` (db/018) via `DATABASE_URL_READONLY`,
+never reads `DATABASE_URL`, and rolls back every transaction. The role has
+SELECT on every public table (current, and future ones by default privileges)
+and BYPASSRLS so RLS does not hide rows from it; it has no write grant
+anywhere. That is enforced by the database, and
+`tests_live/test_readonly_role.py` fails if any public table is unreadable or
+writable by it. Never inspect through `DATABASE_URL`.
+
+**apps/web reads Supabase server-side with the owner's session via
+`@supabase/ssr`.** RLS on every table. App tables: `owner_id = auth.uid()`
+policies. Ledger tables: a select-only policy for the owner, no write policies;
+immutability triggers unchanged. Workers remain the only writers to ledger
+tables, via `DATABASE_URL` (bypasses RLS). The secret/service-role key never
+reaches the browser. Migrations stay numbered files in `db/`, pasted by hand.
+
+**Status 2026-10-08: none of these policies exist yet.** Every table still has
+RLS on with NO policies, so anon and authenticated see nothing. The owner
+policies arrive in db/019+ before apps/web reads any table.
+
+- Workers connect **only** from `DATABASE_URL` in `.env`. Never a hardcoded host.
 - Use the **Session pooler** connection string (port 5432), not the direct
   `db.<ref>` host, which is IPv6-only.
-- RLS is enabled on every table with **no policies** — that denies anon and
-  authenticated by default. The worker connects via the Postgres string and
-  bypasses RLS. Do not add policies to let the frontend read Supabase directly.
 - Schema changes **only** via numbered files in `db/`. Never via a GUI.
 - `timestamptz` everywhere, store UTC. Four agents span crypto (24/7),
   US market hours, game slates, and contract settlement. Naive timestamps
@@ -163,25 +225,29 @@ apply a migration programmatically.
 - Migrations are paste-by-hand, so each file must run top-to-bottom in one go
   with no `BEGIN`/`COMMIT` (the SQL Editor supplies its own transaction) and
   no `psql` meta-commands like `\i` or `\copy`.
-- The dashboard talks to the Python API, not to the database. Do not couple
-  the frontend to Supabase's client library.
+- `postgres` here is **not** a superuser (only `supabase_admin` is). On
+  PostgreSQL 16+ an `ALTER ROLE` that so much as names `SUPERUSER` (even
+  `NOSUPERUSER`) needs one, which is why db/018's first paste failed. Assert
+  role attributes; don't re-set them.
 
 ---
 
 ## 6. Conventions
 
 - Python 3.12, `psycopg` v3, `apscheduler`. Keep dependencies boring.
-- All DB access goes through `core/ledger.py`. If SQL appears in an adapter,
-  that's a bug.
+- All worker DB access goes through `core/ledger.py`; if SQL appears in an
+  adapter, that's a bug. Exceptions: `scripts/db_inspect.py` (read-only role,
+  §5) and `apps/web` (server-side, owner session, §5).
 - Every agent action emits an event row. The dashboard is a consumer of that
   stream — build the stream first, the visuals last.
 - Secrets in `.env`, which is gitignored. `.env.example` documents the keys.
 - Fail loudly. A silent exception in a worker that runs at 3am is the single
   most likely way this project quietly dies.
-- **Run the suite before and after touching `core/` or an adapter:**
+- **Run the suite before and after touching `core/` or an adapter.** From
+  `workers/`, in PowerShell:
 
   ```
-  python -m unittest discover -s tests -t .
+  ..\venv\Scripts\python.exe -m unittest discover -s tests -t .
   ```
 
   Stdlib `unittest`, no extra dependency, under a second. Every ledger
@@ -195,10 +261,10 @@ apply a migration programmatically.
   only in a chat transcript — add the test.
 
 - **`tests/` is structurally blind to SQL. Run `tests_live/` too when you
-  touch a query or add a migration:**
+  touch a query or add a migration.** Also from `workers/`:
 
   ```
-  python -m unittest discover -s tests_live -t .
+  ..\venv\Scripts\python.exe -m unittest discover -s tests_live -t .
   ```
 
   The stub ledger refuses the database on purpose, which is what keeps the fast
@@ -230,13 +296,13 @@ Do not skip ahead. Each step is cheap to change; the ones before it are not.
 3. `crypto` adapter, live data, paper positions ✓
 4. Deploy to Railway — prove the 24/7 path with ONE agent running ✓
    (proven by the `_fake` canary)
-5. CLV machinery: closing snapshots, factors, selections (core + schema)
-   ← **you are here**
-6. `equities` adapter
-7. `prizepicks` adapter
-8. `kalshi` adapter
-9. `chief_of_staff`
-10. Dashboard + pixel visualization layer
+
+From here the build order is **`docs/MASTER_PLAN.md` §6** (thirteen chats,
+each in phases with a "done when" checklist). It supersedes the former steps
+5–10.
+
+- **Chat 1, Phase 1** (repo restructure, CLAUDE.md amendments, Railway redeploy
+  from `workers/`) ← **you are here**
 
 Reason for deploying at step 4 and not at the end: "works locally, dies
 silently at 3am in production" is the classic failure here. Hit it while
@@ -738,9 +804,12 @@ absent row as "I never looked."
 
 ---
 
-## Current State (2026-10-01)
+## Current State (2026-10-08)
 
-- **Migrations:** **`db/001`–`db/012` applied** (007–012 verified live by `scripts/verify_migrations_007_012.sql`, 20/20). **To paste:** `db/013` (enable roster) at go-live; `db/014` (trade and settlement archive) before the first archive run. To paste, **in order**: `db/015` (close mutation gaps), `db/016` (run clock offset), `db/017` (pre-registration stamps). Each depends on the one before. Next new file `db/018`.
+- **Migrations:** **`db/001`–`db/012` and `db/014`–`db/018` applied.** 007–012 verified live by `workers/scripts/verify_migrations_007_012.sql` (20/20). 014–018 were pasted 2026-10-08 and verified by read-only SELECTs. `migration_log` (UTC): 015 04:41:03, 016 04:41:16, 017 04:41:30, 018 04:50:35. 014 predates the log; its tables and triggers are present.
+  - **`db/013` (enable the production roster) stays unpasted.** It is go-live and out of scope until the owner says so.
+  - Real dependencies: 016, 017 and 018 each need only 015 (`migration_log`). 014 needs only 011.
+  - Next new file: `db/019`, the shared tables (MASTER_PLAN §3).
 - **Immutability audit (2026-10-01, empirical).** UPDATE and DELETE were attempted on a `_test` row of every table, rolled back.
   - **Refused by trigger:** `commitments`, `events`, `resolution_attempts`, `commitment_factors`, `closing_snapshots`, `selections`, `model_versions`, `kalshi_markets`, `kalshi_candles`. `legs` UPDATE was refused too, by `legs_frozen`.
   - **ACCEPTED:**
@@ -750,14 +819,16 @@ absent row as "I never looked."
     - `runs` UPDATE on any row;
     - `agents` UPDATE on any column, including `is_test`.
   - **Refused only by a foreign key**, so not protected: `runs` and `agents` DELETE.
-  - **Fix:** `db/015_close_mutation_gaps.sql`, plus `tests_live/test_mutation_gaps.py`, which skips until pasted.
-  - **⚠ `db/015` applied_at: PENDING PASTE.** Fill this in from `migration_log` once pasted. **Rows written before that timestamp in `resolutions`, `legs`, `briefs`, `runs` and `agents` were protected by convention only.** There is no history to prove none was altered.
-- **Tests:** `tests/` 361, `tests_live/` 63 run, 3 skipped (the db/015, db/016, db/017 classes, until pasted). Run both with **`venv/Scripts/python.exe`**. Kalshi jobs run one at a time. The archive's SQL path has no live test, because a test row would be permanent in the real archive; its first real run is the test.
+  - **Fix:** `db/015_close_mutation_gaps.sql`, pasted. `tests_live/test_mutation_gaps.py` now runs and passes.
+  - **`db/015` applied_at: 2026-10-08 04:41:03.069615 UTC** (from `migration_log`). **Rows written before that timestamp in `resolutions`, `legs`, `briefs`, `runs` and `agents` were protected by convention only.** There is no history to prove none was altered.
+- **Tests:** `tests/` **360**, and `tests_live/` 88 run, 0 skipped. Run both from `workers/` with **`..\venv\Scripts\python.exe`**.
+  - The earlier "361" was a typo made in `cf18f9d`. That commit took the suite from 356 to 360 (4 tests in `test_nfl_ml.py`), and nothing has changed `tests/` since.
+  - Kalshi jobs run one at a time. The archive's SQL path has no live test, because a test row would be permanent in the real archive; its first real run is the test.
 - **Quote provenance and clock (2026-10-02):**
   - Every tick stores its worker→DB clock offset on the run row (`db/016`).
   - Every commitment carries `payload.quote_provenance`: `fetched_at_worker`, plus a separately named `fetched_at_db_estimate`. Worker time is never labelled DB time.
   - Local machine: the DB is ~373 ms behind it (RTT ~55 ms).
-  - **Railway's offset is unmeasured: no canary run has been written since 2026-09-29 23:35 UTC.** Check whether the service is up.
+  - **Railway's offset is unmeasured: no canary run has been written since 2026-09-29 23:35 UTC** (see Deploy below for why).
   - The dashboard's "#9076" matches no row in production. Its source is unknown.
 - **Pre-registration stamps (`db/017`):**
   - The holdout runners refuse unless their section's hash was DB-stamped before they run.
@@ -781,15 +852,23 @@ absent row as "I never looked."
   - The scan's base-rate weight did not replicate (0.04 vs 0.63).
   - **CFB totals stop.** The 2026 CFB data through 2026-09-27 is spent.
 - **`_kalshi_probe`:** one real contract per NFL week (is_test) to exercise settlement and close capture, which have never run on real data.
-- **Deploy: owner GO (2026-10-01); `prod-roster` merged to `main`.** Railway keeps booting the canary until its env changes. Go-live:
+- **Railway (verified 2026-10-08):** service `valemont-agents`, project `accomplished-heart`, environment `production`. **Trial plan: $5 credit, ends ~2026-10-18.** Decision due by 2026-10-16: stay on Railway's free plan if the 24 h usage check says the worker fits its $1/month credit, otherwise move to an Oracle Cloud Always Free VM before Chat 1 Phase 4. No payment method on file.
+  - **`CANARY` was removed at an unknown time, and `ROSTER` was never set.** With neither set, `main.py` refuses ("No agents registered"), sleeps 60 s and exits 78, in a loop. The last canary run was 2026-09-29 23:35 UTC.
+  - Restart policy is ON_FAILURE with 10 retries, so the dashboard showed "Online" while nothing ran.
+  - The loop continues until Chat 1 Phase 1, Step 3 restores `CANARY` on the new `workers/` build path. `ROSTER` stays unset and `db/013` unpasted.
+- **Deploy: owner GO (2026-10-01); `prod-roster` merged to `main`.** Go-live (out of scope until the owner says so):
   1. paste `db/013`;
   2. record an `nfl_ml` fit (production has **no** `model_versions` row for it, so it stands down every window until one exists);
   3. set `ROSTER=production` and delete `CANARY` in the same change.
 - **🔁 RECURRING, weekly, by hand:**
-  - **Archive.** Every Tuesday after Monday night's game, run `python -m jobs.archive_nfl_props --week N` for the week just played, weeks 5–18 (first: week 5 on Tuesday 2026-10-13). Run weeks 1–4 once, any time, for F2's settlement pool. Rerun a week later if it logged unsettled markets. Store-only; never query the archive before January (§8.1). Estimate for weeks 5–18: ~0.6–1.1M candle rows, ~0.1–0.4M prints, ~150–250 MB of the 500 MB tier.
+  - **Archive.** Every Tuesday after Monday night's game, run `..\venv\Scripts\python.exe -m jobs.archive_nfl_props --week N` from `workers/` for the week just played, weeks 5–18 (first: week 5 on Tuesday 2026-10-13). Run weeks 1–4 once, any time, for F2's settlement pool. Rerun a week later if it logged unsettled markets. Store-only; never query the archive before January (§8.1). Estimate for weeks 5–18: ~0.6–1.1M candle rows, ~0.1–0.4M prints, ~150–250 MB of the 500 MB tier.
   - **`nfl_ml` refit** (`jobs.fit_nfl_ml --lambda 10`). Preregistration §3.1 requires it and nothing schedules it.
 - **Forward-only F1 (vacated usage, as amended by F1a: Questionable + game-day `INA`) and F2 (longshots under P2)** are pre-registered in `docs/preregistration_nfl.md` §8 and evaluated on 2026 weeks 5–18. **No interim look.**
 - **⏰ JANUARY REMINDER — on or after 2027-01-20:** write the F1/F2 runner exactly to §8, commit it, then execute it **once**, reading the archive. It must refuse before 2027-01-20 and refuse if output exists. If data are missing from both the archive and Kalshi, record the hypothesis as unevaluable, which is a fail.
 - **Market-efficiency scan** (`docs/dev/market_efficiency_scan.md`, run #3): no base-rate weight in liquid markets. Its one candidate, CFB totals, failed out of sample. **No current build candidate.**
 - **The reserve:** Kalshi events dated **2026-07-01 onward** are unread, **except `KXNCAAFTOTAL` through 2026-09-27**, now spent on the CFB holdout. Do not read the reserve in exploration.
-- **Next:** owner review of the crypto track (above); owner go-live; `db/014`–`db/017` pastes; the weekly archive. Any new idea needs a new pre-registration and forward-only validation.
+- **Monorepo (Chat 1 Phase 1, 2026-10-08):**
+  - Python moved under `workers/` with `git mv`. `db/`, `docs/`, `.env` and `venv/` stay at the root.
+  - Repo-root paths go through `core/paths.py`. Every frozen pre-registration text hashes identically to before the move.
+  - Inspection goes only through `db_inspect.py` (§5).
+- **Next:** finish Chat 1 Phase 1 (Railway redeploy from `workers/`, canary restored, 24 h usage check against the free plan). Then MASTER_PLAN §6. Still pending from before: owner review of the crypto track, owner go-live, the weekly archive. Any new idea needs a new pre-registration and forward-only validation.
