@@ -52,9 +52,31 @@ class ReadonlyRole(unittest.TestCase):
             cur.execute("SELECT current_user")
             self.assertEqual(cur.fetchone()[0], "valemont_readonly")
 
+    def test_its_attributes_are_exactly_as_declared(self) -> None:
+        with psycopg.connect(self.url) as conn, conn.cursor() as cur:
+            cur.execute("SELECT rolsuper, rolcreaterole, rolcreatedb, rolreplication, rolbypassrls "
+                        "FROM pg_roles WHERE rolname = current_user")
+            self.assertEqual(cur.fetchone(), (False, False, False, False, True))
+
+    def test_every_public_table_is_readable_and_none_writable(self) -> None:
+        # Future tables are covered by db/018's default privileges for
+        # `postgres`. A table created some other way fails here by name.
+        with psycopg.connect(self.url) as conn, conn.cursor() as cur:
+            cur.execute("""
+                SELECT c.relname,
+                       has_table_privilege(c.oid, 'SELECT'),
+                       has_table_privilege(c.oid, 'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE n.nspname = 'public' AND c.relkind IN ('r', 'v', 'm', 'p')
+                 ORDER BY c.relname""")
+            rows = cur.fetchall()
+        self.assertTrue(rows)
+        self.assertEqual([r[0] for r in rows if not r[1]], [], "tables valemont_readonly cannot read")
+        self.assertEqual([r[0] for r in rows if r[2]], [], "tables valemont_readonly can WRITE")
+
     def test_it_sees_the_same_rows_as_the_worker(self) -> None:
         # RLS is on with no policies: without BYPASSRLS this would be 0 vs N.
-        for table in ("agents", "runs", "commitments"):
+        for table in ("agents", "runs", "commitments", "migration_log", "preregistrations"):
             with self.subTest(table=table):
                 self.assertEqual(_count(self.url, table),
                                  _count(os.environ["DATABASE_URL"], table))

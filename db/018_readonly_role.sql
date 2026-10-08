@@ -31,6 +31,15 @@
 -- function runs with the caller's privileges unless SECURITY DEFINER; none in
 -- db/001–017 is, so EXECUTE gives this role no write path.
 --
+-- No superuser step anywhere. `postgres` on Supabase is not a superuser; it
+-- holds CREATEROLE and BYPASSRLS, and PostgreSQL 16+ lets a role holding
+-- BYPASSRLS create a role with it. The first paste of this file failed because
+-- it also ran `ALTER ROLE ... NOSUPERUSER ...`: on 16+, ALTER ROLE that so much
+-- as mentions the SUPERUSER attribute needs a superuser, even to say NO. This
+-- version never ALTERs the role. It creates it once and then ASSERTS its
+-- attributes, which needs no privilege and fails loudly on a re-run against a
+-- role that has drifted.
+--
 -- Prerequisites: db/015 (migration_log).
 -- SUPABASE: paste the whole file into the SQL Editor and Run. No BEGIN/COMMIT.
 -- Safe to re-run: it never resets LOGIN or the password once the owner sets them.
@@ -38,13 +47,19 @@
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'valemont_readonly') THEN
+        -- Defaults are NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION;
+        -- BYPASSRLS is the only attribute stated.
         CREATE ROLE valemont_readonly NOLOGIN BYPASSRLS;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'valemont_readonly'
+                 AND (rolsuper OR rolcreaterole OR rolcreatedb OR rolreplication
+                      OR NOT rolbypassrls)) THEN
+        RAISE EXCEPTION 'valemont_readonly exists with the wrong attributes; expected '
+                        'BYPASSRLS and none of SUPERUSER, CREATEROLE, CREATEDB, REPLICATION.';
     END IF;
 END
 $$;
-
--- Re-asserted on every run; neither touches LOGIN or the password.
-ALTER ROLE valemont_readonly NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION BYPASSRLS;
 
 GRANT USAGE ON SCHEMA public TO valemont_readonly;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO valemont_readonly;
@@ -61,7 +76,7 @@ ON CONFLICT (name) DO NOTHING;
 -- and the default-privilege row for future tables.
 -- ---------------------------------------------------------------------------
 
-SELECT rolname, rolcanlogin, rolsuper, rolcreaterole, rolbypassrls
+SELECT rolname, rolcanlogin, rolsuper, rolcreaterole, rolcreatedb, rolreplication, rolbypassrls
   FROM pg_roles WHERE rolname = 'valemont_readonly';
 
 SELECT c.relname,
