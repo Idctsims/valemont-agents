@@ -26,7 +26,7 @@ export function AccountMenu({ children }: { children: React.ReactNode }) {
     document.addEventListener("pointerdown", onPointer);
     document.addEventListener("keydown", onKey);
     if (byKeyboard.current) {
-      root.current?.querySelector<HTMLElement>("[data-menu-panel] button")?.focus();
+      root.current?.querySelector<HTMLElement>("[data-menu-panel] a, [data-menu-panel] button")?.focus();
     }
     return () => {
       document.removeEventListener("pointerdown", onPointer);
@@ -55,7 +55,12 @@ export function AccountMenu({ children }: { children: React.ReactNode }) {
         <div
           id={panelId}
           data-menu-panel
-          className="absolute top-full right-0 z-50 mt-2 min-w-44 rounded-inner border border-border bg-surface p-1"
+          // A link inside navigates without remounting the shell, so close
+          // the menu on the way out.
+          onClick={(e) => {
+            if ((e.target as Element).closest("a")) setOpen(false);
+          }}
+          className="absolute top-full right-0 z-50 mt-2 min-w-52 rounded-inner border border-border bg-surface p-1"
         >
           {children}
         </div>
