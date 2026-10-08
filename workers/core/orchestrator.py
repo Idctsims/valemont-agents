@@ -35,7 +35,7 @@ import logging
 import signal
 import threading
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from types import FrameType
 from typing import Any, Callable, Iterable, Sequence
 
@@ -47,6 +47,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from core import ledger
 from core.agent import BaseAgent, DeferPolicy
+from core.jobs import SystemJob, run_tracked
 
 __all__ = [
     "Orchestrator",
@@ -165,6 +166,7 @@ class Orchestrator:
             },
         )
         self._registry: dict[str, Registration] = {}
+        self._system_jobs: dict[str, SystemJob] = {}
         self._stopping = threading.Event()
         self._scheduler.add_listener(
             self._on_job_problem, EVENT_JOB_ERROR | EVENT_JOB_MISSED
@@ -213,6 +215,16 @@ class Orchestrator:
     def register_all(self, registrations: Iterable[Registration]) -> None:
         for registration in registrations:
             self.register(registration)
+
+    def register_system_job(self, job: SystemJob) -> None:
+        """Add a system job (core/system_jobs.py). Raises on a duplicate name."""
+        if job.name in self._system_jobs:
+            raise ValueError(f"system job {job.name!r} is already registered")
+        self._system_jobs[job.name] = job
+
+    @property
+    def system_jobs(self) -> Sequence[SystemJob]:
+        return list(self._system_jobs.values())
 
     @property
     def agents(self) -> Sequence[BaseAgent]:
@@ -268,7 +280,30 @@ class Orchestrator:
                 "unrecoverable, check capture cadence", slug, outcome.missed,
             )
 
+    def _run_system(self, name: str) -> None:
+        """Body of a `system:<name>` job. Re-raises, so the listener logs it too."""
+        if self._stopping.is_set():
+            log.info("shutting down, skipping %s", name)
+            return
+        run_tracked(self._system_jobs[name])
+
     # -- lifecycle ----------------------------------------------------------
+
+    def _wire_system(self) -> None:
+        """Schedule every system job. No gate: they run whatever the roster is."""
+        now = datetime.now(timezone.utc)
+        for name, job in self._system_jobs.items():
+            ledger.job_register(name, job.expected_interval_s)
+            self._scheduler.add_job(
+                self._run_system,
+                trigger=job.trigger,
+                args=[name],
+                id=f"system:{name}",
+                name=f"system {name}",
+                misfire_grace_time=job.misfire_grace,
+                next_run_time=now + timedelta(seconds=job.start_delay_s),
+                replace_existing=True,
+            )
 
     def _wire(self) -> int:
         """Schedule every agent that passes BOTH gates. Returns how many did.
@@ -339,26 +374,39 @@ class Orchestrator:
         Supabase is exactly the silent 3am failure this project is built to
         avoid — better to refuse to boot.
         """
-        if not self._registry:
-            raise RuntimeError("No agents registered. Nothing to orchestrate.")
+        if not self._registry and not self._system_jobs:
+            # A worker with no jobs at all would sit "up" doing nothing and look
+            # healthy while doing it. With system jobs it is never idle: the
+            # heartbeat and health monitor are the point.
+            raise RuntimeError("No agents and no system jobs registered. Nothing to orchestrate.")
 
         for slug in self._registry:
             # Resolves through the ledger, so an agent whose row is missing (or
             # whose migration was never pasted) fails here, at boot, by name.
             self._registry[slug].agent.agent_id
 
-        if self._wire() == 0:
-            # A worker with no jobs would sit "up" forever doing nothing, and
-            # look healthy while doing it. Refuse instead, by name.
+        wired = self._wire()
+        if self._registry and wired == 0 and not self._system_jobs:
+            # Nothing at all would be scheduled: up, idle, and looking healthy.
             raise RuntimeError(
                 "Every registered agent is disabled "
                 f"({', '.join(self._registry)}) — in its Registration or in "
-                "agents.enabled. Nothing to schedule; refusing to start idle."
+                "agents.enabled — and no system job is registered. Nothing to "
+                "schedule; refusing to start idle."
             )
+        if self._registry and wired == 0:
+            log.warning(
+                "every registered agent is disabled (%s), in its Registration or "
+                "in agents.enabled; running system jobs only",
+                ", ".join(self._registry),
+            )
+        self._wire_system()
+        if not self._registry:
+            log.info("no agents registered; running system jobs only")
         self._scheduler.start()
         log.info(
-            "orchestrator up — %d agent(s), %d job(s)",
-            len(self._registry), len(self._scheduler.get_jobs()),
+            "orchestrator up — %d agent(s), %d system job(s), %d scheduled job(s)",
+            len(self._registry), len(self._system_jobs), len(self._scheduler.get_jobs()),
         )
         for job in self._scheduler.get_jobs():
             log.info("  %-24s next: %s", job.id, job.next_run_time)
@@ -426,6 +474,11 @@ class Orchestrator:
             log.warning(
                 "job %s missed its window and was skipped as stale", event.job_id
             )
+            return
+        if event.job_id.startswith("system:"):
+            # Expected path: run_tracked recorded it in job_health and re-raised
+            # so it is visible here too. The health monitor alerts on it.
+            log.error("%s failed (recorded in job_health)", event.job_id)
             return
         log.error(
             "job %s escaped its own error handling — this is a core bug or a "

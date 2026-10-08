@@ -1,14 +1,19 @@
-"""Railway entry point. Canary-gated so the fake agent cannot ship by accident.
+"""Railway entry point.
 
-Set CANARY=true in the environment to register `_fake` and run forever, every
-CANARY_INTERVAL_S seconds (default 60, minimum 5; anything else refuses).
-Anything else — unset, false, misspelled — refuses to start with a clear
-message and an empty registry. The live roster belongs in
-`core.orchestrator.build_default()` later; it is not wired here.
+The worker always runs its system jobs (core/system_jobs.py: heartbeat,
+health monitor, db size, job queue). Agents are added on top, governed by
+ROSTER and CANARY exactly as before:
 
-Configuration refusals sleep before exiting so Railway's restart loop is
-slow (~once a minute) rather than twice a second, and use exit code 78
-(EX_CONFIG) so they are distinguishable from a real crash (exit 1).
+    ROSTER=production   the approved roster (core.orchestrator.build_production)
+    CANARY=true         the fake canary, every CANARY_INTERVAL_S seconds
+                        (default 60, minimum 5; anything else refuses)
+    neither             no agents; system jobs only. Not a refusal: the
+                        heartbeat and health monitor are worth running alone.
+
+Still refused, as configuration errors: both set, an unknown ROSTER, a bad
+CANARY_INTERVAL_S, a missing DATABASE_URL. Refusals sleep before exiting so
+Railway's restart loop is slow (~once a minute) rather than twice a second,
+and use exit code 78 (EX_CONFIG) so they are distinguishable from a crash.
 """
 
 from __future__ import annotations
@@ -56,13 +61,6 @@ def main() -> None:
     if roster and roster != "production":
         _refuse(log, f"ROSTER={roster!r} is not recognised. The only value is "
                      "'production'.")
-    if not canary and roster != "production":
-        _refuse(
-            log,
-            "No agents registered. Set CANARY=true to run the fake canary, or "
-            "ROSTER=production to run the approved roster. Refusing to start "
-            "empty — neither may ship by accident.",
-        )
 
     if not os.getenv("DATABASE_URL", "").strip():
         _refuse(
@@ -71,28 +69,35 @@ def main() -> None:
             "to this service's environment variables.",
         )
 
+    from core.orchestrator import Orchestrator, Registration
+    from core.system_jobs import build_system_jobs
+
     if roster == "production":
         from core.orchestrator import build_production
 
         log.info("production roster — _kalshi_probe, nfl_ml (each two-gated)")
-        build_production().run_forever()
-        return
+        orchestrator = build_production()
+    elif canary:
+        from adapters._fake import CanaryConfigError, build, canary_interval_s, canary_schedule
 
-    from adapters._fake import CanaryConfigError, build, canary_interval_s, canary_schedule
-    from core.orchestrator import Orchestrator, Registration
+        # Validated before build(), which is the first database call.
+        try:
+            interval_s = canary_interval_s()
+        except CanaryConfigError as exc:
+            _refuse(log, str(exc))
 
-    # Validated before build(), which is the first database call.
-    try:
-        interval_s = canary_interval_s()
-    except CanaryConfigError as exc:
-        _refuse(log, str(exc))
+        agent = build()
+        orchestrator = Orchestrator()
+        # One cadence for run, sweep and capture (CANARY_INTERVAL_S, default 60 s).
+        # This is a canary schedule, not a production one.
+        orchestrator.register(Registration(agent=agent, schedule=canary_schedule(interval_s)))
+        log.info("canary mode — registering %s only, every %ds", agent.slug, interval_s)
+    else:
+        log.info("no ROSTER and no CANARY — no agents; system jobs only")
+        orchestrator = Orchestrator()
 
-    agent = build()
-    orchestrator = Orchestrator()
-    # One cadence for run, sweep and capture (CANARY_INTERVAL_S, default 60 s).
-    # This is a canary schedule, not a production one.
-    orchestrator.register(Registration(agent=agent, schedule=canary_schedule(interval_s)))
-    log.info("canary mode — registering %s only, every %ds", agent.slug, interval_s)
+    for job in build_system_jobs():
+        orchestrator.register_system_job(job)
     orchestrator.run_forever()
 
 

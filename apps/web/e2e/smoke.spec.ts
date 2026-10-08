@@ -100,6 +100,21 @@ test.describe("headers and crawlers", () => {
     expect(h["x-powered-by"]).toBeUndefined();
   });
 
+  test("/api/watchdog is token-gated, not login-redirected, and says nothing", async ({ request }) => {
+    const attempts: Record<string, string>[] = [
+      {},
+      { Authorization: "Bearer wrong" },
+      { Authorization: "wrong" },
+    ];
+    for (const headers of attempts) {
+      const res = await request.get("/api/watchdog", { headers, maxRedirects: 0 });
+      expect(res.status()).toBe(401);
+      expect(await res.json()).toEqual({ status: "unauthorized" });
+      expect(res.headers()["cache-control"]).toBe("no-store");
+      expect(res.headers()["x-robots-tag"]).toBe("noindex, nofollow");
+    }
+  });
+
   test("robots.txt allows only /privacy", async ({ request }) => {
     const body = await (await request.get("/robots.txt")).text();
     expect(body).toContain("Allow: /privacy");

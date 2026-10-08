@@ -2,8 +2,14 @@
 
 export const LOGIN_PATH = "/login";
 
-/** Reachable with no session. Nothing else is. */
-export const PUBLIC_PATHS = ["/privacy", "/offline"] as const;
+/**
+ * Reachable with no session. Nothing else is.
+ *
+ * /api/watchdog has no session by nature (cron-job.org calls it) and is
+ * protected by its own bearer token inside the route; it must not be
+ * redirected to /login.
+ */
+export const PUBLIC_PATHS = ["/privacy", "/offline", "/api/watchdog"] as const;
 
 export function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));

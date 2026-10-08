@@ -76,6 +76,24 @@ __all__ = [
     "finish_notification",
     "mark_push_delivered",
     "mark_push_failed",
+    "notification_sent_since",
+    "notification_sent_this_month",
+    "record_ai_usage",
+    "ai_spend_month_to_date",
+    "JobHealth",
+    "job_register",
+    "job_started",
+    "job_succeeded",
+    "job_failed",
+    "job_health_rows",
+    "set_job_alert_state",
+    "database_size",
+    "QueuedJob",
+    "queue_claim",
+    "queue_done",
+    "queue_retry",
+    "queue_fail",
+    "queue_fail_exhausted",
     "close_pool",
 ]
 
@@ -1031,6 +1049,280 @@ def mark_push_failed(subscription_id: int, *, deactivate: bool) -> None:
             """,
             (deactivate, subscription_id),
         )
+
+
+def notification_sent_since(kind: str, hours: int) -> bool:
+    """Has a `kind` notification left `queued` in the last `hours`? Used to
+    send a threshold alert (db size, AI budget) once, not every run."""
+    with _pool().connection() as conn:
+        row = conn.execute(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM notifications
+                 WHERE kind = %s AND status <> 'queued'
+                   AND created_at > now() - make_interval(hours => %s))
+            """,
+            (kind, hours),
+        ).fetchone()
+    return bool(row[0])
+
+
+#: The owner's month, not UTC's: budgets and "once a month" alerts reset at
+#: local midnight on the 1st (app_settings.timezone, America/Chicago default).
+_LOCAL_MONTH_START = """
+    (date_trunc('month', now() AT TIME ZONE coalesce(
+        (SELECT timezone FROM app_settings), 'America/Chicago'))
+     AT TIME ZONE coalesce((SELECT timezone FROM app_settings), 'America/Chicago'))
+"""
+
+
+def notification_sent_this_month(kind: str) -> bool:
+    """Has a `kind` notification left `queued` since the 1st, owner's time?"""
+    with _pool().connection() as conn:
+        row = conn.execute(
+            f"""
+            SELECT EXISTS (
+                SELECT 1 FROM notifications
+                 WHERE kind = %s AND status <> 'queued'
+                   AND created_at >= {_LOCAL_MONTH_START})
+            """,
+            (kind,),
+        ).fetchone()
+    return bool(row[0])
+
+
+# ---------------------------------------------------------------------------
+# AI usage (db/020): append-only. core/ai.py is the only writer here; the web
+# twin (Chat 2) writes as the owner through RLS.
+# ---------------------------------------------------------------------------
+
+def record_ai_usage(*, purpose: str, model: str, tokens_in: int, tokens_out: int,
+                    cache_read_tokens: int, cache_write_tokens: int, batch: bool,
+                    cost_usd: Decimal, critical: bool) -> None:
+    with _pool().connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO ai_usage (purpose, model, tokens_in, tokens_out, cache_read_tokens,
+                                  cache_write_tokens, batch, cost_usd, critical)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (purpose, model, tokens_in, tokens_out, cache_read_tokens, cache_write_tokens,
+             batch, cost_usd, critical),
+        )
+
+
+def ai_spend_month_to_date() -> Decimal:
+    """Sum of ai_usage.cost_usd since the 1st of the owner's month."""
+    with _pool().connection() as conn:
+        row = conn.execute(
+            f"SELECT coalesce(sum(cost_usd), 0) FROM ai_usage WHERE created_at >= {_LOCAL_MONTH_START}"
+        ).fetchone()
+    return Decimal(row[0])
+
+
+# ---------------------------------------------------------------------------
+# Job health (db/020): latest state only, one row per job, UPDATE in place.
+# Written by core/jobs.py's wrapper; read by the health monitor. Every
+# staleness judgement is made with the DATABASE clock, never the worker's
+# (Kalshi adapter notes: no local now() for deadlines).
+# ---------------------------------------------------------------------------
+
+AlertState = Literal["ok", "alerted"]
+
+
+@dataclass(frozen=True)
+class JobHealth:
+    job: str
+    expected_interval_s: int
+    last_ok_at: datetime | None
+    last_error: str | None
+    consecutive_failures: int
+    alert_state: AlertState
+    #: Server-computed: last_ok_at (or, if never ok, the last update) is older
+    #: than twice the expected interval.
+    stale: bool
+
+
+def job_register(job: str, expected_interval_s: int) -> None:
+    """Create the job's row, or update its interval. Never resets its state."""
+    with _pool().connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO job_health (job, expected_interval_s) VALUES (%s, %s)
+            ON CONFLICT (job) DO UPDATE SET expected_interval_s = EXCLUDED.expected_interval_s
+            """,
+            (job, expected_interval_s),
+        )
+
+
+def job_started(job: str) -> None:
+    with _pool().connection() as conn:
+        conn.execute(
+            "UPDATE job_health SET last_started_at = now(), updated_at = now() WHERE job = %s",
+            (job,),
+        )
+
+
+def job_succeeded(job: str) -> None:
+    with _pool().connection() as conn:
+        conn.execute(
+            """
+            UPDATE job_health
+               SET last_ok_at = now(), consecutive_failures = 0, last_error = NULL,
+                   updated_at = now()
+             WHERE job = %s
+            """,
+            (job,),
+        )
+
+
+def job_failed(job: str, error: str) -> None:
+    """`error` must already be redacted and short (core/jobs.py does both)."""
+    with _pool().connection() as conn:
+        conn.execute(
+            """
+            UPDATE job_health
+               SET consecutive_failures = consecutive_failures + 1,
+                   last_error = left(%s, 500), updated_at = now()
+             WHERE job = %s
+            """,
+            (error, job),
+        )
+
+
+def job_health_rows() -> list[JobHealth]:
+    with _pool().connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT job, expected_interval_s, last_ok_at, last_error, consecutive_failures,
+                   alert_state,
+                   now() - coalesce(last_ok_at, updated_at)
+                       > make_interval(secs => 2 * expected_interval_s) AS stale
+              FROM job_health ORDER BY job
+            """
+        ).fetchall()
+    return [JobHealth(*r) for r in rows]
+
+
+def set_job_alert_state(job: str, state: AlertState) -> None:
+    with _pool().connection() as conn:
+        conn.execute(
+            "UPDATE job_health SET alert_state = %s, updated_at = now() WHERE job = %s",
+            (state, job),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Database size (the free tier's 500 MB cap)
+# ---------------------------------------------------------------------------
+
+def database_size(top: int = 10) -> tuple[int, list[tuple[str, int]]]:
+    """(total bytes, [(table, total relation bytes)] for the `top` largest)."""
+    with _pool().connection() as conn:
+        total = conn.execute("SELECT pg_database_size(current_database())").fetchone()[0]
+        tables = conn.execute(
+            """
+            SELECT c.relname, pg_total_relation_size(c.oid)
+              FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = 'public' AND c.relkind = 'r'
+             ORDER BY 2 DESC LIMIT %s
+            """,
+            (top,),
+        ).fetchall()
+    return int(total), [(name, int(size)) for name, size in tables]
+
+
+# ---------------------------------------------------------------------------
+# Job queue (db/020): the app enqueues, the worker claims with
+# FOR UPDATE SKIP LOCKED, so two pollers never take the same row.
+# ---------------------------------------------------------------------------
+
+#: A `running` row older than this belongs to a worker that died mid-job.
+QUEUE_STUCK_AFTER = timedelta(minutes=10)
+QUEUE_MAX_ATTEMPTS = 5
+
+
+@dataclass(frozen=True)
+class QueuedJob:
+    id: int
+    kind: str
+    payload: dict[str, Any]
+    attempts: int  # including this one
+
+
+def queue_claim() -> QueuedJob | None:
+    """Claim the next due job (or one abandoned mid-run), counting an attempt."""
+    with _pool().connection() as conn:
+        row = conn.execute(
+            """
+            UPDATE job_queue
+               SET status = 'running', locked_at = now(), attempts = attempts + 1
+             WHERE id = (
+                 SELECT id FROM job_queue
+                  WHERE attempts < %(max)s
+                    AND ((status = 'queued' AND run_after <= now())
+                      OR (status = 'running' AND locked_at < now() - %(stuck)s))
+                  ORDER BY run_after, id
+                  LIMIT 1
+                  FOR UPDATE SKIP LOCKED)
+            RETURNING id, kind, payload, attempts
+            """,
+            {"max": QUEUE_MAX_ATTEMPTS, "stuck": QUEUE_STUCK_AFTER},
+        ).fetchone()
+    return None if row is None else QueuedJob(*row)
+
+
+def queue_done(job_id: int) -> None:
+    with _pool().connection() as conn:
+        conn.execute(
+            """
+            UPDATE job_queue
+               SET status = 'done', locked_at = NULL, finished_at = now(), last_error = NULL
+             WHERE id = %s
+            """,
+            (job_id,),
+        )
+
+
+def queue_retry(job_id: int, error: str, delay: timedelta) -> None:
+    with _pool().connection() as conn:
+        conn.execute(
+            """
+            UPDATE job_queue
+               SET status = 'queued', locked_at = NULL, last_error = left(%s, 500),
+                   run_after = now() + %s
+             WHERE id = %s
+            """,
+            (error, delay, job_id),
+        )
+
+
+def queue_fail(job_id: int, error: str) -> None:
+    with _pool().connection() as conn:
+        conn.execute(
+            """
+            UPDATE job_queue
+               SET status = 'failed', locked_at = NULL, finished_at = now(),
+                   last_error = left(%s, 500)
+             WHERE id = %s
+            """,
+            (error, job_id),
+        )
+
+
+def queue_fail_exhausted() -> int:
+    """Fail `running` rows abandoned on their last allowed attempt; returns how many."""
+    with _pool().connection() as conn:
+        cur = conn.execute(
+            """
+            UPDATE job_queue
+               SET status = 'failed', locked_at = NULL, finished_at = now(),
+                   last_error = 'abandoned mid-run on the final attempt'
+             WHERE status = 'running' AND attempts >= %s AND locked_at < now() - %s
+            """,
+            (QUEUE_MAX_ATTEMPTS, QUEUE_STUCK_AFTER),
+        )
+        return cur.rowcount
 
 
 # ---------------------------------------------------------------------------

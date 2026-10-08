@@ -239,6 +239,16 @@ policies arrive in db/019+ before apps/web reads any table. db/019 (push_subscri
 - All worker DB access goes through `core/ledger.py`; if SQL appears in an
   adapter, that's a bug. Exceptions: `scripts/db_inspect.py` (read-only role,
   §5) and `apps/web` (server-side, owner session, §5).
+- **All worker Claude calls go through `core/ai.py`** (`complete()`, or
+  `record_usage()` for batch results). It is the only importer of the
+  `anthropic` SDK. Every call writes an `ai_usage` row costed from the
+  response's usage and its dated `PRICING` table; the monthly budget
+  (`AI_MONTHLY_BUDGET_USD`) downgrades non-critical calls at 80% and refuses
+  them at 100%. A direct `anthropic.Anthropic()` anywhere else is a bug.
+  - **Chat 2 adds the TypeScript twin** for Wags and other web-side calls. It
+    reads and appends to the same `ai_usage` table through the owner's RLS
+    policy (db/020) and keeps its own pricing file. A test keeps that file in
+    sync with `core/ai.py` `PRICING`, so the two budgets can never disagree.
 - Every agent action emits an event row. The dashboard is a consumer of that
   stream — build the stream first, the visuals last.
 - Secrets in `.env`, which is gitignored. `.env.example` documents the keys.

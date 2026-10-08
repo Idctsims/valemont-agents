@@ -6,12 +6,14 @@
     "dev": "node scripts/gen-theme-colors.mjs && next dev",
     "build": "node scripts/gen-theme-colors.mjs && next build",
     "start": "next start",
-    "lint": "node scripts/gen-theme-colors.mjs && eslint && node scripts/check-tokens.mjs && node scripts/check-contrast.mjs",
+    "lint": "node scripts/gen-theme-colors.mjs && eslint && node scripts/check-tokens.mjs && node scripts/check-contrast.mjs && node scripts/check-secret-key.mjs",
     "check:tokens": "node scripts/check-tokens.mjs",
     "check:contrast": "node scripts/check-contrast.mjs",
+    "check:secret-key": "node scripts/check-secret-key.mjs",
     "test:e2e": "playwright test",
     "gen:icons": "node scripts/gen-icons.mjs",
-    "gen:vapid": "node scripts/gen-vapid.mjs"
+    "gen:vapid": "node scripts/gen-vapid.mjs",
+    "gen:watchdog-token": "node scripts/gen-watchdog-token.mjs"
   },
   "dependencies": {
     "@phosphor-icons/react": "2.1.10",

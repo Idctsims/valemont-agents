@@ -359,9 +359,10 @@ class LegsFreezeAtCommitTime(LiveLedgerTestCase):
 
     def test_legs_cannot_be_deleted(self) -> None:
         """Before db/015, `legs` accepted a raw DELETE (the 2026-10-01 audit
-        confirmed it empirically). db/015 adds `legs_no_delete`. The trigger
-        list is pinned to whichever state the database is in; the refusal
-        itself is tested in test_mutation_gaps.py."""
+        confirmed it empirically). db/015 adds `legs_no_delete`, and db/020
+        `legs_no_truncate`. The trigger list is pinned to whichever state the
+        database is in; the refusals themselves are tested in
+        test_mutation_gaps.py and test_shared_020.py."""
         triggers = list(self.scalar(
             """
             SELECT coalesce(array_agg(tgname ORDER BY tgname), '{}')
@@ -369,7 +370,11 @@ class LegsFreezeAtCommitTime(LiveLedgerTestCase):
                AND tgrelid = 'legs'::regclass
             """
         ))
-        self.assertIn(triggers, (["legs_frozen"], ["legs_frozen", "legs_no_delete"]))
+        self.assertIn(triggers, (
+            ["legs_frozen"],
+            ["legs_frozen", "legs_no_delete"],
+            ["legs_frozen", "legs_no_delete", "legs_no_truncate"],
+        ))
 
 
 class ResolutionsCannotLandEarly(LiveLedgerTestCase):
