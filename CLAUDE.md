@@ -211,7 +211,7 @@ reaches the browser. Migrations stay numbered files in `db/`, pasted by hand.
 
 **Status 2026-10-08 (apps/web live, see Current State): none of these policies exist yet.** Every table still has
 RLS on with NO policies, so anon and authenticated see nothing. The owner
-policies arrive in db/019+ before apps/web reads any table.
+policies arrive in db/019+ before apps/web reads any table. db/019 (push_subscriptions, notifications) carries the first ones: owner-only, TO authenticated, anon revoked.
 
 - Workers connect **only** from `DATABASE_URL` in `.env`. Never a hardcoded host.
 - Use the **Session pooler** connection string (port 5432), not the direct
@@ -819,7 +819,7 @@ absent row as "I never looked."
 - **Migrations:** **`db/001`–`db/012` and `db/014`–`db/018` applied.** 007–012 verified live by `workers/scripts/verify_migrations_007_012.sql` (20/20). 014–018 were pasted 2026-10-08 and verified by read-only SELECTs. `migration_log` (UTC): 015 04:41:03, 016 04:41:16, 017 04:41:30, 018 04:50:35. 014 predates the log; its tables and triggers are present.
   - **`db/013` (enable the production roster) stays unpasted.** It is go-live and out of scope until the owner says so.
   - Real dependencies: 016, 017 and 018 each need only 015 (`migration_log`). 014 needs only 011.
-  - Next new file: `db/019`, the shared tables (MASTER_PLAN §3).
+  - `db/019_push.sql` (Chat 1 Phase 3): written, **awaiting paste**. Next new file after it: `db/020`, the shared tables (MASTER_PLAN §3).
 - **Immutability audit (2026-10-01, empirical).** UPDATE and DELETE were attempted on a `_test` row of every table, rolled back.
   - **Refused by trigger:** `commitments`, `events`, `resolution_attempts`, `commitment_factors`, `closing_snapshots`, `selections`, `model_versions`, `kalshi_markets`, `kalshi_candles`. `legs` UPDATE was refused too, by `legs_frozen`.
   - **ACCEPTED:**
@@ -885,7 +885,7 @@ absent row as "I never looked."
   - Repo-root paths go through `core/paths.py`. Every frozen pre-registration text hashes identically to before the move.
   - Inspection goes only through `db_inspect.py` (§5).
 - **Web app (Chat 1 Phase 2, 2026-10-08; PR #2, merge `7e01970`):**
-  - **Production: https://valemont-agents.vercel.app** (Vercel project `valemont-agents`, Root Directory `apps/web`, production branch `main`). Public privacy policy at `/privacy`; that is the URL for the Pinterest app.
+  - **Production: https://valemont-command.vercel.app** (Vercel project `valemont-command`, renamed from `valemont-agents` on 2026-10-08, Root Directory `apps/web`, production branch `main`). Public privacy policy at `/privacy`; that is the URL for the Pinterest app.
   - **Stack:** Next.js 16.4 (`src/proxy.ts`, which replaces `middleware.ts`), TypeScript strict, Tailwind 4.3, `@supabase/ssr` 0.12.7, pnpm workspace. `cacheComponents` is off: every route is per-request.
   - **Env (Vercel and `apps/web/.env.local`):** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `OWNER_USER_ID` (server-only, marked Sensitive).
   - **Auth model:**
@@ -894,7 +894,7 @@ absent row as "I never looked."
     - It is checked twice: in `proxy.ts` and again in `requireOwner()` in the `(app)` layout. A missing `OWNER_USER_ID` fails closed.
     - A valid non-owner session is signed out. "Not authorized." shows only after a rejected sign-in. Verified on production with a stranger account, which was then deleted.
     - Public pages never call Supabase, so `/privacy` survives an auth outage.
-  - **Data:** no ledger or app-data reads yet. RLS has no policies until db/019+ (§5).
+  - **Data:** no ledger reads. The first app tables and RLS policies are db/019 (push, Chat 1 Phase 3).
   - **Headers:**
     - A per-request CSP: script nonce plus `strict-dynamic`, and `connect-src` limited to self and the Supabase origin.
     - X-Frame-Options DENY, Referrer-Policy same-origin, HSTS, nosniff.
