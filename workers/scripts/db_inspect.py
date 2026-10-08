@@ -1,6 +1,6 @@
 """Read-only database inspection. The only way a session looks at the database.
 
-    .\\venv\\Scripts\\python.exe scripts\\db_inspect.py "SELECT slug, enabled FROM agents"
+    ..\\venv\\Scripts\\python.exe scripts\\db_inspect.py "SELECT slug, enabled FROM agents"    (from workers/)
 
 Connects with DATABASE_URL_READONLY, the `valemont_readonly` role from db/018,
 and with nothing else. It never reads DATABASE_URL: the .env file is parsed
@@ -24,10 +24,13 @@ import sys
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import psycopg
 from dotenv import dotenv_values
 
-ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
+from core.paths import ENV_FILE  # the path only; nothing is loaded
+
 KEY = "DATABASE_URL_READONLY"
 ROLE = "valemont_readonly"
 STATEMENT_TIMEOUT_MS = 30_000

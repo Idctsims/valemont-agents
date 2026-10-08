@@ -24,14 +24,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from dotenv import load_dotenv
-
 from adapters.crypto import (
     HORIZON, MIN_VOL_FRACTION, UNIVERSE, Z_ENTRY, CryptoAgent, FeedError,
 )
 from core import ledger
+from core.paths import load_env
 
-load_dotenv()
+load_env()
 
 
 def show(commit: bool) -> int:

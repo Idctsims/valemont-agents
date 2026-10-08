@@ -1,18 +1,21 @@
 """Foundation check. Run this before writing anything else.
 
-    source venv/bin/activate
-    python scripts/check_db.py
+    ..\\venv\\Scripts\\python.exe scripts\\check_db.py      (from workers/)
 
 Verifies the connection, the Postgres version, that the schema is loaded,
 and that the append-only triggers actually fire.
 """
 import os
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import psycopg
-from dotenv import load_dotenv
 
-load_dotenv()
+from core.paths import load_env
+
+load_env()
 
 url = os.getenv("DATABASE_URL")
 if not url:

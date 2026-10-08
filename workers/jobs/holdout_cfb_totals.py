@@ -34,6 +34,7 @@ from jobs.dev_props_maker import fill
 from venues.kalshi.client import Candle, KalshiClient, Quote
 from venues.kalshi.fees import fetch_schedule
 from core.preregistration import PreregistrationMissing, require_registered
+from core.paths import REPO_ROOT
 
 log = logging.getLogger("valemont.holdout_cfb_totals")
 
@@ -60,8 +61,8 @@ SEED: Final = 20261002
 DRAWS: Final = 2000
 CELL: Final = scan.Cell("CFB", "total", SERIES, "total", WINDOW)
 
-CACHE: Final = Path(".cache/cfb_holdout")
-OUTPUT_DIR: Final = Path("docs/backtests")
+CACHE: Final = REPO_ROOT / ".cache/cfb_holdout"
+OUTPUT_DIR: Final = REPO_ROOT / "docs/backtests"
 OUTPUT_STEM: Final = "cfb_totals-holdout"
 TESTS: Final = ("tests.test_cfb_totals_holdout", "tests.test_market_scan")
 EPS: Final = 1e-9

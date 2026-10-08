@@ -21,8 +21,8 @@ import json
 import logging
 import sys
 from datetime import timedelta
-from pathlib import Path
 
+from core.paths import REPO_ROOT
 from jobs.dev_nfl_props import (
     COMMIT_LEAD, SERIES, STALE_AFTER, load_player_games, player_name_from_title,
     recently_active, team_code_of,
@@ -34,7 +34,7 @@ from sports.nfl.schedule import NflSchedule, kalshi_codes
 from sports.nfl.spread_model import Rung, fit_ladder, rung_from_ticker
 from venues.kalshi.client import KalshiClient
 
-CACHE = Path(".cache/props_2025.json")
+CACHE = REPO_ROOT / ".cache/props_2025.json"
 log = logging.getLogger("valemont.props_cache")
 
 

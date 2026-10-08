@@ -5,6 +5,8 @@ database. The stub ledger in `tests/support.py` refuses the database on purpose,
 so a defect in a query, a CHECK, a trigger or a server-computed column is
 invisible to the fast suite by construction.
 
+From `workers/` (PowerShell: `..\venv\Scripts\python.exe -m unittest ...`):
+
 ```
 python -m unittest discover -s tests      -t .   # fast gate, offline, <1s
 python -m unittest discover -s tests_live -t .   # this suite, needs Postgres

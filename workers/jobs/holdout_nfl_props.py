@@ -48,6 +48,7 @@ from sports.nfl.props_variants import usage_mean
 from sports.nfl.schedule import NflSchedule
 from venues.kalshi.client import KalshiClient
 from core.preregistration import PreregistrationMissing, require_registered
+from core.paths import REPO_ROOT
 
 log = logging.getLogger("valemont.holdout_nfl_props")
 
@@ -66,9 +67,9 @@ BUCKETS: Final = ((0.0, 0.2), (0.2, 0.4), (0.4, 0.6), (0.6, 0.8), (0.8, 1.0001))
 SEED: Final = 20260930
 DRAWS: Final = 2000
 
-DEV_RUNGS: Final = Path(".cache/props_2025.json")
-DEV_PRED_V1: Final = Path(".cache/props_pred_V1.json")
-OUTPUT_DIR: Final = Path("docs/backtests")
+DEV_RUNGS: Final = REPO_ROOT / ".cache/props_2025.json"
+DEV_PRED_V1: Final = REPO_ROOT / ".cache/props_pred_V1.json"
+OUTPUT_DIR: Final = REPO_ROOT / "docs/backtests"
 OUTPUT_STEM: Final = "nfl_props-holdout"
 H1_TESTS: Final = ("tests.test_props_variants", "tests.test_nfl_props_model",
                    "tests.test_nfl_injury_timing")

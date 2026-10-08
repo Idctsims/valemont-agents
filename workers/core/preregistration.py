@@ -31,10 +31,10 @@ conversion therefore cannot change a hash.
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
 from typing import Any
 
 from core import ledger
+from core.paths import REPO_ROOT
 
 __all__ = ["PreregistrationMissing", "normalize", "section_text", "content_hash", "require_registered"]
 
@@ -90,7 +90,7 @@ def content_hash(text: str) -> str:
 
 def require_registered(document: str, section: str) -> dict[str, Any]:
     """The stamp for `section` of `document` as it stands now, or raise."""
-    sha = content_hash(section_text(Path(document).read_text(encoding="utf-8"), section))
+    sha = content_hash(section_text((REPO_ROOT / document).read_text(encoding="utf-8"), section))
     stamp = ledger.preregistration_stamp(document=document, section=section, content_sha256=sha)
     if stamp is None:
         raise PreregistrationMissing(

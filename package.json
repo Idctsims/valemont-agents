@@ -1,0 +1,8 @@
+{
+  "name": "valemont",
+  "private": true,
+  "scripts": {
+    "test:workers": "cd workers && ..\\venv\\Scripts\\python.exe -m unittest discover -s tests -t .",
+    "test:workers:live": "cd workers && ..\\venv\\Scripts\\python.exe -m unittest discover -s tests_live -t ."
+  }
+}

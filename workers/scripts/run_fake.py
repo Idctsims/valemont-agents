@@ -27,13 +27,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from dotenv import load_dotenv
-
 from adapters._fake import CAPTURE_DELAY, HORIZON, SCRIPT, build
 from core import ledger
 from core.orchestrator import Orchestrator, Registration, Schedule, every
+from core.paths import load_env
 
-load_dotenv()
+load_env()
 
 log = logging.getLogger("valemont.run_fake")
 

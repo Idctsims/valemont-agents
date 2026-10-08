@@ -19,8 +19,8 @@ import statistics
 import sys
 import traceback
 from datetime import datetime, timezone
-from pathlib import Path
 
+from core.paths import REPO_ROOT
 from jobs.dev_nfl_props import load_player_games, market_median, taker_fee
 from sports.nfl import injuries
 from sports.nfl.injuries import OUT_STATUSES, report_public_by
@@ -32,8 +32,8 @@ from sports.nfl.props_variants import (
 )
 from sports.nfl.schedule import GAMES_CSV_URL, NflSchedule, _get_text
 
-CACHE = Path(".cache/props_2025.json")
-LOG = Path("docs/dev/props_variants.md")
+CACHE = REPO_ROOT / ".cache/props_2025.json"
+LOG = REPO_ROOT / "docs/dev/props_variants.md"
 EVAL_FROM_WEEK = 9
 MARGIN, MAX_SPREAD, SEED, DRAWS = 0.04, 0.08, 20260930, 2000
 VARIANTS = ("V0", "V1", "V2", "V3", "V4")
@@ -203,7 +203,7 @@ def run(variant: str) -> dict:
     flat = [r for v in by_game.values() for r in v]
     report["taker"] = {"n": len(flat), "mean_R": statistics.mean(flat) if flat else None,
                        "ci95_game_clustered": game_bootstrap(by_game)}
-    Path(f".cache/props_pred_{variant}.json").write_text(json.dumps(preds), encoding="utf-8")
+    (REPO_ROOT / f".cache/props_pred_{variant}.json").write_text(json.dumps(preds), encoding="utf-8")
     return report
 
 
@@ -219,7 +219,7 @@ def main() -> int:
         traceback.print_exc()
         return 1
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    out = Path(f"docs/dev/props-{v}-{stamp}.json")
+    out = REPO_ROOT / f"docs/dev/props-{v}-{stamp}.json"
     out.write_text(json.dumps(report, indent=2), encoding="utf-8")
     b, t = report["brier"]["overall"], report["taker"]
     ci = t["ci95_game_clustered"]

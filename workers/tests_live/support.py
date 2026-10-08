@@ -30,11 +30,11 @@ from decimal import Decimal
 from typing import Any
 
 import psycopg
-from dotenv import load_dotenv
 
 from core import ledger
+from core.paths import load_env
 
-load_dotenv()
+load_env()
 
 #: The one agent this suite may write as. Seeded by db/006.
 TEST_SLUG = "_test"

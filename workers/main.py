@@ -18,9 +18,9 @@ import sys
 import time
 from typing import NoReturn
 
-from dotenv import load_dotenv
+from core.paths import load_env
 
-load_dotenv()
+load_env()
 
 #: sysexits.h EX_CONFIG — config refusal, not a crash.
 CONFIG_EXIT = 78

@@ -6,11 +6,11 @@ from __future__ import annotations
 import re
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from unittest import mock
 
 from core import ledger
 from core import preregistration as pr
+from core.paths import REPO_ROOT
 from jobs import holdout_cfb_totals, holdout_nfl_ml, holdout_nfl_props
 
 DOC = """# Title
@@ -66,18 +66,18 @@ class FrozenTexts(unittest.TestCase):
     update the hash here: that edit is what the stamp exists to catch."""
 
     def test_db017_hashes_match_the_documents_on_disk(self) -> None:
-        sql = Path("db/017_preregistrations.sql").read_text(encoding="utf-8")
+        sql = (REPO_ROOT / "db/017_preregistrations.sql").read_text(encoding="utf-8")
         rows = re.findall(r"\(\s*'([^']+)',\s*'([^']+)',\s*'([0-9a-f]{64})'", sql)
         self.assertEqual(len(rows), 2)
         for document, section, sha in rows:
             with self.subTest(document=document):
-                text = pr.section_text(Path(document).read_text(encoding="utf-8"), section)
+                text = pr.section_text((REPO_ROOT / document).read_text(encoding="utf-8"), section)
                 self.assertEqual(pr.content_hash(text), sha)
 
     def test_every_runner_names_a_section_that_exists(self) -> None:
         for runner in (holdout_nfl_ml, holdout_nfl_props, holdout_cfb_totals):
             with self.subTest(runner=runner.__name__):
-                pr.section_text(Path(runner.PREREG_DOC).read_text(encoding="utf-8"), runner.PREREG_SECTION)
+                pr.section_text((REPO_ROOT / runner.PREREG_DOC).read_text(encoding="utf-8"), runner.PREREG_SECTION)
 
 
 class Guard(unittest.TestCase):

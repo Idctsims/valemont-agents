@@ -20,8 +20,8 @@ import json
 import random
 import sys
 from datetime import datetime, timezone
-from pathlib import Path
 
+from core.paths import REPO_ROOT
 from jobs.dev_props_variants import DRAWS, EVAL_FROM_WEEK, SEED, append_log
 
 GRID = [round(0.05 * i, 2) for i in range(21)]
@@ -35,7 +35,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--variant", required=True)
     v = ap.parse_args().variant
-    preds = json.loads(Path(f".cache/props_pred_{v}.json").read_text(encoding="utf-8"))
+    preds = json.loads((REPO_ROOT / f".cache/props_pred_{v}.json").read_text(encoding="utf-8"))
     binary = [p for p in preds if p["settle"] in (0.0, 1.0)]
     mid = lambda p: (p["bid"] + p["ask"]) / 2
 
@@ -82,7 +82,7 @@ def main() -> int:
         "ci_excludes_zero": ci[0] > 0,
     }
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    out = Path(f"docs/dev/props-blend-{v}-{stamp}.json")
+    out = REPO_ROOT / f"docs/dev/props-blend-{v}-{stamp}.json"
     out.write_text(json.dumps(report, indent=2), encoding="utf-8")
     append_log(f"blend({v})", "ran",
                f"pooled w {pooled:.3f} CI [{ci[0]:.3f}, {ci[1]:.3f}]; walk-forward Brier blend "

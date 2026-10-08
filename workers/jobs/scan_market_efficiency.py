@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any, Callable, Final, Sequence
 from zoneinfo import ZoneInfo
 
+from core.paths import REPO_ROOT
 from jobs.dev_props_blend import w_star
 from venues.kalshi.client import Candle, KalshiClient, KalshiNotFound, Quote
 
@@ -90,8 +91,8 @@ CELLS: Final = (
     Cell("Tennis", "ATP game spread", "KXATPGSPREAD", "margin"),
 )
 
-CACHE: Final = Path(".cache/scan")
-OUTPUT_DIR: Final = Path("docs/dev")
+CACHE: Final = REPO_ROOT / ".cache/scan"
+OUTPUT_DIR: Final = REPO_ROOT / "docs/dev"
 OUTPUT_STEM: Final = "market-scan"
 
 

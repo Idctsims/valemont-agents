@@ -23,14 +23,14 @@ import statistics
 import sys
 from datetime import datetime, timezone
 from decimal import Decimal
-from pathlib import Path
 
+from core.paths import REPO_ROOT
 from jobs.dev_props_variants import EVAL_FROM_WEEK, MARGIN, MAX_SPREAD, SEED, append_log, game_bootstrap
 from venues.kalshi.client import KalshiClient
 
 SIZE = 100
 FILL_MULTIPLE = 2
-TRADES_CACHE = Path(".cache/props_trades.json")
+TRADES_CACHE = REPO_ROOT / ".cache/props_trades.json"
 
 
 def _ticks(price: float) -> int:
@@ -75,7 +75,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--variant", required=True)
     v = ap.parse_args().variant
-    preds = [p for p in json.loads(Path(f".cache/props_pred_{v}.json").read_text(encoding="utf-8"))
+    preds = [p for p in json.loads((REPO_ROOT / f".cache/props_pred_{v}.json").read_text(encoding="utf-8"))
              if p["week"] >= EVAL_FROM_WEEK and p["settle"] is not None
              and 0 < p["bid"] < p["ask"] < 1 and p["ask"] - p["bid"] <= MAX_SPREAD]
 
@@ -118,7 +118,7 @@ def main() -> int:
     TRADES_CACHE.write_text(json.dumps(cache), encoding="utf-8")
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    out = Path(f"docs/dev/props-maker-{v}-{stamp}.json")
+    out = REPO_ROOT / f"docs/dev/props-maker-{v}-{stamp}.json"
     out.write_text(json.dumps({"variant": v, **results}, indent=2), encoding="utf-8")
     m, r = results["model"], results["random"]
     fmt = lambda x: None if x is None else round(x, 4)

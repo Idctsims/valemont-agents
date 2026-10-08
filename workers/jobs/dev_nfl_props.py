@@ -38,8 +38,8 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from pathlib import Path
 
+from core.paths import REPO_ROOT
 from sports.nfl import injuries
 from sports.nfl.injuries import OUT_STATUSES, STATS_URL, fetch_text, report_public_by
 from sports.nfl.props_model import (
@@ -243,7 +243,7 @@ def main() -> int:
 
     report = summarize(evals, mae_rows, skipped)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    path = Path(f"docs/dev/nfl_props-dev-{stamp}.json")
+    path = REPO_ROOT / f"docs/dev/nfl_props-dev-{stamp}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
     print(json.dumps(report, indent=2, default=str))

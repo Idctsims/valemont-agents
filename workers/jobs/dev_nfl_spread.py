@@ -19,8 +19,8 @@ import logging
 import statistics
 import sys
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
+from core.paths import REPO_ROOT
 from sports.nfl import injuries
 from sports.nfl.ml_dataset import build_rows
 from sports.nfl.ml_model import (
@@ -120,7 +120,7 @@ def main() -> int:
         "needed_prob_at_50c": needed,
     }
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    path = Path(f"docs/dev/nfl_spread-dev-fit-{stamp}.json")
+    path = REPO_ROOT / f"docs/dev/nfl_spread-dev-fit-{stamp}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(out, indent=2, default=str), encoding="utf-8")
     print(json.dumps(out, indent=2, default=str))

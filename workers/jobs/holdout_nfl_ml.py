@@ -58,6 +58,7 @@ from sports.nfl.schedule import Game, NflSchedule
 from venues.kalshi.client import Candle, KalshiClient, Quote
 from venues.kalshi.fees import FeeRegime, fetch_schedule
 from core.preregistration import PreregistrationMissing, require_registered
+from core.paths import REPO_ROOT
 
 __all__ = ["main", "HOLDOUT_SEASON", "HOLDOUT_WEEKS", "EXCLUDED_GAMES", "PREREG_LAMBDA",
            "quote_at", "check_h2", "check_h3", "check_h5", "GameResult"]
@@ -84,7 +85,7 @@ H5_MAX_MEAN_R: Final = 1.0
 RANDOM_SEED: Final = 20260930
 BOOTSTRAP_DRAWS: Final = 10_000
 
-OUTPUT_DIR: Final = Path("docs/backtests")
+OUTPUT_DIR: Final = REPO_ROOT / "docs/backtests"
 OUTPUT_STEM: Final = "nfl_ml-holdout"
 
 #: The unit tests H1 requires to pass before anything is scored.
