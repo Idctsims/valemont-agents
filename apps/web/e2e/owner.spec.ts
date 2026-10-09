@@ -19,8 +19,11 @@ async function signIn(page: Page, next = "/goals") {
 }
 
 async function setTheme(page: Page, theme: "night" | "day") {
+  // Same fix as support/owner.ts: clear, then set at path "/". A `url:`
+  // cookie added on a nested page gets that page's path and loses to "/".
+  await page.context().clearCookies({ name: "vm-theme" });
   await page.context().addCookies([
-    { name: "vm-theme", value: theme, url: page.url() },
+    { name: "vm-theme", value: theme, domain: new URL(page.url()).hostname, path: "/" },
   ]);
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", theme);

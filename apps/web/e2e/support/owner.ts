@@ -23,7 +23,16 @@ export async function signIn(page: Page, next = "/goals") {
 }
 
 export async function setTheme(page: Page, theme: "night" | "day") {
-  await page.context().addCookies([{ name: "vm-theme", value: theme, url: page.url() }]);
+  // Clear first, then set at path "/" on the host. Added with `url:` from a
+  // nested page, the cookie took that page's directory as its path
+  // (/ventures), the earlier "/" one survived, the browser sent both, and
+  // the server read "night" (2026-10-09 trace). The app's own toggle always
+  // writes path=/.
+  const context = page.context();
+  await context.clearCookies({ name: "vm-theme" });
+  await context.addCookies([
+    { name: "vm-theme", value: theme, domain: new URL(page.url()).hostname, path: "/" },
+  ]);
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
 }

@@ -130,13 +130,14 @@ test("navigation shows only built pages", async ({ page }, testInfo) => {
   await signIn(page, "/");
   if (testInfo.project.name === "phone") {
     const dock = page.getByRole("navigation", { name: "Dock" });
-    await expect(dock.getByRole("link")).toHaveText(["Home", "Goals"]);
+    await expect(dock.getByRole("link")).toHaveText(["Home", "Goals", "Ventures"]);
     await expect(dock.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
     await dock.getByRole("button", { name: "More" }).click();
     const sheet = page.getByRole("dialog", { name: "All pages" });
     await expect(sheet.getByRole("link")).toHaveText([
       "Home",
       "Goals",
+      "Ventures HQ",
       "System health",
       "Phone setup",
       "Design tokens",
@@ -145,7 +146,7 @@ test("navigation shows only built pages", async ({ page }, testInfo) => {
     await expect(sheet).toHaveCount(0);
   } else {
     const rail = page.getByRole("navigation", { name: "Pages" });
-    await expect(rail.getByRole("link")).toHaveText(["Home", "Goals"]);
+    await expect(rail.getByRole("link")).toHaveText(["Home", "Goals", "Ventures HQ"]);
   }
   // An unbuilt pillar has no page at all.
   const res = await page.goto("/betting");

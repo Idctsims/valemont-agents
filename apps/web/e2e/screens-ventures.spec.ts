@@ -45,7 +45,9 @@ test("ventures screens", async ({ page }, testInfo) => {
   try {
     const temp = await createTempVenture("today", { stage: "building", next_action: "Shown in TODAY" });
     created.push(temp.id);
-    await addTempDate(temp.id, "Sample date due today", localToday());
+    // Unique per run: the two projects may run this spec at the same time.
+    const label = `${temp.name} sample date due today`;
+    await addTempDate(temp.id, label, localToday());
 
     await signIn(page, "/");
     for (const theme of ["night", "day"] as const) {
@@ -53,7 +55,7 @@ test("ventures screens", async ({ page }, testInfo) => {
 
       await page.goto("/");
       await page.waitForLoadState("networkidle");
-      await expect(page.getByTestId("today-row").filter({ hasText: "Sample date due today" })).toBeVisible();
+      await expect(page.getByTestId("today-row").filter({ hasText: label })).toBeVisible();
       await capture(page, "home-today", phone, theme);
 
       await page.goto("/ventures");
