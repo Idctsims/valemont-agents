@@ -8,6 +8,7 @@ import { expect, test } from "@playwright/test";
 import {
   dueLabel,
   isSetUp,
+  ledgerOrder,
   logStamp,
   metaLine,
   nearestOpen,
@@ -53,6 +54,12 @@ test("meta line: role and stage, whichever are set", () => {
   expect(metaLine({ role: "Co-owner & CEO", stage: "pre_launch" })).toBe("Co-owner & CEO · Pre-launch");
   expect(metaLine({ role: null, stage: "scaling" })).toBe("Scaling");
   expect(metaLine({ role: null, stage: null })).toBe("");
+});
+
+test("ledger order: set up first, then name-only, the owner's order kept within each", () => {
+  const v = (name: string, stage: "idea" | null) => ({ name, stage, next_action: null, tagline: null, role: null });
+  const seeded = [v("SBC", "idea"), v("PTM", null), v("Clipd", null), v("Grow", "idea"), v("Excursion", null)];
+  expect(ledgerOrder(seeded).map((x) => x.name)).toEqual(["SBC", "Grow", "PTM", "Clipd", "Excursion"]);
 });
 
 test("the nearest open date ignores done ones", () => {

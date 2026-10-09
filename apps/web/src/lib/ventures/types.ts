@@ -136,3 +136,8 @@ export function nearestOpen(dates: VentureDate[]): VentureDate | null {
 
 /** A tomorrow-ish default for the "+ Date" field. */
 export const defaultDue = (today: string) => addDays(today, 1);
+
+/** The /ventures order: set-up ventures first, then the name-only ones; the owner's order within each. */
+export function ledgerOrder<T extends Pick<Venture, "stage" | "next_action" | "tagline" | "role">>(ventures: T[]): T[] {
+  return [...ventures.filter(isSetUp), ...ventures.filter((v) => !isSetUp(v))];
+}

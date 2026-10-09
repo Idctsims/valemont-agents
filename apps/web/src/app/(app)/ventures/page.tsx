@@ -7,6 +7,7 @@ import { requireOwner } from "@/lib/auth";
 import { localToday } from "@/lib/goals/period";
 import { createClient } from "@/lib/supabase/server";
 import { listVentures } from "@/lib/ventures/data";
+import { ledgerOrder } from "@/lib/ventures/types";
 
 export const metadata: Metadata = { title: "Ventures" };
 
@@ -15,8 +16,8 @@ export default async function VenturesPage() {
   const supabase = await createClient();
   const today = localToday();
   const all = await listVentures(supabase);
-  const live = all.filter((v) => !v.archived_at);
-  const archived = all.filter((v) => v.archived_at);
+  const live = ledgerOrder(all.filter((v) => !v.archived_at));
+  const archived = ledgerOrder(all.filter((v) => v.archived_at));
 
   return (
     <div className="lg:max-w-3xl">

@@ -63,6 +63,17 @@ test("ventures screens", async ({ page }, testInfo) => {
 
       await page.goto("/ventures");
       await page.waitForLoadState("networkidle");
+      if (phone) {
+        // Owner review: every real venture fits one 390x844 screen, above
+        // the dock, without scrolling. (The temporary TODAY venture is not
+        // the owner's and is left out of the check.)
+        const dockTop = (await page.getByRole("navigation", { name: "Dock" }).boundingBox())!.y;
+        const rows = page.locator('[data-testid="venture-row"]:not([data-slug^="e2e-"])');
+        expect(await rows.count()).toBeGreaterThan(0);
+        for (const box of await rows.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().bottom))) {
+          expect(box, "a real venture row runs under the dock").toBeLessThanOrEqual(dockTop);
+        }
+      }
       await capture(page, "ventures", phone, theme);
 
       await page.goto("/ventures/sail-beach-club");
