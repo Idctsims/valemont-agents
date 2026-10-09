@@ -382,6 +382,11 @@ there's one agent to debug, not four.
   - **No void and no `missed` at zero recorded attempts.**
     `DeferPolicy.expired` never answers at 0 attempts, and `_abandon` and
     `_miss` raise `AbandonWithoutAttempt` (`tests/test_first_look.py`).
+    **And in the database (db/024):** a trigger refuses any void resolution
+    with no `resolve` attempt on record, and any `missed` close snapshot with
+    no `capture` attempt, from any writer. There is no `is_test` exemption:
+    the harness's `seal()` records an attempt first
+    (`tests_live/test_no_untried_abandon.py`).
   - **Never-attempted rows first, then the oldest last attempt**, in both
     due queries. Every due row is attempted within ceil(n / limit) sweeps
     (`tests_live/test_sweep_order.py`: red on the old order, green on the
