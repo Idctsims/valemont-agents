@@ -24,6 +24,7 @@
     "next": "16.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "recharts": "3.10.1",
     "server-only": "^0.0.1",
     "serwist": "9.5.13",
     "web-push": "3.6.7"

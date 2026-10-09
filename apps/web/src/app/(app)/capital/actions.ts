@@ -1,0 +1,46 @@
+"use server";
+
+import { refresh } from "next/cache";
+
+import { requireOwner } from "@/lib/auth";
+import { KINDS, MODES, centsToDecimal, type Kind, type Mode } from "@/lib/capital/types";
+import { createClient } from "@/lib/supabase/server";
+
+// Append one bankroll entry, through the owner's session (db/026's RLS and
+// column grants apply: the database sets owner_id and created_at). Entries
+// are never edited or deleted; a mistake is corrected with an adjustment.
+
+const MAX_CENTS = 1e14 - 1; // numeric(14,2)
+
+export async function addEntry(input: {
+  mode: Mode;
+  kind: Kind;
+  /** Signed cents for an adjustment; positive cents otherwise. */
+  cents: number;
+  note: string | null;
+  /** The typed confirmation, required for a live entry. */
+  confirm?: string;
+}) {
+  await requireOwner();
+  if (!MODES.includes(input.mode)) throw new Error("Unknown mode.");
+  if (!KINDS.includes(input.kind)) throw new Error("Unknown entry kind.");
+  // The page asks for LIVE to be typed before a live entry; the server
+  // checks it again, so no client path can skip it.
+  if (input.mode === "live" && input.confirm !== "LIVE") throw new Error("Type LIVE to record real money.");
+  const cents = input.cents;
+  if (!Number.isInteger(cents) || cents === 0 || Math.abs(cents) > MAX_CENTS) {
+    throw new Error("Enter an amount.");
+  }
+  if (input.kind !== "adjustment" && cents < 0) {
+    throw new Error("A deposit or withdrawal is a positive amount; the kind gives the sign.");
+  }
+  const note = typeof input.note === "string" ? input.note.trim() || null : null;
+  if (note && note.length > 500) throw new Error("The note is too long (500 characters at most).");
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("bankroll_entries")
+    .insert({ mode: input.mode, kind: input.kind, amount: centsToDecimal(cents), note });
+  if (error) throw new Error(`Couldn't save the entry: ${error.message}`);
+  refresh();
+}

@@ -295,6 +295,70 @@ export async function deleteVenturesById(ids: string[]) {
   });
 }
 
+// ----------------------------------------------------------------- capital
+
+export type CapitalState = {
+  /** Paper total now, in cents (v_capital_today). */
+  paperTotal: number;
+  /** Paper total at the latest snapshot before today, cents; null if none. */
+  paperPrior: number | null;
+  /** Rows v_capital_today has for live. Today: none. */
+  liveRows: number;
+  /** Every bankroll entry, id → its fields. Append-only, so none may change. */
+  entries: Map<string, string>;
+};
+
+const cents = (v: string | number) => Math.round(Number(v) * 100);
+
+/**
+ * What /capital is built from, read as the owner (RLS applies). Taken before
+ * and after a spec: entries can only be appended, so the spec's own rows are
+ * the only new ones, and each deposit is followed by its correcting
+ * adjustment, so the paper total must come back to exactly this.
+ */
+export async function snapshotCapital(): Promise<CapitalState> {
+  return asOwner(async (supabase) => {
+    const [t, e] = await Promise.all([
+      supabase.from("v_capital_today").select("mode, is_total, value, prior_value"),
+      supabase.from("bankroll_entries").select("id, mode, kind, amount, note, created_at, owner_id"),
+    ]);
+    if (t.error) throw new Error(`capital read failed: ${t.error.message}`);
+    if (e.error) throw new Error(`entries read failed: ${e.error.message}`);
+    const total = t.data.find((r) => r.mode === "paper" && r.is_total);
+    if (!total) throw new Error("no paper total: is db/026 pasted and seeded?");
+    return {
+      paperTotal: cents(total.value),
+      paperPrior: total.prior_value === null ? null : cents(total.prior_value),
+      liveRows: t.data.filter((r) => r.mode === "live").length,
+      entries: new Map(e.data.map((r) => [String(r.id), JSON.stringify(r)])),
+    };
+  });
+}
+
+/**
+ * Append one PAPER entry as the owner (RLS and column grants apply). There is
+ * no mode parameter on purpose: no spec can write a live row. Entries are
+ * permanent, so callers pair every deposit with its correcting adjustment.
+ */
+export async function addPaperEntry(kind: "deposit" | "adjustment", amount: string, note: string) {
+  await asOwner(async (supabase) => {
+    const { error } = await supabase.from("bankroll_entries").insert({ mode: "paper", kind, amount, note });
+    if (error) throw new Error(`entry failed: ${error.message}`);
+  });
+}
+
+/** The entries `notePrefix` marks (this run's), as id → { kind, amount cents, mode }. */
+export async function capitalEntriesNoted(notePrefix: string) {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase
+      .from("bankroll_entries")
+      .select("id, mode, kind, amount, note")
+      .like("note", `${notePrefix}%`);
+    if (error) throw new Error(`entries read failed: ${error.message}`);
+    return data.map((r) => ({ id: String(r.id), mode: r.mode as string, kind: r.kind as string, amount: cents(r.amount) }));
+  });
+}
+
 /**
  * The owner's real ventures and everything under them, as one string per
  * row keyed by table and id. Temporary "e2e …" ventures are left out. Taken
