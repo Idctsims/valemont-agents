@@ -1,17 +1,27 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { deleteE2eGoals, hasOwner, runPrefix, signIn } from "./support/owner";
+import { deleteE2eGoals, hasOwner, runPrefix, signIn, snapshotGoals } from "./support/owner";
 
-// Goals and navigation, signed in as the owner. Skipped unless the owner's
-// credentials are in the shell session (see support/owner.ts). Every goal
-// these specs add is titled "e2e …" and deleted afterwards.
+// Goals and navigation, signed in as the owner's REAL account. Skipped unless
+// the owner's credentials are in the shell session (see support/owner.ts).
+// Every goal these specs add is titled "e2e <run id> …" and deleted
+// afterwards; every count is read before it is asserted against; and the
+// owner's own goals are checked unchanged at the end.
 
 test.skip(!hasOwner, "set E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD to run");
 test.describe.configure({ mode: "serial" });
 
+let owners = new Map<string, string>();
+
+test.beforeAll(async () => {
+  owners = await snapshotGoals();
+});
+
 test.afterAll(async () => {
   // Only this worker's goals: the other project may still be mid-test.
   await deleteE2eGoals({ titlePrefix: runPrefix() });
+  const after = await snapshotGoals();
+  for (const [id, fields] of owners) expect(after.get(id), `owner goal ${id} changed`).toBe(fields);
 });
 
 const week = (page: Page) => page.getByTestId("goals-weekly");

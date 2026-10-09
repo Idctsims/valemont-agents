@@ -67,33 +67,72 @@ export const RUN_ID = `${Date.now().toString(36)}${process.pid}`;
 export const runPrefix = () => `${E2E_PREFIX}${RUN_ID} `;
 
 /**
- * Delete goals an owner spec made, as the owner (RLS applies): those titled
- * with `titlePrefix`, or (seed: true) those noted e2e-seed. Goals are an app
- * table, so this is real cleanup. Leaves first: a goal cannot be deleted
- * while its carried row exists (db/021), and a seed may be carried twice.
+ * Delete exactly these goals, as the owner (RLS applies), and nothing else.
+ * The owner's real goals live in the same account and the same week, so a
+ * spec cleans up by the ids it created, never by a pattern. Leaves first: a
+ * goal cannot be deleted while its carried row exists (db/021).
  */
-export async function deleteE2eGoals(scope: { titlePrefix?: string; seed?: boolean }) {
+async function deleteGoalsById(supabase: SupabaseClient, ids: string[]) {
+  let left = [...new Set(ids)];
+  for (let pass = 0; pass < 10 && left.length; pass++) {
+    const { data, error } = await supabase.from("goals").select("id, carried_from").in("id", left);
+    if (error) throw new Error(`cleanup read failed: ${error.message}`);
+    if (!data.length) return;
+    const parents = new Set(data.map((g) => g.carried_from).filter(Boolean));
+    const leaves = data.filter((g) => !parents.has(g.id)).map((g) => g.id);
+    const del = await supabase.from("goals").delete().in("id", leaves);
+    if (del.error) throw new Error(`cleanup failed: ${del.error.message}`);
+    left = data.filter((g) => parents.has(g.id)).map((g) => g.id);
+  }
+  if (left.length) throw new Error(`cleanup: ${left.length} created goal(s) still present after 10 passes`);
+}
+
+/**
+ * Delete the goals this worker's specs made: titled with `titlePrefix`
+ * (runPrefix(), unique per worker process), so the ids come from a title only
+ * this run could have written. Never another run's, never the owner's.
+ */
+export async function deleteE2eGoals(scope: { titlePrefix: string }) {
   await asOwner(async (supabase) => {
-    for (let pass = 0; pass < 10; pass++) {
-      const reads = [
-        scope.titlePrefix
-          ? supabase.from("goals").select("id, carried_from").like("title", `${scope.titlePrefix}%`)
-          : null,
-        scope.seed ? supabase.from("goals").select("id, carried_from").eq("notes", SEED_NOTE) : null,
-      ].filter((q) => q !== null);
-      const results = await Promise.all(reads);
-      const failed = results.find((r) => r.error);
-      if (failed?.error) throw new Error(`cleanup read failed: ${failed.error.message}`);
-      const data = results.flatMap((r) => r.data ?? []);
-      if (!data.length) return;
-      const parents = new Set(data.map((g) => g.carried_from).filter(Boolean));
-      const leaves = data.filter((g) => !parents.has(g.id)).map((g) => g.id);
-      const del = await supabase.from("goals").delete().in("id", leaves);
-      if (del.error) throw new Error(`cleanup failed: ${del.error.message}`);
-    }
-    throw new Error("cleanup: e2e goals still present after 10 passes");
+    const { data, error } = await supabase
+      .from("goals")
+      .select("id")
+      .like("title", `${scope.titlePrefix}%`);
+    if (error) throw new Error(`cleanup read failed: ${error.message}`);
+    await deleteGoalsById(supabase, data.map((g) => g.id));
   });
 }
+
+/**
+ * Every goal the owner has, as id -> its fields. Taken before and after a
+ * spec: each goal present before must be present and unchanged after. New
+ * rows are allowed only as ensureRollover's carries of the owner's own goals.
+ */
+export async function snapshotGoals(): Promise<Map<string, string>> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase
+      .from("goals")
+      .select("id, title, notes, horizon, area, period_start, status, carried_from, carry_count, completed_at");
+    if (error) throw new Error(`snapshot failed: ${error.message}`);
+    // The owner's goals only: rows another e2e run is writing at the same
+    // moment (parallel projects) are that run's business, not the owner's.
+    const real = data.filter((g) => !String(g.title).startsWith(E2E_PREFIX) && g.notes !== SEED_NOTE);
+    return new Map(real.map((g) => [g.id as string, JSON.stringify(g)]));
+  });
+}
+
+/** Delete exactly the goals in `ids` (what seedScreens recorded). */
+export async function deleteSeededGoals(ids: string[]) {
+  if (!ids.length) return;
+  await asOwner((supabase) => deleteGoalsById(supabase, ids));
+}
+
+/**
+ * What the seed adds to the current week. Slots: 8 open (one carried in
+ * twice) + 2 done. Folded under "Moved on": 1 dropped + 1 moved to next week.
+ * Kept beside the seed list so the two cannot drift apart unnoticed.
+ */
+export const SEEDED_WEEK = { open: 8, done: 2, folded: 2 } as const;
 
 type Seed = {
   title: string;
@@ -108,9 +147,18 @@ type Seed = {
 /**
  * A realistic week for the screenshot review: open, done, carried twice,
  * dropped, moved on; a past week for History; month and long-term goals.
- * Every row is marked SEED_NOTE and removed by deleteE2eGoals().
+ *
+ * Every id it creates (inserts and carried copies) is pushed into `created`
+ * as it goes, so the caller can delete exactly those, even after a failure
+ * halfway. Its effect on THIS week is SEEDED_WEEK, for relative assertions.
  */
-export async function seedScreens(thisWeek: string, lastWeek: string, twoWeeksAgo: string, month: string) {
+export async function seedScreens(
+  created: string[],
+  thisWeek: string,
+  lastWeek: string,
+  twoWeeksAgo: string,
+  month: string,
+) {
   const seeds: Seed[] = [
     { title: "Send Clipd the revised term sheet", horizon: "weekly", period: thisWeek, area: "business" },
     { title: "Draft the Sail Beach Club budget", horizon: "weekly", period: thisWeek, area: "business" },
@@ -150,12 +198,14 @@ export async function seedScreens(thisWeek: string, lastWeek: string, twoWeeksAg
         .single();
       if (error) throw new Error(`seed failed: ${error.message}`);
       let id: string = data.id;
+      created.push(id);
       for (let i = 0; i < (s.carries ?? 0); i++) {
         const carried = await supabase.rpc("carry_goal", { p_goal: id });
         if (carried.error) throw new Error(`seed carry failed: ${carried.error.message}`);
         const child = await supabase.from("goals").select("id").eq("carried_from", id).single();
         if (child.error) throw new Error(`seed carry read failed: ${child.error.message}`);
         id = child.data.id;
+        created.push(id);
       }
     }
   });
