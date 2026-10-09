@@ -351,7 +351,8 @@ each in phases with a "done when" checklist). It supersedes the former steps
 - **Chat 2, Phase 1** (Goals, plus the app shell navigation registry) ✓ (PR #8, merge `464c6ea`). **Owner's phone checklist DONE, 2026-10-09: all items green**, except the two that need the real clock: the Monday 00:01 rollover and the 07:00 "Set your week" push, first due **Mon 2026-10-12** (America/Chicago).
 - **Sweep starvation fix** (PR #10, §8) ✓
 - **Chat 2, Phase 2** (Ventures HQ) ✓ (merged 2026-10-09; see Current State). **Owner's phone checklist: ALL GREEN, 2026-10-09.**
-- **Follow-up, own branch and PR:** the "never abandon an untried commitment" database invariant (db/024, db/025) ← **you are here**, then Chat 2 Phase 3 (Capital Tracker)
+- **Follow-up, own branch and PR:** the "never abandon an untried commitment" database invariant (db/024, db/025) ✓
+- **Chat 2, Phase 3** (Capital Tracker) ← **you are here**
 
 Reason for deploying at step 4 and not at the end: "works locally, dies
 silently at 3am in production" is the classic failure here. Hit it while
@@ -915,7 +916,7 @@ absent row as "I never looked."
   - **`db/021_goals.sql` applied 2026-10-09 17:21:18 UTC** (`migration_log`).
   - **`db/022_ventures.sql` applied 2026-10-09 22:20:20 UTC; `db/023_job_health_retired.sql` applied 22:22:06 UTC** (`migration_log`). The 022 verify was checked via db_inspect: 7 ventures in order; SBC with 5 workstreams (2 parked) and 1 log row; 0 anon grants; `v_venture_today` `security_invoker=true`.
   - **`db/024_no_untried_abandon.sql` applied 2026-10-09 23:27:30 UTC** (`migration_log`).
-  - **`db/025_answered_attempts.sql`: written, NOT yet pasted.** It adds `answered` to `resolution_attempts.result`. Until it is pasted, the worker's `add_resolution` and captured `add_closing_snapshot` fail the CHECK (no agent runs in production today: `ROSTER` unset, canary retired).
+  - **`db/025_answered_attempts.sql` applied 2026-10-09 23:36:41 UTC** (`migration_log`; CHECK read back via db_inspect: deferred, error, answered). It adds `answered` to `resolution_attempts.result`.
     - Next new file: `db/026`.
 - **Immutability audit (2026-10-01, empirical).** UPDATE and DELETE were attempted on a `_test` row of every table, rolled back.
   - **Refused by trigger:** `commitments`, `events`, `resolution_attempts`, `commitment_factors`, `closing_snapshots`, `selections`, `model_versions`, `kalshi_markets`, `kalshi_candles`. `legs` UPDATE was refused too, by `legs_frozen`.
@@ -1144,7 +1145,7 @@ absent row as "I never looked."
     - Sign in once per worker; per-call sign-ins tripped Supabase Auth's rate limit.
     - After sign-in, wait out "JWT issued at future" with a harmless read before any write.
 - **Next:**
-  - **Zero-attempt database invariant** (branch `db-zero-attempt-invariant`, db/024 pasted, db/025 to paste). Merge once db/025 is pasted and `tests_live/` is at 0 failures.
+  - **Zero-attempt database invariant** (db/024, db/025, both applied): merged from branch `db-zero-attempt-invariant`. `tests/` 479 OK; `tests_live/` 181 OK, 0 skipped (2026-10-09).
   - **Chat 2 Phase 3:** Capital Tracker.
   - **~2026-10-18:** the Railway trial ends; redeploy the worker by hand on the Free plan.
   - Still pending from before: owner review of the crypto track, owner go-live, and the weekly archive.
