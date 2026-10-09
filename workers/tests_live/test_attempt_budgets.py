@@ -23,6 +23,18 @@ from .support import LiveLedgerTestCase, tearDownModule  # noqa: F401
 
 
 class AttemptBudgetsAreIndependent(LiveLedgerTestCase):
+    # Every read takes the WHOLE due set (limit sized from the live count),
+    # so the answer cannot depend on how many permanent `_test` rows have
+    # built up ahead of the fixture. These tests are about which attempts
+    # are counted, not about paging; paging is test_sweep_order.py. The
+    # production queries are unchanged: this is their own `limit` argument.
+    # Before 2026-10-09 they read the default page of 100 and went red once
+    # 109 leaked fixtures sat ahead of them.
+
+    def whole(self, sweep: str) -> list[ledger.PendingCommitment]:
+        if sweep == "capture":
+            return ledger.due_for_capture(self.agent_id, limit=self.due_count("capture") + 10)
+        return ledger.due_for_resolution(self.agent_id, limit=self.due_count("resolve") + 10)
     def test_capture_attempts_do_not_count_against_resolution(self) -> None:
         """The bug, stated as a test. This failed before the fix."""
         committed = self.commit_due(with_close=True)
@@ -32,8 +44,8 @@ class AttemptBudgetsAreIndependent(LiveLedgerTestCase):
                 committed.id, "deferred", "market still open", purpose="capture"
             )
 
-        resolving = self.find(ledger.due_for_resolution(self.agent_id), committed.id)
-        capturing = self.find(ledger.due_for_capture(self.agent_id), committed.id)
+        resolving = self.find(self.whole("resolve"), committed.id)
+        capturing = self.find(self.whole("capture"), committed.id)
 
         self.assertEqual(
             resolving.attempts, 0,
@@ -52,8 +64,8 @@ class AttemptBudgetsAreIndependent(LiveLedgerTestCase):
                 committed.id, "deferred", "not knowable yet", purpose="resolve"
             )
 
-        resolving = self.find(ledger.due_for_resolution(self.agent_id), committed.id)
-        capturing = self.find(ledger.due_for_capture(self.agent_id), committed.id)
+        resolving = self.find(self.whole("resolve"), committed.id)
+        capturing = self.find(self.whole("capture"), committed.id)
 
         self.assertEqual(resolving.attempts, 3)
         self.assertEqual(capturing.attempts, 0)
@@ -67,8 +79,8 @@ class AttemptBudgetsAreIndependent(LiveLedgerTestCase):
             ledger.record_resolution_attempt(committed.id, "error", "y", purpose="resolve")
         ledger.record_resolution_attempt(committed.id, "deferred", "z", purpose="capture")
 
-        resolving = self.find(ledger.due_for_resolution(self.agent_id), committed.id)
-        capturing = self.find(ledger.due_for_capture(self.agent_id), committed.id)
+        resolving = self.find(self.whole("resolve"), committed.id)
+        capturing = self.find(self.whole("capture"), committed.id)
 
         self.assertEqual(resolving.attempts, 2, "resolution saw capture's attempts")
         self.assertEqual(capturing.attempts, 5, "capture saw resolution's attempts")
@@ -88,7 +100,7 @@ class AttemptBudgetsAreIndependent(LiveLedgerTestCase):
                 committed.id, "deferred", "market still open", purpose="capture"
             )
 
-        pending = self.find(ledger.due_for_resolution(self.agent_id), committed.id)
+        pending = self.find(self.whole("resolve"), committed.id)
         verdict = DeferPolicy().expired(pending)
         self.assertIsNone(
             verdict,
@@ -108,7 +120,7 @@ class AttemptsAreScopedPerCommitment(LiveLedgerTestCase):
         for _ in range(3):
             ledger.record_resolution_attempt(first.id, "deferred", "x", purpose="resolve")
 
-        rows = ledger.due_for_resolution(self.agent_id, limit=200)
+        rows = ledger.due_for_resolution(self.agent_id, limit=self.due_count("resolve") + 10)
         self.assertEqual(self.find(rows, first.id).attempts, 3)
         self.assertEqual(self.find(rows, second.id).attempts, 0)
 

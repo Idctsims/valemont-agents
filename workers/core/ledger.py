@@ -1577,7 +1577,15 @@ _DUE_SQL: Final = """
      -- every other selected column of `agents` and `commitments`. Listing the
      -- columns individually instead is how `a.is_test` got missed once.
      GROUP BY c.id, a.id
-     ORDER BY c.resolves_after ASC
+     -- STARVATION GUARD. The sweep reads one page (sweep_limit). Ordered by
+     -- deadline alone, a backlog larger than the page kept handing back the
+     -- same oldest rows, and the rest were never asked at all; then, past
+     -- max_overdue, core gave up on them unseen. Now: rows never attempted
+     -- first, then the one whose last attempt is oldest. Every due row is
+     -- tried within ceil(n / limit) sweeps (tests_live/test_sweep_order.py).
+     ORDER BY (SELECT max(ra.attempted_at) FROM resolution_attempts ra
+                WHERE ra.commitment_id = c.id AND ra.purpose = 'resolve') ASC NULLS FIRST,
+              c.resolves_after ASC, c.id ASC
      LIMIT %(limit)s
 """
 
@@ -1590,7 +1598,9 @@ def due_for_resolution(
 ) -> list[PendingCommitment]:
     """Commitments past `resolves_after` with no resolution row yet.
 
-    Oldest first, so a backlog drains in the order reality arrived. Legs come
+    Never-attempted rows first, then the oldest last attempt, then the oldest
+    deadline: a backlog bigger than one page drains fairly instead of
+    re-serving the same rows while the rest starve. Legs come
     back in `leg_index` order — the same order they were passed to `commit()`,
     which is what lets `resolve()` line them up positionally.
 
@@ -1654,7 +1664,12 @@ _CAPTURE_SQL: Final = """
        AND (%(agent_id)s::smallint IS NULL OR c.agent_id = %(agent_id)s)
        AND (%(include_test)s OR a.is_test = false)
      GROUP BY c.id, a.id
-     ORDER BY c.closes_at ASC
+     -- STARVATION GUARD, as in _DUE_SQL: never-attempted rows first, then the
+     -- oldest last attempt, then the oldest close. A close happens once, so a
+     -- row the page never reached was the worst case of all.
+     ORDER BY (SELECT max(ra.attempted_at) FROM resolution_attempts ra
+                WHERE ra.commitment_id = c.id AND ra.purpose = 'capture') ASC NULLS FIRST,
+              c.closes_at ASC, c.id ASC
      LIMIT %(limit)s
 """
 
@@ -1667,9 +1682,10 @@ def due_for_capture(
 ) -> list[PendingCommitment]:
     """Commitments past their close with no snapshot yet.
 
-    Oldest close first. A missed snapshot is permanent data loss — the close
-    happens once — so this drains in the order the closes actually happened,
-    giving the oldest and most at-risk the first attempt.
+    Never-attempted rows first, then the oldest last attempt, then the oldest
+    close. A missed snapshot is permanent data loss (the close happens once),
+    so no row may wait behind a page of rows that keep deferring: every due
+    row gets an attempt within ceil(n / limit) sweeps.
 
     A `missed` tombstone counts as a snapshot and removes the row from this
     set, which is what stops a permanently uncapturable commitment being

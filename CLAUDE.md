@@ -343,10 +343,10 @@ each in phases with a "done when" checklist). It supersedes the former steps
 5–10.
 
 - **Chat 1, Phase 1** (repo restructure, CLAUDE.md amendments, Railway redeploy
-  from `workers/`) ✓, except Step 8 (24 h Railway usage check)
+  from `workers/`) ✓ (Step 8, the Railway usage check, closed 2026-10-09: stay on Free)
 - **Chat 1, Phase 2** (Next.js app, owner-only auth, design tokens, Vercel) ✓
 - **Chat 1, Phase 3** (PWA shell and push) ✓ (phone-verified 2026-10-08)
-- **Chat 1, Phase 4** (db/020 shared tables, scheduler, `job_health`, push alerts) ✓ (Drills 1 and 2 passed; canary retired 2026-10-09; the Step 8 usage report is pending the owner's numbers)
+- **Chat 1, Phase 4** (db/020 shared tables, scheduler, `job_health`, push alerts) ✓ (Drills 1 and 2 passed; canary retired 2026-10-09)
 - **Chat 1 complete.**
 - **Chat 2, Phase 1** (Goals, plus the app shell navigation registry) ✓ (PR #8, merge `464c6ea`; the owner's phone checklist is pending)
 - **Chat 2, Phase 2** (Ventures HQ) ← **you are here**, after the separate `fix-sweep-starvation` PR
@@ -860,7 +860,6 @@ absent row as "I never looked."
   - Calendar (Google Calendar highlights) is **deferred**.
 - **⏰ Reminders:**
   - **Tue 2026-10-13:** NFL props archive, week 5; also weeks 1–4, once (see RECURRING below).
-  - **2026-10-16:** Railway decision (Free plan vs Oracle Cloud), once the Step 8 usage numbers are in.
   - **~2026-10-18:** the Railway trial ends. The worker stops, the watchdog pushes "Worker down", and it needs a **manual redeploy**.
 
 - **Migrations:** **`db/001`–`db/012` and `db/014`–`db/018` applied.** 007–012 verified live by `workers/scripts/verify_migrations_007_012.sql` (20/20). 014–018 were pasted 2026-10-08 and verified by read-only SELECTs. `migration_log` (UTC): 015 04:41:03, 016 04:41:16, 017 04:41:30, 018 04:50:35. 014 predates the log; its tables and triggers are present.
@@ -928,7 +927,8 @@ absent row as "I never looked."
   - The scan's base-rate weight did not replicate (0.04 vs 0.63).
   - **CFB totals stop.** The 2026 CFB data through 2026-09-27 is spent.
 - **`_kalshi_probe`:** one real contract per NFL week (is_test) to exercise settlement and close capture, which have never run on real data.
-- **Railway (verified 2026-10-08):** service `valemont-agents`, project `accomplished-heart`, environment `production`. **Trial plan: $5 credit, ends ~2026-10-18.** Decision due by 2026-10-16: stay on Railway's free plan if the 24 h usage check says the worker fits its $1/month credit, otherwise move to an Oracle Cloud Always Free VM before Chat 1 Phase 4. No payment method on file.
+- **Railway (verified 2026-10-08):** service `valemont-agents`, project `accomplished-heart`, environment `production`. **Trial plan: $5 credit, ends ~2026-10-18; when it lapses the worker stops and needs a manual redeploy.** No payment method on file.
+  - **Decision CLOSED 2026-10-09 (owner): stay on Railway's Free plan.** The worker runs at about 40 MB steady, with near-zero CPU, with the canary gone. Oracle Cloud is not needed.
   - **`CANARY` was removed at an unknown time, and `ROSTER` was never set.** With neither set, `main.py` refuses ("No agents registered"), sleeps 60 s and exits 78, in a loop. The last canary run was 2026-09-29 23:35 UTC.
   - Restart policy is ON_FAILURE with 10 retries, so the dashboard showed "Online" while nothing ran.
   - **Restored 2026-10-08 05:36 UTC on the `workers/` path.** The service builds from Root Directory `/workers` with config file `/workers/railway.json` (merge `8ae8f14`, deployment `fba3fb6b`). `CANARY=true` was set and deployment `8adfc44d` booted. The first canary run was 1688 at 05:37:14 UTC, carrying a clock offset. `ROSTER` stays unset and `db/013` unpasted.
@@ -941,7 +941,6 @@ absent row as "I never looked."
     - The canary kept its cadence across the switch: every gap 58.3–60.0 s between tick runs (max 69.6 s since 19:30 UTC), 0 error runs in 2 h.
     - The new instance's worker→DB clock offset is ~33 ms (it was ~90 ms on the previous one).
   - **Canary retired 2026-10-09.** The owner removed `CANARY` on Railway. Verified by `db_inspect`: the last `_fake` run is 2026-10-09 04:42:36 UTC, with none in the 12 h to 16:54 UTC, while `heartbeat`, `health_monitor` and `job_queue` stayed green. The system jobs and the external watchdog now carry the liveness signal.
-  - **Step 8 usage report: PENDING** the owner's Railway RAM/CPU numbers with the canary gone, for the 2026-10-16 decision.
 - **Deploy: owner GO (2026-10-01); `prod-roster` merged to `main`.** Go-live (out of scope until the owner says so):
   1. paste `db/013`;
   2. record an `nfl_ml` fit (production has **no** `model_versions` row for it, so it stands down every window until one exists);
@@ -1080,13 +1079,7 @@ absent row as "I never looked."
     - `lib/nav.ts` holds all 16 pillars with `built`; only built pages render. The `[section]`/`[pillar]` placeholders are gone, so unbuilt pillars 404.
   - **Rollover end-to-end on production (2026-10-09 18:27 UTC):** `add_goal` "Rollover test" in week 2026-09-28, then `goals_rollover --from 2026-09-28` returned **1**, then **0**. The carried copy sits in 2026-10-05 with carry_count 1; it is a real row, the owner drops it.
 - **Next:**
-  - **`fix-sweep-starvation`** (owner-approved, its own branch and PR). Invariants:
-    - no missed or void write with zero attempts;
-    - never-attempted rows first, so none is starved past `sweep_limit`;
-    - a written answer on whether `capture_close` reads the current price or the candle at `closes_at`;
-    - `test_attempt_budgets.py` made deterministic, with no ledger deletes;
-    - `tests_live` ends at 0 failures.
   - **Chat 2 Phase 2:** Ventures HQ (seven ventures).
-  - **Carried from Chat 1:** the Step 8 usage report (owner's numbers), for the 2026-10-16 decision.
+  - **~2026-10-18:** the Railway trial ends; redeploy the worker by hand on the Free plan.
   - Still pending from before: owner review of the crypto track, owner go-live, and the weekly archive.
   - Any new idea needs a new pre-registration and forward-only validation.

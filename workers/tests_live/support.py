@@ -262,7 +262,11 @@ class LiveLedgerTestCase(unittest.TestCase):
             closes_at = now + (self.HORIZON / 2) if with_close else None
         else:
             resolves_after = now + self.FAR_FUTURE
-            closes_at = now + timedelta(days=1) if with_close else None
+            # Parked means parked for BOTH sweeps. This used to be now + 1 day:
+            # invisible when the test ended, then due for capture forever the
+            # next day, with nothing to seal it. That leaked the 109 rows that
+            # pushed fresh fixtures off due_for_capture's page (2026-10-09).
+            closes_at = now + self.FAR_FUTURE - timedelta(days=1) if with_close else None
 
         committed = ledger.commit(
             agent_id=self.agent_id,
@@ -293,7 +297,7 @@ class LiveLedgerTestCase(unittest.TestCase):
     def server_now(self) -> datetime:
         return self.scalar("SELECT now()")
 
-    def wait_for_server(self, deadline: datetime) -> None:
+    def wait_for_server(self, deadline: datetime, timeout: timedelta | None = None) -> None:
         """Block until the SERVER confirms `now() >= deadline`.
 
         The exit condition is the server's own answer, not an elapsed duration,
@@ -301,7 +305,7 @@ class LiveLedgerTestCase(unittest.TestCase):
         early. The short pause between polls only paces the queries; it has no
         bearing on correctness.
         """
-        give_up = time.monotonic() + self.SERVER_WAIT_TIMEOUT.total_seconds()
+        give_up = time.monotonic() + (timeout or self.SERVER_WAIT_TIMEOUT).total_seconds()
         while not self.scalar("SELECT now() >= %s", deadline):
             if time.monotonic() > give_up:
                 self.fail(
@@ -313,6 +317,75 @@ class LiveLedgerTestCase(unittest.TestCase):
     def commit_due(self, **kwargs: Any) -> ledger.Commitment:
         """`commitment(due=True)`. Kept for readability at call sites."""
         return self.commitment(due=True, **kwargs)
+
+    def commit_many_due(self, n: int, *, with_close: bool = True) -> list[ledger.Commitment]:
+        """`n` due fixtures sharing one deadline, with ONE wait, all sealed in
+        cleanup. commit_due() n times would wait n x HORIZON."""
+        # Every row's close must land strictly after ITS commit (db/004's
+        # closes_between_commit_and_resolve), so the shared close is budgeted
+        # past the time it takes to write them all: 0.5 s a row. A first
+        # version gave the close a flat 2 s, and row 17 of 70 was committed
+        # after it.
+        #
+        # Each row gets its OWN deadline, a millisecond apart, oldest first:
+        # real rows do not share a deadline, and with ties the old
+        # deadline-only ORDER BY broke them arbitrarily, which can look fair
+        # by accident.
+        now = self.server_now()
+        closes_base = now + self.HORIZON + timedelta(seconds=n * 0.5)
+        resolves_after = closes_base + timedelta(seconds=1)
+        made = []
+        try:
+            for i in range(n):
+                step = timedelta(milliseconds=i)
+                committed = ledger.commit(
+                    agent_id=self.agent_id, run_id=self.run_id, kind="event_contract",
+                    thesis=f"tests_live sweep-order fixture {i}",
+                    payload={"invalidation": "0", "fixture": True},
+                    resolves_after=resolves_after + step,
+                    closes_at=closes_base + step if with_close else None,
+                    legs=[ledger.Leg(subject="TEST-MKT", market="event_contract",
+                                     line=Decimal("0.40"), direction="yes", size=Decimal("1"))],
+                )
+                self._created.append(committed.id)
+                self.addCleanup(self.seal, committed.id, with_close)
+                made.append(committed)
+        finally:
+            # Even if a commit failed midway: the seals of the rows already
+            # written can only run once they are due. Waiting here means they
+            # do, instead of leaking into both due sets for good. The deadline
+            # is deliberately far (0.5 s a row), so the wait is sized to it.
+            last = resolves_after + timedelta(milliseconds=n)
+            self.wait_for_server(last, timeout=last - now + self.SERVER_WAIT_TIMEOUT)
+        return made
+
+    def due_ids(self, sweep: str) -> list[int]:
+        """Every `_test` commitment in a sweep's due set right now."""
+        pred = (
+            "c.closes_at IS NOT NULL AND c.closes_at <= now() AND NOT EXISTS "
+            "(SELECT 1 FROM closing_snapshots s WHERE s.commitment_id = c.id)"
+            if sweep == "capture" else
+            "c.resolves_after <= now() AND NOT EXISTS "
+            "(SELECT 1 FROM resolutions r WHERE r.commitment_id = c.id)"
+        )
+        with psycopg.connect(os.environ["DATABASE_URL"]) as conn, conn.cursor() as cur:
+            cur.execute(f"SELECT c.id FROM commitments c WHERE c.agent_id = %s AND {pred} ORDER BY c.id",
+                        (self.agent_id,))
+            return [r[0] for r in cur.fetchall()]
+
+    def due_count(self, sweep: str) -> int:
+        """How many of `_test`'s rows are in a sweep's due set right now: the
+        whole set, so a test can read it in one page however many permanent
+        `_test` rows have built up. Same predicates as the ledger queries."""
+        if sweep == "capture":
+            sql = """SELECT count(*) FROM commitments c
+                      WHERE c.agent_id = %s AND c.closes_at IS NOT NULL AND c.closes_at <= now()
+                        AND NOT EXISTS (SELECT 1 FROM closing_snapshots s WHERE s.commitment_id = c.id)"""
+        else:
+            sql = """SELECT count(*) FROM commitments c
+                      WHERE c.agent_id = %s AND c.resolves_after <= now()
+                        AND NOT EXISTS (SELECT 1 FROM resolutions r WHERE r.commitment_id = c.id)"""
+        return int(self.scalar(sql, self.agent_id))
 
     def seal(self, commitment_id: int, with_close: bool = False) -> None:
         """Take a due fixture back out of the sweeps' due sets.
