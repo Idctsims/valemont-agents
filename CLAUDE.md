@@ -348,7 +348,8 @@ each in phases with a "done when" checklist). It supersedes the former steps
 - **Chat 1, Phase 3** (PWA shell and push) ✓ (phone-verified 2026-10-08)
 - **Chat 1, Phase 4** (db/020 shared tables, scheduler, `job_health`, push alerts) ✓ (Drills 1 and 2 passed; canary retired 2026-10-09; the Step 8 usage report is pending the owner's numbers)
 - **Chat 1 complete.**
-- **Chat 2, Phase 1** (Goals, plus the app shell navigation registry) ← **you are here**
+- **Chat 2, Phase 1** (Goals, plus the app shell navigation registry) ✓ (PR #8, merge `464c6ea`; the owner's phone checklist is pending)
+- **Chat 2, Phase 2** (Ventures HQ) ← **you are here**, after the separate `fix-sweep-starvation` PR
 
 Reason for deploying at step 4 and not at the end: "works locally, dies
 silently at 3am in production" is the classic failure here. Hit it while
@@ -872,7 +873,8 @@ absent row as "I never looked."
     - `commitments.mode` and `origin`: all 1,346 existing rows read paper/agent.
     - A **TRUNCATE guard on all 19 append-only tables**: TRUNCATE fires no row triggers, so before this it could empty the ledger.
     - **anon has no privilege on any public table, now or in future**, and the signed-in role is read-only on ledger and archive tables.
-    - Next new file: `db/021`.
+  - **`db/021_goals.sql` applied 2026-10-09 17:21:18 UTC** (`migration_log`).
+    - Next new file: `db/022`.
 - **Immutability audit (2026-10-01, empirical).** UPDATE and DELETE were attempted on a `_test` row of every table, rolled back.
   - **Refused by trigger:** `commitments`, `events`, `resolution_attempts`, `commitment_factors`, `closing_snapshots`, `selections`, `model_versions`, `kalshi_markets`, `kalshi_candles`. `legs` UPDATE was refused too, by `legs_frozen`.
   - **ACCEPTED:**
@@ -884,7 +886,14 @@ absent row as "I never looked."
   - **Refused only by a foreign key**, so not protected: `runs` and `agents` DELETE.
   - **Fix:** `db/015_close_mutation_gaps.sql`, pasted. `tests_live/test_mutation_gaps.py` now runs and passes.
   - **`db/015` applied_at: 2026-10-08 04:41:03.069615 UTC** (from `migration_log`). **Rows written before that timestamp in `resolutions`, `legs`, `briefs`, `runs` and `agents` were protected by convention only.** There is no history to prove none was altered.
-- **Tests:** `tests/` **441** and `tests_live/` **128**, 0 skipped. Run both from `workers/` with **`..\venv\Scripts\python.exe`**.
+- **Tests (2026-10-09, after Chat 2 Phase 1):** `tests/` **463** OK; `tests_live/` **150**, 0 skipped, **3 failing**. Run both from `workers/` with **`..\venv\Scripts\python.exe`**.
+  - **The 3 failures predate Phase 1** (the baseline was 128 with the same 3 red). They are all in `test_attempt_budgets.py`: 109 permanent `_test` commitments are past close with no snapshot, beyond `due_for_capture`'s `limit=100`, oldest first, so a fresh test commitment never makes the page. Fix: the separate `fix-sweep-starvation` PR (see §8 when it lands).
+  - Phase 1 added 22 to `tests/` (`test_goals.py`) and 22 to `tests_live/` (`test_goals_sql.py`, each test in one rolled-back transaction).
+  - Web after Phase 1: `pnpm test:unit` 23; `pnpm test:e2e` logged out 45 pass, 21 skip (owner-only specs). Owner run: `pnpm test:e2e goals owner` 13 pass, 3 skip; `pnpm test:e2e screens --workers=1` 2 pass.
+  - **Owner e2e rules, learned the hard way on 2026-10-09:**
+    - Any supabase-js sign-out in a spec must pass `{ scope: "local" }`. The default, `global`, signed the owner out of every device, including their phone.
+    - Goal cleanup is scoped to the worker that made the goals (`runPrefix()`, or the `e2e-seed` note). A shared "delete every e2e goal" cleanup deleted a parallel project's goal mid-test.
+    - Wait for `aria-busy="false"` before a reload: actions queue, and a reload aborts the rest.
   - Phase 3 added 14 to `tests/` (`test_push.py`) and 13 to `tests_live/` (8 in `test_push_rls.py`, 5 in `test_push_ledger.py`).
   - Phase 4 added 61 to `tests/` (`test_system_jobs.py` 42, `test_ai.py` 19) and 27 to `tests_live/` (`test_shared_020.py` 14, `test_system_jobs_sql.py` 8, `test_ai_sql.py` 5).
   - Web: `pnpm test:unit` (7 watchdog logic specs, no server) and `pnpm test:e2e` (Playwright, 43 pass, 9 skip by design).
@@ -1051,8 +1060,33 @@ absent row as "I never looked."
 
     - Every cron call returned 200, every run pinged healthchecks with no errors, and there were no false alerts from the redeploy.
     - The first run, at 03:00 UTC, failed: two 500s from the Supabase clock skew. That's what PR #7 fixed.
+- **Goals (Chat 2 Phase 1, 2026-10-09; PR #8, merge `464c6ea`):**
+  - **db/021:** `goals` is an app table, edited in place except its carry history.
+    - `carried_from` is UNIQUE, so carry-over is idempotent.
+    - A trigger checks every carried row against its original.
+    - The owner may UPDATE only title, notes, area, status, sort_order and completed_at.
+    - `carry_over_goals(horizon, from)` refuses a period that has not ended in America/Chicago.
+    - `goal_periods_to_roll(horizon)` is the catch-up list; `carry_goal(id)` is "move to next week".
+  - **Worker:** `goals_rollover`, Mon 00:01 and the 1st 00:01 Chicago, and at boot, oldest period first. `goals_monday_push`, Mon 07:00, never at boot (`SystemJob.run_at_boot=False`).
+    - Both seen in production: on deploy `9bf52dd3` (boot 18:26:29 UTC) `goals_rollover` ran OK at boot and `goals_monday_push` did not.
+    - Scripts: `-m scripts.goals_rollover --horizon weekly --from <Monday>` prints the count only; `-m scripts.add_goal` inserts one goal.
+  - **The slot rule:** a goal holds one of the week's 10 slots when it is open or done in this period; dropped and moved-on goals hold none. Web: `holdsSlot`/`weekTally` (`src/lib/goals/types.ts`). Worker: `ledger.WEEK_GOAL_COUNTS_SQL` and `WeekGoalCounts.held`.
+  - **Web:**
+    - `/` Home: the date is the hero, "Week 41 · Q4", then This week. The Morning Brief and feed slots are named and render nothing.
+    - `/goals`: Week / Month / Long term / History.
+    - `ensureRollover()` runs the same SQL catch-up while Home and Goals render.
+    - Server actions with `useOptimistic`; "saving" plus `aria-busy` while any is queued.
+    - "Moved on · N" fold; swipe gestures, each with a row-menu path.
+    - `lib/nav.ts` holds all 16 pillars with `built`; only built pages render. The `[section]`/`[pillar]` placeholders are gone, so unbuilt pillars 404.
+  - **Rollover end-to-end on production (2026-10-09 18:27 UTC):** `add_goal` "Rollover test" in week 2026-09-28, then `goals_rollover --from 2026-09-28` returned **1**, then **0**. The carried copy sits in 2026-10-05 with carry_count 1; it is a real row, the owner drops it.
 - **Next:**
-  - **Chat 2 Phase 1:** Goals (db/021), the rollover jobs, and the navigation registry.
+  - **`fix-sweep-starvation`** (owner-approved, its own branch and PR). Invariants:
+    - no missed or void write with zero attempts;
+    - never-attempted rows first, so none is starved past `sweep_limit`;
+    - a written answer on whether `capture_close` reads the current price or the candle at `closes_at`;
+    - `test_attempt_budgets.py` made deterministic, with no ledger deletes;
+    - `tests_live` ends at 0 failures.
+  - **Chat 2 Phase 2:** Ventures HQ (seven ventures).
   - **Carried from Chat 1:** the Step 8 usage report (owner's numbers), for the 2026-10-16 decision.
   - Still pending from before: owner review of the crypto track, owner go-live, and the weekly archive.
   - Any new idea needs a new pre-registration and forward-only validation.
