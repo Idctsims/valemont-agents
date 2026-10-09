@@ -348,7 +348,7 @@ each in phases with a "done when" checklist). It supersedes the former steps
 - **Chat 1, Phase 3** (PWA shell and push) ✓ (phone-verified 2026-10-08)
 - **Chat 1, Phase 4** (db/020 shared tables, scheduler, `job_health`, push alerts) ✓ (Drills 1 and 2 passed; canary retired 2026-10-09)
 - **Chat 1 complete.**
-- **Chat 2, Phase 1** (Goals, plus the app shell navigation registry) ✓ (PR #8, merge `464c6ea`; the owner's phone checklist is pending)
+- **Chat 2, Phase 1** (Goals, plus the app shell navigation registry) ✓ (PR #8, merge `464c6ea`). **Owner's phone checklist DONE, 2026-10-09: all items green**, except the two that need the real clock: the Monday 00:01 rollover and the 07:00 "Set your week" push, first due **Mon 2026-10-12** (America/Chicago).
 - **Sweep starvation fix** (PR #10, §8) ✓
 - **Chat 2, Phase 2** (Ventures HQ) ✓ (merged 2026-10-09; see Current State)
 - **Follow-up, own branch and PR:** the "never abandon an untried commitment" database invariant (db/024) ← **you are here**, then Chat 2 Phase 3 (Capital Tracker)
