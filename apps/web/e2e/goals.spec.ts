@@ -43,7 +43,9 @@ test("goals CRUD on the phone", async ({ page }, testInfo) => {
   await row(page, title).getByRole("button", { name: `Actions for ${title}` }).click();
   await page.getByRole("menuitem", { name: "Edit" }).click();
   const edited = `${title} edited`;
-  await row(page, title).getByRole("textbox", { name: "Goal title" }).fill(edited);
+  // Not row(page, title): while editing, the title is an input's value, and
+  // hasText does not match input values, so that locator matches nothing.
+  await week(page).getByRole("textbox", { name: "Goal title" }).fill(edited);
   await page.getByRole("button", { name: "health" }).click();
   await page.getByRole("button", { name: "Save" }).click();
   await expect(row(page, edited)).toContainText("health");

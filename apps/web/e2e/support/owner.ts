@@ -51,5 +51,8 @@ export async function deleteE2eGoals() {
     const { error } = await q;
     if (error) throw new Error(`cleanup failed: ${error.message}`);
   }
-  await supabase.auth.signOut();
+  // scope 'local' ONLY. supabase-js defaults to 'global', which revokes every
+  // session the owner has: the other test browsers still running, and the
+  // owner's real phone. That is what failed the phone project on 2026-10-09.
+  await supabase.auth.signOut({ scope: "local" });
 }
