@@ -202,10 +202,63 @@ class HealthMonitor(SystemTestCase):
         system_jobs.check_health(self.WATCHED)
         self.assertEqual(self.pushes, [])
 
-    def test_the_external_watchdog_row_is_watched_too(self) -> None:
-        self.ledger.health = [row("watchdog", stale=True, interval=300)]
+
+class ExternalWatchdog(SystemTestCase):
+    """The 'watchdog' row is written by the Vercel route, which owns its
+    alert_state ("worker down"). The monitor alerts only on the row going
+    stale (cron stopped calling), with its own state, and never touches
+    alert_state, so neither incident can close the other."""
+
+    WATCHED = ["heartbeat", "health_monitor"]
+
+    def setUp(self) -> None:
+        super().setUp()
+        p = mock.patch.dict(system_jobs._external_alerted, clear=True)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def check(self, *, stale: bool, state: str = "ok") -> None:
+        self.ledger.health = [row("watchdog", stale=stale, state=state, interval=300)]
         system_jobs.check_health(self.WATCHED)
-        self.assertEqual(len(self.pushes), 1)
+
+    def test_stale_alerts_once_resumed_pushes_once_and_alert_state_is_never_written(self) -> None:
+        self.check(stale=True)
+        self.check(stale=True)
+        self.check(stale=False)
+        self.check(stale=False)
+        self.assertEqual([m.kind for m in self.pushes], ["watchdog_stale", "watchdog_resumed"])
+        self.assertEqual(self.pushes[0].deep_link, "/settings/health")
+        self.assertNotIn("set_job_alert_state", self.ledger.names())
+
+    def test_the_routes_own_worker_down_state_is_not_the_monitors_business(self) -> None:
+        # The bug this fixes: the route marked the row 'alerted' (worker down)
+        # while cron kept calling. The monitor must neither push nor reset it.
+        self.check(stale=False, state="alerted")
+        self.assertEqual(self.pushes, [])
+        self.assertNotIn("set_job_alert_state", self.ledger.names())
+
+    def test_a_stale_row_alerted_before_a_restart_is_adopted_not_repushed(self) -> None:
+        self.ledger.sent_kinds = {"watchdog_stale"}
+        self.check(stale=True)
+        self.assertEqual(self.pushes, [])
+        self.check(stale=False)  # and its recovery is still announced
+        self.assertEqual([m.kind for m in self.pushes], ["watchdog_resumed"])
+
+    def test_a_stale_row_never_alerted_is_pushed_after_a_restart(self) -> None:
+        self.check(stale=True)
+        self.assertEqual([m.kind for m in self.pushes], ["watchdog_stale"])
+
+    def test_a_failed_push_is_retried_next_pass(self) -> None:
+        self.push_error = push.PushError("no active push subscriptions")
+        self.check(stale=True)
+        self.push_error = None
+        self.check(stale=True)
+        self.assertEqual([m.kind for m in self.pushes], ["watchdog_stale"])
+
+    def test_an_external_row_is_watched_even_though_it_is_not_scheduled_here(self) -> None:
+        # Not in WATCHED, yet not treated as an unscheduled job to close out.
+        self.check(stale=True)
+        self.assertNotIn("no longer scheduled", self.pushes[0].body)
 
 
 # ----------------------------------------------------------------- db size

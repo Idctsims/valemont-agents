@@ -35,6 +35,7 @@ HEALTH_LINK = "/settings/health"
 
 #: Rows other processes keep. The Vercel watchdog writes 'watchdog' each time
 #: cron-job.org calls it, so the worker notices if that external check dies.
+#: Watched for staleness only, with their own incident state (_check_external).
 EXTERNAL_JOBS = frozenset({"watchdog"})
 
 FAILURES_TO_ALERT = 2
@@ -66,10 +67,58 @@ def _alert(message: push.Message) -> bool:
     return any(r.status in ("sent", "partial") for r in results)
 
 
+#: Incident state for EXTERNAL rows, held by the monitor itself. Their
+#: job_health.alert_state belongs to the process that writes the row (the
+#: watchdog route uses it for "worker down"); sharing it would let one
+#: incident close the other with the wrong message. None = not yet known in
+#: this process (after a restart).
+_external_alerted: dict[str, bool] = {}
+
+#: An external stale alert sent within this window is adopted after a worker
+#: restart instead of being pushed again.
+EXTERNAL_REALERT_HOURS = 24
+
+
+def _check_external(row: ledger.JobHealth) -> None:
+    """A row kept by another process: alert when it stops reporting, once per
+    incident, and once when it resumes. Never touches its alert_state."""
+    stale_kind, resumed_kind = f"{row.job}_stale", f"{row.job}_resumed"
+    alerted = _external_alerted.get(row.job)
+    if alerted is None:
+        # First pass in this process: adopt an incident alerted before a
+        # restart rather than pushing it twice. If it already recovered, the
+        # resumed push for it is lost with the restart; accepted.
+        alerted = row.stale and ledger.notification_sent_since(stale_kind, EXTERNAL_REALERT_HOURS)
+        _external_alerted[row.job] = alerted
+
+    if row.stale and not alerted:
+        if _alert(push.Message(
+            kind=stale_kind,
+            title=f"{row.job} is not reporting",
+            body=(f"Nothing has called {row.job} on schedule. Until it resumes, "
+                  "nothing outside Railway is watching the worker."),
+            deep_link=HEALTH_LINK, tag=f"job-{row.job}",
+        )):
+            _external_alerted[row.job] = True
+            log.warning("alerted: external %s stale", row.job)
+    elif not row.stale and alerted:
+        if _alert(push.Message(
+            kind=resumed_kind,
+            title=f"{row.job} reporting again",
+            body=f"{row.job} is being called on schedule again.",
+            deep_link=HEALTH_LINK, tag=f"job-{row.job}",
+        )):
+            _external_alerted[row.job] = False
+            log.info("recovered: external %s", row.job)
+
+
 def check_health(scheduled: Iterable[str]) -> None:
     """One pass of the monitor over every job_health row this process answers for."""
-    watched = set(scheduled) | EXTERNAL_JOBS
+    watched = set(scheduled)
     for row in ledger.job_health_rows():
+        if row.job in EXTERNAL_JOBS:
+            _check_external(row)
+            continue
         if row.job not in watched:
             # A job that was alerting and is no longer scheduled at all (the
             # drill, once HEALTH_DRILL is unset): close the incident.
