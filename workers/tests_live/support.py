@@ -403,7 +403,13 @@ class LiveLedgerTestCase(unittest.TestCase):
         captured one refuses a second snapshot by UNIQUE. Anything else
         propagates. Swallowing every exception here once hid a "not due yet"
         refusal and left 32 fixtures in the due set for good.
+
+        Records an attempt of each purpose FIRST: db/024 refuses a void, or a
+        missed snapshot, for a commitment with no attempt of that purpose on
+        record, and the harness gets no exemption from that (is_test or not).
+        An extra attempt on a fixture the test already finished is harmless.
         """
+        ledger.record_resolution_attempt(commitment_id, "error", "tests_live fixture sealed", purpose="resolve")
         try:
             ledger.add_resolution(
                 commitment_id=commitment_id,
@@ -411,6 +417,7 @@ class LiveLedgerTestCase(unittest.TestCase):
                 leg_outcomes=[ledger.LegOutcome(0, "void", None)],
                 pnl=None,
                 detail={"sealed_by": "tests_live", "abandoned": True},
+                attempt=None,  # an abandonment, like core's: it stands on the attempt above
             )
         except psycopg.errors.UniqueViolation:
             pass
@@ -418,11 +425,15 @@ class LiveLedgerTestCase(unittest.TestCase):
             if "already resolved" not in str(exc):
                 raise
         if with_close:
+            ledger.record_resolution_attempt(
+                commitment_id, "error", "tests_live fixture sealed", purpose="capture"
+            )
             try:
                 ledger.add_closing_snapshot(
                     commitment_id=commitment_id,
                     status="missed",
                     reason="tests_live fixture sealed, never captured",
+                    attempt=None,
                 )
             except psycopg.errors.UniqueViolation:
                 pass

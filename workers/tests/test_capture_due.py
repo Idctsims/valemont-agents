@@ -81,12 +81,13 @@ class CaptureDue(LedgerTestCase):
         self.assertEqual(tomb.kwargs["status"], "missed")
         self.assertTrue(tomb.kwargs["reason"].startswith("unavailable:"))
         self.assertIn("venue serves no history", tomb.kwargs["reason"])
-        # The attempt is on record BEFORE the tombstone: never missed at zero.
-        [attempt] = self.ledger.named("record_resolution_attempt")
-        self.assertEqual((attempt.args[:2], attempt.kwargs["purpose"]), ((1, "error"), "capture"))
+        # The look is the attempt, written in the tombstone's own transaction:
+        # never missed at zero, and never one without the other.
+        self.assertEqual((tomb.kwargs["attempt"], tomb.kwargs["attempt_reason"]),
+                         ("error", tomb.kwargs["reason"]))
+        self.assertEqual(self.ledger.named("record_resolution_attempt", ok=None), [])
+        self.assertEqual(self.ledger.attempts[(1, "capture")], 1)
         self.assertEqual(tomb.kwargs["detail"]["attempts"], 1)
-        names = [c.name for c in self.ledger.calls]
-        self.assertLess(names.index("record_resolution_attempt"), names.index("add_closing_snapshot"))
         self.assertIn("close_missed", self.ledger.event_kinds())
 
     def test_exhausted_attempts_tombstone_without_asking_again(self) -> None:

@@ -348,10 +348,11 @@ each in phases with a "done when" checklist). It supersedes the former steps
 - **Chat 1, Phase 3** (PWA shell and push) ✓ (phone-verified 2026-10-08)
 - **Chat 1, Phase 4** (db/020 shared tables, scheduler, `job_health`, push alerts) ✓ (Drills 1 and 2 passed; canary retired 2026-10-09)
 - **Chat 1 complete.**
-- **Chat 2, Phase 1** (Goals, plus the app shell navigation registry) ✓ (PR #8, merge `464c6ea`; the owner's phone checklist is pending)
+- **Chat 2, Phase 1** (Goals, plus the app shell navigation registry) ✓ (PR #8, merge `464c6ea`). **Owner's phone checklist DONE, 2026-10-09: all items green**, except the two that need the real clock: the Monday 00:01 rollover and the 07:00 "Set your week" push, first due **Mon 2026-10-12** (America/Chicago).
 - **Sweep starvation fix** (PR #10, §8) ✓
-- **Chat 2, Phase 2** (Ventures HQ) ✓ (merged 2026-10-09; see Current State)
-- **Follow-up, own branch and PR:** the "never abandon an untried commitment" database invariant (db/024) ← **you are here**, then Chat 2 Phase 3 (Capital Tracker)
+- **Chat 2, Phase 2** (Ventures HQ) ✓ (merged 2026-10-09; see Current State). **Owner's phone checklist: ALL GREEN, 2026-10-09.**
+- **Follow-up, own branch and PR:** the "never abandon an untried commitment" database invariant (db/024, db/025) ✓
+- **Chat 2, Phase 3** (Capital Tracker) ← **you are here**
 
 Reason for deploying at step 4 and not at the end: "works locally, dies
 silently at 3am in production" is the classic failure here. Hit it while
@@ -382,6 +383,24 @@ there's one agent to debug, not four.
   - **No void and no `missed` at zero recorded attempts.**
     `DeferPolicy.expired` never answers at 0 attempts, and `_abandon` and
     `_miss` raise `AbandonWithoutAttempt` (`tests/test_first_look.py`).
+    **And in the database (db/024):** a trigger refuses any void resolution
+    with no `resolve` attempt on record, and any `missed` close snapshot with
+    no `capture` attempt, from any writer. There is no `is_test` exemption:
+    the harness's `seal()` records an attempt first
+    (`tests_live/test_no_untried_abandon.py`).
+    **The rule stays strict (owner, 2026-10-09: no `pnl IS NULL` carve-out);
+    core satisfies it by construction (db/025).** `ledger.add_resolution` and
+    `ledger.add_closing_snapshot` write the attempt that produced the answer
+    in the **same transaction**, before it: `answered` for every outcome
+    (hit/miss/partial/push/void) and every captured close, `error` for a
+    CloseUnavailable tombstone. So an adapter's first-look void is accepted.
+    Only core's give-ups (exhausted budget) pass `attempt=None`: they asked
+    nothing, and must stand on the attempts already recorded. An `answered`
+    row is never written alone. **Anything that reads `resolution_attempts`
+    as failures (void or retry rate) must filter `result IN
+    ('deferred','error')`.** Tests: `tests/test_first_look.py`
+    (`EveryAnswerCarriesItsAttempt`; the stub ledger models the trigger),
+    `tests_live/test_answered_attempts.py`.
   - **Never-attempted rows first, then the oldest last attempt**, in both
     due queries. Every due row is attempted within ceil(n / limit) sweeps
     (`tests_live/test_sweep_order.py`: red on the old order, green on the
@@ -896,7 +915,9 @@ absent row as "I never looked."
     - **anon has no privilege on any public table, now or in future**, and the signed-in role is read-only on ledger and archive tables.
   - **`db/021_goals.sql` applied 2026-10-09 17:21:18 UTC** (`migration_log`).
   - **`db/022_ventures.sql` applied 2026-10-09 22:20:20 UTC; `db/023_job_health_retired.sql` applied 22:22:06 UTC** (`migration_log`). The 022 verify was checked via db_inspect: 7 ventures in order; SBC with 5 workstreams (2 parked) and 1 log row; 0 anon grants; `v_venture_today` `security_invoker=true`.
-    - Next new file: `db/024` (reserved for the zero-attempt database invariant).
+  - **`db/024_no_untried_abandon.sql` applied 2026-10-09 23:27:30 UTC** (`migration_log`).
+  - **`db/025_answered_attempts.sql` applied 2026-10-09 23:36:41 UTC** (`migration_log`; CHECK read back via db_inspect: deferred, error, answered). It adds `answered` to `resolution_attempts.result`.
+    - Next new file: `db/026`.
 - **Immutability audit (2026-10-01, empirical).** UPDATE and DELETE were attempted on a `_test` row of every table, rolled back.
   - **Refused by trigger:** `commitments`, `events`, `resolution_attempts`, `commitment_factors`, `closing_snapshots`, `selections`, `model_versions`, `kalshi_markets`, `kalshi_candles`. `legs` UPDATE was refused too, by `legs_frozen`.
   - **ACCEPTED:**
@@ -1124,7 +1145,7 @@ absent row as "I never looked."
     - Sign in once per worker; per-call sign-ins tripped Supabase Auth's rate limit.
     - After sign-in, wait out "JWT issued at future" with a harmless read before any write.
 - **Next:**
-  - **Zero-attempt database invariant** (own branch and PR, db/024). A trigger refuses a void resolution, or a `missed` closing snapshot, when no attempt of that purpose is recorded. The test harness must record an attempt first, with no `is_test` exemption.
+  - **Zero-attempt database invariant** (db/024, db/025, both applied): merged from branch `db-zero-attempt-invariant`. `tests/` 479 OK; `tests_live/` 181 OK, 0 skipped (2026-10-09).
   - **Chat 2 Phase 3:** Capital Tracker.
   - **~2026-10-18:** the Railway trial ends; redeploy the worker by hand on the Free plan.
   - Still pending from before: owner review of the crypto track, owner go-live, and the weekly archive.

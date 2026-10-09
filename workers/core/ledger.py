@@ -136,8 +136,10 @@ EventKind = Literal[
     "error",
 ]
 
-#: Why an attempt did not produce an answer.
-AttemptResult = Literal["deferred", "error"]
+#: What an attempt came to. `deferred` and `error` produced no answer and count
+#: against the bounded-defer budget. `answered` is the attempt that produced
+#: the resolution or snapshot, written in the same transaction as it (db/025).
+AttemptResult = Literal["deferred", "error", "answered"]
 
 #: Which sweep an attempt belongs to. Capture and resolution share the counter
 #: because they share the bounded-retry discipline exactly.
@@ -626,8 +628,20 @@ def add_resolution(
     leg_outcomes: Sequence[LegOutcome],
     pnl: Numeric | None = None,
     detail: dict[str, Any] | None = None,
+    attempt: AttemptResult | None = "answered",
+    attempt_reason: str | None = None,
 ) -> int:
-    """Record what happened. One transaction: leg outcomes, then the seal.
+    """Record what happened. One transaction: the attempt, leg outcomes, then
+    the seal.
+
+    **The attempt is part of the answer (db/024, db/025).** A resolution
+    answers a `resolve()` call, so by default the `'resolve'` attempt that
+    produced it is written first, in the same transaction. That is what lets
+    db/024's trigger stay strict without special cases: an adapter that
+    returns a void on its very first look has that look on record, and the
+    void is accepted. Pass ``attempt=None`` only when nothing was asked —
+    core's abandonment of an exhausted budget — so that void must stand on
+    the attempts already recorded, which is exactly what db/024 checks.
 
     `outcome` and `pnl` are the adapter's verdict, persisted as given. This
     function does not know what a hit is — see the module docstring.
@@ -694,6 +708,8 @@ def add_resolution(
         The new resolution row's id.
     """
     with _pool().connection() as conn, conn.cursor() as cur:
+        if attempt is not None:
+            _insert_attempt(cur, commitment_id, attempt, attempt_reason, "resolve")
         if leg_outcomes:
             cur.executemany(
                 """
@@ -770,8 +786,17 @@ def add_closing_snapshot(
     status: Literal["captured", "missed"] = "captured",
     reason: str | None = None,
     detail: dict[str, Any] | None = None,
+    attempt: AttemptResult | None = "answered",
+    attempt_reason: str | None = None,
 ) -> ClosingSnapshot:
     """Record the market's final opinion. One per commitment, ever.
+
+    Like `add_resolution`, the `'capture'` attempt that produced the snapshot
+    is written first, in the same transaction: ``'answered'`` for a captured
+    close, ``'error'`` (with its reason) when the adapter declared the close
+    unavailable on that look. ``attempt=None`` only for core's tombstone of an
+    exhausted budget, which asks nothing and must stand on the attempts
+    already on record (db/024).
 
     `clv` is passed in already computed rather than derived here or on read.
     A formula living in a query can be changed, and changing it silently
@@ -800,8 +825,10 @@ def add_closing_snapshot(
             "data loss, and an unexplained one is no better than an absent row."
         )
 
-    with _pool().connection() as conn:
-        row = conn.execute(
+    with _pool().connection() as conn, conn.cursor() as cur:
+        if attempt is not None:
+            _insert_attempt(cur, commitment_id, attempt, attempt_reason, "capture")
+        row = cur.execute(
             """
             INSERT INTO closing_snapshots
                 (commitment_id, status, entry_price, close_price,
@@ -1522,16 +1549,34 @@ def record_resolution_attempt(
 
     Both `deferred` and `error` count against the cap. An adapter that raises
     every sweep is no more resolvable than one that keeps saying "not yet".
+
+    An ``'answered'`` attempt is never written alone: `add_resolution` and
+    `add_closing_snapshot` write it with the answer, in one transaction.
     """
-    with _pool().connection() as conn:
-        conn.execute(
-            """
-            INSERT INTO resolution_attempts
-                (commitment_id, result, reason, purpose)
-            VALUES (%s, %s, %s, %s)
-            """,
-            (commitment_id, result, reason[:2000] if reason else None, purpose),
+    if result == "answered":
+        raise LedgerError(
+            "an answered attempt is written with its resolution or snapshot, "
+            "in the same transaction — never on its own"
         )
+    with _pool().connection() as conn, conn.cursor() as cur:
+        _insert_attempt(cur, commitment_id, result, reason, purpose)
+
+
+def _insert_attempt(
+    cur: Any,
+    commitment_id: int,
+    result: AttemptResult,
+    reason: str | None,
+    purpose: AttemptPurpose,
+) -> None:
+    cur.execute(
+        """
+        INSERT INTO resolution_attempts
+            (commitment_id, result, reason, purpose)
+        VALUES (%s, %s, %s, %s)
+        """,
+        (commitment_id, result, reason[:2000] if reason else None, purpose),
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -276,6 +276,8 @@ class AVoidIsPermanent(LiveLedgerTestCase):
     def test_a_voided_commitment_cannot_later_be_resolved(self) -> None:
         """The §9.3 sentence, as a test: the answer arriving later changes nothing."""
         committed = self.commit_due()
+        # Abandoned after an attempt, as db/024 requires of every void.
+        ledger.record_resolution_attempt(committed.id, "deferred", "tests_live", purpose="resolve")
         ledger.add_resolution(
             commitment_id=committed.id, outcome="void",
             leg_outcomes=[ledger.LegOutcome(0, "void", None)], pnl=None,

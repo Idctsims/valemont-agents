@@ -213,6 +213,9 @@ class SnapshotShapeChecks(LiveLedgerTestCase):
 
     def test_a_missed_snapshot_must_carry_a_reason(self) -> None:
         committed = self.commit_due(with_close=True)
+        # An attempt on record, so db/024's trigger lets the row through and
+        # it is the reason CHECK that refuses it, which is what this tests.
+        ledger.record_resolution_attempt(committed.id, "deferred", "tests_live", purpose="capture")
         self.refuses(
             "INSERT INTO closing_snapshots (commitment_id, status) "
             "VALUES (%s, 'missed')",

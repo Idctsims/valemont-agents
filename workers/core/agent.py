@@ -1093,12 +1093,18 @@ class BaseAgent[Obs, Th](ABC):
                 continue
 
             try:
+                # The 'resolve' attempt that produced this verdict is written
+                # in the same transaction, before it (ledger default). Every
+                # outcome, void included: an adapter's first-look void has its
+                # look on record, so db/024 accepts it by construction.
                 ledger.add_resolution(
                     commitment_id=commitment.id,
                     outcome=verdict.outcome,
                     leg_outcomes=verdict.leg_outcomes,
                     pnl=verdict.pnl,
                     detail=verdict.detail,
+                    attempt="answered",
+                    attempt_reason=f"resolve() returned {verdict.outcome}",
                 )
             except Exception as exc:
                 failed += 1
@@ -1193,15 +1199,16 @@ class BaseAgent[Obs, Th](ABC):
                 close = self.capture_close(commitment)
             except CloseUnavailable as exc:
                 # Permanent by the adapter's own assessment. Record it now
-                # rather than spending the budget discovering the same thing,
-                # but record the ATTEMPT first: no tombstone is written with
-                # zero attempts on record. If that write fails, keep the row
-                # due and ask again, the safe direction to fail in.
+                # rather than spending the budget discovering the same thing.
+                # This look is the attempt: it goes in the tombstone's own
+                # transaction, so no tombstone exists without it. If the write
+                # fails, neither lands; the row stays due and is asked again,
+                # the safe direction to fail in.
                 reason = f"unavailable: {exc}"
-                if not self._note_attempt(commitment, "error", reason, purpose="capture"):
-                    failed += 1
-                    continue
-                if self._miss(commitment, reason, run_id=run_id, attempts=commitment.attempts + 1):
+                if self._miss(
+                    commitment, reason, run_id=run_id,
+                    attempts=commitment.attempts + 1, attempt="error",
+                ):
                     missed += 1
                 else:
                     failed += 1
@@ -1256,6 +1263,8 @@ class BaseAgent[Obs, Th](ABC):
                     clv=clv,
                     clv_pct=clv_pct,
                     detail={**close.detail, "captured_by": self.slug},
+                    attempt="answered",
+                    attempt_reason="capture_close() returned a close",
                 )
             except Exception as exc:
                 failed += 1
@@ -1315,11 +1324,15 @@ class BaseAgent[Obs, Th](ABC):
         *,
         run_id: int,
         attempts: int | None = None,
+        attempt: ledger.AttemptResult | None = None,
     ) -> bool:
         """Write the tombstone that records a permanently lost close.
 
-        `attempts` is the count on record, when the caller has just added one
-        (the CloseUnavailable path). Raises AbandonWithoutAttempt at zero.
+        `attempt` is the look that produced this tombstone, written in the
+        same transaction (the CloseUnavailable path: ``'error'``), and
+        `attempts` the count including it. With no `attempt` (an exhausted
+        budget) nothing was asked, and the tombstone stands on the attempts
+        already on record. Raises AbandonWithoutAttempt at zero.
         """
         attempts = commitment.attempts if attempts is None else attempts
         _require_attempted(commitment.id, attempts, "tombstone the close of")
@@ -1340,6 +1353,8 @@ class BaseAgent[Obs, Th](ABC):
                             self.capture_policy.max_overdue.total_seconds(),
                     },
                 },
+                attempt=attempt,
+                attempt_reason=reason,
             )
         except Exception as exc:
             self._fail(
@@ -1427,6 +1442,9 @@ class BaseAgent[Obs, Th](ABC):
                             self.defer_policy.max_overdue.total_seconds(),
                     },
                 },
+                # Nothing was asked: this void stands on the attempts already
+                # on record, which is what db/024 checks.
+                attempt=None,
             )
         except Exception as exc:
             # Could not even give up cleanly. Leave it in the due set — the
