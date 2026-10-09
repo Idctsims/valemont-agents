@@ -7,6 +7,8 @@ const PORT = 3100;
 
 export default defineConfig({
   testDir: "./e2e",
+  // Logic-only specs run under playwright.unit.config.ts (pnpm test:unit).
+  testIgnore: "**/*-unit.spec.ts",
   outputDir: "./test-results",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,

@@ -11,6 +11,7 @@
     "check:contrast": "node scripts/check-contrast.mjs",
     "check:secret-key": "node scripts/check-secret-key.mjs",
     "test:e2e": "playwright test",
+    "test:unit": "playwright test -c playwright.unit.config.ts",
     "gen:icons": "node scripts/gen-icons.mjs",
     "gen:vapid": "node scripts/gen-vapid.mjs",
     "gen:watchdog-token": "node scripts/gen-watchdog-token.mjs"
