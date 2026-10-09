@@ -65,21 +65,34 @@ async function untilTokenAccepted(supabase: SupabaseClient) {
   throw new Error("owner session: still 'JWT issued at future' after 5 s (Supabase clock skew)");
 }
 
-/** Run `fn` with a supabase-js client signed in as the owner (RLS applies). */
-async function asOwner<T>(fn: (supabase: SupabaseClient) => Promise<T>): Promise<T> {
-  const { url, key } = publicEnv();
-  const supabase = createClient(url, key, { auth: { persistSession: false } });
-  const { error } = await supabase.auth.signInWithPassword({ email: email!, password: password! });
-  if (error) throw new Error(`owner sign-in failed: ${error.message}`);
-  try {
+/**
+ * One signed-in client per worker process, made on first use and reused.
+ * Signing in on every call (snapshot, create, delete...) plus each test's
+ * browser sign-in tripped Supabase Auth's "Request rate limit reached" on a
+ * 28-test run (2026-10-09). The session is in memory only and dies with the
+ * worker; it is never signed out, because supabase-js's default sign-out is
+ * 'global' and would revoke every session the owner has, phone included.
+ */
+let ownerClient: Promise<SupabaseClient> | null = null;
+
+function ownerSession(): Promise<SupabaseClient> {
+  ownerClient ??= (async () => {
+    const { url, key } = publicEnv();
+    const supabase = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: true } });
+    const { error } = await supabase.auth.signInWithPassword({ email: email!, password: password! });
+    if (error) throw new Error(`owner sign-in failed: ${error.message}`);
     await untilTokenAccepted(supabase);
-    return await fn(supabase);
-  } finally {
-    // scope 'local' ONLY. supabase-js defaults to 'global', which revokes
-    // every session the owner has: the other test browsers still running,
-    // and the owner's real phone. That failed the phone project on 2026-10-09.
-    await supabase.auth.signOut({ scope: "local" });
-  }
+    return supabase;
+  })().catch((e) => {
+    ownerClient = null; // a failed sign-in is retried on next use, not cached
+    throw e;
+  });
+  return ownerClient;
+}
+
+/** Run `fn` with the worker's client signed in as the owner (RLS applies). */
+async function asOwner<T>(fn: (supabase: SupabaseClient) => Promise<T>): Promise<T> {
+  return fn(await ownerSession());
 }
 
 /**
