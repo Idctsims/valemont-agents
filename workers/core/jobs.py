@@ -72,6 +72,9 @@ class SystemJob:
     #: proves it on every deploy. The health monitor waits longer, so it never
     #: judges a job that has not had its first chance to run.
     start_delay_s: int = 0
+    #: False for a job whose run is an event in its own right (the Monday
+    #: goals push): it runs only when its trigger fires, never on a deploy.
+    run_at_boot: bool = True
 
     def __post_init__(self) -> None:
         if not _NAME.match(self.name):

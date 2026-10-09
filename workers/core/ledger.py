@@ -27,7 +27,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Final, Literal, Sequence
 
@@ -94,6 +94,12 @@ __all__ = [
     "queue_retry",
     "queue_fail",
     "queue_fail_exhausted",
+    "WeekGoalCounts",
+    "owner_id",
+    "carry_over_goals",
+    "goal_periods_to_roll",
+    "add_goal",
+    "this_week_goal_counts",
     "close_pool",
 ]
 
@@ -1323,6 +1329,89 @@ def queue_fail_exhausted() -> int:
             (QUEUE_MAX_ATTEMPTS, QUEUE_STUCK_AFTER),
         )
         return cur.rowcount
+
+
+# ---------------------------------------------------------------------------
+# Goals (db/021): an app table, edited in place, except its carry history.
+# The carry rules live in SQL (carry_over_goals, goal_periods_to_roll), so the
+# worker, apps/web's ensureRollover and scripts/goals_rollover.py share one
+# copy. The worker's DATABASE_URL role bypasses RLS: owner_id is passed or
+# read from app_settings, never taken from auth.uid().
+# ---------------------------------------------------------------------------
+
+#: The horizons that have periods, and so roll over. long_term never does.
+RolloverHorizon = Literal["weekly", "monthly"]
+GoalHorizon = Literal["weekly", "monthly", "long_term"]
+
+
+@dataclass(frozen=True)
+class WeekGoalCounts:
+    """The owner's current week (Monday, owner's timezone). Goals moved on to
+    a later week and dropped goals are in none of the three."""
+
+    open: int
+    done: int
+    #: Open goals that arrived by carry-over.
+    carried_in: int
+
+
+def owner_id() -> str:
+    """The one owner (app_settings, seeded by db/020)."""
+    with _pool().connection() as conn:
+        row = conn.execute("SELECT owner_id::text FROM app_settings").fetchone()
+    if row is None:
+        raise LedgerError("app_settings has no row; db/020 seeds it with the owner id")
+    return row[0]
+
+
+def carry_over_goals(horizon: RolloverHorizon, from_date: date) -> int:
+    """Carry the open goals of one ENDED period into the next. Returns rows
+    inserted; 0 when they were already carried. The database refuses a period
+    that has not ended in the owner's timezone, or a misaligned date."""
+    with _pool().connection() as conn:
+        row = conn.execute("SELECT carry_over_goals(%s, %s)", (horizon, from_date)).fetchone()
+    return int(row[0])
+
+
+def goal_periods_to_roll(horizon: RolloverHorizon) -> list[date]:
+    """Ended periods still holding an open, uncarried goal, oldest first."""
+    with _pool().connection() as conn:
+        rows = conn.execute("SELECT goal_periods_to_roll(%s)", (horizon,)).fetchall()
+    return [r[0] for r in rows]
+
+
+def add_goal(*, title: str, horizon: GoalHorizon, period_start: date | None,
+             area: str | None = None, notes: str | None = None,
+             owner: str | None = None) -> str:
+    """Insert one goal for `owner` (default: the app_settings owner). Returns its id."""
+    owner = owner or owner_id()
+    with _pool().connection() as conn:
+        row = conn.execute(
+            """
+            INSERT INTO goals (owner_id, title, horizon, period_start, area, notes)
+            VALUES (%s, %s, %s, %s, %s, %s) RETURNING id::text
+            """,
+            (owner, title, horizon, period_start, area, notes),
+        ).fetchone()
+    return row[0]
+
+
+def this_week_goal_counts() -> WeekGoalCounts:
+    """Open, done and carried-in weekly goals for the owner's current week."""
+    with _pool().connection() as conn:
+        row = conn.execute(
+            """
+            SELECT count(*) FILTER (WHERE g.status = 'open'),
+                   count(*) FILTER (WHERE g.status = 'done'),
+                   count(*) FILTER (WHERE g.status = 'open' AND g.carried_from IS NOT NULL)
+              FROM goals g
+             WHERE g.owner_id = (SELECT owner_id FROM app_settings)
+               AND g.horizon = 'weekly'
+               AND g.period_start = date_trunc('week', goal_local_today())::date
+               AND NOT EXISTS (SELECT 1 FROM goals c WHERE c.carried_from = g.id)
+            """
+        ).fetchone()
+    return WeekGoalCounts(*(int(v) for v in row))
 
 
 # ---------------------------------------------------------------------------
