@@ -40,6 +40,10 @@ EXTERNAL_JOBS = frozenset({"watchdog"})
 
 FAILURES_TO_ALERT = 2
 
+#: The health monitor's own job name. It is exempt from its own staleness
+#: check (see check_health).
+MONITOR = "health_monitor"
+
 MB = 1024 * 1024
 DB_SIZE_THRESHOLDS_MB = (400, 450)
 #: Re-alert a threshold at most once a month while the database stays above it.
@@ -133,7 +137,14 @@ def check_health(scheduled: Iterable[str]) -> None:
             continue
 
         failing = row.consecutive_failures >= FAILURES_TO_ALERT
-        unhealthy = failing or row.stale
+        # The monitor never judges its own staleness: if this line runs, the
+        # monitor is running. Across a redeploy its row is legitimately old
+        # (the old process stopped, the new one waits start_delay_s), which
+        # used to push a false "needs attention" + "Recovered" pair on every
+        # deploy. A monitor that has truly stopped can't report itself; the
+        # external watchdog covers that. Its own failures still count.
+        stale = row.stale and row.job != MONITOR
+        unhealthy = failing or stale
         if unhealthy and row.alert_state == "ok":
             why = (f"failed {row.consecutive_failures} times in a row"
                    if failing else "has not succeeded on schedule")
@@ -234,7 +245,7 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
         log.warning("HEALTH_DRILL=true: scheduling health_drill, which always fails")
         jobs.append(SystemJob("health_drill", 60, IntervalTrigger(seconds=60), health_drill))
     # The monitor watches every job above, including itself.
-    names = [j.name for j in jobs] + ["health_monitor"]
-    jobs.append(SystemJob("health_monitor", 60, IntervalTrigger(seconds=60),
+    names = [j.name for j in jobs] + [MONITOR]
+    jobs.append(SystemJob(MONITOR, 60, IntervalTrigger(seconds=60),
                           lambda: check_health(names), start_delay_s=90))
     return jobs

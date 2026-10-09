@@ -173,6 +173,30 @@ class HealthMonitor(SystemTestCase):
         system_jobs.check_health(self.WATCHED)
         self.assertIn("has not succeeded on schedule", self.pushes[0].body)
 
+    def test_the_monitor_never_calls_itself_stale(self) -> None:
+        # The redeploy case: the old process stopped and the new one waited
+        # 90 s, so the monitor's own row is older than 2x60 s on its first
+        # pass. That used to push a false "needs attention" + "Recovered" pair.
+        self.ledger.health = [row("health_monitor", stale=True)]
+        system_jobs.check_health(self.WATCHED)
+        self.assertEqual(self.pushes, [])
+        self.assertNotIn("set_job_alert_state", self.ledger.names())
+
+    def test_the_monitors_own_failures_still_alert(self) -> None:
+        self.ledger.health = [row("health_monitor", failures=2, error="ConnectionError: x")]
+        system_jobs.check_health(self.WATCHED)
+        self.assertEqual(self.pushes[0].title, "health_monitor needs attention")
+
+    def test_other_jobs_are_still_judged_stale_alongside_the_monitor(self) -> None:
+        self.ledger.health = [row("health_monitor", stale=True), row("heartbeat", stale=True)]
+        system_jobs.check_health(self.WATCHED)
+        self.assertEqual([m.title for m in self.pushes], ["heartbeat needs attention"])
+
+    def test_a_self_stale_alert_from_before_the_fix_is_closed(self) -> None:
+        self.ledger.health = [row("health_monitor", stale=True, state="alerted")]
+        system_jobs.check_health(self.WATCHED)
+        self.assertEqual([m.title for m in self.pushes], ["Recovered: health_monitor"])
+
     def test_an_open_incident_does_not_alert_again(self) -> None:
         self.ledger.health = [row("heartbeat", failures=7, state="alerted")]
         system_jobs.check_health(self.WATCHED)
