@@ -349,7 +349,8 @@ each in phases with a "done when" checklist). It supersedes the former steps
 - **Chat 1, Phase 4** (db/020 shared tables, scheduler, `job_health`, push alerts) ✓ (Drills 1 and 2 passed; canary retired 2026-10-09)
 - **Chat 1 complete.**
 - **Chat 2, Phase 1** (Goals, plus the app shell navigation registry) ✓ (PR #8, merge `464c6ea`; the owner's phone checklist is pending)
-- **Chat 2, Phase 2** (Ventures HQ) ← **you are here**, after the separate `fix-sweep-starvation` PR
+- **Sweep starvation fix** (PR #10, §8) ✓
+- **Chat 2, Phase 2** (Ventures HQ) ← **you are here**
 
 Reason for deploying at step 4 and not at the end: "works locally, dies
 silently at 3am in production" is the classic failure here. Hit it while
@@ -370,6 +371,26 @@ there's one agent to debug, not four.
   chart. The dashboard (step 10) surfaces per-agent void rate over time as a
   first-class number, not buried in the event stream — and `resolution_attempts`
   is the table that feeds it. Treat a rising line as an outage, not as data.
+- **Sweep starvation: FIXED (PR #10, 2026-10-09).** A sweep reads one page
+  (`sweep_limit` 50) of its due set. Ordered by deadline alone, a backlog
+  bigger than the page re-served the same rows while the rest were never
+  asked. Expiry is measured from the deadline, so past `max_overdue` core
+  then voided, or tombstoned the close of, rows it had **never once
+  attempted**. That is permanent loss from bookkeeping. Two invariants now,
+  each tested:
+  - **No void and no `missed` at zero recorded attempts.**
+    `DeferPolicy.expired` never answers at 0 attempts, and `_abandon` and
+    `_miss` raise `AbandonWithoutAttempt` (`tests/test_first_look.py`).
+  - **Never-attempted rows first, then the oldest last attempt**, in both
+    due queries. Every due row is attempted within ceil(n / limit) sweeps
+    (`tests_live/test_sweep_order.py`: red on the old order, green on the
+    new).
+
+  Kalshi's `capture_close` reads candle history (the last 1-minute mid at or
+  before kickoff), not the current price, so a late first look recovers the
+  close rather than losing it. It was found because 109 leaked `_test`
+  fixtures (a parked fixture's close was `now + 1 day`) pushed fresh rows
+  off `due_for_capture`'s page and turned `test_attempt_budgets.py` red.
 - **Per-game exposure across all agents is a first-class dashboard view.**
   `nfl_ml` on CHI, `nfl_spread` on CHI −3.5 and `nfl_props` on CHI's QB overs
   are correlated positions in three separate records. Per-agent scoring
@@ -885,8 +906,9 @@ absent row as "I never looked."
   - **Refused only by a foreign key**, so not protected: `runs` and `agents` DELETE.
   - **Fix:** `db/015_close_mutation_gaps.sql`, pasted. `tests_live/test_mutation_gaps.py` now runs and passes.
   - **`db/015` applied_at: 2026-10-08 04:41:03.069615 UTC** (from `migration_log`). **Rows written before that timestamp in `resolutions`, `legs`, `briefs`, `runs` and `agents` were protected by convention only.** There is no history to prove none was altered.
-- **Tests (2026-10-09, after Chat 2 Phase 1):** `tests/` **463** OK; `tests_live/` **150**, 0 skipped, **3 failing**. Run both from `workers/` with **`..\venv\Scripts\python.exe`**.
-  - **The 3 failures predate Phase 1** (the baseline was 128 with the same 3 red). They are all in `test_attempt_budgets.py`: 109 permanent `_test` commitments are past close with no snapshot, beyond `due_for_capture`'s `limit=100`, oldest first, so a fresh test commitment never makes the page. Fix: the separate `fix-sweep-starvation` PR (see §8 when it lands).
+- **Tests (2026-10-09, after PR #10):** `tests/` **472** OK; `tests_live/` **151** OK, 0 skipped, **0 failing**. Run both from `workers/` with **`..\venv\Scripts\python.exe`**.
+  - The 3 `test_attempt_budgets.py` failures that predated Chat 2 Phase 1 are fixed by PR #10 (§8, sweep starvation). PR #10 added 9 to `tests/` (`test_first_look.py`) and 1 to `tests_live/` (`test_sweep_order.py`, about 90 s: it waits out 70 fixtures' deadlines and runs real sweeps).
+  - **`tests_live` fixtures:** a parked fixture (`due=False`) is parked for both sweeps; only `due=True` fixtures enter a due set, and they are sealed. Never give a parked fixture a near close.
   - Phase 1 added 22 to `tests/` (`test_goals.py`) and 22 to `tests_live/` (`test_goals_sql.py`, each test in one rolled-back transaction).
   - Web after Phase 1: `pnpm test:unit` 23; `pnpm test:e2e` logged out 45 pass, 21 skip (owner-only specs). Owner run: `pnpm test:e2e goals owner` 13 pass, 3 skip; `pnpm test:e2e screens --workers=1` 2 pass.
   - **Owner e2e rules, learned the hard way on 2026-10-09:**
