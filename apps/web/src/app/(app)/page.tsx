@@ -34,7 +34,9 @@ export default async function Home() {
 
       <MorningBriefSlot />
 
-      <GoalLedger goals={goals} horizon="weekly" periodLabel={weekRange(weekStart(today))} />
+      <div className="lg:max-w-3xl">
+        <GoalLedger goals={goals} horizon="weekly" periodLabel={weekRange(weekStart(today))} />
+      </div>
 
       <FeedSlot />
     </>

@@ -69,6 +69,9 @@ test("goals CRUD on the phone", async ({ page }, testInfo) => {
   await expect(row(page, edited)).toHaveAttribute("data-state", "done");
 
   // It survives a reload: the server has it, not just the optimistic list.
+  // Actions are queued one at a time; reloading before the queue drains
+  // aborts the rest (the 2026-10-09 failure: Restore and the swipe were lost).
+  await expect(week(page)).toHaveAttribute("aria-busy", "false");
   await page.reload();
   await expect(row(page, edited)).toHaveAttribute("data-state", "done");
 });
@@ -86,6 +89,12 @@ test("an 11th weekly goal shows the cap warning", async ({ page }, testInfo) => 
   );
   await expect(week(page).locator("[data-over]")).toHaveCount(total - 10);
   await expect(week(page).locator("[data-over-cap]")).toHaveCount(total - 10);
+  // And it is the server's count, not only the optimistic one.
+  await expect(week(page)).toHaveAttribute("aria-busy", "false");
+  await page.reload();
+  await expect(week(page).getByTestId("cap-warning")).toHaveText(
+    `${total} of 10. Something's not getting done.`,
+  );
 });
 
 test("history renders", async ({ page }) => {

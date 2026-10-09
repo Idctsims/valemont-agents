@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { expect, type Page } from "@playwright/test";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 // Shared by the owner-only specs. Credentials come from the shell session
 // only, never a file:
@@ -35,24 +35,108 @@ function publicEnv(): { url: string; key: string } {
   return { url: get("NEXT_PUBLIC_SUPABASE_URL"), key: get("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY") };
 }
 
-/**
- * Delete every goal an owner spec made, as the owner (RLS applies). Goals are
- * an app table, so this is real cleanup, children first: a carried goal
- * cannot be deleted while its carried row exists (db/021).
- */
-export async function deleteE2eGoals() {
+/** Seeded goals read like real ones on screen; this note is what marks them. */
+export const SEED_NOTE = "e2e-seed";
+
+/** Run `fn` with a supabase-js client signed in as the owner (RLS applies). */
+async function asOwner<T>(fn: (supabase: SupabaseClient) => Promise<T>): Promise<T> {
   const { url, key } = publicEnv();
   const supabase = createClient(url, key, { auth: { persistSession: false } });
-  const { error: authError } = await supabase.auth.signInWithPassword({ email: email!, password: password! });
-  if (authError) throw new Error(`cleanup sign-in failed: ${authError.message}`);
-  for (const children of [true, false]) {
-    let q = supabase.from("goals").delete().like("title", `${E2E_PREFIX}%`);
-    q = children ? q.not("carried_from", "is", null) : q.is("carried_from", null);
-    const { error } = await q;
-    if (error) throw new Error(`cleanup failed: ${error.message}`);
+  const { error } = await supabase.auth.signInWithPassword({ email: email!, password: password! });
+  if (error) throw new Error(`owner sign-in failed: ${error.message}`);
+  try {
+    return await fn(supabase);
+  } finally {
+    // scope 'local' ONLY. supabase-js defaults to 'global', which revokes
+    // every session the owner has: the other test browsers still running,
+    // and the owner's real phone. That failed the phone project on 2026-10-09.
+    await supabase.auth.signOut({ scope: "local" });
   }
-  // scope 'local' ONLY. supabase-js defaults to 'global', which revokes every
-  // session the owner has: the other test browsers still running, and the
-  // owner's real phone. That is what failed the phone project on 2026-10-09.
-  await supabase.auth.signOut({ scope: "local" });
+}
+
+/**
+ * Delete every goal an owner spec made: titled "e2e …" or noted e2e-seed.
+ * Goals are an app table, so this is real cleanup. Leaves first: a goal
+ * cannot be deleted while its carried row exists (db/021), and a seed may
+ * be carried twice.
+ */
+export async function deleteE2eGoals() {
+  await asOwner(async (supabase) => {
+    for (let pass = 0; pass < 10; pass++) {
+      const [byTitle, bySeed] = await Promise.all([
+        supabase.from("goals").select("id, carried_from").like("title", `${E2E_PREFIX}%`),
+        supabase.from("goals").select("id, carried_from").eq("notes", SEED_NOTE),
+      ]);
+      const error = byTitle.error ?? bySeed.error;
+      if (error) throw new Error(`cleanup read failed: ${error.message}`);
+      const data = [...byTitle.data!, ...bySeed.data!];
+      if (!data.length) return;
+      const parents = new Set(data.map((g) => g.carried_from).filter(Boolean));
+      const leaves = data.filter((g) => !parents.has(g.id)).map((g) => g.id);
+      const del = await supabase.from("goals").delete().in("id", leaves);
+      if (del.error) throw new Error(`cleanup failed: ${del.error.message}`);
+    }
+    throw new Error("cleanup: e2e goals still present after 10 passes");
+  });
+}
+
+type Seed = {
+  title: string;
+  horizon: "weekly" | "monthly" | "long_term";
+  period: string | null;
+  area?: string;
+  status?: "open" | "done" | "dropped";
+  /** Carry it this many times after inserting (carry_goal, db/021). */
+  carries?: number;
+};
+
+/**
+ * A realistic week for the screenshot review: open, done, carried twice,
+ * dropped, moved on; a past week for History; month and long-term goals.
+ * Every row is marked SEED_NOTE and removed by deleteE2eGoals().
+ */
+export async function seedScreens(thisWeek: string, lastWeek: string, twoWeeksAgo: string, month: string) {
+  const seeds: Seed[] = [
+    { title: "Send Clipd the revised term sheet", horizon: "weekly", period: thisWeek, area: "business" },
+    { title: "Draft the Sail Beach Club budget", horizon: "weekly", period: thisWeek, area: "business" },
+    { title: "Four lifts this week", horizon: "weekly", period: thisWeek, area: "health", status: "done" },
+    { title: "Book the Excursion site visit", horizon: "weekly", period: thisWeek, status: "done" },
+    { title: "Close out the Q3 books", horizon: "weekly", period: twoWeeksAgo, area: "money", carries: 2 },
+    { title: "Reorganise the garage", horizon: "weekly", period: thisWeek, area: "personal", status: "dropped" },
+    { title: "Call Marcus about the lease", horizon: "weekly", period: thisWeek, area: "people", carries: 1 },
+    { title: "Send the Perfect Timing invoice", horizon: "weekly", period: lastWeek, area: "money", status: "done" },
+    { title: "Run the Valemont Grow standup", horizon: "weekly", period: lastWeek, area: "business", status: "done" },
+    { title: "Sell the old monitor", horizon: "weekly", period: lastWeek, area: "personal", status: "dropped" },
+    { title: "Close two freelance web dev leads", horizon: "monthly", period: month, area: "business" },
+    { title: "Ten workouts", horizon: "monthly", period: month, area: "health", status: "done" },
+    { title: "First outside LP for Sims & Vale Capital", horizon: "long_term", period: null, area: "money" },
+    { title: "Run a half marathon", horizon: "long_term", period: null, area: "health" },
+  ];
+  await asOwner(async (supabase) => {
+    for (const s of seeds) {
+      const status = s.status ?? "open";
+      const { data, error } = await supabase
+        .from("goals")
+        .insert({
+          title: s.title,
+          horizon: s.horizon,
+          period_start: s.period,
+          area: s.area ?? null,
+          status,
+          completed_at: status === "done" ? new Date().toISOString() : null,
+          notes: SEED_NOTE,
+        })
+        .select("id")
+        .single();
+      if (error) throw new Error(`seed failed: ${error.message}`);
+      let id: string = data.id;
+      for (let i = 0; i < (s.carries ?? 0); i++) {
+        const carried = await supabase.rpc("carry_goal", { p_goal: id });
+        if (carried.error) throw new Error(`seed carry failed: ${carried.error.message}`);
+        const child = await supabase.from("goals").select("id").eq("carried_from", id).single();
+        if (child.error) throw new Error(`seed carry read failed: ${child.error.message}`);
+        id = child.data.id;
+      }
+    }
+  });
 }

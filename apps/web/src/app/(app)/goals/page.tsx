@@ -32,7 +32,7 @@ export default async function GoalsPage({ searchParams }: PageProps<"/goals">) {
   await ensureRollover(supabase);
 
   return (
-    <div className="pb-composer lg:pb-0">
+    <div className="pb-composer lg:max-w-3xl lg:pb-0">
       <header className="mb-6 lg:mb-10">
         <h1 className="font-display text-4xl text-text lg:text-display">Goals</h1>
       </header>
@@ -68,6 +68,7 @@ export default async function GoalsPage({ searchParams }: PageProps<"/goals">) {
           horizon="weekly"
           periodLabel={weekRange(weekStart(today))}
           composer="pinned"
+          titled={false}
         />
       )}
       {view === "month" && (
@@ -76,10 +77,12 @@ export default async function GoalsPage({ searchParams }: PageProps<"/goals">) {
           horizon="monthly"
           periodLabel={monthName(monthStart(today))}
           composer="pinned"
+          titled={false}
         />
       )}
       {view === "long-term" && (
-        <GoalLedger goals={await longTermGoals(supabase)} horizon="long_term" composer="pinned" />
+        <GoalLedger goals={await longTermGoals(supabase)} horizon="long_term" composer="pinned"
+          titled={false} />
       )}
       {view === "history" && <History weeks={await weekHistory(supabase, today)} />}
     </div>

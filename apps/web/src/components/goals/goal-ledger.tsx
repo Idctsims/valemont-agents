@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useOptimistic, useState } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 
 import {
   completeGoal,
@@ -54,7 +54,7 @@ const COPY: Record<Horizon, { heading: string; empty: string; move?: string; pla
   },
   long_term: {
     heading: "Long term",
-    empty: "Nothing you're building toward, written down yet.",
+    empty: "Nothing long-term written down yet.",
     placeholder: "Add a long-term goal",
   },
 };
@@ -68,15 +68,22 @@ export function GoalLedger({
   horizon,
   periodLabel,
   composer = "inline",
+  titled = true,
 }: {
   goals: Goal[];
   horizon: Horizon;
-  /** Shown beside the heading: 'Oct 5 – 11', 'October 2026'. */
+  /** 'Oct 5 – 11', 'October 2026'. */
   periodLabel?: string;
+  /** false where a tab already names the view: the period becomes the heading. */
+  titled?: boolean;
   /** "pinned": fixed above the dock on phones (the Goals page). */
   composer?: "inline" | "pinned";
 }) {
   const [list, change] = useOptimistic(goals, reduce);
+  // Actions run one at a time, and until the last one lands the screen is
+  // ahead of the database. Say so, quietly, so a tap isn't lost to an app
+  // closed too soon.
+  const [saving, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const copy = COPY[horizon];
 
@@ -101,23 +108,25 @@ export function GoalLedger({
   const warning = weekly ? overCapMessage(held.length) : null;
 
   return (
-    <section aria-label={copy.heading} data-testid={`goals-${horizon}`}>
+    <section aria-label={copy.heading} aria-busy={saving} data-testid={`goals-${horizon}`}>
       <div className="flex items-baseline justify-between gap-4">
+        {/* Titled (Home): "This week", period beneath. Untitled (/goals, where
+            the tab already names the view): the period IS the heading. */}
         <h2 className="font-display text-3xl text-text">
-          {copy.heading}
-          {periodLabel && <span className="sr-only">, {periodLabel}</span>}
+          {titled ? copy.heading : (periodLabel ?? <span className="sr-only">{copy.heading}</span>)}
+          {titled && periodLabel && <span className="sr-only">, {periodLabel}</span>}
         </h2>
-        <p className="font-mono text-sm text-text-muted tabular-nums">
-          {weekly ? (
+        <p className="shrink-0 font-mono text-sm text-text-muted tabular-nums">
+          {saving && <span className="mr-3">saving</span>}
+          {weekly && (
             <span data-testid="goals-fraction">
               {done}/{Math.max(WEEKLY_CAP, held.length)}
             </span>
-          ) : (
-            periodLabel
           )}
+          {!weekly && titled && periodLabel}
         </p>
       </div>
-      {weekly && periodLabel && <p className="mt-1 text-sm text-text-muted">{periodLabel}</p>}
+      {weekly && titled && periodLabel && <p className="mt-1 text-sm text-text-muted">{periodLabel}</p>}
 
       {weekly && (
         <div className="mt-4">

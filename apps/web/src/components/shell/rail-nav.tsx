@@ -12,13 +12,17 @@ import { builtGroups, isActive } from "@/lib/nav";
  */
 export function RailNav() {
   const pathname = usePathname();
+  const groups = builtGroups();
+  // With one group built, its name would just repeat the wordmark's
+  // "Command" directly above it. Headings appear once there are two.
+  const headed = groups.length > 1;
 
   return (
     <nav aria-label="Pages" className="flex flex-col gap-6">
-      {builtGroups().map((g) => (
+      {groups.map((g) => (
         <div key={g.key}>
-          <h2 className="label-mono px-3 text-text-muted">{g.name}</h2>
-          <ul className="mt-2 ml-3 border-l border-border pl-2">
+          {headed && <h2 className="label-mono mb-2 px-3 text-text-muted">{g.name}</h2>}
+          <ul className="ml-3 border-l border-border pl-2">
             {g.pages.map((p) => {
               const active = isActive(pathname, p.href);
               return (
