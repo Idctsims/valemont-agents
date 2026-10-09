@@ -67,6 +67,12 @@ export function isoWeekLabel(day: string): string {
   return `${year}-W${String(week).padStart(2, "0")}`;
 }
 
+/** 'Week 41 · Q4': the ISO week, and the calendar quarter of `day`. */
+export function weekStamp(day: string): string {
+  const quarter = Math.floor((Number(day.slice(5, 7)) - 1) / 3) + 1;
+  return `Week ${isoWeek(day).week} · Q${quarter}`;
+}
+
 /** 'Friday, October 9' */
 export function longDate(day: string): string {
   return new Intl.DateTimeFormat("en-US", {

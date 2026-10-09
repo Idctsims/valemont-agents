@@ -6,7 +6,7 @@ import { GoalRow } from "@/components/goals/goal-row";
 import { ProgressStrip } from "@/components/goals/progress-strip";
 import { requireOwner } from "@/lib/auth";
 import { ensureRollover, longTermGoals, monthGoals, weekGoals, weekHistory, type PastWeek } from "@/lib/goals/data";
-import { isoWeekLabel, localToday, monthName, monthStart, weekRange, weekStart } from "@/lib/goals/period";
+import { localToday, weekStamp, monthName, monthStart, weekRange, weekStart } from "@/lib/goals/period";
 import { ordered, segments } from "@/lib/goals/types";
 import { createClient } from "@/lib/supabase/server";
 
@@ -33,11 +33,11 @@ export default async function GoalsPage({ searchParams }: PageProps<"/goals">) {
 
   return (
     <div className="pb-composer lg:max-w-3xl lg:pb-0">
-      <header className="mb-6 lg:mb-10">
-        <h1 className="font-display text-4xl text-text lg:text-display">Goals</h1>
-      </header>
+      {/* One hero per screen: the period under the tabs. The page title stays
+          for screen readers and the tab title. */}
+      <h1 className="sr-only">Goals</h1>
 
-      <nav aria-label="Goal views" className="mb-8">
+      <nav aria-label="Goal views" className="mb-8 lg:mb-10">
         <ul className="grid grid-cols-4 border-b border-border">
           {VIEWS.map((v) => {
             const current = v.key === view;
@@ -68,7 +68,7 @@ export default async function GoalsPage({ searchParams }: PageProps<"/goals">) {
           horizon="weekly"
           periodLabel={weekRange(weekStart(today))}
           composer="pinned"
-          titled={false}
+          header="hero"
         />
       )}
       {view === "month" && (
@@ -77,12 +77,12 @@ export default async function GoalsPage({ searchParams }: PageProps<"/goals">) {
           horizon="monthly"
           periodLabel={monthName(monthStart(today))}
           composer="pinned"
-          titled={false}
+          header="hero"
         />
       )}
       {view === "long-term" && (
         <GoalLedger goals={await longTermGoals(supabase)} horizon="long_term" composer="pinned"
-          titled={false} />
+          header="hero" />
       )}
       {view === "history" && <History weeks={await weekHistory(supabase, today)} />}
     </div>
@@ -108,7 +108,7 @@ function History({ weeks }: { weeks: PastWeek[] }) {
                 <summary className="flex cursor-pointer summary-plain items-center gap-4 py-4">
                   <span className="w-28 shrink-0">
                     <span className="block text-base text-text">{weekRange(monday)}</span>
-                    <span className="block font-mono text-xs text-text-muted">{isoWeekLabel(monday)}</span>
+                    <span className="block font-mono text-xs text-text-muted">{weekStamp(monday)}</span>
                   </span>
                   <span className="min-w-0 flex-1">
                     <ProgressStrip segments={segments(goals, "history")} size="sm" />

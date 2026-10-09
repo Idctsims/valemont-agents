@@ -55,6 +55,22 @@ test("screens", async ({ page }, testInfo) => {
         await shoot(page, name, width, theme);
       }
       if (phone) {
+        // Viewport shots (what the phone shows, not fullPage), at load and
+        // scrolled to the bottom: does the dock or the composer cover the
+        // last row?
+        for (const [name, path] of [["home", "/"], ["goals-week", "/goals"]] as const) {
+          await page.goto(path);
+          await page.waitForLoadState("networkidle");
+          await shoot(page, `${name}-viewport-top`, width, theme, false);
+          await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+          await page.waitForTimeout(250);
+          await shoot(page, `${name}-viewport-bottom`, width, theme, false);
+        }
+        // The fold, opened.
+        await page.getByTestId("goals-weekly").getByRole("button", { name: /^Moved on/ }).click();
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        await shoot(page, "goals-week-fold-open", width, theme, false);
+
         await page.goto("/goals");
         await page.getByRole("navigation", { name: "Dock" }).getByRole("button", { name: "More" }).click();
         await shoot(page, "more-sheet", width, theme, false);

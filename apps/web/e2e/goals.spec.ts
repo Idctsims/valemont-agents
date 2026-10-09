@@ -54,6 +54,11 @@ test("goals CRUD on the phone", async ({ page }, testInfo) => {
   // Drop and restore through the menu (the tap path for the left swipe).
   await row(page, edited).getByRole("button", { name: `Actions for ${edited}` }).click();
   await page.getByRole("menuitem", { name: "Drop" }).click();
+  // Dropped goals fold away under "Moved on · N", closed until tapped.
+  const fold = week(page).getByTestId("moved-on");
+  await expect(fold.getByRole("button", { name: /^Moved on · \d+$/ })).toHaveAttribute("aria-expanded", "false");
+  await expect(row(page, edited)).toHaveCount(0);
+  await fold.getByRole("button", { name: /^Moved on/ }).click();
   await expect(row(page, edited)).toHaveAttribute("data-state", "dropped");
   await row(page, edited).getByRole("button", { name: `Actions for ${edited}` }).click();
   await page.getByRole("menuitem", { name: "Restore" }).click();
@@ -142,7 +147,8 @@ test("home shows the date, the ISO week and this week's goals", async ({ page })
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday), [A-Z][a-z]+ \d{1,2}$/,
   );
-  await expect(page.getByText(/^\d{4}-W\d{2}$/)).toBeVisible();
+  await expect(page.getByText(/^Week \d{1,2} · Q[1-4]$/)).toBeVisible();
+  await expect(page.getByTestId("goals-fraction")).toHaveText(/^\d+ done · \d+ of 10$/);
   await expect(page.getByRole("heading", { level: 2, name: "This week" })).toBeVisible();
   await expect(page.getByTestId("progress-strip")).toBeVisible();
 });

@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { LedgerHeader, MovedOnFold } from "@/components/goals/goal-ledger";
 import { GoalRow } from "@/components/goals/goal-row";
 import { ProgressStrip } from "@/components/goals/progress-strip";
 import { BetLegRow, type Leg } from "@/components/ui/bet-leg-row";
-import type { Goal, Segment } from "@/lib/goals/types";
+import { countLabel, type Goal, type Segment } from "@/lib/goals/types";
 import { PaperBadge, StatusChip } from "@/components/ui/badges";
 import { button, chip } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -126,6 +127,10 @@ const GOAL_STATES: { state: string; goal: Goal; overCap?: boolean }[] = [
   { state: "Moved on", goal: goal({ id: "g5", title: "Call Marcus about the lease", area: "people", moved: true }) },
   { state: "Over cap", goal: goal({ id: "g6", title: "An eleventh thing", area: "business" }), overCap: true },
 ];
+
+const FOLDED: Goal[] = GOAL_STATES.filter((s) => s.state === "Dropped" || s.state === "Moved on").map(
+  (s) => s.goal,
+);
 
 const STRIP_DEMO: Segment[] = ["done", "done", "done", "open", "open", "open", "empty", "empty", "empty", "empty"];
 const STRIP_OVER: Segment[] = [
@@ -258,6 +263,40 @@ function ThemePanel({ theme }: { theme: Theme }) {
           <p className="mt-3 text-sm text-text-muted">
             Open, done, carried twice, dropped, moved on to next week, and an eleventh goal past the soft cap.
           </p>
+        </div>
+
+        <div>
+          <SubHead>Ledger headers</SubHead>
+          <div className="flex flex-col gap-6">
+            <div>
+              <p className="mb-2 text-sm text-text-muted">Label: Home, where the date is the hero</p>
+              <LedgerHeader variant="label" heading="This week" periodLabel="Oct 5 – 11" count={countLabel(2, 6)} />
+            </div>
+            <div>
+              <p className="mb-2 text-sm text-text-muted">Hero: /goals, under the tabs</p>
+              <LedgerHeader variant="hero" heading="This week" periodLabel="Oct 5 – 11" count={countLabel(2, 6)} />
+            </div>
+            <div>
+              <p className="mb-2 text-sm text-text-muted">Saving: a tap not yet on the server</p>
+              <LedgerHeader variant="label" heading="This week" periodLabel="Oct 5 – 11" count={countLabel(3, 6)} saving />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <SubHead>Moved on fold</SubHead>
+          <p className="mb-2 text-sm text-text-muted">Dropped and moved-on goals, after open and done. Closed:</p>
+          <MovedOnFold count={2}>
+            {FOLDED.map((g) => (
+              <GoalRow key={g.id} goal={g} />
+            ))}
+          </MovedOnFold>
+          <p className="mt-4 mb-2 text-sm text-text-muted">Open:</p>
+          <MovedOnFold count={2} defaultOpen>
+            {FOLDED.map((g) => (
+              <GoalRow key={g.id} goal={g} />
+            ))}
+          </MovedOnFold>
         </div>
 
         <div>

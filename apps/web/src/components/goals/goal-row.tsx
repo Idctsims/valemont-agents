@@ -155,7 +155,7 @@ export function GoalRow({
         onPointerUp={onPointerEnd}
         onPointerCancel={onPointerEnd}
         style={dx ? { transform: `translateX(${dx}px)` } : undefined}
-        className={`relative flex touch-pan-y items-start gap-2 bg-bg py-3 ${
+        className={`relative flex touch-pan-y items-start gap-2 bg-bg py-2 ${
           dragging ? "" : "transition-transform"
         }`}
       >
@@ -163,7 +163,7 @@ export function GoalRow({
 
         <Ring goal={goal} onToggle={live ? actions?.onToggle : undefined} />
 
-        <div className={`min-w-0 flex-1 py-2.5 transition-opacity ${struck || state === "moved" ? "opacity-55" : ""}`}>
+        <div className={`min-w-0 flex-1 py-1.5 transition-opacity ${struck || state === "moved" ? "opacity-55" : ""}`}>
           {editing && actions ? (
             <EditForm
               goal={goal}

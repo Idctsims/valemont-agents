@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { GoalLedger } from "@/components/goals/goal-ledger";
 import { requireOwner } from "@/lib/auth";
 import { ensureRollover, weekGoals } from "@/lib/goals/data";
-import { isoWeekLabel, localToday, longDate, weekRange, weekStart } from "@/lib/goals/period";
+import { localToday, longDate, weekRange, weekStamp, weekStart } from "@/lib/goals/period";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Home" };
@@ -29,7 +29,7 @@ export default async function Home() {
     <>
       <header className="mb-10 lg:mb-14">
         <h1 className="font-display text-4xl text-text lg:text-display">{longDate(today)}</h1>
-        <p className="mt-2 font-mono text-sm text-text-muted">{isoWeekLabel(today)}</p>
+        <p className="mt-2 font-mono text-sm text-text-muted">{weekStamp(today)}</p>
       </header>
 
       <MorningBriefSlot />

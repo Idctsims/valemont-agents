@@ -13,9 +13,10 @@ import {
   monthStart,
   periodFor,
   weekRange,
+  weekStamp,
   weekStart,
 } from "../src/lib/goals/period";
-import { holdsSlot, ordered, overCapMessage, segments, type Goal } from "../src/lib/goals/types";
+import { countLabel, holdsSlot, isFolded, ordered, overCapMessage, segments, type Goal } from "../src/lib/goals/types";
 import { NAV, SYSTEM_PAGES, builtGroups, isActive } from "../src/lib/nav";
 
 function goal(over: Partial<Goal>): Goal {
@@ -65,6 +66,12 @@ test.describe("periods", () => {
     expect(isoWeekLabel("2021-01-03")).toBe("2020-W53");
   });
 
+  test("week stamp: ISO week and calendar quarter", () => {
+    expect(weekStamp("2026-10-09")).toBe("Week 41 · Q4");
+    expect(weekStamp("2026-01-01")).toBe("Week 1 · Q1");
+    expect(weekStamp("2026-06-30")).toBe("Week 27 · Q2");
+  });
+
   test("labels", () => {
     expect(longDate("2026-10-09")).toBe("Friday, October 9");
     expect(weekRange("2026-10-05")).toBe("Oct 5 – 11");
@@ -97,6 +104,18 @@ test.describe("the week strip and the cap", () => {
       "history",
     );
     expect(s.slice(0, 3)).toEqual(["done", "carried", "dropped"]);
+  });
+
+  test("count label: done, then held of the cap", () => {
+    expect(countLabel(2, 6)).toBe("2 done · 6 of 10");
+    expect(countLabel(0, 11)).toBe("0 done · 11 of 10");
+  });
+
+  test("dropped and moved-on goals fold away; open and done stay", () => {
+    expect(isFolded(goal({ status: "dropped" }))).toBe(true);
+    expect(isFolded(goal({ moved: true }))).toBe(true);
+    expect(isFolded(goal({ status: "done" }))).toBe(false);
+    expect(isFolded(goal({}))).toBe(false);
   });
 
   test("rows order open, done, dropped, moved", () => {

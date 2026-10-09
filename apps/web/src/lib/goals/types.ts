@@ -72,6 +72,16 @@ export function segments(goals: Goal[], mode: "live" | "history"): Segment[] {
   return list;
 }
 
+/** Dropped goals and goals moved to a later period: kept out of the way. */
+export function isFolded(g: Goal): boolean {
+  return g.moved || g.status === "dropped";
+}
+
+/** '2 done · 6 of 10': done, then every goal holding a slot, of the cap. */
+export function countLabel(done: number, held: number): string {
+  return `${done} done · ${held} of ${WEEKLY_CAP}`;
+}
+
 export function overCapMessage(held: number): string | null {
   return held > WEEKLY_CAP ? `${held} of ${WEEKLY_CAP}. Something's not getting done.` : null;
 }

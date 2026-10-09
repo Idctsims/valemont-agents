@@ -7,10 +7,9 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { SYSTEM_PAGES, builtGroups, isActive } from "@/lib/nav";
 
-// Phone navigation, in the thumb zone: Home and Goals on the left, a centre
-// slot held for Wags (Chat 2 Phase 4, renders nothing yet), More on the
-// right. The two halves are equal width, so the centre slot is truly centred
-// whatever each side holds. More opens a sheet of every built page, from the
+// Phone navigation, in the thumb zone: Home, Goals and More, evenly spaced.
+// Wags takes a centre slot when it arrives (Chat 2 Phase 4); until then there
+// is no gap held for it. More opens a sheet of every built page, from the
 // same registry as the desktop rail (src/lib/nav.ts).
 
 const DOCK: { label: string; href: string; Icon: React.ComponentType<IconProps> }[] = [
@@ -52,9 +51,8 @@ export function Dock() {
         aria-label="Dock"
         className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface pb-safe lg:hidden"
       >
-        <div className="mx-auto flex h-tabbar max-w-xl items-stretch px-2">
-          <ul className="flex flex-1">
-            {DOCK.map(({ label, href, Icon }) => {
+        <ul className="mx-auto flex h-tabbar max-w-xl items-stretch px-2">
+          {DOCK.map(({ label, href, Icon }) => {
               const active = isActive(pathname, href);
               return (
                 <li key={href} className="flex flex-1">
@@ -73,12 +71,7 @@ export function Dock() {
                 </li>
               );
             })}
-          </ul>
-
-          {/* Reserved for Wags. Holds its width; renders nothing until then. */}
-          <div data-slot="wags" aria-hidden className="w-dock-slot shrink-0" />
-
-          <div className="flex flex-1">
+          <li className="flex flex-1">
             <button
               ref={moreButton}
               type="button"
@@ -90,8 +83,8 @@ export function Dock() {
               <DotsThreeCircle size={24} weight={open ? "fill" : "regular"} aria-hidden />
               More
             </button>
-          </div>
-        </div>
+          </li>
+        </ul>
       </nav>
     </>
   );
