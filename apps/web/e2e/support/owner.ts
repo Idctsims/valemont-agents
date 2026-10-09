@@ -55,21 +55,36 @@ async function asOwner<T>(fn: (supabase: SupabaseClient) => Promise<T>): Promise
 }
 
 /**
- * Delete every goal an owner spec made: titled "e2e …" or noted e2e-seed.
- * Goals are an app table, so this is real cleanup. Leaves first: a goal
- * cannot be deleted while its carried row exists (db/021), and a seed may
- * be carried twice.
+ * One id per worker process. The desktop and phone projects run in separate
+ * workers at the same time, so each spec run titles its goals with this and
+ * deletes only those: on 2026-10-09 a shared "delete every e2e goal" cleanup,
+ * run by the desktop worker as it finished, deleted the goal the phone CRUD
+ * test was still editing.
  */
-export async function deleteE2eGoals() {
+export const RUN_ID = `${Date.now().toString(36)}${process.pid}`;
+
+/** Title prefix for this worker's goals: "e2e <run> ". */
+export const runPrefix = () => `${E2E_PREFIX}${RUN_ID} `;
+
+/**
+ * Delete goals an owner spec made, as the owner (RLS applies): those titled
+ * with `titlePrefix`, or (seed: true) those noted e2e-seed. Goals are an app
+ * table, so this is real cleanup. Leaves first: a goal cannot be deleted
+ * while its carried row exists (db/021), and a seed may be carried twice.
+ */
+export async function deleteE2eGoals(scope: { titlePrefix?: string; seed?: boolean }) {
   await asOwner(async (supabase) => {
     for (let pass = 0; pass < 10; pass++) {
-      const [byTitle, bySeed] = await Promise.all([
-        supabase.from("goals").select("id, carried_from").like("title", `${E2E_PREFIX}%`),
-        supabase.from("goals").select("id, carried_from").eq("notes", SEED_NOTE),
-      ]);
-      const error = byTitle.error ?? bySeed.error;
-      if (error) throw new Error(`cleanup read failed: ${error.message}`);
-      const data = [...byTitle.data!, ...bySeed.data!];
+      const reads = [
+        scope.titlePrefix
+          ? supabase.from("goals").select("id, carried_from").like("title", `${scope.titlePrefix}%`)
+          : null,
+        scope.seed ? supabase.from("goals").select("id, carried_from").eq("notes", SEED_NOTE) : null,
+      ].filter((q) => q !== null);
+      const results = await Promise.all(reads);
+      const failed = results.find((r) => r.error);
+      if (failed?.error) throw new Error(`cleanup read failed: ${failed.error.message}`);
+      const data = results.flatMap((r) => r.data ?? []);
       if (!data.length) return;
       const parents = new Set(data.map((g) => g.carried_from).filter(Boolean));
       const leaves = data.filter((g) => !parents.has(g.id)).map((g) => g.id);

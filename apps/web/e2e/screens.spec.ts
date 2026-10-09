@@ -39,7 +39,7 @@ test("screens", async ({ page }, testInfo) => {
 
   const today = localToday();
   const thisWeek = weekStart(today);
-  await deleteE2eGoals();
+  await deleteE2eGoals({ seed: true });
   await seedScreens(thisWeek, addDays(thisWeek, -7), addDays(thisWeek, -14), monthStart(today));
   try {
     await signIn(page, "/");
@@ -64,6 +64,6 @@ test("screens", async ({ page }, testInfo) => {
       }
     }
   } finally {
-    await deleteE2eGoals();
+    await deleteE2eGoals({ seed: true });
   }
 });

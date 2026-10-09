@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { E2E_PREFIX, deleteE2eGoals, hasOwner, signIn } from "./support/owner";
+import { deleteE2eGoals, hasOwner, runPrefix, signIn } from "./support/owner";
 
 // Goals and navigation, signed in as the owner. Skipped unless the owner's
 // credentials are in the shell session (see support/owner.ts). Every goal
@@ -10,7 +10,8 @@ test.skip(!hasOwner, "set E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD to run");
 test.describe.configure({ mode: "serial" });
 
 test.afterAll(async () => {
-  await deleteE2eGoals();
+  // Only this worker's goals: the other project may still be mid-test.
+  await deleteE2eGoals({ titlePrefix: runPrefix() });
 });
 
 const week = (page: Page) => page.getByTestId("goals-weekly");
@@ -27,7 +28,7 @@ async function addGoal(page: Page, title: string) {
 test("goals CRUD on the phone", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "phone", "phone project");
   await signIn(page, "/goals");
-  const title = `${E2E_PREFIX}crud ${Date.now()}`;
+  const title = `${runPrefix()}crud`;
 
   await addGoal(page, title);
   // The optimistic row is replaced by the server's: it stops saying "saving".
@@ -82,7 +83,7 @@ test("an 11th weekly goal shows the cap warning", async ({ page }, testInfo) => 
   const held = await week(page).locator('[data-segment="done"], [data-segment="open"]').count();
   await expect(week(page).getByTestId("cap-warning")).toHaveCount(held > 10 ? 1 : 0);
   const stamp = Date.now();
-  for (let i = held; i < 11; i++) await addGoal(page, `${E2E_PREFIX}cap ${stamp} ${i + 1}`);
+  for (let i = held; i < 11; i++) await addGoal(page, `${runPrefix()}cap ${stamp} ${i + 1}`);
   const total = Math.max(held, 11);
   await expect(week(page).getByTestId("cap-warning")).toHaveText(
     `${total} of 10. Something's not getting done.`,
