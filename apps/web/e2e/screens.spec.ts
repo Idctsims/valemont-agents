@@ -2,17 +2,29 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { addDays, localToday, monthStart, weekStart } from "../src/lib/goals/period";
 
-import { deleteE2eGoals, hasOwner, seedScreens, setTheme, signIn } from "./support/owner";
+import {
+  SEEDED_WEEK,
+  deleteSeededGoals,
+  hasOwner,
+  seedScreens,
+  setTheme,
+  signIn,
+  snapshotGoals,
+} from "./support/owner";
 
 // Screenshot review for Chat 2 Phase 1: Home, every Goals tab, the More
 // sheet, the composer while typing, and /design (the goal row states and
 // week strips), at 390 px (phone project) and 1440 px (desktop project), in
 // both themes. Written to e2e/screenshots/chat2-p1/ (gitignored).
 //
-// Seeds a realistic set of goals first (open, done, carried twice, dropped,
-// moved on, a past week, month and long term), marked notes = 'e2e-seed',
-// and deletes them afterwards. Owner-only. Run it ALONE and on one worker,
-// so the two projects don't seed over each other or over goals.spec:
+// Runs against the owner's REAL account, so it is written to coexist with
+// real goals:
+//   - every count it asserts is relative: read before seeding, then
+//     before + what the seed adds (SEEDED_WEEK);
+//   - it deletes exactly the ids it created, nothing matched by pattern;
+//   - afterwards it checks every goal the owner had is still there, unchanged.
+// Owner-only. Run it ALONE and on one worker, so the two projects don't seed
+// over each other or over goals.spec:
 //   pnpm test:e2e screens --workers=1
 
 test.skip(!hasOwner, "set E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD to run");
@@ -39,19 +51,28 @@ test("screens", async ({ page }, testInfo) => {
 
   const today = localToday();
   const thisWeek = weekStart(today);
-  await deleteE2eGoals({ seed: true });
-  await seedScreens(thisWeek, addDays(thisWeek, -7), addDays(thisWeek, -14), monthStart(today));
+  const created: string[] = [];
+  const owners = await snapshotGoals();
   try {
+    // Before: whatever the owner's real week holds. Every assertion below
+    // is this plus what the seed adds, so real goals never break the spec.
     await signIn(page, "/");
-    // The seeded week: 8 open (one carried in) + 2 done hold slots; the
-    // dropped goal and the one moved on to next week hold none.
+    const before = await readWeek(page);
+
+    await seedScreens(created, thisWeek, addDays(thisWeek, -7), addDays(thisWeek, -14), monthStart(today));
+    await page.reload();
     const week = page.getByTestId("goals-weekly");
-    await expect(week.getByTestId("goals-fraction")).toHaveText("2 done · 10 of 10");
-    await expect(week.locator('[data-segment="done"]')).toHaveCount(2);
-    await expect(week.locator('[data-segment="open"]')).toHaveCount(8);
-    await expect(week.locator('[data-segment="empty"]')).toHaveCount(0);
-    await expect(week.getByTestId("cap-warning")).toHaveCount(0);
-    await expect(week.getByRole("button", { name: "Moved on · 2" })).toHaveAttribute("aria-expanded", "false");
+    const done = before.done + SEEDED_WEEK.done;
+    const held = before.held + SEEDED_WEEK.open + SEEDED_WEEK.done;
+    await expect(week.getByTestId("goals-fraction")).toHaveText(`${done} done · ${held} of 10`);
+    await expect(week.locator('[data-segment="done"]')).toHaveCount(done);
+    await expect(week.locator('[data-segment="open"]')).toHaveCount(held - done);
+    await expect(week.locator('[data-segment="empty"]')).toHaveCount(Math.max(0, 10 - held));
+    await expect(week.locator("[data-over]")).toHaveCount(Math.max(0, held - 10));
+    await expect(week.getByTestId("cap-warning")).toHaveCount(held > 10 ? 1 : 0);
+    await expect(
+      week.getByRole("button", { name: `Moved on · ${before.folded + SEEDED_WEEK.folded}` }),
+    ).toHaveAttribute("aria-expanded", "false");
     for (const theme of ["night", "day"] as const) {
       await setTheme(page, theme);
       for (const [name, path] of PAGES) {
@@ -90,6 +111,29 @@ test("screens", async ({ page }, testInfo) => {
       }
     }
   } finally {
-    await deleteE2eGoals({ seed: true });
+    await deleteSeededGoals(created);
+  }
+
+  // Nothing the owner had was touched: every goal from before is still there,
+  // field for field. A new row is acceptable only as a rollover carry of one
+  // of the owner's own goals (ensureRollover runs on every page load).
+  const after = await snapshotGoals();
+  for (const [id, fields] of owners) expect(after.get(id), `owner goal ${id} changed`).toBe(fields);
+  for (const [id, fields] of after) {
+    if (owners.has(id)) continue;
+    const from = (JSON.parse(fields) as { carried_from: string | null }).carried_from;
+    expect(from && owners.has(from), `goal ${id} is new and not a rollover of an owner goal`).toBe(true);
   }
 });
+
+/** The owner's week as Home shows it: done, slots held, folded away. */
+async function readWeek(page: Page): Promise<{ done: number; held: number; folded: number }> {
+  const week = page.getByTestId("goals-weekly");
+  await expect(week).toHaveAttribute("aria-busy", "false");
+  const text = (await week.getByTestId("goals-fraction").textContent()) ?? "";
+  const m = text.match(/^(\d+) done · (\d+) of 10$/);
+  expect(m, `unexpected count label ${JSON.stringify(text)}`).not.toBeNull();
+  const fold = week.getByRole("button", { name: /^Moved on · \d+$/ });
+  const folded = (await fold.count()) ? Number(((await fold.textContent()) ?? "").match(/(\d+)\s*$/)![1]) : 0;
+  return { done: Number(m![1]), held: Number(m![2]), folded };
+}
