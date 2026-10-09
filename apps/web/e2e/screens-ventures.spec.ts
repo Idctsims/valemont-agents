@@ -25,6 +25,9 @@ async function shot(page: Page, name: string, width: string, theme: string, full
 
 async function capture(page: Page, name: string, phone: boolean, theme: string) {
   if (phone) {
+    // Opening a workstream scrolls; the top shot is the top (hero, NEXT).
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(150);
     await shot(page, `${name}-top`, "390", theme, false);
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     await page.waitForTimeout(300);

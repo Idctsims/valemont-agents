@@ -295,20 +295,23 @@ export function VentureDetail({
 
       {/* Log */}
       <section aria-label="Log">
-        <SectionLabel aside={`${model.log.length} entries`}>Log</SectionLabel>
-        <LogComposer
-          onAdd={(kind, entry) =>
-            run(
-              { t: "log", entry: { id: `pending-${crypto.randomUUID()}`, kind, entry, created_at: new Date().toISOString(), pending: true } },
-              () => addLogEntry(v.id, kind, entry),
-            )
-          }
-        />
-        <ul className="mt-4 border-t border-border">
+        <SectionLabel aside={`${model.log.length} ${model.log.length === 1 ? "entry" : "entries"}`}>Log</SectionLabel>
+        <ul className="border-t border-border">
           {model.log.map((l) => (
             <LogRow key={l.id} entry={l} />
           ))}
         </ul>
+        {/* At the end, as the brief has it; the list itself reads newest first. */}
+        <div className="mt-4">
+          <LogComposer
+            onAdd={(kind, entry) =>
+              run(
+                { t: "log", entry: { id: `pending-${crypto.randomUUID()}`, kind, entry, created_at: new Date().toISOString(), pending: true } },
+                () => addLogEntry(v.id, kind, entry),
+              )
+            }
+          />
+        </div>
       </section>
     </article>
   );
@@ -432,7 +435,8 @@ export function WorkstreamRow({
             <span className={`text-base font-medium ${ws.state === "done" ? "text-text-muted line-through" : "text-text"}`}>{ws.name}</span>
             {ws.state !== "active" && <span className="font-mono text-xs text-text-muted">{ws.state}</span>}
           </span>
-          {ws.next_action && <span className="mt-1 block text-sm text-text-muted text-pretty">{ws.next_action}</span>}
+          {/* Open, the editable field below says it; closed, this line does. */}
+          {ws.next_action && !open && <span className="mt-1 block text-sm text-text-muted text-pretty">{ws.next_action}</span>}
         </span>
         {openCount > 0 && (
           <span className="shrink-0 pt-0.5 font-mono text-xs text-text-muted tabular-nums">
@@ -655,7 +659,9 @@ export function LogRow({ entry }: { entry: LogEntry }) {
     <li data-testid="log-entry" data-kind={entry.kind} className="border-b border-border py-3">
       <p className="flex flex-wrap gap-x-3 font-mono text-xs text-text-muted">
         <span>{logStamp(entry.created_at)}</span>
-        {marked && <span className="text-accent">{entry.kind}</span>}
+        {/* Outlined, not just accent-coloured: Day's accent is nearly the
+            body text's brown, and a decision must stand out in both themes. */}
+        {marked && <span className="rounded-pill border border-current px-1.5 text-accent">{entry.kind}</span>}
         {auto && <span>auto</span>}
         {entry.pending && <span>saving</span>}
       </p>

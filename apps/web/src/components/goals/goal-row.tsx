@@ -3,6 +3,7 @@
 import { ArrowBendUpRight, Check, DotsThree } from "@phosphor-icons/react";
 import { useEffect, useId, useRef, useState } from "react";
 
+import { ChipFace } from "@/components/ui/chip";
 import { AREAS, type Area } from "@/lib/goals/period";
 import { rowState, type Goal } from "@/lib/goals/types";
 
@@ -334,20 +335,16 @@ export function VentureChips({
 }) {
   if (ventures.length === 0) return null;
   return (
-    <div role="group" aria-label="Venture" className="mt-2 flex flex-wrap gap-1.5">
+    <div role="group" aria-label="Venture" className="-mx-1 mt-1 flex flex-wrap">
       {ventures.map((v) => (
         <button
           key={v.id}
           type="button"
           aria-pressed={value === v.id}
           onClick={() => onChange(value === v.id ? null : v.id)}
-          className={`tap inline-flex items-center rounded-pill border px-3.5 text-xs transition-colors ${
-            value === v.id
-              ? "border-accent bg-accent text-on-accent"
-              : "border-border text-text-muted hover:bg-surface-2 hover:text-text"
-          }`}
+          className="tap group inline-flex items-center justify-center px-1"
         >
-          {v.name}
+          <ChipFace selected={value === v.id}>{v.name}</ChipFace>
         </button>
       ))}
     </div>
@@ -356,20 +353,18 @@ export function VentureChips({
 
 export function AreaChips({ value, onChange }: { value: Area | null; onChange: (a: Area | null) => void }) {
   return (
-    <div role="group" aria-label="Area" className="mt-2 flex flex-wrap gap-1.5">
+    <div role="group" aria-label="Area" className="-mx-1 mt-1 flex flex-wrap">
       {AREAS.map((a) => (
         <button
           key={a}
           type="button"
           aria-pressed={value === a}
           onClick={() => onChange(value === a ? null : a)}
-          className={`tap inline-flex items-center rounded-pill border px-3.5 font-mono text-xs transition-colors ${
-            value === a
-              ? "border-accent bg-accent text-on-accent"
-              : "border-border text-text-muted hover:bg-surface-2 hover:text-text"
-          }`}
+          className="tap group inline-flex items-center justify-center px-1"
         >
-          {a}
+          <ChipFace selected={value === a} mono>
+            {a}
+          </ChipFace>
         </button>
       ))}
     </div>

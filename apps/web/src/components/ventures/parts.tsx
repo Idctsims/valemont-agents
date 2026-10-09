@@ -3,6 +3,8 @@
 import { DotsThree } from "@phosphor-icons/react";
 import { useEffect, useId, useRef, useState } from "react";
 
+import { ChipFace } from "@/components/ui/chip";
+
 // Small pieces the venture detail is built from: tap-to-edit text, a row
 // menu, and a chip group. Tokens only; every control is a 44 px target.
 
@@ -187,20 +189,18 @@ export function Chips<T extends string>({
   allowNone?: boolean;
 }) {
   return (
-    <div role="group" aria-label={label} className="flex flex-wrap gap-1.5">
+    <div role="group" aria-label={label} className="-mx-1 flex flex-wrap">
       {options.map((o) => (
         <button
           key={o}
           type="button"
           aria-pressed={value === o}
           onClick={() => onChange(value === o && allowNone ? null : o)}
-          className={`tap inline-flex items-center rounded-pill border px-3.5 font-mono text-xs transition-colors ${
-            value === o
-              ? "border-accent bg-accent text-on-accent"
-              : "border-border text-text-muted hover:bg-surface-2 hover:text-text"
-          }`}
+          className="tap group inline-flex items-center justify-center px-1"
         >
-          {render(o)}
+          <ChipFace selected={value === o} mono>
+            {render(o)}
+          </ChipFace>
         </button>
       ))}
     </div>
