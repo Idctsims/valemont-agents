@@ -245,7 +245,7 @@ Thirteen build chats after this one, each split into phases with a test you run 
 
 **Every chat follows the same contract:** read this plan and CLAUDE.md, ask questions, search GitHub, deliver phased Claude Code prompts, list keys needed, and close with all checkboxes ticked. Every new worker also registers a Wags context provider and a Morning Brief section in the same chat.
 
-**(as built) Working rules added during Chat 1,** now in CLAUDE.md:
+**(as built) Working rules added during Chat 1, all in CLAUDE.md §6:**
 - Native Windows PowerShell 5.1: no `&&`, `||`, ternaries or `??`.
 - No secret values ever printed in any tool output.
 - Never use another account's CLI session (Vercel, Railway, GitHub) for this repo.
@@ -274,7 +274,7 @@ Thirteen build chats after this one, each split into phases with a test you run 
 
 **Carried out of Chat 1:**
 - Railway trial ends about Oct 18. Decision: stay on Free. When the trial lapses the worker stops, the watchdog pushes "Worker down", and it gets redeployed by hand. Confirm with the 24-hour usage figures (due Oct 9).
-- "JWT issued at future" (clock skew between caller and Supabase) shows up occasionally; the watchdog retry absorbs it. Escalate to Supabase only if 503s appear in the watchdog logs.
+- "JWT issued at future" (clock skew inside Supabase, between its API gateway and PostgREST, not the caller) shows up occasionally; the watchdog retry absorbs it. Escalate to Supabase only if 503s appear in the watchdog logs.
 - Pinterest trial access pending. On approval, move the privacy URL to `https://valemont-command.vercel.app/privacy`.
 
 ### Chat 2 — Command core ← next
@@ -433,10 +433,10 @@ The three most likely ways this build fails are silent worker death, data source
 | Pinterest trial access stuck pending for weeks | High | Applied Oct 8; Lookbook ships on public board RSS feeds plus uploads, then switches to OAuth sync when approved |
 | Supabase 500 MB cap | Medium within 6 months | Retention jobs, 384-dim embeddings, candle archive windowed (design needed, see §3), size alerts at 400 and 450 MB **(built)** |
 | Supabase project pauses | Low | The heartbeat writes every minute **(built)** |
-| Worker dies silently at 3 a.m. | **Mitigated (built, drilled)** | Worker health monitor; external watchdog pushes "Worker down" within 10 minutes; healthchecks.io emails if the watchdog stops; both drills passed Oct 8 |
+| Worker dies silently at 3 a.m. | **Mitigated (built, drilled)** | Railway restart policy and the repo's SIGTERM drain (seen working in Drill 2: clean shutdown on removal); worker health monitor; external watchdog pushes "Worker down" within 10 minutes; healthchecks.io emails if the watchdog stops; both drills passed Oct 8 |
 | Railway usage creeps past the plan's credit | Medium | One consolidated worker; usage measured (about $0.45–0.51/month on Free); move to Hobby when agents or bots push past $1 |
 | Railway trial ends (about Oct 18) | Certain | Worker stops; watchdog alerts; redeploy by hand on the Free plan |
-| Supabase clock skew ("JWT issued at future") | Low, observed | Watchdog read retried once; persistent failure returns 503 and reports `/fail` to healthchecks |
+| Supabase clock skew ("JWT issued at future") | Low, observed | Skew inside Supabase (API gateway vs PostgREST), not the caller, so no client clock fix applies. Watchdog read retried once; persistent failure returns 503 and reports `/fail` to healthchecks |
 | Vercel function time limits on Hobby | Medium | Nothing long-running on Vercel: AI generation, parsing and syncing happen on Railway, Vercel only reads and enqueues; watchdog has a hard time budget under 30 s |
 | Claude API cost spike | Low | Spend limit in the Anthropic console, `ai_usage` logging, budget guard **(built)**, Batch API for summaries |
 | Claude vision misreads a slip | Medium | Every parsed slip goes to a confirm/edit screen before it's saved; parse confidence shown per leg |
@@ -493,7 +493,6 @@ Only three things happen before Chat 1. Every other account and key is set up in
 - [x] Git and the GitHub CLI: `git --version`; `gh auth status`
 - [x] pnpm, Railway CLI, Vercel CLI: `npm install -g pnpm @railway/cli vercel`
 - [x] Green baseline in the repo
-- [ ] Windows clock synced (`w32tm /resync` as Administrator) to reduce Supabase clock-skew errors
 
 **Cursor**
 

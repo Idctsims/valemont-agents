@@ -269,6 +269,15 @@ policies arrive in db/019+ before apps/web reads any table. db/019 (push_subscri
     Drill 2 watchdog failure stalled on it.
   - `vercel logs` filters to the **current git branch** by default. Pass
     `--no-branch` (and `--environment production`) to see production.
+- **Shell: native Windows PowerShell 5.1 only**, as the header of this file
+  says. No `&&`, `||`, ternaries or `??`.
+- **Merge PRs with a merge commit, never squash.** Each step's commit, and
+  the evidence in its message, stays visible in `main`'s history.
+- **Reports back to the planning chat state only what was actually verified.
+  Anything not checked is recorded as pending, never as passed.** That
+  includes anything taken from a template the owner pasted without filling
+  in: say it was not provided, and verify it independently or leave it
+  pending.
 - Fail loudly. A silent exception in a worker that runs at 3am is the single
   most likely way this project quietly dies.
 - **Run the suite before and after touching `core/` or an adapter.** From
