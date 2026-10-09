@@ -1,13 +1,13 @@
 "use client";
 
-import { DotsThreeCircle, House, Target, type IconProps } from "@phosphor-icons/react";
+import { Briefcase, DotsThreeCircle, House, Target, type IconProps } from "@phosphor-icons/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { SYSTEM_PAGES, builtGroups, isActive } from "@/lib/nav";
 
-// Phone navigation, in the thumb zone: Home, Goals and More, evenly spaced.
+// Phone navigation, in the thumb zone: Home, Goals, Ventures and More, evenly spaced.
 // Wags takes a centre slot when it arrives (Chat 2 Phase 4); until then there
 // is no gap held for it. More opens a sheet of every built page, from the
 // same registry as the desktop rail (src/lib/nav.ts).
@@ -15,6 +15,7 @@ import { SYSTEM_PAGES, builtGroups, isActive } from "@/lib/nav";
 const DOCK: { label: string; href: string; Icon: React.ComponentType<IconProps> }[] = [
   { label: "Home", href: "/", Icon: House },
   { label: "Goals", href: "/goals", Icon: Target },
+  { label: "Ventures", href: "/ventures", Icon: Briefcase },
 ];
 
 const item =

@@ -1,7 +1,6 @@
 "use client";
 
-import { CaretRight } from "@phosphor-icons/react";
-import { useId, useOptimistic, useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 
 import {
   completeGoal,
@@ -24,13 +23,15 @@ import {
   weekTally,
 } from "@/lib/goals/types";
 
-import { AreaChips, GoalRow } from "./goal-row";
+import { Fold } from "@/components/ui/fold";
+
+import { AreaChips, GoalRow, VentureChips, type VentureOption } from "./goal-row";
 import { ProgressStrip } from "./progress-strip";
 
 type Change =
   | { type: "add"; goal: Goal }
   | { type: "status"; id: string; status: GoalStatus }
-  | { type: "edit"; id: string; title: string; area: Area | null }
+  | { type: "edit"; id: string; title: string; area: Area | null; ventureId: string | null }
   | { type: "move"; id: string };
 
 function reduce(goals: Goal[], c: Change): Goal[] {
@@ -44,7 +45,7 @@ function reduce(goals: Goal[], c: Change): Goal[] {
           : g,
       );
     case "edit":
-      return goals.map((g) => (g.id === c.id ? { ...g, title: c.title, area: c.area } : g));
+      return goals.map((g) => (g.id === c.id ? { ...g, title: c.title, area: c.area, venture_id: c.ventureId } : g));
     case "move":
       return goals.map((g) => (g.id === c.id ? { ...g, moved: true } : g));
   }
@@ -80,9 +81,15 @@ export function GoalLedger({
   periodLabel,
   composer = "inline",
   header = "label",
+  ventures = [],
+  ventureNames = {},
 }: {
   goals: Goal[];
   horizon: Horizon;
+  /** Active ventures, offered as chips when a goal's area is business. */
+  ventures?: VentureOption[];
+  /** Every venture's name by id, for the tag line of a linked goal. */
+  ventureNames?: Record<string, string>;
   /** 'Oct 5 – 11', 'October 2026'. */
   periodLabel?: string;
   /** "label" where the page has another hero (Home's date); "hero" on /goals. */
@@ -125,6 +132,8 @@ export function GoalLedger({
       goal={g}
       overCap={overCapIds.has(g.id)}
       moveLabel={copy.move}
+      ventureName={g.venture_id ? ventureNames[g.venture_id] : undefined}
+      ventures={ventures}
       actions={
         g.pending
           ? undefined
@@ -136,8 +145,10 @@ export function GoalLedger({
               onDrop: () => run({ type: "status", id: g.id, status: "dropped" }, () => dropGoal(g.id)),
               onRestore: () => run({ type: "status", id: g.id, status: "open" }, () => uncompleteGoal(g.id)),
               onMove: copy.move ? () => run({ type: "move", id: g.id }, () => moveGoalToNext(g.id)) : undefined,
-              onEdit: (title, area) =>
-                run({ type: "edit", id: g.id, title, area }, () => editGoal(g.id, { title, area })),
+              onEdit: (title, area, ventureId) =>
+                run({ type: "edit", id: g.id, title, area, ventureId }, () =>
+                  editGoal(g.id, { title, area, ventureId }),
+                ),
             }
       }
     />
@@ -181,7 +192,8 @@ export function GoalLedger({
         horizon={horizon}
         placeholder={copy.placeholder}
         pinned={composer === "pinned"}
-        onAdd={(title, area) => {
+        ventures={ventures}
+        onAdd={(title, area, ventureId) => {
           const goal: Goal = {
             id: crypto.randomUUID(),
             title,
@@ -192,13 +204,14 @@ export function GoalLedger({
             status: "open",
             carried_from: null,
             carry_count: 0,
+            venture_id: ventureId,
             sort_order: 0,
             created_at: new Date().toISOString(),
             completed_at: null,
             moved: false,
             pending: true,
           };
-          run({ type: "add", goal }, () => createGoal({ title, horizon, area }));
+          run({ type: "add", goal }, () => createGoal({ title, horizon, area, ventureId }));
         }}
       />
     </section>
@@ -267,28 +280,10 @@ export function MovedOnFold({
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
-  const id = useId();
   return (
-    <div data-testid="moved-on" className="border-b border-border">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={id}
-        onClick={() => setOpen((o) => !o)}
-        className="tap flex w-full items-center justify-between font-mono text-xs text-text-muted transition-colors hover:text-text"
-      >
-        <span>Moved on · {count}</span>
-        {/* Closed points right, open points down: a 90 degree turn. Reduced
-            motion: tokens.css drops the transition, so it simply flips. */}
-        <CaretRight size={16} aria-hidden className={`transition-transform ${open ? "rotate-90" : ""}`} />
-      </button>
-      {open && (
-        <ul id={id} className="border-t border-border">
-          {children}
-        </ul>
-      )}
-    </div>
+    <Fold label="Moved on" count={count} defaultOpen={defaultOpen} testId="moved-on">
+      {children}
+    </Fold>
   );
 }
 
@@ -296,15 +291,18 @@ function Composer({
   horizon,
   placeholder,
   pinned,
+  ventures,
   onAdd,
 }: {
   horizon: Horizon;
   placeholder: string;
   pinned: boolean;
-  onAdd: (title: string, area: Area | null) => void;
+  ventures: VentureOption[];
+  onAdd: (title: string, area: Area | null, ventureId: string | null) => void;
 }) {
   const [value, setValue] = useState("");
   const [area, setArea] = useState<Area | null>(null);
+  const [venture, setVenture] = useState<string | null>(null);
   const typing = value.trim().length > 0;
 
   return (
@@ -316,7 +314,8 @@ function Composer({
         if (!title) return;
         setValue("");
         setArea(null);
-        onAdd(title, area);
+        setVenture(null);
+        onAdd(title, area, area === "business" ? venture : null);
       }}
       className={
         pinned
@@ -325,6 +324,7 @@ function Composer({
       }
     >
       {typing && <AreaChips value={area} onChange={setArea} />}
+      {typing && area === "business" && <VentureChips ventures={ventures} value={venture} onChange={setVenture} />}
       <div className={`flex items-center gap-2 border-b border-border focus-within:border-accent ${typing ? "mt-2" : ""}`}>
         <input
           name={`new-${horizon}-goal`}

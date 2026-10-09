@@ -3,6 +3,7 @@
 import { ArrowBendUpRight, Check, DotsThree } from "@phosphor-icons/react";
 import { useEffect, useId, useRef, useState } from "react";
 
+import { ChipFace } from "@/components/ui/chip";
 import { AREAS, type Area } from "@/lib/goals/period";
 import { rowState, type Goal } from "@/lib/goals/types";
 
@@ -20,8 +21,11 @@ export type GoalRowActions = {
   onDrop: () => void;
   onRestore: () => void;
   onMove?: () => void;
-  onEdit: (title: string, area: Area | null) => void;
+  onEdit: (title: string, area: Area | null, ventureId: string | null) => void;
 };
+
+/** An active venture a goal can be linked to (db/022). */
+export type VentureOption = { id: string; name: string };
 
 /** Must match --vm-swipe-commit (4.5rem) in tokens.css. */
 const COMMIT_PX = 72;
@@ -33,6 +37,8 @@ export function GoalRow({
   actions,
   moveLabel,
   overCap = false,
+  ventureName,
+  ventures = [],
 }: {
   goal: Goal;
   actions?: GoalRowActions;
@@ -40,6 +46,10 @@ export function GoalRow({
   moveLabel?: string;
   /** This row is past the week's soft cap of ten. */
   overCap?: boolean;
+  /** The linked venture's name, shown in the tag line. */
+  ventureName?: string;
+  /** Active ventures, offered when editing a business goal. */
+  ventures?: VentureOption[];
 }) {
   const state = rowState(goal);
   const live = !!actions && state !== "moved";
@@ -173,10 +183,11 @@ export function GoalRow({
           {editing && actions ? (
             <EditForm
               goal={goal}
+              ventures={ventures}
               onCancel={() => setEditing(false)}
-              onSave={(title, area) => {
+              onSave={(title, area, ventureId) => {
                 setEditing(false);
-                actions.onEdit(title, area);
+                actions.onEdit(title, area, ventureId);
               }}
             />
           ) : (
@@ -184,7 +195,7 @@ export function GoalRow({
               <p className="text-base text-text text-pretty">
                 <span className={`strike-draw ${struck ? "strike-draw-on" : ""}`}>{goal.title}</span>
               </p>
-              <Meta goal={goal} overCap={overCap} />
+              <Meta goal={goal} overCap={overCap} ventureName={ventureName} />
             </>
           )}
         </div>
@@ -242,10 +253,11 @@ function Ring({ goal, onToggle }: { goal: Goal; onToggle?: () => void }) {
   );
 }
 
-function Meta({ goal, overCap }: { goal: Goal; overCap: boolean }) {
+function Meta({ goal, overCap, ventureName }: { goal: Goal; overCap: boolean; ventureName?: string }) {
   const state = rowState(goal);
   const bits: React.ReactNode[] = [];
   if (goal.area) bits.push(<span key="area">{goal.area}</span>);
+  if (ventureName) bits.push(<span key="venture" data-testid="goal-venture">{ventureName}</span>);
   if (goal.carry_count > 0) {
     bits.push(
       <span key="carry" title={`Carried over ${goal.carry_count} time${goal.carry_count === 1 ? "" : "s"}`}>
@@ -264,15 +276,18 @@ function Meta({ goal, overCap }: { goal: Goal; overCap: boolean }) {
 
 function EditForm({
   goal,
+  ventures,
   onSave,
   onCancel,
 }: {
   goal: Goal;
-  onSave: (title: string, area: Area | null) => void;
+  ventures: VentureOption[];
+  onSave: (title: string, area: Area | null, ventureId: string | null) => void;
   onCancel: () => void;
 }) {
   const [title, setTitle] = useState(goal.title);
   const [area, setArea] = useState<Area | null>(goal.area);
+  const [venture, setVenture] = useState<string | null>(goal.venture_id);
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => input.current?.focus(), []);
 
@@ -280,7 +295,7 @@ function EditForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (title.trim()) onSave(title, area);
+        if (title.trim()) onSave(title, area, area === "business" ? venture : null);
       }}
       onKeyDown={(e) => {
         if (e.key === "Escape") onCancel();
@@ -295,6 +310,7 @@ function EditForm({
         className="w-full border-b border-accent bg-transparent pb-1 text-base text-text outline-none"
       />
       <AreaChips value={area} onChange={setArea} />
+      {area === "business" && <VentureChips ventures={ventures} value={venture} onChange={setVenture} />}
       <div className="mt-2 flex gap-2">
         <button type="submit" className="tap rounded-pill px-3 text-sm font-medium text-accent hover:bg-surface-2">
           Save
@@ -307,22 +323,48 @@ function EditForm({
   );
 }
 
+/** Active ventures as chips, under the area chips when the area is business. */
+export function VentureChips({
+  ventures,
+  value,
+  onChange,
+}: {
+  ventures: VentureOption[];
+  value: string | null;
+  onChange: (id: string | null) => void;
+}) {
+  if (ventures.length === 0) return null;
+  return (
+    <div role="group" aria-label="Venture" className="-mx-1 mt-1 flex flex-wrap">
+      {ventures.map((v) => (
+        <button
+          key={v.id}
+          type="button"
+          aria-pressed={value === v.id}
+          onClick={() => onChange(value === v.id ? null : v.id)}
+          className="tap group inline-flex items-center justify-center px-1"
+        >
+          <ChipFace selected={value === v.id}>{v.name}</ChipFace>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function AreaChips({ value, onChange }: { value: Area | null; onChange: (a: Area | null) => void }) {
   return (
-    <div role="group" aria-label="Area" className="mt-2 flex flex-wrap gap-1.5">
+    <div role="group" aria-label="Area" className="-mx-1 mt-1 flex flex-wrap">
       {AREAS.map((a) => (
         <button
           key={a}
           type="button"
           aria-pressed={value === a}
           onClick={() => onChange(value === a ? null : a)}
-          className={`inline-flex h-8 items-center rounded-pill border px-3 font-mono text-xs transition-colors ${
-            value === a
-              ? "border-accent bg-accent text-on-accent"
-              : "border-border text-text-muted hover:bg-surface-2 hover:text-text"
-          }`}
+          className="tap group inline-flex items-center justify-center px-1"
         >
-          {a}
+          <ChipFace selected={value === a} mono>
+            {a}
+          </ChipFace>
         </button>
       ))}
     </div>

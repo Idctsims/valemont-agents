@@ -23,7 +23,16 @@ export async function signIn(page: Page, next = "/goals") {
 }
 
 export async function setTheme(page: Page, theme: "night" | "day") {
-  await page.context().addCookies([{ name: "vm-theme", value: theme, url: page.url() }]);
+  // Clear first, then set at path "/" on the host. Added with `url:` from a
+  // nested page, the cookie took that page's directory as its path
+  // (/ventures), the earlier "/" one survived, the browser sent both, and
+  // the server read "night" (2026-10-09 trace). The app's own toggle always
+  // writes path=/.
+  const context = page.context();
+  await context.clearCookies({ name: "vm-theme" });
+  await context.addCookies([
+    { name: "vm-theme", value: theme, domain: new URL(page.url()).hostname, path: "/" },
+  ]);
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
 }
@@ -38,20 +47,52 @@ function publicEnv(): { url: string; key: string } {
 /** Seeded goals read like real ones on screen; this note is what marks them. */
 export const SEED_NOTE = "e2e-seed";
 
-/** Run `fn` with a supabase-js client signed in as the owner (RLS applies). */
-async function asOwner<T>(fn: (supabase: SupabaseClient) => Promise<T>): Promise<T> {
-  const { url, key } = publicEnv();
-  const supabase = createClient(url, key, { auth: { persistSession: false } });
-  const { error } = await supabase.auth.signInWithPassword({ email: email!, password: password! });
-  if (error) throw new Error(`owner sign-in failed: ${error.message}`);
-  try {
-    return await fn(supabase);
-  } finally {
-    // scope 'local' ONLY. supabase-js defaults to 'global', which revokes
-    // every session the owner has: the other test browsers still running,
-    // and the owner's real phone. That failed the phone project on 2026-10-09.
-    await supabase.auth.signOut({ scope: "local" });
+/**
+ * Supabase's API gateway can stamp a fresh token a moment ahead of
+ * PostgREST's clock, which then refuses it: "JWT issued at future"
+ * (PGRST303, CLAUDE.md; the watchdog route retries for it too). It hit the
+ * first query after sign-in on 2026-10-09. Probe with a harmless read until
+ * the token is accepted, for up to 5 s, BEFORE any real query or write, so
+ * nothing that writes is ever retried.
+ */
+async function untilTokenAccepted(supabase: SupabaseClient) {
+  for (let i = 0; i < 10; i++) {
+    const { error } = await supabase.from("app_settings").select("timezone").limit(1);
+    if (!error) return;
+    if (!/issued at future/i.test(error.message)) throw new Error(`owner session check failed: ${error.message}`);
+    await new Promise((r) => setTimeout(r, 500));
   }
+  throw new Error("owner session: still 'JWT issued at future' after 5 s (Supabase clock skew)");
+}
+
+/**
+ * One signed-in client per worker process, made on first use and reused.
+ * Signing in on every call (snapshot, create, delete...) plus each test's
+ * browser sign-in tripped Supabase Auth's "Request rate limit reached" on a
+ * 28-test run (2026-10-09). The session is in memory only and dies with the
+ * worker; it is never signed out, because supabase-js's default sign-out is
+ * 'global' and would revoke every session the owner has, phone included.
+ */
+let ownerClient: Promise<SupabaseClient> | null = null;
+
+function ownerSession(): Promise<SupabaseClient> {
+  ownerClient ??= (async () => {
+    const { url, key } = publicEnv();
+    const supabase = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: true } });
+    const { error } = await supabase.auth.signInWithPassword({ email: email!, password: password! });
+    if (error) throw new Error(`owner sign-in failed: ${error.message}`);
+    await untilTokenAccepted(supabase);
+    return supabase;
+  })().catch((e) => {
+    ownerClient = null; // a failed sign-in is retried on next use, not cached
+    throw e;
+  });
+  return ownerClient;
+}
+
+/** Run `fn` with the worker's client signed in as the owner (RLS applies). */
+async function asOwner<T>(fn: (supabase: SupabaseClient) => Promise<T>): Promise<T> {
+  return fn(await ownerSession());
 }
 
 /**
@@ -208,5 +249,78 @@ export async function seedScreens(
         created.push(id);
       }
     }
+  });
+}
+
+// ---------------------------------------------------------------- ventures
+
+/**
+ * A temporary venture for one spec run: "e2e <run id> …", slug
+ * "e2e-<run id>-<tag>". Created and deleted by id; deleting it cascades its
+ * workstreams, dates and log (db/022 permits exactly that cascade).
+ */
+export async function createTempVenture(
+  tag: string,
+  fields: Record<string, unknown> = {},
+): Promise<{ id: string; slug: string; name: string }> {
+  const slug = `e2e-${RUN_ID}-${tag}`.toLowerCase();
+  const name = `${runPrefix()}${tag}`;
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase
+      .from("ventures")
+      .insert({ name, slug, sort_order: 9999, ...fields })
+      .select("id")
+      .single();
+    if (error) throw new Error(`temp venture failed: ${error.message}`);
+    return { id: data.id as string, slug, name };
+  });
+}
+
+/** Add an open date to a venture, due on `dueOn` (YYYY-MM-DD). */
+export async function addTempDate(ventureId: string, label: string, dueOn: string, workstreamId?: string) {
+  await asOwner(async (supabase) => {
+    const { error } = await supabase
+      .from("venture_dates")
+      .insert({ venture_id: ventureId, label, due_on: dueOn, workstream_id: workstreamId ?? null });
+    if (error) throw new Error(`temp date failed: ${error.message}`);
+  });
+}
+
+/** Delete exactly these ventures (and, by cascade, everything under them). */
+export async function deleteVenturesById(ids: string[]) {
+  if (!ids.length) return;
+  await asOwner(async (supabase) => {
+    const { error } = await supabase.from("ventures").delete().in("id", ids);
+    if (error) throw new Error(`venture cleanup failed: ${error.message}`);
+  });
+}
+
+/**
+ * The owner's real ventures and everything under them, as one string per
+ * row keyed by table and id. Temporary "e2e …" ventures are left out. Taken
+ * before and after a spec: every entry must be identical afterwards.
+ */
+export async function snapshotVentures(): Promise<Map<string, string>> {
+  return asOwner(async (supabase) => {
+    const [v, w, d, l] = await Promise.all([
+      supabase.from("ventures").select("*"),
+      supabase.from("venture_workstreams").select("*"),
+      supabase.from("venture_dates").select("*"),
+      supabase.from("venture_log").select("*"),
+    ]);
+    for (const r of [v, w, d, l]) if (r.error) throw new Error(`venture snapshot failed: ${r.error.message}`);
+    const real = new Set(
+      v.data!.filter((x) => !String(x.name).startsWith(E2E_PREFIX)).map((x) => x.id as string),
+    );
+    const out = new Map<string, string>();
+    for (const x of v.data!) if (real.has(x.id)) out.set(`ventures:${x.id}`, JSON.stringify(x));
+    for (const [table, rows] of [
+      ["venture_workstreams", w.data!],
+      ["venture_dates", d.data!],
+      ["venture_log", l.data!],
+    ] as const) {
+      for (const x of rows) if (real.has(x.venture_id)) out.set(`${table}:${x.id}`, JSON.stringify(x));
+    }
+    return out;
   });
 }

@@ -46,6 +46,8 @@ export default async function HealthPage() {
   const { data, error } = await supabase
     .from("job_health")
     .select("job, expected_interval_s, last_ok_at, last_error, consecutive_failures, alert_state, updated_at")
+    // Retired jobs (db/023) keep their row as history but are off the board.
+    .is("retired_at", null)
     .order("job");
   const rows = (data ?? []) as Row[];
   // Display only: the worker judges health on the database clock.

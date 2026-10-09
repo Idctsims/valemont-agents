@@ -39,6 +39,7 @@ function goal(over: Partial<Goal>): Goal {
     status: "open",
     carried_from: null,
     carry_count: 0,
+    venture_id: null,
     sort_order: 0,
     created_at: "2026-10-05T12:00:00Z",
     completed_at: null,
@@ -172,7 +173,7 @@ test.describe("navigation registry", () => {
     );
   });
 
-  test("only built pages render: today, Home and Goals", () => {
+  test("only built pages render: today, Home, Goals and Ventures HQ", () => {
     expect(builtGroups()).toEqual([
       {
         key: "command",
@@ -180,6 +181,7 @@ test.describe("navigation registry", () => {
         pages: [
           { label: "Home", href: "/" },
           { label: "Goals", href: "/goals" },
+          { label: "Ventures HQ", href: "/ventures" },
         ],
       },
     ]);

@@ -13,6 +13,8 @@ export type Goal = {
   carried_from: string | null;
   carry_count: number;
   sort_order: number;
+  /** The venture this goal serves (db/022), if any. */
+  venture_id: string | null;
   created_at: string;
   completed_at: string | null;
   /** Carried on to a later period (a child row exists). Read-only here. */
@@ -22,7 +24,7 @@ export type Goal = {
 };
 
 export const GOAL_COLUMNS =
-  "id, title, notes, horizon, area, period_start, status, carried_from, carry_count, sort_order, created_at, completed_at";
+  "id, title, notes, horizon, area, period_start, status, carried_from, carry_count, sort_order, created_at, completed_at, venture_id";
 
 /** The state a row is drawn in. */
 export type RowState = "open" | "done" | "dropped" | "moved";
