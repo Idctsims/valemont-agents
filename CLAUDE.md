@@ -346,7 +346,9 @@ each in phases with a "done when" checklist). It supersedes the former steps
   from `workers/`) ✓, except Step 8 (24 h Railway usage check)
 - **Chat 1, Phase 2** (Next.js app, owner-only auth, design tokens, Vercel) ✓
 - **Chat 1, Phase 3** (PWA shell and push) ✓ (phone-verified 2026-10-08)
-- **Chat 1, Phase 4** (db/020 shared tables, scheduler, `job_health`, push alerts) ← **you are here** (Drills 1 and 2 passed; canary retirement and the Step 8 usage report remain)
+- **Chat 1, Phase 4** (db/020 shared tables, scheduler, `job_health`, push alerts) ✓ (Drills 1 and 2 passed; canary retired 2026-10-09; the Step 8 usage report is pending the owner's numbers)
+- **Chat 1 complete.**
+- **Chat 2, Phase 1** (Goals, plus the app shell navigation registry) ← **you are here**
 
 Reason for deploying at step 4 and not at the end: "works locally, dies
 silently at 3am in production" is the classic failure here. Hit it while
@@ -848,7 +850,17 @@ absent row as "I never looked."
 
 ---
 
-## Current State (2026-10-08)
+## Current State (2026-10-09)
+
+- **Owner decisions, 2026-10-09:**
+  - AI budget: **$20/month**. `AI_MONTHLY_BUDGET_USD` is set to it in Chat 2 Phase 4 (the code default is still $10).
+  - Ventures **NCLEXCompass** and **Senior Care Systems** are dropped. Ventures HQ seeds the remaining seven.
+  - Morning Brief push: **09:45 America/Chicago**.
+  - Calendar (Google Calendar highlights) is **deferred**.
+- **⏰ Reminders:**
+  - **Tue 2026-10-13:** NFL props archive, week 5; also weeks 1–4, once (see RECURRING below).
+  - **2026-10-16:** Railway decision (Free plan vs Oracle Cloud), once the Step 8 usage numbers are in.
+  - **~2026-10-18:** the Railway trial ends. The worker stops, the watchdog pushes "Worker down", and it needs a **manual redeploy**.
 
 - **Migrations:** **`db/001`–`db/012` and `db/014`–`db/018` applied.** 007–012 verified live by `workers/scripts/verify_migrations_007_012.sql` (20/20). 014–018 were pasted 2026-10-08 and verified by read-only SELECTs. `migration_log` (UTC): 015 04:41:03, 016 04:41:16, 017 04:41:30, 018 04:50:35. 014 predates the log; its tables and triggers are present.
   - **`db/013` (enable the production roster) stays unpasted.** It is go-live and out of scope until the owner says so.
@@ -919,7 +931,8 @@ absent row as "I never looked."
     - The earlier `209f58a8` (20:12 UTC, REMOVED) was most likely the redeploy from adding the VAPID variables.
     - The canary kept its cadence across the switch: every gap 58.3–60.0 s between tick runs (max 69.6 s since 19:30 UTC), 0 error runs in 2 h.
     - The new instance's worker→DB clock offset is ~33 ms (it was ~90 ms on the previous one).
-  - It stays on until the 2026-10-16 Railway decision. It is retired in Chat 1 Phase 4, when the scheduler and `job_health` heartbeats replace it.
+  - **Canary retired 2026-10-09.** The owner removed `CANARY` on Railway. Verified by `db_inspect`: the last `_fake` run is 2026-10-09 04:42:36 UTC, with none in the 12 h to 16:54 UTC, while `heartbeat`, `health_monitor` and `job_queue` stayed green. The system jobs and the external watchdog now carry the liveness signal.
+  - **Step 8 usage report: PENDING** the owner's Railway RAM/CPU numbers with the canary gone, for the 2026-10-16 decision.
 - **Deploy: owner GO (2026-10-01); `prod-roster` merged to `main`.** Go-live (out of scope until the owner says so):
   1. paste `db/013`;
   2. record an `nfl_ml` fit (production has **no** `model_versions` row for it, so it stands down every window until one exists);
@@ -1039,6 +1052,7 @@ absent row as "I never looked."
     - Every cron call returned 200, every run pinged healthchecks with no errors, and there were no false alerts from the redeploy.
     - The first run, at 03:00 UTC, failed: two 500s from the Supabase clock skew. That's what PR #7 fixed.
 - **Next:**
-  - **Chat 1 Phase 4, remaining:** retire the canary (unset `CANARY`), then the Step 8 usage report, Railway RAM/CPU with the canary gone, for the 2026-10-16 decision.
+  - **Chat 2 Phase 1:** Goals (db/021), the rollover jobs, and the navigation registry.
+  - **Carried from Chat 1:** the Step 8 usage report (owner's numbers), for the 2026-10-16 decision.
   - Still pending from before: owner review of the crypto track, owner go-live, and the weekly archive.
   - Any new idea needs a new pre-registration and forward-only validation.
