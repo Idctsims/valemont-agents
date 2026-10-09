@@ -210,3 +210,76 @@ export async function seedScreens(
     }
   });
 }
+
+// ---------------------------------------------------------------- ventures
+
+/**
+ * A temporary venture for one spec run: "e2e <run id> …", slug
+ * "e2e-<run id>-<tag>". Created and deleted by id; deleting it cascades its
+ * workstreams, dates and log (db/022 permits exactly that cascade).
+ */
+export async function createTempVenture(
+  tag: string,
+  fields: Record<string, unknown> = {},
+): Promise<{ id: string; slug: string; name: string }> {
+  const slug = `e2e-${RUN_ID}-${tag}`.toLowerCase();
+  const name = `${runPrefix()}${tag}`;
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase
+      .from("ventures")
+      .insert({ name, slug, sort_order: 9999, ...fields })
+      .select("id")
+      .single();
+    if (error) throw new Error(`temp venture failed: ${error.message}`);
+    return { id: data.id as string, slug, name };
+  });
+}
+
+/** Add an open date to a venture, due on `dueOn` (YYYY-MM-DD). */
+export async function addTempDate(ventureId: string, label: string, dueOn: string, workstreamId?: string) {
+  await asOwner(async (supabase) => {
+    const { error } = await supabase
+      .from("venture_dates")
+      .insert({ venture_id: ventureId, label, due_on: dueOn, workstream_id: workstreamId ?? null });
+    if (error) throw new Error(`temp date failed: ${error.message}`);
+  });
+}
+
+/** Delete exactly these ventures (and, by cascade, everything under them). */
+export async function deleteVenturesById(ids: string[]) {
+  if (!ids.length) return;
+  await asOwner(async (supabase) => {
+    const { error } = await supabase.from("ventures").delete().in("id", ids);
+    if (error) throw new Error(`venture cleanup failed: ${error.message}`);
+  });
+}
+
+/**
+ * The owner's real ventures and everything under them, as one string per
+ * row keyed by table and id. Temporary "e2e …" ventures are left out. Taken
+ * before and after a spec: every entry must be identical afterwards.
+ */
+export async function snapshotVentures(): Promise<Map<string, string>> {
+  return asOwner(async (supabase) => {
+    const [v, w, d, l] = await Promise.all([
+      supabase.from("ventures").select("*"),
+      supabase.from("venture_workstreams").select("*"),
+      supabase.from("venture_dates").select("*"),
+      supabase.from("venture_log").select("*"),
+    ]);
+    for (const r of [v, w, d, l]) if (r.error) throw new Error(`venture snapshot failed: ${r.error.message}`);
+    const real = new Set(
+      v.data!.filter((x) => !String(x.name).startsWith(E2E_PREFIX)).map((x) => x.id as string),
+    );
+    const out = new Map<string, string>();
+    for (const x of v.data!) if (real.has(x.id)) out.set(`ventures:${x.id}`, JSON.stringify(x));
+    for (const [table, rows] of [
+      ["venture_workstreams", w.data!],
+      ["venture_dates", d.data!],
+      ["venture_log", l.data!],
+    ] as const) {
+      for (const x of rows) if (real.has(x.venture_id)) out.set(`${table}:${x.id}`, JSON.stringify(x));
+    }
+    return out;
+  });
+}

@@ -35,13 +35,27 @@ async function owner() {
   return createClient();
 }
 
-export async function createGoal(input: { title: string; horizon: Horizon; area: Area | null }) {
+/** A venture link: only alongside the business area (db/022's goals.venture_id). */
+function cleanVenture(ventureId: unknown, area: Area | null): string | null {
+  if (ventureId === null || ventureId === undefined || ventureId === "") return null;
+  if (area !== "business") return null;
+  return cleanId(ventureId);
+}
+
+export async function createGoal(input: {
+  title: string;
+  horizon: Horizon;
+  area: Area | null;
+  ventureId?: string | null;
+}) {
   const supabase = await owner();
   if (!HORIZONS.includes(input.horizon)) throw new Error("Unknown horizon.");
+  const area = cleanArea(input.area);
   const { error } = await supabase.from("goals").insert({
     title: cleanTitle(input.title),
     horizon: input.horizon,
-    area: cleanArea(input.area),
+    area,
+    venture_id: cleanVenture(input.ventureId, area),
     // The current period in the owner's timezone, decided here, never by
     // the phone's clock.
     period_start: periodFor(input.horizon, localToday()),
@@ -77,11 +91,15 @@ export async function dropGoal(id: string) {
   await setStatus(id, "dropped");
 }
 
-export async function editGoal(id: string, input: { title: string; area: Area | null }) {
+export async function editGoal(id: string, input: { title: string; area: Area | null; ventureId?: string | null }) {
   const supabase = await owner();
+  const area = cleanArea(input.area);
   const { error, count } = await supabase
     .from("goals")
-    .update({ title: cleanTitle(input.title), area: cleanArea(input.area) }, { count: "exact" })
+    .update(
+      { title: cleanTitle(input.title), area, venture_id: cleanVenture(input.ventureId, area) },
+      { count: "exact" },
+    )
     .eq("id", cleanId(id));
   if (error) throw new Error(`Couldn't save the goal: ${error.message}`);
   if (count === 0) throw new Error("That goal no longer exists.");

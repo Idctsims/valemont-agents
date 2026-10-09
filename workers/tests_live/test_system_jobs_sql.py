@@ -58,6 +58,31 @@ class SystemJobsSql(unittest.TestCase):
 
     # -- job_health ------------------------------------------------------------
 
+    def test_a_retired_job_is_off_the_monitors_board_and_kept(self) -> None:
+        if not _sql("SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                    "WHERE table_name = 'job_health' AND column_name = 'retired_at')")[0][0]:
+            self.skipTest("db/023 not pasted")
+        job = "tests_live_retired"
+        ledger.job_register(job, 60)
+        ledger.job_failed(job, "RuntimeError: old drill")
+        _sql("UPDATE job_health SET retired_at = now() WHERE job = %s", job)
+
+        self.assertNotIn(job, [r.job for r in ledger.job_health_rows()], "retired, so not watched")
+        self.assertEqual(_sql("SELECT consecutive_failures FROM job_health WHERE job = %s", job), [(1,)],
+                         "retired, not deleted: its history stays")
+
+        ledger.job_register(job, 60)  # scheduled again
+        self.assertEqual(self._health(job).consecutive_failures, 1, "back on the board, state intact")
+
+    def test_health_drill_is_retired(self) -> None:
+        if not _sql("SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                    "WHERE table_name = 'job_health' AND column_name = 'retired_at')")[0][0]:
+            self.skipTest("db/023 not pasted")
+        rows = _sql("SELECT retired_at IS NOT NULL FROM job_health WHERE job = 'health_drill'")
+        if rows:
+            self.assertEqual(rows, [(True,)])
+            self.assertNotIn("health_drill", [r.job for r in ledger.job_health_rows()])
+
     def test_the_lifecycle_updates_one_row_in_place(self) -> None:
         job = "tests_live_probe"
         ledger.job_register(job, 60)

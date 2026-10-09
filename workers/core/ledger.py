@@ -1150,12 +1150,14 @@ class JobHealth:
 
 
 def job_register(job: str, expected_interval_s: int) -> None:
-    """Create the job's row, or update its interval. Never resets its state."""
+    """Create the job's row, or update its interval. Never resets its state.
+    A retired job (db/023) that is scheduled again is un-retired: it is live."""
     with _pool().connection() as conn:
         conn.execute(
             """
             INSERT INTO job_health (job, expected_interval_s) VALUES (%s, %s)
-            ON CONFLICT (job) DO UPDATE SET expected_interval_s = EXCLUDED.expected_interval_s
+            ON CONFLICT (job) DO UPDATE SET expected_interval_s = EXCLUDED.expected_interval_s,
+                                            retired_at = NULL
             """,
             (job, expected_interval_s),
         )
@@ -1204,7 +1206,10 @@ def job_health_rows() -> list[JobHealth]:
                    alert_state,
                    now() - coalesce(last_ok_at, updated_at)
                        > make_interval(secs => 2 * expected_interval_s) AS stale
-              FROM job_health ORDER BY job
+              FROM job_health
+             -- Retired jobs (db/023) are history, not health: kept, not watched.
+             WHERE retired_at IS NULL
+             ORDER BY job
             """
         ).fetchall()
     return [JobHealth(*r) for r in rows]

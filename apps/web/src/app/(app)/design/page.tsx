@@ -6,6 +6,10 @@ import { GoalRow } from "@/components/goals/goal-row";
 import { ProgressStrip } from "@/components/goals/progress-strip";
 import { BetLegRow, type Leg } from "@/components/ui/bet-leg-row";
 import { countLabel, type Goal, type Segment } from "@/lib/goals/types";
+import type { Venture, VentureDate } from "@/lib/ventures/types";
+import { VentureRow } from "@/components/ventures/venture-row";
+
+import { LogSamples, TodaySamples, WorkstreamSamples } from "./venture-samples";
 import { PaperBadge, StatusChip } from "@/components/ui/badges";
 import { button, chip } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -105,6 +109,7 @@ function goal(over: Partial<Goal> & { id: string; title: string }): Goal {
     status: "open",
     carried_from: null,
     carry_count: 0,
+    venture_id: null,
     sort_order: 0,
     created_at: "2026-10-05T12:00:00Z",
     completed_at: null,
@@ -126,6 +131,41 @@ const GOAL_STATES: { state: string; goal: Goal; overCap?: boolean }[] = [
   { state: "Dropped", goal: goal({ id: "g4", title: "Reorganise the garage", area: "personal", status: "dropped" }) },
   { state: "Moved on", goal: goal({ id: "g5", title: "Call Marcus about the lease", area: "people", moved: true }) },
   { state: "Over cap", goal: goal({ id: "g6", title: "An eleventh thing", area: "business" }), overCap: true },
+];
+
+function venture(over: Partial<Venture> & { id: string; name: string; slug: string }): Venture {
+  return {
+    tagline: null,
+    role: null,
+    stage: null,
+    next_action: null,
+    blockers: null,
+    notes: null,
+    sort_order: 0,
+    archived_at: null,
+    ...over,
+  };
+}
+
+const DESIGN_TODAY = "2026-10-09";
+const VENTURE_STATES: { state: string; venture: Venture; dates: VentureDate[] }[] = [
+  {
+    state: "Set up, with a date",
+    venture: venture({
+      id: "v1", name: "Sail Beach Club", slug: "sail-beach-club", stage: "pre_launch",
+      next_action: "Build 50 LinkedIn connections this week",
+    }),
+    dates: [{ id: "vd1", venture_id: "v1", workstream_id: null, label: "DEP application", due_on: "2026-10-14", done_at: null }],
+  },
+  {
+    state: "Blocked, date late",
+    venture: venture({
+      id: "v2", name: "Clipd", slug: "clipd", stage: "building", next_action: "Send revised term sheet",
+      blockers: "Waiting on the lead investor's counsel",
+    }),
+    dates: [{ id: "vd2", venture_id: "v2", workstream_id: null, label: "Term sheet", due_on: "2026-10-07", done_at: null }],
+  },
+  { state: "Not set up", venture: venture({ id: "v3", name: "Excursion", slug: "excursion" }), dates: [] },
 ];
 
 const FOLDED: Goal[] = GOAL_STATES.filter((s) => s.state === "Dropped" || s.state === "Moved on").map(
@@ -297,6 +337,35 @@ function ThemePanel({ theme }: { theme: Theme }) {
               <GoalRow key={g.id} goal={g} />
             ))}
           </MovedOnFold>
+        </div>
+
+        <div>
+          <SubHead>Venture rows</SubHead>
+          <ul className="border-t border-border" data-testid="design-venture-rows">
+            {VENTURE_STATES.map(({ state, venture: v, dates }) => (
+              <VentureRow key={state} venture={v} openDates={dates} today={DESIGN_TODAY} />
+            ))}
+          </ul>
+          <p className="mt-3 text-sm text-text-muted">
+            Set up with its nearest date, blocked with a late date, and a name-only venture.
+          </p>
+        </div>
+
+        <div>
+          <SubHead>Workstreams</SubHead>
+          <WorkstreamSamples />
+          <p className="mt-3 text-sm text-text-muted">Tap a row for its next action, notes and dates. Parked ones fold.</p>
+        </div>
+
+        <div>
+          <SubHead>Venture log</SubHead>
+          <LogSamples />
+          <p className="mt-3 text-sm text-text-muted">Auto entries (written by the database) are muted; decisions and milestones are marked.</p>
+        </div>
+
+        <div>
+          <SubHead>Today</SubHead>
+          <TodaySamples />
         </div>
 
         <div>

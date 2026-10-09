@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 
 import { GoalLedger } from "@/components/goals/goal-ledger";
+import { TodayModule } from "@/components/ventures/today";
 import { requireOwner } from "@/lib/auth";
 import { ensureRollover, weekGoals } from "@/lib/goals/data";
 import { localToday, longDate, weekRange, weekStamp, weekStart } from "@/lib/goals/period";
 import { createClient } from "@/lib/supabase/server";
+import { ventureLinks, ventureToday } from "@/lib/ventures/data";
 
 export const metadata: Metadata = { title: "Home" };
 
@@ -23,7 +25,11 @@ export default async function Home() {
   const supabase = await createClient();
   const today = localToday();
   await ensureRollover(supabase);
-  const goals = await weekGoals(supabase, today);
+  const [goals, todayRows, links] = await Promise.all([
+    weekGoals(supabase, today),
+    ventureToday(supabase),
+    ventureLinks(supabase),
+  ]);
 
   return (
     <>
@@ -35,7 +41,15 @@ export default async function Home() {
       <MorningBriefSlot />
 
       <div className="lg:max-w-3xl">
-        <GoalLedger goals={goals} horizon="weekly" periodLabel={weekRange(weekStart(today))} />
+        {/* Venture dates due today or earlier; renders nothing when none are. */}
+        <TodayModule rows={todayRows} />
+        <GoalLedger
+          goals={goals}
+          horizon="weekly"
+          periodLabel={weekRange(weekStart(today))}
+          ventures={links.options}
+          ventureNames={links.names}
+        />
       </div>
 
       <FeedSlot />

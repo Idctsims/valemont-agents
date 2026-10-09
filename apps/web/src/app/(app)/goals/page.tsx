@@ -9,6 +9,7 @@ import { ensureRollover, longTermGoals, monthGoals, weekGoals, weekHistory, type
 import { localToday, weekStamp, monthName, monthStart, weekRange, weekStart } from "@/lib/goals/period";
 import { ordered, segments } from "@/lib/goals/types";
 import { createClient } from "@/lib/supabase/server";
+import { ventureLinks } from "@/lib/ventures/data";
 
 export const metadata: Metadata = { title: "Goals" };
 
@@ -30,6 +31,8 @@ export default async function GoalsPage({ searchParams }: PageProps<"/goals">) {
   const supabase = await createClient();
   const today = localToday();
   await ensureRollover(supabase);
+  const links = await ventureLinks(supabase);
+  const linkProps = { ventures: links.options, ventureNames: links.names };
 
   return (
     <div className="pb-composer lg:max-w-3xl lg:pb-0">
@@ -69,6 +72,7 @@ export default async function GoalsPage({ searchParams }: PageProps<"/goals">) {
           periodLabel={weekRange(weekStart(today))}
           composer="pinned"
           header="hero"
+          {...linkProps}
         />
       )}
       {view === "month" && (
@@ -78,11 +82,17 @@ export default async function GoalsPage({ searchParams }: PageProps<"/goals">) {
           periodLabel={monthName(monthStart(today))}
           composer="pinned"
           header="hero"
+          {...linkProps}
         />
       )}
       {view === "long-term" && (
-        <GoalLedger goals={await longTermGoals(supabase)} horizon="long_term" composer="pinned"
-          header="hero" />
+        <GoalLedger
+          goals={await longTermGoals(supabase)}
+          horizon="long_term"
+          composer="pinned"
+          header="hero"
+          {...linkProps}
+        />
       )}
       {view === "history" && <History weeks={await weekHistory(supabase, today)} />}
     </div>

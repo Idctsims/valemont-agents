@@ -34,7 +34,7 @@ export const NAV: NavGroup[] = [
     pillars: [
       { n: 1, name: "Home", built: true, href: "/", pages: [{ label: "Goals", href: "/goals" }] },
       { n: 2, name: "Wags", built: false, href: "/wags" },
-      { n: 3, name: "Ventures HQ", built: false, href: "/ventures" },
+      { n: 3, name: "Ventures HQ", built: true, href: "/ventures" },
       { n: 4, name: "Capital Tracker", built: false, href: "/capital" },
     ],
   },

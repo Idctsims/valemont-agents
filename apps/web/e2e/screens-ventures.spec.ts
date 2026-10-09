@@ -1,0 +1,77 @@
+import { expect, test, type Page } from "@playwright/test";
+
+import { localToday } from "../src/lib/goals/period";
+
+import { addTempDate, createTempVenture, deleteVenturesById, hasOwner, setTheme, signIn, snapshotVentures } from "./support/owner";
+
+// Screenshot review for Chat 2 Phase 2: /ventures, /ventures/sail-beach-club
+// (first workstream expanded, Parked fold open) and Home with TODAY showing,
+// in both themes. Phone: viewport shots at 390x844, at load and scrolled to
+// the bottom. Desktop: 1440 full page. Written to e2e/screenshots/chat2-p2/
+// (gitignored).
+//
+// For TODAY it creates one temporary venture ("e2e <run id> …") with a date
+// due today, by id, and deletes it by id afterwards. The owner's real
+// ventures are only read, and are checked unchanged at the end.
+//   pnpm test:e2e screens --workers=1
+
+test.skip(!hasOwner, "set E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD to run");
+
+const DIR = "e2e/screenshots/chat2-p2";
+
+async function shot(page: Page, name: string, width: string, theme: string, fullPage: boolean) {
+  await page.screenshot({ path: `${DIR}/${name}-${width}-${theme}.png`, fullPage });
+}
+
+async function capture(page: Page, name: string, phone: boolean, theme: string) {
+  if (phone) {
+    await shot(page, `${name}-top`, "390", theme, false);
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await page.waitForTimeout(300);
+    await shot(page, `${name}-bottom`, "390", theme, false);
+    await page.evaluate(() => window.scrollTo(0, 0));
+  } else {
+    await shot(page, name, "1440", theme, true);
+  }
+}
+
+test("ventures screens", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  const phone = testInfo.project.name === "phone";
+  if (!phone) await page.setViewportSize({ width: 1440, height: 900 });
+
+  const real = await snapshotVentures();
+  const created: string[] = [];
+  try {
+    const temp = await createTempVenture("today", { stage: "building", next_action: "Shown in TODAY" });
+    created.push(temp.id);
+    await addTempDate(temp.id, "Sample date due today", localToday());
+
+    await signIn(page, "/");
+    for (const theme of ["night", "day"] as const) {
+      await setTheme(page, theme);
+
+      await page.goto("/");
+      await page.waitForLoadState("networkidle");
+      await expect(page.getByTestId("today-row").filter({ hasText: "Sample date due today" })).toBeVisible();
+      await capture(page, "home-today", phone, theme);
+
+      await page.goto("/ventures");
+      await page.waitForLoadState("networkidle");
+      await capture(page, "ventures", phone, theme);
+
+      await page.goto("/ventures/sail-beach-club");
+      await page.waitForLoadState("networkidle");
+      await page.getByTestId("workstream-row").first().getByRole("button").first().click();
+      await page.getByTestId("workstreams-parked").getByRole("button", { name: /^Parked · \d+$/ }).click();
+      await page.waitForTimeout(250);
+      await capture(page, "sail-beach-club", phone, theme);
+    }
+  } finally {
+    await deleteVenturesById(created);
+  }
+
+  const after = await snapshotVentures();
+  expect([...after.keys()].sort()).toEqual([...real.keys()].sort());
+  for (const [key, value] of real) expect(after.get(key), `${key} changed`).toBe(value);
+});
