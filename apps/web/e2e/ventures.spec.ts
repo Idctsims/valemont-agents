@@ -20,7 +20,7 @@ import {
 test.skip(!hasOwner, "set E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD to run");
 test.describe.configure({ mode: "serial" });
 
-let real = new Map<string, string>();
+let real: Map<string, string> | null = null;
 let temp: { id: string; slug: string; name: string } | null = null;
 
 test.beforeAll(async ({}, testInfo) => {
@@ -32,6 +32,10 @@ test.beforeAll(async ({}, testInfo) => {
 test.afterAll(async ({}, testInfo) => {
   if (testInfo.project.name !== "phone") return;
   await deleteVenturesById(temp ? [temp.id] : []);
+  // No baseline means beforeAll failed, and that failure is already the
+  // report. Comparing against nothing would only add a misleading second one
+  // (2026-10-09: 15 real rows listed as "added").
+  if (!real) return;
   const after = await snapshotVentures();
   expect([...after.keys()].sort(), "no real venture row added or removed").toEqual([...real.keys()].sort());
   for (const [key, value] of real) expect(after.get(key), `${key} changed`).toBe(value);

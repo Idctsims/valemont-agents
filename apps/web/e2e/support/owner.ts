@@ -47,6 +47,24 @@ function publicEnv(): { url: string; key: string } {
 /** Seeded goals read like real ones on screen; this note is what marks them. */
 export const SEED_NOTE = "e2e-seed";
 
+/**
+ * Supabase's API gateway can stamp a fresh token a moment ahead of
+ * PostgREST's clock, which then refuses it: "JWT issued at future"
+ * (PGRST303, CLAUDE.md; the watchdog route retries for it too). It hit the
+ * first query after sign-in on 2026-10-09. Probe with a harmless read until
+ * the token is accepted, for up to 5 s, BEFORE any real query or write, so
+ * nothing that writes is ever retried.
+ */
+async function untilTokenAccepted(supabase: SupabaseClient) {
+  for (let i = 0; i < 10; i++) {
+    const { error } = await supabase.from("app_settings").select("timezone").limit(1);
+    if (!error) return;
+    if (!/issued at future/i.test(error.message)) throw new Error(`owner session check failed: ${error.message}`);
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error("owner session: still 'JWT issued at future' after 5 s (Supabase clock skew)");
+}
+
 /** Run `fn` with a supabase-js client signed in as the owner (RLS applies). */
 async function asOwner<T>(fn: (supabase: SupabaseClient) => Promise<T>): Promise<T> {
   const { url, key } = publicEnv();
@@ -54,6 +72,7 @@ async function asOwner<T>(fn: (supabase: SupabaseClient) => Promise<T>): Promise
   const { error } = await supabase.auth.signInWithPassword({ email: email!, password: password! });
   if (error) throw new Error(`owner sign-in failed: ${error.message}`);
   try {
+    await untilTokenAccepted(supabase);
     return await fn(supabase);
   } finally {
     // scope 'local' ONLY. supabase-js defaults to 'global', which revokes
