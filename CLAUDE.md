@@ -311,7 +311,11 @@ policies arrive in db/019+ before apps/web reads any table. db/019 (push_subscri
 
   Still outside both suites, and worth knowing before trusting a green run:
   live HTTP response shapes, migrations actually running in the SQL Editor,
-  APScheduler firing on a real clock, and the SIGTERM drain.
+  APScheduler firing on a real clock, and the SIGTERM drain. The last two
+  have been seen working in production, not tested: system jobs on their
+  intervals since 2026-10-08, and a clean drain on Railway at Drill 2
+  (`caught SIGTERM`, `shutting down (drain=True)`, `orchestrator down`,
+  2026-10-09 04:21:32 UTC).
 
 ---
 
@@ -333,7 +337,7 @@ each in phases with a "done when" checklist). It supersedes the former steps
   from `workers/`) ✓, except Step 8 (24 h Railway usage check)
 - **Chat 1, Phase 2** (Next.js app, owner-only auth, design tokens, Vercel) ✓
 - **Chat 1, Phase 3** (PWA shell and push) ✓ (phone-verified 2026-10-08)
-- **Chat 1, Phase 4** (db/020 shared tables, scheduler, `job_health`, push alerts) ← **you are here**
+- **Chat 1, Phase 4** (db/020 shared tables, scheduler, `job_health`, push alerts) ← **you are here** (Drills 1 and 2 passed; canary retirement and the Step 8 usage report remain)
 
 Reason for deploying at step 4 and not at the end: "works locally, dies
 silently at 3am in production" is the classic failure here. Hit it while
@@ -840,7 +844,14 @@ absent row as "I never looked."
 - **Migrations:** **`db/001`–`db/012` and `db/014`–`db/018` applied.** 007–012 verified live by `workers/scripts/verify_migrations_007_012.sql` (20/20). 014–018 were pasted 2026-10-08 and verified by read-only SELECTs. `migration_log` (UTC): 015 04:41:03, 016 04:41:16, 017 04:41:30, 018 04:50:35. 014 predates the log; its tables and triggers are present.
   - **`db/013` (enable the production roster) stays unpasted.** It is go-live and out of scope until the owner says so.
   - Real dependencies: 016, 017 and 018 each need only 015 (`migration_log`). 014 needs only 011.
-  - **`db/019_push.sql` applied 2026-10-08 20:06:52 UTC** (`migration_log`; owner-verified: RLS on, one policy per table, anon none, readonly SELECT). Next new file: `db/020`, the shared tables (MASTER_PLAN §3).
+  - **`db/019_push.sql` applied 2026-10-08 20:06:52 UTC** (`migration_log`; owner-verified: RLS on, one policy per table, anon none, readonly SELECT).
+  - **`db/020_shared.sql` applied 2026-10-08 20:47:09 UTC.**
+    - It holds `app_settings` (the owner id, pasted by hand; the committed file keeps the `__OWNER_USER_ID__` placeholder), `job_health`, `ai_usage` and `job_queue`, plus `is_owner()`.
+    - The owner has SELECT-only policies on 11 ledger tables.
+    - `commitments.mode` and `origin`: all 1,346 existing rows read paper/agent.
+    - A **TRUNCATE guard on all 19 append-only tables**: TRUNCATE fires no row triggers, so before this it could empty the ledger.
+    - **anon has no privilege on any public table, now or in future**, and the signed-in role is read-only on ledger and archive tables.
+    - Next new file: `db/021`.
 - **Immutability audit (2026-10-01, empirical).** UPDATE and DELETE were attempted on a `_test` row of every table, rolled back.
   - **Refused by trigger:** `commitments`, `events`, `resolution_attempts`, `commitment_factors`, `closing_snapshots`, `selections`, `model_versions`, `kalshi_markets`, `kalshi_candles`. `legs` UPDATE was refused too, by `legs_frozen`.
   - **ACCEPTED:**
@@ -852,7 +863,10 @@ absent row as "I never looked."
   - **Refused only by a foreign key**, so not protected: `runs` and `agents` DELETE.
   - **Fix:** `db/015_close_mutation_gaps.sql`, pasted. `tests_live/test_mutation_gaps.py` now runs and passes.
   - **`db/015` applied_at: 2026-10-08 04:41:03.069615 UTC** (from `migration_log`). **Rows written before that timestamp in `resolutions`, `legs`, `briefs`, `runs` and `agents` were protected by convention only.** There is no history to prove none was altered.
-- **Tests:** `tests/` **380** (366, plus 14 in `test_push.py` from Chat 1 Phase 3), and `tests_live/` **101** run, 0 skipped (88, plus 8 in `test_push_rls.py` and 5 in `test_push_ledger.py`). Run both from `workers/` with **`..\venv\Scripts\python.exe`**.
+- **Tests:** `tests/` **441** and `tests_live/` **128**, 0 skipped. Run both from `workers/` with **`..\venv\Scripts\python.exe`**.
+  - Phase 3 added 14 to `tests/` (`test_push.py`) and 13 to `tests_live/` (8 in `test_push_rls.py`, 5 in `test_push_ledger.py`).
+  - Phase 4 added 61 to `tests/` (`test_system_jobs.py` 42, `test_ai.py` 19) and 27 to `tests_live/` (`test_shared_020.py` 14, `test_system_jobs_sql.py` 8, `test_ai_sql.py` 5).
+  - Web: `pnpm test:unit` (7 watchdog logic specs, no server) and `pnpm test:e2e` (Playwright, 43 pass, 9 skip by design).
   - The push live tests touch app tables, not the ledger. `test_push_rls` runs every case in one rolled-back transaction. `test_push_ledger` deletes its `.invalid` fixture afterwards. Neither leaves a row: a leftover subscription would be a live push target.
   - The earlier "361" was a typo made in `cf18f9d`. That commit took the suite from 356 to 360 (4 tests in `test_nfl_ml.py`), and nothing has changed `tests/` since.
   - Kalshi jobs run one at a time. The archive's SQL path has no live test, because a test row would be permanent in the real archive; its first real run is the test.
@@ -973,8 +987,49 @@ absent row as "I never looked."
   - **VAPID:** `pnpm gen:vapid` (apps/web) writes both env files without printing values. It refuses to rotate without `--force`, because rotating orphans every subscription.
     - Set in Vercel (Production and Preview, private key Sensitive) and Railway (dashboard), 2026-10-08.
   - **`/onboarding`** (account menu, desktop rail): Add to Home Screen steps on iPhone Safari (iOS 16.4+), then enable notifications (permission requested only from that tap), then send a test push. On desktop it shows a phone-only note.
+- **Scheduler, health and watchdog (Chat 1 Phase 4, 2026-10-08/09; PRs #4–#7):**
+  - **System jobs always run** (`core/system_jobs.py`); ROSTER and CANARY govern only agents. Each records itself in `job_health` through `core/jobs.py` `run_tracked` (errors redacted, then re-raised).
+    - heartbeat, 60 s;
+    - `health_monitor`, 60 s, first pass 90 s after boot;
+    - `db_size`, 03:00 America/Chicago and at boot; 15.2 MB on 2026-10-08;
+    - `job_queue`, 10 s;
+    - `health_drill`, only with `HEALTH_DRILL=true`.
+  - **Health monitor:** one push per incident (2 failures in a row, or stale beyond 2× its interval) and one on recovery, linking to `/settings/health`.
+    - It never judges its **own** staleness (PR #6). Every redeploy used to push a false "health_monitor needs attention" + "Recovered" pair.
+    - The external `watchdog` row is watched with the monitor's own incident state and never its `alert_state` (PR #5). That field belongs to the Vercel route.
+  - **External watchdog** `/api/watchdog` (Vercel, called by cron-job.org every 5 min with a bearer token):
+    - pushes "Worker down" when the heartbeat is more than 5 min old (again at most every 30 min), and "Worker back" on recovery;
+    - answers 200 ok/down, 503 when it can't read the heartbeat, 401 for a bad token;
+    - a failed push never fails the request (PR #7): it's recorded in `job_health.last_error` and retried;
+    - pings **healthchecks.io** (`WATCHDOG_PING_URL`, period 5 min, grace 5 min) on every run, and `/fail` when it can't read;
+    - `SUPABASE_SECRET_KEY` is read only in `route.ts` (`check:secret-key`).
+  - **Known Supabase issue:** PostgREST intermittently rejects the gateway's per-request token as **"JWT issued at future"** (PGRST303), because the gateway's clock runs ahead of PostgREST's.
+    - Seen in production at 03:00, 03:05 and 03:30 UTC on 2026-10-09 (500s on the old route), and in local calls.
+    - The route now retries once (rescued the 04:35 drill call). Persistent skew is a 503 plus healthchecks `/fail`.
+    - The worker connects to Postgres directly and is unaffected. Worth reporting to Supabase if it continues.
+  - **AI budget guard** `core/ai.py` (§6). There's no `ANTHROPIC_API_KEY` yet, so every AI call is refused loudly.
+  - **Drill 1 (failure) PASSED 2026-10-09:**
+
+    | UTC | Event |
+    |---|---|
+    | 02:41:00 | Deploy with `HEALTH_DRILL=true` |
+    | 02:42:53 | "health_drill needs attention" (#39), about 92 s after boot |
+    | 02:46:10 | Variable unset; "Recovered: health_drill" (#40) |
+
+  - **Drill 2 (kill) PASSED on rerun 2026-10-09:**
+
+    | UTC | Event |
+    |---|---|
+    | 04:20:44 | Last heartbeat |
+    | 04:21:32 | Deployment `f8c246e5` removed; clean SIGTERM drain |
+    | 04:25:03 | Cron 200 ok (heartbeat 259 s old) |
+    | 04:30:06 | Cron 200 **down**: the first call past 5 min stale (562 s). "Worker down" sent 04:30:08 (#45). Read 373 ms, lookup 78, push 534, stamp 74, ping 325 |
+    | 04:31:22 | Redeploy `7cb09719` created; booted ~04:31:36 |
+    | 04:35:03 | Cron 200 ok; "Worker back" sent 04:35:04 (#46). The first read hit "JWT issued at future" and was retried (read 590 ms) |
+
+    - Every cron call returned 200, every run pinged healthchecks with no errors, and there were no false alerts from the redeploy.
+    - The first run, at 03:00 UTC, failed: two 500s from the Supabase clock skew. That's what PR #7 fixed.
 - **Next:**
-  - **Chat 1 Phase 1, Step 8** is due after 2026-10-09 05:36 UTC: 24 h RAM, CPU and projected cost against the free plan's $1/month credit, feeding the 2026-10-16 Railway decision.
-  - **Chat 1 Phase 4:** `db/020` shared tables, the consolidated scheduler, `job_health` and its push alerts (wiring `core/push.py` in).
+  - **Chat 1 Phase 4, remaining:** retire the canary (unset `CANARY`), then the Step 8 usage report, Railway RAM/CPU with the canary gone, for the 2026-10-16 decision.
   - Still pending from before: owner review of the crypto track, owner go-live, and the weekly archive.
   - Any new idea needs a new pre-registration and forward-only validation.
