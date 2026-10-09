@@ -32,9 +32,21 @@ export function rowState(g: Goal): RowState {
   return g.status;
 }
 
-/** Goals that hold one of the week's slots: everything but dropped and moved on. */
+/**
+ * THE slot rule: a goal holds one of the week's ten slots when it is open or
+ * done in this period. Dropped goals and goals moved on to a later week hold
+ * none. The count, the strip and the 11th-goal warning all go through this;
+ * the worker's Monday push uses the same rule in SQL
+ * (workers/core/ledger.py WEEK_GOAL_COUNTS_SQL).
+ */
 export function holdsSlot(g: Goal): boolean {
-  return !g.moved && g.status !== "dropped";
+  return !g.moved && (g.status === "open" || g.status === "done");
+}
+
+/** Done, and every goal holding a slot. */
+export function weekTally(goals: Goal[]): { done: number; held: number } {
+  const held = goals.filter(holdsSlot);
+  return { done: held.filter((g) => g.status === "done").length, held: held.length };
 }
 
 /** Open first (in sort order), then done, then dropped, then moved on. */

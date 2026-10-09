@@ -1354,6 +1354,12 @@ class WeekGoalCounts:
     #: Open goals that arrived by carry-over.
     carried_in: int
 
+    @property
+    def held(self) -> int:
+        """Goals holding one of the week's slots: open + done. Dropped and
+        moved-on goals are already outside all three counts."""
+        return self.open + self.done
+
 
 def owner_id() -> str:
     """The one owner (app_settings, seeded by db/020)."""
@@ -1396,21 +1402,27 @@ def add_goal(*, title: str, horizon: GoalHorizon, period_start: date | None,
     return row[0]
 
 
+#: The slot rule, in SQL: a goal holds one of the week's ten slots when it is
+#: open or done in this period. Dropped goals and goals moved on to a later
+#: week (a carried row points at them) hold none. apps/web's holdsSlot()
+#: (src/lib/goals/types.ts) is the same rule for the count, the strip and the
+#: 11th-goal warning. tests_live/test_goals_sql.py runs this exact text.
+WEEK_GOAL_COUNTS_SQL: Final = """
+    SELECT count(*) FILTER (WHERE g.status = 'open'),
+           count(*) FILTER (WHERE g.status = 'done'),
+           count(*) FILTER (WHERE g.status = 'open' AND g.carried_from IS NOT NULL)
+      FROM goals g
+     WHERE g.owner_id = (SELECT owner_id FROM app_settings)
+       AND g.horizon = 'weekly'
+       AND g.period_start = date_trunc('week', goal_local_today())::date
+       AND NOT EXISTS (SELECT 1 FROM goals c WHERE c.carried_from = g.id)
+"""
+
+
 def this_week_goal_counts() -> WeekGoalCounts:
     """Open, done and carried-in weekly goals for the owner's current week."""
     with _pool().connection() as conn:
-        row = conn.execute(
-            """
-            SELECT count(*) FILTER (WHERE g.status = 'open'),
-                   count(*) FILTER (WHERE g.status = 'done'),
-                   count(*) FILTER (WHERE g.status = 'open' AND g.carried_from IS NOT NULL)
-              FROM goals g
-             WHERE g.owner_id = (SELECT owner_id FROM app_settings)
-               AND g.horizon = 'weekly'
-               AND g.period_start = date_trunc('week', goal_local_today())::date
-               AND NOT EXISTS (SELECT 1 FROM goals c WHERE c.carried_from = g.id)
-            """
-        ).fetchone()
+        row = conn.execute(WEEK_GOAL_COUNTS_SQL).fetchone()
     return WeekGoalCounts(*(int(v) for v in row))
 
 

@@ -273,7 +273,7 @@ def _plural(n: int, word: str) -> str:
 
 
 def monday_message(counts: ledger.WeekGoalCounts) -> push.Message:
-    slots = max(0, WEEKLY_GOAL_CAP - counts.open - counts.done)
+    slots = max(0, WEEKLY_GOAL_CAP - counts.held)
     return push.Message(
         kind="goals_monday",
         title="Set your week",

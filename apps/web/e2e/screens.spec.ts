@@ -1,4 +1,4 @@
-import { test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { addDays, localToday, monthStart, weekStart } from "../src/lib/goals/period";
 
@@ -43,6 +43,15 @@ test("screens", async ({ page }, testInfo) => {
   await seedScreens(thisWeek, addDays(thisWeek, -7), addDays(thisWeek, -14), monthStart(today));
   try {
     await signIn(page, "/");
+    // The seeded week: 8 open (one carried in) + 2 done hold slots; the
+    // dropped goal and the one moved on to next week hold none.
+    const week = page.getByTestId("goals-weekly");
+    await expect(week.getByTestId("goals-fraction")).toHaveText("2 done · 10 of 10");
+    await expect(week.locator('[data-segment="done"]')).toHaveCount(2);
+    await expect(week.locator('[data-segment="open"]')).toHaveCount(8);
+    await expect(week.locator('[data-segment="empty"]')).toHaveCount(0);
+    await expect(week.getByTestId("cap-warning")).toHaveCount(0);
+    await expect(week.getByRole("button", { name: "Moved on · 2" })).toHaveAttribute("aria-expanded", "false");
     for (const theme of ["night", "day"] as const) {
       await setTheme(page, theme);
       for (const [name, path] of PAGES) {
@@ -69,6 +78,7 @@ test("screens", async ({ page }, testInfo) => {
         // The fold, opened.
         await page.getByTestId("goals-weekly").getByRole("button", { name: /^Moved on/ }).click();
         await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        await page.waitForTimeout(300); // let the chevron finish its 180 ms turn
         await shoot(page, "goals-week-fold-open", width, theme, false);
 
         await page.goto("/goals");

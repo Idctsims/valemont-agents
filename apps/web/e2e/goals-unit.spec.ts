@@ -16,7 +16,16 @@ import {
   weekStamp,
   weekStart,
 } from "../src/lib/goals/period";
-import { countLabel, holdsSlot, isFolded, ordered, overCapMessage, segments, type Goal } from "../src/lib/goals/types";
+import {
+  countLabel,
+  holdsSlot,
+  isFolded,
+  ordered,
+  overCapMessage,
+  segments,
+  weekTally,
+  type Goal,
+} from "../src/lib/goals/types";
 import { NAV, SYSTEM_PAGES, builtGroups, isActive } from "../src/lib/nav";
 
 function goal(over: Partial<Goal>): Goal {
@@ -104,6 +113,32 @@ test.describe("the week strip and the cap", () => {
       "history",
     );
     expect(s.slice(0, 3)).toEqual(["done", "carried", "dropped"]);
+  });
+
+  test("the slot rule on the seeded week: dropped and moved-on hold no slot", () => {
+    // screens.spec's seed: 8 open (one carried in), 2 done, 1 dropped, 1 moved on.
+    const week = [
+      ...Array.from({ length: 7 }, () => goal({})),
+      goal({ carried_from: "x", carry_count: 2 }),
+      goal({ status: "done" }),
+      goal({ status: "done" }),
+      goal({ status: "dropped" }),
+      goal({ moved: true }),
+    ];
+    const t = weekTally(week);
+    expect(t).toEqual({ done: 2, held: 10 });
+    expect(countLabel(t.done, t.held)).toBe("2 done · 10 of 10");
+    expect(segments(week, "live").filter((s) => s === "empty")).toHaveLength(0);
+    expect(overCapMessage(t.held)).toBeNull();
+
+    // One open fewer: 9 of 10, one free slot.
+    const nine = week.slice(1);
+    expect(countLabel(weekTally(nine).done, weekTally(nine).held)).toBe("2 done · 9 of 10");
+    expect(segments(nine, "live").filter((s) => s === "empty")).toHaveLength(1);
+
+    // An 11th that holds a slot warns; an 11th that is dropped does not.
+    expect(overCapMessage(weekTally([...week, goal({})]).held)).not.toBeNull();
+    expect(overCapMessage(weekTally([...week, goal({ status: "dropped" })]).held)).toBeNull();
   });
 
   test("count label: done, then held of the cap", () => {

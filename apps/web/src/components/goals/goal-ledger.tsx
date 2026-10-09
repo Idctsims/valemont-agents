@@ -1,6 +1,6 @@
 "use client";
 
-import { CaretDown } from "@phosphor-icons/react";
+import { CaretRight } from "@phosphor-icons/react";
 import { useId, useOptimistic, useState, useTransition } from "react";
 
 import {
@@ -21,6 +21,7 @@ import {
   segments,
   type Goal,
   type GoalStatus,
+  weekTally,
 } from "@/lib/goals/types";
 
 import { AreaChips, GoalRow } from "./goal-row";
@@ -113,11 +114,10 @@ export function GoalLedger({
   const active = rows.filter((g) => !isFolded(g));
   const folded = rows.filter(isFolded);
   const weekly = horizon === "weekly";
-  const held = list.filter(holdsSlot);
-  const done = held.filter((g) => g.status === "done").length;
+  const { done, held } = weekTally(list);
   // Over-cap rows: the slot holders past the tenth, in display order.
-  const overCapIds = new Set(weekly ? active.slice(WEEKLY_CAP).map((g) => g.id) : []);
-  const warning = weekly ? overCapMessage(held.length) : null;
+  const overCapIds = new Set(weekly ? active.filter(holdsSlot).slice(WEEKLY_CAP).map((g) => g.id) : []);
+  const warning = weekly ? overCapMessage(held) : null;
 
   const rowFor = (g: Goal) => (
     <GoalRow
@@ -149,7 +149,7 @@ export function GoalLedger({
         variant={header}
         heading={copy.heading}
         periodLabel={periodLabel}
-        count={weekly ? countLabel(done, held.length) : undefined}
+        count={weekly ? countLabel(done, held) : undefined}
         saving={saving}
       />
 
@@ -279,7 +279,9 @@ export function MovedOnFold({
         className="tap flex w-full items-center justify-between font-mono text-xs text-text-muted transition-colors hover:text-text"
       >
         <span>Moved on · {count}</span>
-        <CaretDown size={16} aria-hidden className={`transition-transform ${open ? "rotate-180" : ""}`} />
+        {/* Closed points right, open points down: a 90 degree turn. Reduced
+            motion: tokens.css drops the transition, so it simply flips. */}
+        <CaretRight size={16} aria-hidden className={`transition-transform ${open ? "rotate-90" : ""}`} />
       </button>
       {open && (
         <ul id={id} className="border-t border-border">

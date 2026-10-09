@@ -112,7 +112,13 @@ export function GoalRow({
     >
       {/* Behind the row: the complete hint (right swipe) or the actions (left). */}
       {live && (
-        <div aria-hidden={!revealed} className="absolute inset-0 flex items-stretch justify-between">
+        // Invisible (still laid out, so the panel can be measured) unless a
+        // swipe is under way: at rest, sub-pixel rounding let the Drop
+        // button show as a 1 px line down the row's right edge.
+        <div
+          aria-hidden={!revealed}
+          className={`absolute inset-0 flex items-stretch justify-between ${dx === 0 && !revealed ? "invisible" : ""}`}
+        >
           <span
             className={`flex items-center pl-4 text-accent transition-opacity ${dx > 0 ? "opacity-100" : "opacity-0"}`}
           >

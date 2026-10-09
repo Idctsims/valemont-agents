@@ -182,6 +182,40 @@ class CarryOver(GoalsTestCase):
                 cur.execute("SELECT carry_goal(%s)", (done,))
 
 
+# --------------------------------------------------------------- the slot rule
+
+class WeekCounts(GoalsTestCase):
+    """ledger.WEEK_GOAL_COUNTS_SQL, the text the Monday push runs: open and
+    done hold slots; dropped and moved-on goals do not. Measured as a delta,
+    so the owner's real goals this week do not matter."""
+
+    def counts(self, cur: psycopg.Cursor) -> tuple[int, int, int]:
+        from core.ledger import WEEK_GOAL_COUNTS_SQL
+        cur.execute(WEEK_GOAL_COUNTS_SQL)
+        return tuple(cur.fetchone())
+
+    def test_dropped_and_moved_on_hold_no_slot(self) -> None:
+        with _rolled_back() as cur:
+            cur.execute("SELECT date_trunc('week', goal_local_today())::date")
+            this_week = cur.fetchone()[0]
+            last_week = date.fromordinal(this_week.toordinal() - 7)
+            before = self.counts(cur)
+
+            for i in range(7):
+                self.add(cur, f"tests_live: open {i}", period=this_week)
+            carried = self.add(cur, "tests_live: carried in", period=last_week)
+            cur.execute("SELECT carry_goal(%s)", (carried,))          # 8th open, carried in
+            self.add(cur, "tests_live: done 1", period=this_week, status="done")
+            self.add(cur, "tests_live: done 2", period=this_week, status="done")
+            self.add(cur, "tests_live: dropped", period=this_week, status="dropped")
+            moved = self.add(cur, "tests_live: moved on", period=this_week)
+            cur.execute("SELECT carry_goal(%s)", (moved,))            # now next week's
+
+            after = self.counts(cur)
+            delta = tuple(a - b for a, b in zip(after, before))
+            self.assertEqual(delta, (8, 2, 1), "open, done, carried in: dropped and moved hold no slot")
+
+
 # ------------------------------------------------------------------ the rules
 
 class Rules(GoalsTestCase):

@@ -220,6 +220,13 @@ class MondayPush(SystemTestCase):
                 msg = system_jobs.monday_message(WeekGoalCounts(open=open_, done=done, carried_in=carried))
                 self.assertEqual(msg.body, body)
 
+    def test_held_is_open_plus_done(self) -> None:
+        # The seeded week: 8 open (1 carried in) + 2 done. Dropped and
+        # moved-on goals are excluded by the query, so they never reach here.
+        counts = WeekGoalCounts(open=8, done=2, carried_in=1)
+        self.assertEqual(counts.held, 10)
+        self.assertEqual(system_jobs.monday_message(counts).body, "1 carried in. 0 slots left.")
+
     def test_over_the_cap_never_goes_negative(self) -> None:
         msg = system_jobs.monday_message(WeekGoalCounts(open=12, done=0, carried_in=12))
         self.assertEqual(msg.body, "12 carried in. 0 slots left.")
