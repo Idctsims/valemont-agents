@@ -71,6 +71,23 @@ class AgentError(RuntimeError):
     """Raised when an adapter is wired up wrong. Surfaces at import or boot."""
 
 
+class AbandonWithoutAttempt(AgentError):
+    """Core was about to void, or tombstone the close of, a commitment it has
+    never once asked about. Both writes are permanent (`resolutions` and
+    `closing_snapshots` are UNIQUE per commitment), so giving up without a
+    single recorded attempt would be data loss caused by bookkeeping, not
+    by the world. `DeferPolicy.expired` never asks for it; this guard makes
+    sure no other path can."""
+
+
+def _require_attempted(commitment_id: int, attempts: int, what: str) -> None:
+    if attempts < 1:
+        raise AbandonWithoutAttempt(
+            f"refusing to {what} commitment {commitment_id} with 0 recorded "
+            f"attempts: core always takes a first look before it gives up"
+        )
+
+
 # ---------------------------------------------------------------------------
 # What the hooks hand back
 # ---------------------------------------------------------------------------
@@ -256,7 +273,18 @@ class DeferPolicy:
         describes the wrong failure and names the wrong deadline column. Capture
         measures `overdue_by` from `closes_at`; resolution measures it from
         `resolves_after`.
+
+        **Never before a first look.** With zero recorded attempts this always
+        returns None, however overdue the row is. Due sets are read a page at
+        a time, so a row can sit unseen past `max_overdue` (a backlog larger
+        than the page); giving up on it then would void or tombstone something
+        core never asked about. It gets one real attempt first. For a close,
+        that matters doubly: capture reads candle history, so a late first
+        look can still recover the price. Enforced again at the write
+        (`_require_attempted`).
         """
+        if pending.attempts < 1:
+            return None
         if pending.attempts >= self.max_attempts:
             answer = (
                 "no resolution" if what == "resolution"
@@ -1165,8 +1193,15 @@ class BaseAgent[Obs, Th](ABC):
                 close = self.capture_close(commitment)
             except CloseUnavailable as exc:
                 # Permanent by the adapter's own assessment. Record it now
-                # rather than spending the budget discovering the same thing.
-                if self._miss(commitment, f"unavailable: {exc}", run_id=run_id):
+                # rather than spending the budget discovering the same thing,
+                # but record the ATTEMPT first: no tombstone is written with
+                # zero attempts on record. If that write fails, keep the row
+                # due and ask again, the safe direction to fail in.
+                reason = f"unavailable: {exc}"
+                if not self._note_attempt(commitment, "error", reason, purpose="capture"):
+                    failed += 1
+                    continue
+                if self._miss(commitment, reason, run_id=run_id, attempts=commitment.attempts + 1):
                     missed += 1
                 else:
                     failed += 1
@@ -1279,8 +1314,15 @@ class BaseAgent[Obs, Th](ABC):
         reason: str,
         *,
         run_id: int,
+        attempts: int | None = None,
     ) -> bool:
-        """Write the tombstone that records a permanently lost close."""
+        """Write the tombstone that records a permanently lost close.
+
+        `attempts` is the count on record, when the caller has just added one
+        (the CloseUnavailable path). Raises AbandonWithoutAttempt at zero.
+        """
+        attempts = commitment.attempts if attempts is None else attempts
+        _require_attempted(commitment.id, attempts, "tombstone the close of")
         self.log.warning(
             "giving up on the close for commitment #%s: %s", commitment.id, reason
         )
@@ -1290,7 +1332,7 @@ class BaseAgent[Obs, Th](ABC):
                 status="missed",
                 reason=reason,
                 detail={
-                    "attempts": commitment.attempts,
+                    "attempts": attempts,
                     "overdue_by_seconds": commitment.overdue_by.total_seconds(),
                     "policy": {
                         "max_attempts": self.capture_policy.max_attempts,
@@ -1322,12 +1364,13 @@ class BaseAgent[Obs, Th](ABC):
         result: ledger.AttemptResult,
         reason: str,
         purpose: ledger.AttemptPurpose = "resolve",
-    ) -> None:
+    ) -> bool:
         """Count one unproductive attempt. Never breaks the sweep.
 
         If this write fails the commitment simply gets asked again next sweep,
         which is the safe direction to fail in — we keep trying rather than
-        abandoning something we could have resolved.
+        abandoning something we could have resolved. Returns whether the
+        attempt is on record.
         """
         try:
             ledger.record_resolution_attempt(
@@ -1338,6 +1381,8 @@ class BaseAgent[Obs, Th](ABC):
                 "could not record resolution attempt for #%s — it will be "
                 "retried, not abandoned", commitment.id, exc_info=True,
             )
+            return False
+        return True
 
     def _abandon(
         self,
@@ -1354,8 +1399,10 @@ class BaseAgent[Obs, Th](ABC):
         must never be counted as a break-even. Every leg is voided too, so the
         dashboard doesn't show half-resolved rows.
 
-        Returns True if the void was written.
+        Returns True if the void was written. Raises AbandonWithoutAttempt if
+        the commitment has no attempt on record.
         """
+        _require_attempted(commitment.id, commitment.attempts, "void")
         self.log.warning(
             "abandoning commitment #%s: %s — thesis was: %s",
             commitment.id, reason, commitment.thesis[:200],

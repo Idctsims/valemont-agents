@@ -97,7 +97,8 @@ class ResolveDue(LedgerTestCase):
         self.assertEqual(agent.resolve_calls, [7])
 
     def test_overdue_cap_voids_however_few_attempts(self) -> None:
-        self.ledger.add_due(pending(8, attempts=0, overdue_by=timedelta(hours=25)))
+        # "However few": one. Zero never voids (see ZeroAttemptsNeverAbandon).
+        self.ledger.add_due(pending(8, attempts=1, overdue_by=timedelta(hours=25)))
         outcome = self.agent().resolve_due()
         self.assertEqual(outcome.voided, 1)
         [void] = self.ledger.named("add_resolution")
