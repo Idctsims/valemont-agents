@@ -259,6 +259,16 @@ policies arrive in db/019+ before apps/web reads any table. db/019 (push_subscri
   a secret, pipe it through redaction or don't run it. Why: on 2026-10-08 that
   command printed `DATABASE_URL` with its password into a session transcript,
   and the password had to be rotated.
+- **Never use another account's CLI session for this repo** (Vercel, Railway,
+  `gh`, Supabase or anything else). Before the first CLI call of a session,
+  confirm the account by name only: `vercel whoami` must print `idctsims`.
+  If it names anyone else, stop and ask the owner to log in. Never switch
+  accounts yourself.
+  - Why: on 2026-10-08 the Vercel CLI on the owner's machine was logged in
+    as `toya-rn-7874`, which could not see the project. Diagnosis of the
+    Drill 2 watchdog failure stalled on it.
+  - `vercel logs` filters to the **current git branch** by default. Pass
+    `--no-branch` (and `--environment production`) to see production.
 - Fail loudly. A silent exception in a worker that runs at 3am is the single
   most likely way this project quietly dies.
 - **Run the suite before and after touching `core/` or an adapter.** From
@@ -903,7 +913,7 @@ absent row as "I never looked."
   - Repo-root paths go through `core/paths.py`. Every frozen pre-registration text hashes identically to before the move.
   - Inspection goes only through `db_inspect.py` (§5).
 - **Web app (Chat 1 Phase 2, 2026-10-08; PR #2, merge `7e01970`):**
-  - **Production: https://valemont-command.vercel.app** (Vercel project `valemont-command`, renamed from `valemont-agents` on 2026-10-08, Root Directory `apps/web`, production branch `main`). Public privacy policy at `/privacy`; that is the URL for the Pinterest app.
+  - **Production: https://valemont-command.vercel.app** (Vercel project **`valemont-agents`**, scope `idctsims-projects`, Root Directory `apps/web`, production branch `main`; on 2026-10-08 the owner changed the production **domain** from `valemont-agents.vercel.app` to `valemont-command.vercel.app`, and the project name did not change). Public privacy policy at `/privacy`; that is the URL for the Pinterest app.
   - **Stack:** Next.js 16.4 (`src/proxy.ts`, which replaces `middleware.ts`), TypeScript strict, Tailwind 4.3, `@supabase/ssr` 0.12.7, pnpm workspace. `cacheComponents` is off: every route is per-request.
   - **Env (Vercel and `apps/web/.env.local`):** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, and `OWNER_USER_ID` (server-only, marked Sensitive).
   - **Auth model:**
