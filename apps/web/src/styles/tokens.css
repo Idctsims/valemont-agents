@@ -188,6 +188,12 @@
   --vm-target-min: 2.75rem; /* 44px touch target */
   --vm-rail-width: 16.5rem;
   --vm-tabbar-height: 4.25rem;
+  /* The goals composer pinned above the dock on phones. */
+  --vm-composer-height: 4.25rem;
+  /* The dock's reserved centre slot (Wags, Chat 2 Phase 4). */
+  --vm-dock-slot: 4.5rem;
+  /* Swipe distance that commits a gesture on a goal row. */
+  --vm-swipe-commit: 4.5rem;
 }
 
 /* ------------------------------------------------------------ utilities */
@@ -246,6 +252,47 @@
 }
 @utility pb-tabbar {
   padding-bottom: calc(var(--vm-tabbar-height) + env(safe-area-inset-bottom, 0px) + 1.5rem);
+}
+
+/* Dock and the composer that sits on it (phones). */
+@utility bottom-dock {
+  bottom: calc(var(--vm-tabbar-height) + env(safe-area-inset-bottom, 0px));
+}
+/* Room for the pinned composer; the shell's pb-tabbar already clears the dock. */
+@utility pb-composer {
+  padding-bottom: var(--vm-composer-height);
+}
+@utility w-dock-slot {
+  width: var(--vm-dock-slot);
+}
+@utility w-swipe {
+  width: var(--vm-swipe-commit);
+}
+
+/* A <summary> with no disclosure triangle, in every engine (Safari keeps
+   its marker unless the -webkit pseudo-element is hidden too). */
+@utility summary-plain {
+  display: flex;
+  list-style: none;
+  &::-webkit-details-marker {
+    display: none;
+  }
+}
+
+/* A strikethrough that draws in, left to right, on every wrapped line.
+   Put strike-draw on an inline element; add strike-draw-on to draw it. */
+@utility strike-draw {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: 0 58%;
+  background-size: var(--vm-strike, 0%) 1px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: background-size var(--vm-duration-std) var(--ease-standard),
+    opacity var(--vm-duration-std) var(--ease-standard);
+}
+@utility strike-draw-on {
+  --vm-strike: 100%;
 }
 
 /* Uppercase tracked mono label: numbers, odds, stats and labels. */

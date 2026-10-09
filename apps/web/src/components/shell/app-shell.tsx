@@ -1,4 +1,4 @@
-import { DeviceMobile } from "@phosphor-icons/react/ssr";
+import { DeviceMobile, Heartbeat, Palette } from "@phosphor-icons/react/ssr";
 import Link from "next/link";
 
 import type { Theme } from "@/lib/theme";
@@ -6,7 +6,7 @@ import type { Theme } from "@/lib/theme";
 import { AccountMenu } from "./account-menu";
 import { LogoutButton } from "./logout-button";
 import { RailNav } from "./rail-nav";
-import { TabBar } from "./tab-bar";
+import { Dock } from "./dock";
 import { ThemeToggle } from "./theme-toggle";
 
 /**
@@ -14,6 +14,12 @@ import { ThemeToggle } from "./theme-toggle";
  * bottom tab bar under the thumb. Desktop (lg+): a fixed left rail with every
  * pillar, theme and log out.
  */
+const SYSTEM_LINKS = [
+  { href: "/settings/health", label: "System health", Icon: Heartbeat },
+  { href: "/onboarding", label: "Phone setup", Icon: DeviceMobile },
+  { href: "/design", label: "Design tokens", Icon: Palette },
+];
+
 export function AppShell({ theme, children }: { theme: Theme; children: React.ReactNode }) {
   return (
     <>
@@ -35,13 +41,16 @@ export function AppShell({ theme, children }: { theme: Theme; children: React.Re
           <RailNav />
         </div>
         <div className="border-t border-border px-3 py-3">
-          <Link
-            href="/onboarding"
-            className="tap flex items-center gap-2 rounded-pill px-3 text-sm text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
-          >
-            <DeviceMobile size={20} aria-hidden />
-            Phone setup
-          </Link>
+          {SYSTEM_LINKS.map(({ href, label, Icon }) => (
+            <Link
+              key={href}
+              href={href}
+              className="tap flex items-center gap-2 rounded-pill px-3 text-sm text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
+            >
+              <Icon size={20} aria-hidden />
+              {label}
+            </Link>
+          ))}
           <div className="flex items-center justify-between">
             <ThemeToggle initial={theme} withLabel />
             <LogoutButton />
@@ -74,7 +83,7 @@ export function AppShell({ theme, children }: { theme: Theme; children: React.Re
         <div className="mx-auto max-w-shell px-safe pt-8 lg:px-12 lg:pt-16">{children}</div>
       </main>
 
-      <TabBar />
+      <Dock />
     </>
   );
 }

@@ -7,7 +7,7 @@ import { expect, test } from "@playwright/test";
 const webRoot = resolve(__dirname, "..");
 
 test.describe("logged out", () => {
-  for (const path of ["/command", "/command/betting", "/crypto/btc-15", "/design", "/onboarding"]) {
+  for (const path of ["/goals", "/goals?view=history", "/betting", "/design", "/onboarding", "/settings/health"]) {
     test(`${path} redirects to /login with next`, async ({ page }) => {
       await page.goto(path);
       await expect(page).toHaveURL(
