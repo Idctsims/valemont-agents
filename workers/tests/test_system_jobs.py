@@ -64,6 +64,10 @@ class FakeLedger:
     def queue_done(self, job_id): self._rec("queue_done", job_id)
     def queue_retry(self, job_id, error, delay): self._rec("queue_retry", job_id, error, delay)
     def queue_fail(self, job_id, error): self._rec("queue_fail", job_id, error)
+    # goals (tests/test_goals.py drives these; here they only keep boot quiet)
+    def goal_periods_to_roll(self, horizon): return []
+    def carry_over_goals(self, horizon, from_date): self._rec("carry_over_goals", horizon, from_date); return 0
+    def this_week_goal_counts(self): return ledger.WeekGoalCounts(open=0, done=0, carried_in=0)
 
 
 class SystemTestCase(unittest.TestCase):
@@ -71,7 +75,8 @@ class SystemTestCase(unittest.TestCase):
         self.ledger = FakeLedger()
         names = ("job_register", "job_started", "job_succeeded", "job_failed", "job_health_rows",
                  "set_job_alert_state", "database_size", "notification_sent_since",
-                 "queue_fail_exhausted", "queue_claim", "queue_done", "queue_retry", "queue_fail")
+                 "queue_fail_exhausted", "queue_claim", "queue_done", "queue_retry", "queue_fail",
+                 "goal_periods_to_roll", "carry_over_goals", "this_week_goal_counts")
         for name in names:
             p = mock.patch.object(ledger, name, getattr(self.ledger, name))
             p.start()
@@ -356,7 +361,8 @@ class Queue(SystemTestCase):
 class Registry(unittest.TestCase):
     def test_default_jobs(self) -> None:
         built = {j.name: j for j in system_jobs.build_system_jobs({})}
-        self.assertEqual(set(built), {"heartbeat", "health_monitor", "db_size", "job_queue"})
+        self.assertEqual(set(built), {"heartbeat", "health_monitor", "db_size", "job_queue",
+                                     "goals_rollover", "goals_monday_push"})
         self.assertEqual(built["heartbeat"].expected_interval_s, 60)
         self.assertEqual(built["job_queue"].expected_interval_s, 10)
         self.assertEqual(built["db_size"].expected_interval_s, 86400)
@@ -385,8 +391,9 @@ class SystemOnlyBoot(SystemTestCase):
         self.addCleanup(orchestrator.shutdown, False)
         ids = {j.id for j in orchestrator._scheduler.get_jobs()}
         self.assertEqual(ids, {"system:heartbeat", "system:health_monitor",
-                               "system:db_size", "system:job_queue"})
-        self.assertEqual(self.ledger.names().count("job_register"), 4)
+                               "system:db_size", "system:job_queue",
+                               "system:goals_rollover", "system:goals_monday_push"})
+        self.assertEqual(self.ledger.names().count("job_register"), 6)
 
     def test_disabled_agents_plus_system_jobs_start_rather_than_refuse(self) -> None:
         from tests.support import ScriptedAgent
@@ -430,7 +437,8 @@ class SystemOnlyBoot(SystemTestCase):
         self.assertEqual(len(started), 1)
         self.assertEqual(started[0].agents, [])
         self.assertEqual({j.name for j in started[0].system_jobs},
-                         {"heartbeat", "health_monitor", "db_size", "job_queue"})
+                         {"heartbeat", "health_monitor", "db_size", "job_queue",
+                          "goals_rollover", "goals_monday_push"})
 
 
 if __name__ == "__main__":

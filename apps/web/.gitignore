@@ -47,3 +47,6 @@ next-env.d.ts
 
 # generated from tokens.css at build time
 /src/generated/
+
+# Playwright screenshot reviews (Chat 2 onward)
+/e2e/screenshots/

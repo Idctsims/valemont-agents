@@ -10,7 +10,7 @@ const password = process.env.E2E_OWNER_PASSWORD;
 test.skip(!email || !password, "set E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD to run");
 test.describe.configure({ mode: "serial" });
 
-async function signIn(page: Page, next = "/command/betting") {
+async function signIn(page: Page, next = "/goals") {
   await page.goto(`/login?next=${encodeURIComponent(next)}`);
   await page.getByLabel("Email").fill(email!);
   await page.getByLabel("Password").fill(password!);
@@ -66,19 +66,19 @@ test("onboarding on an iPhone in Safari shows Add to Home Screen", async ({ brow
   }
 });
 
-test("owner signs in, sees the active pillar, and logs out", async ({ page }, testInfo) => {
+test("owner signs in, sees the active page, and logs out", async ({ page }, testInfo) => {
   await signIn(page);
-  await expect(page.getByRole("heading", { level: 1, name: "Betting" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Goals" })).toBeVisible();
 
   const phone = testInfo.project.name === "phone";
   if (phone) {
-    const tab = page.getByRole("navigation", { name: "Sections" }).getByRole("link", {
-      name: "Sports",
+    const tab = page.getByRole("navigation", { name: "Dock" }).getByRole("link", {
+      name: "Goals",
     });
     await expect(tab).toHaveAttribute("aria-current", "page");
   } else {
-    const item = page.getByRole("navigation", { name: "Pillars" }).getByRole("link", {
-      name: /Betting/,
+    const item = page.getByRole("navigation", { name: "Pages" }).getByRole("link", {
+      name: "Goals",
     });
     await expect(item).toHaveAttribute("aria-current", "page");
   }
@@ -86,7 +86,7 @@ test("owner signs in, sees the active pillar, and logs out", async ({ page }, te
   for (const theme of ["night", "day"] as const) {
     await setTheme(page, theme);
     await page.screenshot({
-      path: `e2e-screenshots/pillar-betting-${testInfo.project.name}-${theme}.png`,
+      path: `e2e-screenshots/goals-${testInfo.project.name}-${theme}.png`,
     });
   }
 
@@ -98,6 +98,6 @@ test("owner signs in, sees the active pillar, and logs out", async ({ page }, te
   await expect(page).toHaveURL(/\/login$/);
 
   // The session is really gone, not just the page.
-  await page.goto("/command");
-  await expect(page).toHaveURL(/\/login\?next=%2Fcommand$/);
+  await page.goto("/goals");
+  await expect(page).toHaveURL(/\/login\?next=%2Fgoals$/);
 });

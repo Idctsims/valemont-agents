@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { LedgerHeader, MovedOnFold } from "@/components/goals/goal-ledger";
+import { GoalRow } from "@/components/goals/goal-row";
+import { ProgressStrip } from "@/components/goals/progress-strip";
 import { BetLegRow, type Leg } from "@/components/ui/bet-leg-row";
+import { countLabel, type Goal, type Segment } from "@/lib/goals/types";
 import { PaperBadge, StatusChip } from "@/components/ui/badges";
 import { button, chip } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -91,6 +95,48 @@ const LEGS: Leg[] = [
     prob: 0.21,
   },
 ];
+
+function goal(over: Partial<Goal> & { id: string; title: string }): Goal {
+  return {
+    notes: null,
+    horizon: "weekly",
+    area: null,
+    period_start: "2026-10-05",
+    status: "open",
+    carried_from: null,
+    carry_count: 0,
+    sort_order: 0,
+    created_at: "2026-10-05T12:00:00Z",
+    completed_at: null,
+    moved: false,
+    ...over,
+  };
+}
+
+const GOAL_STATES: { state: string; goal: Goal; overCap?: boolean }[] = [
+  { state: "Open", goal: goal({ id: "g1", title: "Send Clipd the revised term sheet", area: "business" }) },
+  {
+    state: "Done",
+    goal: goal({ id: "g2", title: "Four lifts this week", area: "health", status: "done", completed_at: "2026-10-08T12:00:00Z" }),
+  },
+  {
+    state: "Carried",
+    goal: goal({ id: "g3", title: "Close out the Q3 books", area: "money", carried_from: "g0", carry_count: 2 }),
+  },
+  { state: "Dropped", goal: goal({ id: "g4", title: "Reorganise the garage", area: "personal", status: "dropped" }) },
+  { state: "Moved on", goal: goal({ id: "g5", title: "Call Marcus about the lease", area: "people", moved: true }) },
+  { state: "Over cap", goal: goal({ id: "g6", title: "An eleventh thing", area: "business" }), overCap: true },
+];
+
+const FOLDED: Goal[] = GOAL_STATES.filter((s) => s.state === "Dropped" || s.state === "Moved on").map(
+  (s) => s.goal,
+);
+
+const STRIP_DEMO: Segment[] = ["done", "done", "done", "open", "open", "open", "empty", "empty", "empty", "empty"];
+const STRIP_OVER: Segment[] = [
+  "done", "done", "done", "done", "open", "open", "open", "open", "open", "open", "open", "done",
+];
+const STRIP_HISTORY: Segment[] = ["done", "done", "done", "done", "done", "done", "done", "carried", "carried", "dropped"];
 
 function SubHead({ children }: { children: React.ReactNode }) {
   return <h3 className="label-mono mb-4 text-text-muted">{children}</h3>;
@@ -203,6 +249,70 @@ function ThemePanel({ theme }: { theme: Theme }) {
               {LEGS.map((leg) => (
                 <BetLegRow key={leg.player} leg={leg} />
               ))}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <SubHead>Goal rows</SubHead>
+          <ul className="border-t border-border" data-testid="design-goal-rows">
+            {GOAL_STATES.map(({ state, goal: g, overCap }) => (
+              <GoalRow key={state} goal={g} overCap={overCap} />
+            ))}
+          </ul>
+          <p className="mt-3 text-sm text-text-muted">
+            Open, done, carried twice, dropped, moved on to next week, and an eleventh goal past the soft cap.
+          </p>
+        </div>
+
+        <div>
+          <SubHead>Ledger headers</SubHead>
+          <div className="flex flex-col gap-6">
+            <div>
+              <p className="mb-2 text-sm text-text-muted">Label: Home, where the date is the hero</p>
+              <LedgerHeader variant="label" heading="This week" periodLabel="Oct 5 – 11" count={countLabel(2, 6)} />
+            </div>
+            <div>
+              <p className="mb-2 text-sm text-text-muted">Hero: /goals, under the tabs</p>
+              <LedgerHeader variant="hero" heading="This week" periodLabel="Oct 5 – 11" count={countLabel(2, 6)} />
+            </div>
+            <div>
+              <p className="mb-2 text-sm text-text-muted">Saving: a tap not yet on the server</p>
+              <LedgerHeader variant="label" heading="This week" periodLabel="Oct 5 – 11" count={countLabel(3, 6)} saving />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <SubHead>Moved on fold</SubHead>
+          <p className="mb-2 text-sm text-text-muted">Dropped and moved-on goals, after open and done. Closed:</p>
+          <MovedOnFold count={2}>
+            {FOLDED.map((g) => (
+              <GoalRow key={g.id} goal={g} />
+            ))}
+          </MovedOnFold>
+          <p className="mt-4 mb-2 text-sm text-text-muted">Open:</p>
+          <MovedOnFold count={2} defaultOpen>
+            {FOLDED.map((g) => (
+              <GoalRow key={g.id} goal={g} />
+            ))}
+          </MovedOnFold>
+        </div>
+
+        <div>
+          <SubHead>Week strip</SubHead>
+          <div className="flex flex-col gap-4">
+            <div>
+              <p className="mb-2 text-sm text-text-muted">Live week, 3 of 10 done</p>
+              <ProgressStrip segments={STRIP_DEMO} />
+            </div>
+            <div>
+              <p className="mb-2 text-sm text-text-muted">Over the cap: twelve goals</p>
+              <ProgressStrip segments={STRIP_OVER} />
+            </div>
+            <div>
+              <p className="mb-2 text-sm text-text-muted">History: done, carried, dropped</p>
+              <ProgressStrip segments={STRIP_HISTORY} size="sm" />
             </div>
           </div>
         </div>

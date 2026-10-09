@@ -12,6 +12,13 @@
                              retries with backoff, gives up after 5 attempts.
     health_drill     60 s    HEALTH_DRILL=true only: always fails, to prove
                              the alert path end to end.
+    goals_rollover   weekly  Monday 00:01 and the 1st 00:01, America/Chicago,
+                             and once at boot: carries every ended week and
+                             month not yet rolled (db/021), oldest first.
+                             Idempotent, so the boot run is what saves a
+                             midnight the worker was down for.
+    goals_monday_push weekly Monday 07:00 America/Chicago, never at boot:
+                             "Set your week", linking to /goals.
 
 Alerts go through core/push.py with deep link /settings/health.
 """
@@ -23,6 +30,7 @@ import os
 from datetime import timedelta
 from typing import Any, Callable, Iterable, Mapping
 
+from apscheduler.triggers.combining import OrTrigger
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
@@ -32,6 +40,9 @@ from core.jobs import SystemJob, describe
 log = logging.getLogger("valemont.system")
 
 HEALTH_LINK = "/settings/health"
+GOALS_LINK = "/goals"
+OWNER_TZ = "America/Chicago"
+WEEK_S = 7 * 24 * 60 * 60
 
 #: Rows other processes keep. The Vercel watchdog writes 'watchdog' each time
 #: cron-job.org calls it, so the worker notices if that external check dies.
@@ -225,6 +236,60 @@ def poll_queue(handlers: Mapping[str, QueueHandler] = QUEUE_HANDLERS) -> None:
         ledger.queue_done(job.id)
 
 
+# ---------------------------------------------------------------------- goals
+
+#: A soft cap: the web allows an 11th weekly goal and warns about it.
+WEEKLY_GOAL_CAP = 10
+ROLLOVER_HORIZONS: tuple[ledger.RolloverHorizon, ...] = ("weekly", "monthly")
+#: Far more ended periods than a real outage leaves behind. Reaching it means
+#: the due list is not shrinking, which is a bug to surface, not to loop on.
+ROLLOVER_MAX_STEPS = 200
+
+
+def roll_over_goals() -> int:
+    """Carry every ended period not yet rolled, oldest first, for both
+    horizons. Returns goals carried. Carrying a period can make the next one
+    due (its new rows are open), so this asks again after each carry."""
+    total = 0
+    for horizon in ROLLOVER_HORIZONS:
+        for _ in range(ROLLOVER_MAX_STEPS):
+            due = ledger.goal_periods_to_roll(horizon)
+            if not due:
+                break
+            carried = ledger.carry_over_goals(horizon, due[0])
+            if carried == 0:
+                raise RuntimeError(
+                    f"goals rollover: {horizon} {due[0]} is listed as due but nothing carried")
+            log.info("goals: carried %d %s goal(s) from %s", carried, horizon, due[0])
+            total += carried
+        else:
+            raise RuntimeError(
+                f"goals rollover: {horizon} still has periods due after {ROLLOVER_MAX_STEPS} steps")
+    return total
+
+
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}" if n == 1 else f"{n} {word}s"
+
+
+def monday_message(counts: ledger.WeekGoalCounts) -> push.Message:
+    slots = max(0, WEEKLY_GOAL_CAP - counts.held)
+    return push.Message(
+        kind="goals_monday",
+        title="Set your week",
+        body=f"{counts.carried_in} carried in. {_plural(slots, 'slot')} left.",
+        deep_link=GOALS_LINK,
+        tag="goals-week",
+    )
+
+
+def goals_monday_push() -> None:
+    """Roll first (00:01 may have been missed; it is idempotent), then push.
+    No device to push to raises, so the job records a failure."""
+    roll_over_goals()
+    push.send(monday_message(ledger.this_week_goal_counts()))
+
+
 # ---------------------------------------------------------------------- drill
 
 def health_drill() -> None:
@@ -240,6 +305,15 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
                   CronTrigger(hour=3, minute=0, timezone="America/Chicago"),
                   check_db_size, misfire_grace=3600),
         SystemJob("job_queue", 10, IntervalTrigger(seconds=10), poll_queue, misfire_grace=9),
+        SystemJob("goals_rollover", WEEK_S,
+                  OrTrigger([
+                      CronTrigger(day_of_week="mon", hour=0, minute=1, timezone=OWNER_TZ),
+                      CronTrigger(day=1, hour=0, minute=1, timezone=OWNER_TZ),
+                  ]),
+                  roll_over_goals, misfire_grace=3600),
+        SystemJob("goals_monday_push", WEEK_S,
+                  CronTrigger(day_of_week="mon", hour=7, minute=0, timezone=OWNER_TZ),
+                  goals_monday_push, misfire_grace=3600, run_at_boot=False),
     ]
     if env.get("HEALTH_DRILL", "").strip().lower() == "true":
         log.warning("HEALTH_DRILL=true: scheduling health_drill, which always fails")
