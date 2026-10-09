@@ -1,10 +1,20 @@
 # Valemont Command — Master Plan
 
-Oct 7, 2026 · @Terrell Sims
+Oct 7, 2026 · @Terrell Sims · **Updated Oct 8, 2026: Chat 1 (Foundation) complete**
+
+## Build status
+
+| Chat | Status | Closed |
+| --- | --- | --- |
+| Chat 1 — Foundation | **Done.** All four phases green, both monitoring drills passed | Oct 8, 2026 |
+| Chat 2 — Command core | **Next.** Setup listed under Chat 2 in §6 | — |
+| Chats 3–13 | Not started | — |
+
+What changed from this plan during Chat 1 is recorded where it applies, marked **(as built)**. The repo's `CLAUDE.md` Current State holds the full detail: commits, test counts, drill timelines.
 
 ## Read first: six calls that shape everything
 
-Verdict: build Valemont Command inside the existing valemont-agents repo, on free tiers except Railway Hobby and the Claude API (about $40–60/month total), and point the Betting pillar at a market-consensus engine instead of the old Kalshi models. The reasons follow.
+Verdict: build Valemont Command inside the existing valemont-agents repo, on free tiers except the Claude API (and Railway Hobby once the worker outgrows the free plan), and point the Betting pillar at a market-consensus engine instead of the old Kalshi models. The reasons follow.
 
 **1. Your own repo already proved the Kalshi models don't beat Kalshi.** This is the most important finding of the audit. The `nfl_ml` walk-forward fit found no signal: its biggest possible adjustment was about 1.6¢ against the 3.1–4.3¢ a bet needs to clear fees. Both pre-registered props strategies failed their holdout, and by your own rule props stopped. Three outside builders measured the same thing and lost. Building the parlay generator on those models would print confident edges that don't exist.
 
@@ -14,7 +24,7 @@ Verdict: build Valemont Command inside the existing valemont-agents repo, on fre
 
 **4. Kalshi needs no API keys to build any of this.** Market data is public and unauthenticated; the repo's client already reads it that way. Account verification only matters when you trade, and API keys only when you want quotes or orders pulled into the dashboard. Alabama has no state regulator action against Kalshi, but private class actions are pending there, so access risk sits in the risk register.
 
-**5. The repo's "no real money, ever" rule must be amended before Chat 1.** CLAUDE.md §1 forbids any live execution. Your brief requires a paper/live switch on both bots. The amendment: paper by default; live only by an explicit owner flip per bot, with separate keys, hard limits and a kill switch. Kalshi bets and FOMO trades stay manual execution.
+**5. The repo's "no real money, ever" rule must be amended before Chat 1.** CLAUDE.md §1 forbids any live execution. Your brief requires a paper/live switch on both bots. The amendment: paper by default; live only by an explicit owner flip per bot, with separate keys, hard limits and a kill switch. Kalshi bets and FOMO trades stay manual execution. **(as built)** Amended in Chat 1 Phase 1: only the core crypto bot on Alpaca is eligible for automated live execution; no key with withdrawal or transfer permission is ever stored.
 
 **6. Crypto venues.** Core bot runs on **Alpaca**: identical paper and live APIs, crypto paper trading open in every state, keys already stubbed in `.env.example`. Memecoin bot uses **FOMO** for execution, but FOMO has no official API. So the bot paper-trades on DexScreener and Jupiter prices, and in live mode it pushes you the call to execute in FOMO, then logs your fill.
 
@@ -26,7 +36,7 @@ Build on `valemont-agents` and turn it into a monorepo: `apps/web` (Next.js) and
 | --- | --- | --- |
 | `core/` (ledger, BaseAgent loop, orchestrator) | Keep as-is | Commit-before-outcome ledger becomes the backbone for bets, bot trades and 15-min BTC calls |
 | `venues/kalshi/` (read-only client, fees, edge gate) | Keep, extend | Add combo/multivariate reads, sport discovery across all series, optional authenticated RFQ later |
-| `db/001–017` migrations | Keep, continue numbering at 018 (018 is the read-only inspection role; 019 is push subscriptions and notifications, Chat 1 Phase 3; the other shared tables start at 020) | Paper/live separation and immutability triggers already exist for ledger tables |
+| `db/001–017` migrations | Keep, continue numbering at 018 | Paper/live separation and immutability triggers already exist for ledger tables |
 | `sports/nfl/` models | Keep as research only | Failed holdout; kept registered as forward tests, not used for picks |
 | `adapters/crypto.py` | Replace strategy, keep plumbing | Mechanical placeholder rule; core bot gets a real strategy on Alpaca |
 | `adapters/prizepicks.py` | Fold into Manual Slip Entry | No public PrizePicks API; screenshot parsing replaces the fragile fetch |
@@ -35,7 +45,9 @@ Build on `valemont-agents` and turn it into a monorepo: `apps/web` (Next.js) and
 | `tests/`, `tests_live/` | Keep and extend to every new worker | They already caught two silent data-loss bugs |
 | `dashboard/` (empty) | Replaced by `apps/web` | Nothing to carry |
 
-**Two architecture rules in CLAUDE.md change.** First, the "dashboard never reads Supabase directly" rule: the Next.js app now reads Supabase server-side with your login, through read-only views over the ledger. Workers stay the only writers to ledger tables. Second, the Supabase MCP: CLAUDE.md says the database is on a separate account with no MCP, so migrations stay paste-by-hand unless you decide to connect it. Recommendation: keep paste-by-hand for ledger migrations and allow the MCP for read-only inspection.
+**Two architecture rules in CLAUDE.md change.** First, the "dashboard never reads Supabase directly" rule: the Next.js app now reads Supabase server-side with your login, through read-only policies over the ledger. Workers stay the only writers to ledger tables. Second, database inspection.
+
+**(as built)** The Supabase MCP is **not used in this repo at all**. The MCP connected in Cursor belongs to a different Supabase account. Instead, every inspection goes through `workers/scripts/db_inspect.py`, which connects only as the `valemont_readonly` role (db/018): SELECT on every table, no write grant anywhere, enforced by the database and covered by a live test. Migrations stay paste-by-hand. The repo is now laid out as `apps/web`, `workers/`, `db/`, `docs/`, with the Railway image built from `workers/` only.
 
 ## 2. Architecture
 
@@ -53,6 +65,8 @@ flowchart TB
   R -->|AI jobs| C
   R -.->|Web Push alerts| P
   X["Outside data<br/>Sports: Kalshi, ESPN, The Odds API<br/>Crypto: Alpaca, Coinbase, Deribit, DexScreener, Jupiter, RugCheck, GoPlus<br/>Culture/news: RSS, Reddit, HN, GitHub, TMDB, Pinterest, Unsplash, Pexels"] -->|pulled by workers| R
+  W["Watchdog<br/>cron-job.org → Vercel /api/watchdog<br/>healthchecks.io dead-man's switch"] -.->|checks heartbeat| S
+  W -.->|"Worker down" push| P
 ```
 
 - **Reads:** pages are server components that read Supabase with your session. API routes handle writes (reactions, goals, slips, uploads) and drop heavy work into the `job_queue` table.
@@ -60,16 +74,27 @@ flowchart TB
 - **Live screens:** Live Bet Tracker, Game Day and BTC 15-min subscribe to Supabase Realtime, so the phone updates without refreshing.
 - **Wags:** chat streams from a Vercel route that calls Claude with the latest cross-pillar context snapshot plus the page you opened it from.
 - **Alerts:** the worker sends Web Push straight to your devices; no third-party notification service.
+- **Monitoring (as built), three layers:** the worker's own health monitor (job failures and stale jobs); an external watchdog (cron-job.org calls a token-protected Vercel route every 5 minutes, which pushes "Worker down" if the heartbeat is over 5 minutes stale); and healthchecks.io, which alerts by email if the watchdog itself stops calling.
 
 ## 3. Data model
 
-One Supabase Postgres database, `public` schema, migrations continuing at `db/020` (`db/018` is the `valemont_readonly` inspection role, Chat 1 Phase 1; `db/019` is `push_subscriptions` and `notifications`, Chat 1 Phase 3). The existing ledger tables stay the single source of truth for anything that wins or loses: generated parlays, played slips, bot trades and 15-minute BTC calls are all `commitments` with `legs` and `resolutions`. Everything else is ordinary app data.
+One Supabase Postgres database, `public` schema, migrations continuing at `db/018`. The existing ledger tables stay the single source of truth for anything that wins or loses: generated parlays, played slips, bot trades and 15-minute BTC calls are all `commitments` with `legs` and `resolutions`. Everything else is ordinary app data.
 
-**Paper vs live, from day one.** Every money table carries `mode text not null check (mode in ('paper','live'))` with default `'paper'`, alongside the existing `is_test`. Capital Tracker, model stats and bot stats always group by `mode`, so live money never mixes with paper numbers and flipping a bot to live needs no schema change.
+**(as built) Migration numbering.** Applied: `db/001`–`012` and `db/014`–`020`. `db/013` (production roster, go-live) is deliberately unpasted. Chat 1 used: `018` read-only inspection role, `019` push tables, `020` shared tables plus ledger read policies, the TRUNCATE guard and grant lockdown. **Next new file: `db/021`.**
+
+**Paper vs live, from day one.** Every money table carries `mode text not null check (mode in ('paper','live'))` with default `'paper'`, alongside the existing `is_test`. Capital Tracker, model stats and bot stats always group by `mode`, so live money never mixes with paper numbers and flipping a bot to live needs no schema change. **(as built)** `commitments` gained `mode` (default `'paper'`) and `origin` (default `'agent'`) in db/020; every existing row reads paper/agent.
 
 **Row-level security.** App tables: RLS on, one policy `owner_id = auth.uid()` for select/insert/update/delete. Ledger tables: RLS on, a select-only policy for your user, no write policies. Workers write through the Postgres connection string, which bypasses RLS, so the frontend can read the ledger but can never edit a commitment. The immutability triggers from db/001–015 stay.
 
-**Free-tier budget (500 MB).** Embeddings use 384 dimensions (about 1.5 KB per item). Unreacted news older than 90 days is pruned nightly; anything you reacted to is kept. Lookbook uploads are compressed to WebP in Storage (1 GB); Pinterest pins store URLs only. A nightly job logs table sizes and pushes an alert at 400 MB.
+**(as built) Security additions in db/020:**
+- `is_owner()` reads the single `app_settings` row, so no UUID is hard-coded in any policy.
+- A TRUNCATE guard on all 19 append-only tables (row triggers never fire on TRUNCATE, so this was an open hole for every role, the worker included).
+- `anon` holds no privilege on any public table, current or future; the signed-in role holds no write privilege on any ledger or archive table.
+- Pattern for every new app table: RLS on, policies `TO authenticated` using `owner_id = auth.uid()`, anon revoked.
+
+**Free-tier budget (500 MB).** Embeddings use 384 dimensions (about 1.5 KB per item). Unreacted news older than 90 days is pruned nightly; anything you reacted to is kept. Lookbook uploads are compressed to WebP in Storage (1 GB); Pinterest pins store URLs only. A nightly job logs table sizes and pushes an alert at 400 MB. **(as built)** The `db_size` system job runs daily at 03:00 Chicago and at every boot; it pushes once at 400 MB and once at 450 MB. Database size on Oct 8: about 15 MB.
+
+**Open design question (not urgent):** `kalshi_candles` is immutable and TRUNCATE-proof, so the "retention window" below can't be a plain delete. When storage gets tight, it needs a deliberate design (archive and drop by partition, or a pre-registered exception), never a weakened guard.
 
 ### Existing tables carried over
 
@@ -85,13 +110,16 @@ One Supabase Postgres database, `public` schema, migrations continuing at `db/02
 
 ### New tables
 
+Rows marked **built** exist as of Chat 1.
+
 | Domain | Table | Key columns |
 | --- | --- | --- |
-| Shared | `app_settings` | owner\_id, timezone, notification prefs, seed interests (jsonb) |
-| Shared | `push_subscriptions` | endpoint, p256dh, auth, device\_label, active (db/019, Chat 1 Phase 3) |
-| Shared | `notifications` | kind, title, body, deep\_link, sent\_at, status (db/019, Chat 1 Phase 3) |
-| Shared | `job_health` | job, last\_ok\_at, last\_error, consecutive\_failures |
-| Shared | `ai_usage` | purpose, model, tokens\_in, tokens\_out, cost\_usd, created\_at |
+| Shared | `app_settings` **built** | owner\_id, timezone, notification prefs, seed interests (jsonb); exactly one row |
+| Shared | `push_subscriptions` **built** | endpoint, p256dh, auth, device\_label, active, last\_success\_at |
+| Shared | `notifications` **built** | kind, title, body, deep\_link, sent\_at, status, error |
+| Shared | `job_health` **built** | job, expected\_interval\_s, last\_ok\_at, last\_error, consecutive\_failures, alert\_state |
+| Shared | `ai_usage` **built** | purpose, model, tokens\_in, tokens\_out, cache tokens, batch, cost\_usd, critical, created\_at (append-only) |
+| Shared | `job_queue` **built** | kind, payload, status, attempts, run\_after, locked\_at, last\_error |
 | Learning engine | `sources` | pillar, name, kind (rss / reddit / github / api), url, weight, active |
 | Learning engine | `content_items` | pillar, source\_id, external\_id, url, title, ai\_summary, published\_at, tags\[\], embedding vector(384); unique (source\_id, external\_id) |
 | Learning engine | `reactions` | item\_id, reaction (love / neutral / not\_interested), created\_at |
@@ -129,26 +157,28 @@ One Supabase Postgres database, `public` schema, migrations continuing at `db/02
 | Crypto | `accumulation_signals` | asset, date, call (accumulate / hold / wait), reasoning, metrics (jsonb) |
 | Crypto | `btc15_positions` | commitment\_id, entered\_price, entered\_at, exited\_price, exited\_at |
 
-`job_queue` (kind, payload, status, attempts, run\_after) carries work the app hands to Railway: slip parsing, Arm Me requests, Lookbook tagging, on-demand parlay runs.
+`job_queue` carries work the app hands to Railway: slip parsing, Arm Me requests, Lookbook tagging, on-demand parlay runs. **(as built)** The worker claims jobs with `FOR UPDATE SKIP LOCKED` every 10 seconds, retries with backoff, and fails a job after 5 attempts. Only a `noop` handler exists so far; each pillar adds its own.
 
 Views the app reads: `v_model_performance` (hit rate, ROI net of fees and CLV by tier, sport, mode), `v_capital_today` (totals and breakdown by source and mode), `v_open_exposure` (every open leg by game, never summed across agents).
 
 ## 4. API and services inventory
 
-Expected spend is about **$40–60/month**: Railway Hobby (about $7–10) and the Claude API (about $30–50). Everything else runs on free tiers. Railway's permanent free plan gives $1/month of credit on 0.5 GB of RAM, which can't keep 24/7 workers alive, so Hobby is the one paid plan I'd insist on. The Claude API has no free tier, and a Claude Pro subscription doesn't cover API usage.
+**(as built) Expected spend is about $0–10/month until the worker grows:** the Railway free plan (about $0.45–0.51/month of usage against a $1 credit) and the Claude API (starting with $5 prepaid and a $10 monthly cap). Everything else runs on free tiers. Original estimate, for when the full build is running: about **$40–60/month**, with Railway Hobby (about $7–10) and the Claude API (about $30–50). The Claude API has no free tier, and a Claude Pro subscription doesn't cover API usage.
 
-**How the Claude estimate is built.** Assumes about 300 summaries a day on the Haiku tier through the Batch API (about $5), Wags at about 20 messages a day on Sonnet 5.5 with prompt caching (about $14), and the Morning Brief, Arsenal, slip parsing, Lookbook tagging and bot reasoning together at about $15. Every call is logged to `ai_usage`, and a budget guard downgrades non-critical calls to Haiku if the month runs hot. Sonnet 5.5 lists at $2/$10 per million tokens and the Haiku tier at $1/$5 ([pricing](https://apidog.com/blog/claude-sonnet-5-5-pricing/)).
+**How the Claude estimate is built.** Assumes about 300 summaries a day on the Haiku tier through the Batch API (about $5), Wags at about 20 messages a day on Sonnet 5.5 with prompt caching (about $14), and the Morning Brief, Arsenal, slip parsing, Lookbook tagging and bot reasoning together at about $15. Every call is logged to `ai_usage`, and a budget guard downgrades non-critical calls to Haiku if the month runs hot. **(as built)** The guard lives in `workers/core/ai.py`, the only file allowed to call Claude: at 80% of `AI_MONTHLY_BUDGET_USD` (default $10) non-critical calls downgrade to the cheapest model; at 100% they're refused; one push per threshold per month. The web side gets a TypeScript twin in Chat 2, reading the same table.
 
 ### Core platform
 
 | Service | Used for | Tier and limits | $/mo | Account or key | Fallback |
 | --- | --- | --- | --- | --- | --- |
-| Vercel | Next.js app, API routes | Hobby, free (personal use) | 0 | Vercel account linked to GitHub | Cloudflare Pages |
-| Supabase | Postgres, Auth, Storage, pgvector, Edge Functions | Free: 500 MB DB, 1 GB storage, pauses after 7 idle days (daily jobs prevent it) | 0 | Existing project; anon key, service role key, Session pooler URL | Pro at $25 if the cap is hit |
-| Railway | All Python workers and the scheduler | Hobby: $5 including $5 usage ([pricing](https://temps.sh/blog/railway-pricing-2026)) | 7–10 | Existing account | Fly.io or Render |
-| Claude API | Summaries, vision, Brief, Wags, Arsenal, reasoning | Pay as you go | 30–50 | Console API key with a monthly spend limit set | Haiku-only mode via budget guard |
+| Vercel | Next.js app, API routes, watchdog route | Hobby, free (personal use). **Live at `valemont-command.vercel.app`**; builds only when `apps/web` changes | 0 | Vercel account linked to GitHub; env: Supabase URL, publishable key, `OWNER_USER_ID`, VAPID keys, `SUPABASE_SECRET_KEY` (watchdog only), `WATCHDOG_TOKEN`, `WATCHDOG_PING_URL` | Cloudflare Pages |
+| Supabase | Postgres, Auth, Storage, pgvector, Edge Functions | Free: 500 MB DB, 1 GB storage, pauses after 7 idle days (the heartbeat prevents it) | 0 | Existing project; publishable key (browser), a dedicated `vercel-watchdog` secret key (server, one route), Session pooler URL, read-only role URL | Pro at $25 if the cap is hit |
+| Railway | All Python workers and the scheduler | **Free plan for now (as built):** $1/month usage credit, 0.5 GB RAM per service. The system-jobs-only worker uses about 45–50 MB, about $0.45–0.51/month. Move to Hobby ($5 including $5 usage) when real agents or bots push past $1 | 0 now; 5+ later | Existing account; trial ends about Oct 18, after which the service must be redeployed by hand | Hobby; Fly.io or Render |
+| Claude API | Summaries, vision, Brief, Wags, Arsenal, reasoning | Pay as you go | Start: $5 prepaid, $10 cap | Console API key with a monthly spend limit set (Chat 2) | Haiku-only mode via budget guard |
 | Embeddings | Learning engine, Lookbook similarity | Supabase built-in gte-small (384-dim) in Edge Functions, free | 0 | None | sentence-transformers on Railway |
-| Web Push | All push alerts | Self-hosted VAPID with `web-push`, free | 0 | Generate VAPID keys once | Email digest |
+| Web Push | All push alerts | Self-hosted VAPID: `web-push` on Vercel, `pywebpush` on the worker, free. **Proven on a locked iPhone from both senders** | 0 | VAPID key pair in Vercel and Railway | Email digest |
+| cron-job.org **(added)** | Calls the watchdog route every 5 minutes | Free | 0 | Account; job sends `Authorization: Bearer WATCHDOG_TOKEN` | GitHub Actions cron |
+| healthchecks.io **(added)** | Dead-man's switch: emails if the watchdog stops pinging | Free Hobbyist; 5-minute period, 5-minute grace | 0 | Account; ping URL (secret) | Second cron-job.org job |
 
 ### Betting and sports
 
@@ -168,7 +198,7 @@ Expected spend is about **$40–60/month**: Railway Hobby (about $7–10) and th
 | Hacker News (Algolia) | Tech Hub | Free | 0 | None | HN Firebase API |
 | GitHub REST | Trending and most-starred repos | 5,000 requests/hour with a token | 0 | Personal access token | Search sorted by recent stars |
 | TMDB | Titles, release dates, trailers, where to stream | Free with attribution | 0 | API key | OMDb |
-| Pinterest API v5 | Boards and pins sync | Free; trial access gives read scopes, but approval has taken weeks for many developers ([forum](https://community.pinterest.biz/t/update-developer-app-approvals/45527?page=4)) | 0 | Business account plus developer app | Public board RSS feeds |
+| Pinterest API v5 | Boards and pins sync | Free; trial access gives read scopes, but approval has taken weeks for many developers ([forum](https://community.pinterest.biz/t/update-developer-app-approvals/45527?page=4)). **Applied Oct 8 (Personal API access), trial access pending** | 0 | Business account plus developer app | Public board RSS feeds |
 | Unsplash, Pexels | Lookbook discovery feed | Free: about 50 and 200 requests/hour | 0 | API keys | Each other |
 | Google Calendar | Morning Brief highlights | Free | 0 | Google Cloud OAuth client | Paste an ICS link |
 
@@ -191,7 +221,7 @@ Nothing gets built before what it stands on: Foundation first, then the five sha
 
 ```mermaid
 flowchart TB
-  A["Already built: ledger, Kalshi client, fee math, CLV, tests"] --> F["Chat 1 Foundation: auth, PWA + push, scheduler + health, design tokens"]
+  A["Already built: ledger, Kalshi client, fee math, CLV, tests"] --> F["Chat 1 Foundation ✓: auth, PWA + push, scheduler + health, design tokens"]
   F --> E["Shared engines: context layer (2), learning (3), vision (6), sports data (7), consensus (8)"]
   E --> P1["Ch2 Goals, Ventures, Capital"]
   E --> P2["Ch3 Home feed, Sports News"]
@@ -215,24 +245,44 @@ Thirteen build chats after this one, each split into phases with a test you run 
 
 **Every chat follows the same contract:** read this plan and CLAUDE.md, ask questions, search GitHub, deliver phased Claude Code prompts, list keys needed, and close with all checkboxes ticked. Every new worker also registers a Wags context provider and a Morning Brief section in the same chat.
 
-### Chat 1 — Foundation
+**(as built) Working rules added during Chat 1,** now in CLAUDE.md:
+- Native Windows PowerShell 5.1: no `&&`, `||`, ternaries or `??`.
+- No secret values ever printed in any tool output.
+- Never use another account's CLI session (Vercel, Railway, GitHub) for this repo.
+- Merge PRs with a merge commit, not a squash.
+- Reports back to the planning chat get filled in honestly; anything not actually checked is recorded as pending, never as passed.
 
-**Set up in this chat:** Supabase keys (existing project), Railway Hobby upgrade, Vercel account, Anthropic API key with a $60 monthly limit. VAPID push keys are generated locally, no account.
+### Chat 1 — Foundation ✅ Done Oct 8, 2026
+
+**Set up in this chat (as built):** Supabase keys (publishable, plus a dedicated `vercel-watchdog` secret key), Vercel, VAPID keys, cron-job.org, healthchecks.io. **Changed from plan:** Railway stays on the free plan instead of Hobby; the Anthropic API key moves to Chat 2 (the budget guard was built and tested with stubbed calls, no spend).
 
 1. Repo restructure and rules: `apps/web` + `workers/`, CLAUDE.md amended (§1 live-money rule, §5 frontend reads).
-   - [ ] Both test suites green after the move
-   - [ ] Railway worker redeploys from the new path
+   - [x] Both test suites green after the move (tests 360, tests\_live 88; pre-registration hashes unchanged)
+   - [x] Railway worker redeploys from the new path (root `/workers`, config `/workers/railway.json`, watch pattern `/workers/**`)
+   - Also: db/014–018 pasted (ledger mutation gaps closed); read-only inspection role replaced the MCP; Railway clock offset measured for the first time (+30 ms); a canary crash bug found and fixed; database password rotated.
 2. Next.js app, Supabase Auth (your login only), design tokens extracted from your inspo screenshots.
-   - [ ] Login works on phone and desktop; any other account is rejected
-   - [ ] Tokens file drives every color, font and spacing value; no default shadcn grays
+   - [x] Login works on phone and desktop; any other account is rejected (stranger account tested, then deleted)
+   - [x] Tokens file drives every color, font and spacing value; no default shadcn grays (`check:tokens` and `check:contrast` in lint)
+   - Design system: Night (default, River Styx / Carbon Fibre / Amber Autumn) and Day (coconut cream); Instrument Serif, Geist, Geist Mono, one pixel face for the boot screen and 404. Next.js 16, Tailwind v4, `proxy.ts`.
 3. PWA shell and push: manifest, service worker (Serwist), VAPID keys, onboarding screen.
-   - [ ] Installed to iPhone Home Screen; test push arrives with the phone locked
-4. Shared tables (db/020; shifted twice: 018 became the read-only role in Phase 1, and 019 the push tables in Phase 3), consolidated worker scheduler, `job_health`, `ai_usage`, budget guard.
-   - [ ] A deliberately failing test job triggers a push after two misses
+   - [x] Installed to iPhone Home Screen; test push arrives with the phone locked (from both the app and the worker)
+   - Also: `@serwist/turbopack`; no signed-in page ever cached on the device; offline screen works in airplane mode.
+4. Shared tables (built as db/020), consolidated worker scheduler, `job_health`, `ai_usage`, budget guard.
+   - [x] A deliberately failing test job triggers a push after two misses (Drill 1: alert about 92 s after boot, then "Recovered")
+   - [x] **Added:** kill the worker, get "Worker down" from the external watchdog, restart, get "Worker back" (Drill 2: passed on rerun, first stale call, every cron call 200)
+   - Also: worker now runs system jobs with zero agents (heartbeat, health monitor, db size, job queue); canary retired; watchdog fault isolation fixed after Drill 2's first run exposed two 500s.
 
-### Chat 2 — Command core
+**Carried out of Chat 1:**
+- Railway trial ends about Oct 18. Decision: stay on Free. When the trial lapses the worker stops, the watchdog pushes "Worker down", and it gets redeployed by hand. Confirm with the 24-hour usage figures (due Oct 9).
+- "JWT issued at future" (clock skew between caller and Supabase) shows up occasionally; the watchdog retry absorbs it. Escalate to Supabase only if 503s appear in the watchdog logs.
+- Pinterest trial access pending. On approval, move the privacy URL to `https://valemont-command.vercel.app/privacy`.
 
-**Set up in this chat:** Google Cloud project with the Calendar API and an OAuth client.
+### Chat 2 — Command core ← next
+
+**Set up in this chat:**
+- Anthropic API key: $5 prepaid credit, $10 monthly spend limit.
+- Google Cloud project with the Calendar API and an OAuth client (optional; calendar highlights can wait).
+- Your nine ventures' current state (stage, next action, blockers, deadlines), as a braindump, to seed Ventures HQ.
 
 1. Goals (weekly and long-term, Monday reset, carry-over, history).
    - [ ] Unfinished goals carry to the next week automatically
@@ -240,7 +290,7 @@ Thirteen build chats after this one, each split into phases with a test you run 
    - [ ] A venture item due today appears in the Today list
 3. Capital Tracker on paper data, labeled PAPER, with history chart.
    - [ ] A paper bankroll entry shows in the total and the breakdown within a minute
-4. Context layer and Wags: page-aware floating button, saved threads, provider registry.
+4. Context layer and Wags: page-aware floating button, saved threads, provider registry. Includes the TypeScript twin of the AI budget guard.
    - [ ] Wags answers "what's due this week" from real venture and goal data
 5. Morning Brief generator on Railway, sections that switch on as pillars register.
    - [ ] A brief generates at the scheduled time and arrives as a push
@@ -278,7 +328,7 @@ Thirteen build chats after this one, each split into phases with a test you run 
 
 ### Chat 6 — The Lookbook and the vision service
 
-**Set up in this chat:** Pinterest app credentials (applied for before Chat 1), Unsplash and Pexels keys.
+**Set up in this chat:** Pinterest app credentials (applied for Oct 8, pending), Unsplash and Pexels keys.
 
 1. Shared vision service: image in, structured JSON out, confidence per field.
    - [ ] The same service tags an outfit photo and reads a test slip screenshot
@@ -327,7 +377,7 @@ Thirteen build chats after this one, each split into phases with a test you run 
 
 ### Chat 10 — Crypto Long-Term Home and Core Paper Bot
 
-**Set up in this chat:** Alpaca account and paper key pair (instant), CoinGecko Demo key.
+**Set up in this chat:** Alpaca account and paper key pair (instant), CoinGecko Demo key. Likely the point to move Railway to Hobby.
 
 1. Long-Term Home: live prices, accumulation signals with reasoning, news strip.
    - [ ] BTC, ETH, SOL and XRP each show accumulate, hold or wait with a reason
@@ -380,20 +430,23 @@ The three most likely ways this build fails are silent worker death, data source
 | ESPN unofficial endpoints change or block | Medium | One `espn` adapter module, schema-validated responses, `job_health` alert on first failure, API-Sports fallback wired in Chat 7 |
 | Live stats latency (30–90 s behind TV) | Certain | Leg status shows its data timestamp; danger alerts debounced; no live-betting suggestions built on stale stats |
 | The Odds API free credits run out | High during NFL season | ESPN odds for mainlines, Odds API only for props, cached per slate, credit counter on the dashboard |
-| Pinterest trial access stuck pending for weeks | High | Apply during environment setup; Lookbook ships on public board RSS feeds plus uploads, then switches to OAuth sync when approved |
-| Supabase 500 MB cap | Medium within 6 months | Retention jobs, 384-dim embeddings, candle archive windowed, size alert at 400 MB |
-| Supabase project pauses | Low | Daily worker writes count as activity |
-| Worker dies silently at 3 a.m. | High without monitoring | Heartbeat per bot and job, `job_health` table, push alert after two missed runs, Railway restart policy, SIGTERM drain already in repo |
-| Railway usage creeps past $5 credit | Medium | One consolidated worker service with an internal scheduler instead of many services; usage alert set in Railway |
-| Vercel function time limits on Hobby | Medium | Nothing long-running on Vercel: AI generation, parsing and syncing happen on Railway, Vercel only reads and enqueues |
-| Claude API cost spike | Low | Spend limit in the Anthropic console, `ai_usage` logging, budget guard, Batch API for summaries |
+| Pinterest trial access stuck pending for weeks | High | Applied Oct 8; Lookbook ships on public board RSS feeds plus uploads, then switches to OAuth sync when approved |
+| Supabase 500 MB cap | Medium within 6 months | Retention jobs, 384-dim embeddings, candle archive windowed (design needed, see §3), size alerts at 400 and 450 MB **(built)** |
+| Supabase project pauses | Low | The heartbeat writes every minute **(built)** |
+| Worker dies silently at 3 a.m. | **Mitigated (built, drilled)** | Worker health monitor; external watchdog pushes "Worker down" within 10 minutes; healthchecks.io emails if the watchdog stops; both drills passed Oct 8 |
+| Railway usage creeps past the plan's credit | Medium | One consolidated worker; usage measured (about $0.45–0.51/month on Free); move to Hobby when agents or bots push past $1 |
+| Railway trial ends (about Oct 18) | Certain | Worker stops; watchdog alerts; redeploy by hand on the Free plan |
+| Supabase clock skew ("JWT issued at future") | Low, observed | Watchdog read retried once; persistent failure returns 503 and reports `/fail` to healthchecks |
+| Vercel function time limits on Hobby | Medium | Nothing long-running on Vercel: AI generation, parsing and syncing happen on Railway, Vercel only reads and enqueues; watchdog has a hard time budget under 30 s |
+| Claude API cost spike | Low | Spend limit in the Anthropic console, `ai_usage` logging, budget guard **(built)**, Batch API for summaries |
 | Claude vision misreads a slip | Medium | Every parsed slip goes to a confirm/edit screen before it's saved; parse confidence shown per leg |
 | Memecoin rug or honeypot | High in that market | Two independent checks (RugCheck and GoPlus) plus a liquidity floor before any paper entry; a failed check blocks entry |
 | Paper fills too optimistic | High | Fills priced off real quotes with spread and slippage added; meme fills use Jupiter quotes for the actual size |
 | Accidental live trade | Low, severe | Live keys only in a separate Railway environment, per-bot live flag requires typed confirmation, hard daily loss limit and kill switch |
-| iPhone PWA push quirks | Medium | Push works only from the Home Screen app on iOS 16.4+; onboarding screen walks through Add to Home Screen; permission requested from a button tap |
+| iPhone PWA push quirks | Medium | Push works only from the Home Screen app on iOS 16.4+; onboarding screen walks through Add to Home Screen; permission requested from a button tap **(built, proven)** |
 | iOS evicts PWA storage | Medium | Nothing important stored on device; everything lives in Supabase |
-| Windows PowerShell gotchas | Certain | Every command written for PowerShell (`$env:` not `export`, `;` not `&&` on 5.1, `python -m` everywhere); Python 3.12 via the official installer; repo's Dockerfile builds on Railway, not locally |
+| Windows PowerShell gotchas | Certain | Every command written for PowerShell 5.1 (`$env:` not `export`, `;` not `&&`, `python -m` everywhere); Python 3.12 via the official installer; repo's Dockerfile builds on Railway, not locally |
+| Secrets leaking through tool output | Medium | Rule in CLAUDE.md §6; key generators write to env files without printing; the database password was rotated once after a leak into a session |
 | Scope size (16 pillars, no MVP) | Certain | Dependency-ordered chats so finished pillars are usable daily while later ones are built; nothing deferred |
 
 ## 8. Testing plan
@@ -402,10 +455,12 @@ A pillar is done when three layers pass: automated tests, a live check on real d
 
 | Layer | What it covers | How it runs |
 | --- | --- | --- |
-| Invariant suite (`tests/`) | Ledger rules, fees, edge math, risk limits, correlation math, paper/live separation | `python -m unittest discover -s tests -t .` before and after every worker change |
-| Live database suite (`tests_live/`) | Migrations, triggers, RLS policies, views | Same command on `tests_live`, after each migration is pasted |
+| Invariant suite (`workers/tests/`) | Ledger rules, fees, edge math, risk limits, correlation math, paper/live separation, system jobs, push, AI budget guard | `..\venv\Scripts\python.exe -m unittest discover -s tests -t .` from `workers/` before and after every worker change |
+| Live database suite (`workers/tests_live/`) | Migrations, triggers, RLS policies, views, read-only role | Same command on `tests_live`, after each migration is pasted |
 | Contract tests | Real response shapes from Kalshi, ESPN, TMDB, Pinterest, DexScreener, Alpaca | Daily on Railway; a shape change alerts instead of silently returning nulls |
-| Web tests | Pages render, auth blocks strangers, reactions save | Playwright smoke run against the Vercel preview on each push |
+| Web tests | Pages render, auth blocks strangers, manifest and service worker, watchdog logic | Playwright from `apps/web` (`pnpm test:e2e`); owner suite with shell-only credentials |
+| Lint gates | No raw colors or arbitrary values, WCAG AA contrast, secret key used only in the watchdog route | `pnpm lint` (`check:tokens`, `check:contrast`, secret-key check) |
+| Monitoring drills | A failing job alerts and recovers; a killed worker alerts and recovers | Re-run after any change to the scheduler, health monitor or watchdog |
 | Accuracy tracking | Parlay hit rate, ROI net of fees and CLV by tier and sport; bot P/L and drawdown; 15-min call accuracy | Dashboards built in the pillar's own chat, reported per agent, never blended |
 | Phone check | One-handed use, push arrival, Home Screen install | Your checklist at the end of every phase |
 
@@ -419,7 +474,7 @@ A pillar is done when three layers pass: automated tests, a live check on real d
 - [ ] A 15-min BTC call is logged before its window; an exit alert fires in profit only
 - [ ] Share an Instagram image to the Lookbook; it's tagged and categorized
 - [ ] Ask Wags "what should I focus on today" and "how's the model doing this month"; both answers cite real data
-- [ ] Kill a worker on purpose; you get a push within two missed cycles
+- [x] Kill a worker on purpose; you get a push within two missed cycles (first proven in Chat 1, Drill 2; re-run here)
 - [ ] Log out; no page or API route returns your data
 
 ## 9. Environment setup checklist
@@ -428,30 +483,33 @@ Only three things happen before Chat 1. Every other account and key is set up in
 
 **Start now: the only slow clock**
 
-- [ ] Pinterest: convert to a free business account, create a developer app, request trial access with read scopes (`boards:read`, `pins:read`, `user_accounts:read`), described as a personal tool reading your own boards. Approval can take weeks, so starting now means it's through by Chat 6
+- [x] Pinterest: free business account, developer app, trial access requested (Personal API access, read scopes) on Oct 8. Placeholder website and privacy policy at `idctsims.github.io/valemont-legal`. **Status: trial access pending.**
 - [ ] Make your Lookbook Pinterest boards public, so the RSS fallback works if approval is still pending
 
 **Machine (PowerShell)**
 
-- [x] Node 20 LTS or newer: `node -v`
+- [x] Node 20 LTS or newer: `node -v` (Node 24)
 - [x] Python 3.12 in the repo venv (matches the Dockerfile): `.\venv\Scripts\python.exe --version`
 - [x] Git and the GitHub CLI: `git --version`; `gh auth status`
 - [x] pnpm, Railway CLI, Vercel CLI: `npm install -g pnpm @railway/cli vercel`
-- [x] Green baseline in the repo: `.\venv\Scripts\python.exe -m unittest discover -s tests -t .`
+- [x] Green baseline in the repo
+- [ ] Windows clock synced (`w32tm /resync` as Administrator) to reduce Supabase clock-skew errors
 
 **Cursor**
 
-- [ ] GitHub, Context7, Memory and Supabase MCPs connected; Supabase MCP set to read-only
-- [ ] This plan saved as `docs/MASTER_PLAN.md` and the build brief as `docs/BUILD_BRIEF.md`
-- [ ] 5–10 design inspo screenshots ready for Chat 1
+- [x] GitHub, Context7 and Memory MCPs connected. **Supabase MCP is not used for this repo** (it belongs to another account); inspection goes through `db_inspect.py`. Optional: move that MCP to per-project config in your other repos.
+- [x] This plan saved as `docs/MASTER_PLAN.md` and the build brief as `docs/BUILD_BRIEF.md`
+- [x] Design inspo screenshots provided in Chat 1
 
 ## 10. What needs your approval
 
-Approved by Tsims on Oct 7, 2026: all six decisions below are locked. Chat 1 starts from this plan.
+Approved by Tsims on Oct 7, 2026: all six decisions below are locked. Chat 1 started from this plan.
 
 - [x] Build on `valemont-agents` as a monorepo (section 1)
 - [x] Betting runs on the market-consensus engine; the old NFL models stay research-only until a new model passes a pre-registered holdout (Read first, points 1–2)
 - [x] Amend CLAUDE.md: paper by default, live only by an explicit per-bot flip with separate keys and hard limits (point 5)
 - [x] Alpaca for the core bot; memecoin live mode as FOMO signals you execute by hand (point 6)
-- [x] Pay for Railway Hobby and the Claude API (about $40–60/month); everything else free (section 4)
+- [x] Pay for Railway Hobby and the Claude API (about $40–60/month); everything else free (section 4). **Amended Oct 8:** Railway stays on the Free plan until the worker outgrows its $1 credit; the Claude API starts at $5 prepaid with a $10 cap.
 - [x] Thirteen-chat sequence with Wags and the Morning Brief framework built in Chat 2 (section 6)
+
+**Owner decisions still parked** (recorded in CLAUDE.md, not part of this build's critical path): go-live of the existing Kalshi roster (`db/013`), the `nfl_ml` commit-window question, the crypto research track review, and the weekly NFL props archive run every Tuesday (first: Oct 13, week 5).
