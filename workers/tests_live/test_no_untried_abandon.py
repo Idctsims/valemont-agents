@@ -37,15 +37,21 @@ class NoUntriedAbandon(LiveLedgerTestCase):
         if present != 2:
             raise unittest.SkipTest("db/024 not pasted")
 
+    # attempt=None: an abandonment, which asks nothing. The ledger's default
+    # (an 'answered' attempt in the same transaction, db/025) would satisfy
+    # the trigger and hide exactly what these tests are checking.
     def void(self, commitment_id: int) -> None:
         ledger.add_resolution(
             commitment_id=commitment_id, outcome="void",
             leg_outcomes=[ledger.LegOutcome(0, "void", None)], pnl=None,
             detail={"abandoned": True, "reason": "tests_live db/024"},
+            attempt=None,
         )
 
     def miss(self, commitment_id: int) -> None:
-        ledger.add_closing_snapshot(commitment_id=commitment_id, status="missed", reason="tests_live db/024")
+        ledger.add_closing_snapshot(
+            commitment_id=commitment_id, status="missed", reason="tests_live db/024", attempt=None
+        )
 
     def test_the_rows_here_are_test_rows_and_get_no_exemption(self) -> None:
         self.assertTrue(ledger.agent_is_test("_test"))
@@ -83,14 +89,14 @@ class NoUntriedAbandon(LiveLedgerTestCase):
         committed = self.commit_due()
         ledger.add_resolution(
             commitment_id=committed.id, outcome="hit",
-            leg_outcomes=[ledger.LegOutcome(0, "hit", "1")], pnl="1",
+            leg_outcomes=[ledger.LegOutcome(0, "hit", "1")], pnl="1", attempt=None,
         )
 
     def test_a_captured_close_needs_no_attempt(self) -> None:
         committed = self.commit_due(with_close=True)
         ledger.add_closing_snapshot(
             commitment_id=committed.id, entry_price="0.40", close_price="0.45",
-            clv="0.05", clv_pct="0.125",
+            clv="0.05", clv_pct="0.125", attempt=None,
         )
 
     def test_raw_sql_gets_no_way_around_it(self) -> None:

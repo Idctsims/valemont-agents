@@ -417,6 +417,7 @@ class LiveLedgerTestCase(unittest.TestCase):
                 leg_outcomes=[ledger.LegOutcome(0, "void", None)],
                 pnl=None,
                 detail={"sealed_by": "tests_live", "abandoned": True},
+                attempt=None,  # an abandonment, like core's: it stands on the attempt above
             )
         except psycopg.errors.UniqueViolation:
             pass
@@ -432,6 +433,7 @@ class LiveLedgerTestCase(unittest.TestCase):
                     commitment_id=commitment_id,
                     status="missed",
                     reason="tests_live fixture sealed, never captured",
+                    attempt=None,
                 )
             except psycopg.errors.UniqueViolation:
                 pass

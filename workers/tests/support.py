@@ -80,6 +80,9 @@ class LedgerStub:
         db_time=datetime(2026, 10, 1, 0, 0, 0, 250000, tzinfo=timezone.utc)))
     _runs: dict[int, int] = field(default_factory=dict)
     _commitments: dict[int, int] = field(default_factory=dict)
+    #: Attempts on record per (commitment_id, purpose), as the database holds
+    #: them. Seeded from `PendingCommitment.attempts` by add_due/add_capture.
+    attempts: dict[tuple[int, str], int] = field(default_factory=dict)
     _ids: Any = field(default_factory=lambda: itertools.count(1000))
 
     def __post_init__(self) -> None:
@@ -99,11 +102,13 @@ class LedgerStub:
     def add_due(self, *pending: PendingCommitment) -> None:
         for p in pending:
             self._commitments[p.id] = p.agent_id
+            self.attempts[(p.id, "resolve")] = p.attempts
         self.due.extend(pending)
 
     def add_capture(self, *pending: PendingCommitment) -> None:
         for p in pending:
             self._commitments[p.id] = p.agent_id
+            self.attempts[(p.id, "capture")] = p.attempts
         self.capture.extend(pending)
 
     # -- queries for assertions ---------------------------------------------
@@ -198,9 +203,23 @@ class LedgerStub:
             resolves_after=kwargs["resolves_after"],
         )
 
+    def _with_attempt(self, call: Call, purpose: str, abandoning: bool) -> None:
+        """The attempt and the answer land together or not at all, and
+        db/024's trigger refuses an abandonment with no attempt of its
+        purpose on record, counting one written in the same transaction."""
+        key = (call.kwargs["commitment_id"], purpose)
+        added = 0 if call.kwargs.get("attempt", "answered") is None else 1
+        if abandoning and self.attempts.get(key, 0) + added == 0:
+            call.ok = False
+            raise ledger.LedgerError(
+                f"commitment {key[0]} has no {purpose} attempt on record (db/024)"
+            )
+        self.attempts[key] = self.attempts.get(key, 0) + added
+
     def add_resolution(self, **kwargs: Any) -> int:
-        self._record("add_resolution", (), kwargs,
-                     self._commitments.get(kwargs.get("commitment_id")))
+        call = self._record("add_resolution", (), kwargs,
+                            self._commitments.get(kwargs.get("commitment_id")))
+        self._with_attempt(call, "resolve", kwargs.get("outcome") == "void")
         return next(self._ids)
 
     def emit_event(self, kind: str, message: str | None = None, **kwargs: Any) -> None:
@@ -209,13 +228,19 @@ class LedgerStub:
     def record_resolution_attempt(self, commitment_id: int, result: str = "deferred",
                                   reason: str | None = None,
                                   purpose: str = "resolve") -> None:
-        self._record("record_resolution_attempt", (commitment_id, result),
-                     {"reason": reason, "purpose": purpose},
-                     self._commitments.get(commitment_id))
+        call = self._record("record_resolution_attempt", (commitment_id, result),
+                            {"reason": reason, "purpose": purpose},
+                            self._commitments.get(commitment_id))
+        if result == "answered":
+            call.ok = False
+            raise ledger.LedgerError("an answered attempt is never written on its own")
+        key = (commitment_id, purpose)
+        self.attempts[key] = self.attempts.get(key, 0) + 1
 
     def add_closing_snapshot(self, **kwargs: Any) -> ledger.ClosingSnapshot:
-        self._record("add_closing_snapshot", (), kwargs,
-                     self._commitments.get(kwargs.get("commitment_id")))
+        call = self._record("add_closing_snapshot", (), kwargs,
+                            self._commitments.get(kwargs.get("commitment_id")))
+        self._with_attempt(call, "capture", kwargs.get("status") == "missed")
         return ledger.ClosingSnapshot(
             id=next(self._ids), commitment_id=kwargs["commitment_id"],
             captured_at=now(), status=kwargs.get("status", "captured"),
