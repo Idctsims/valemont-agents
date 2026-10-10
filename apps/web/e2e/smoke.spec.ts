@@ -7,7 +7,7 @@ import { expect, test } from "@playwright/test";
 const webRoot = resolve(__dirname, "..");
 
 test.describe("logged out", () => {
-  for (const path of ["/goals", "/goals?view=history", "/ventures", "/ventures/sail-beach-club", "/capital", "/betting", "/design", "/onboarding", "/settings/health"]) {
+  for (const path of ["/goals", "/goals?view=history", "/ventures", "/ventures/sail-beach-club", "/capital", "/wags", "/betting", "/design", "/onboarding", "/settings/health"]) {
     test(`${path} redirects to /login with next`, async ({ page }) => {
       await page.goto(path);
       await expect(page).toHaveURL(
@@ -19,6 +19,15 @@ test.describe("logged out", () => {
   test("/ redirects to /login", async ({ page }) => {
     await page.goto("/");
     await expect(page).toHaveURL((url) => url.pathname === "/login" && !url.search);
+  });
+
+  test("/api/wags answers no one but the owner, and never reaches the model", async ({ request }) => {
+    const res = await request.post("/api/wags", {
+      data: { threadId: "00000000-0000-4000-8000-000000000000", message: { parts: [{ type: "text", text: "hi" }] } },
+      maxRedirects: 0,
+    });
+    expect([307, 308]).toContain(res.status());
+    expect(res.headers()["location"]).toMatch(/\/login/);
   });
 
   test("an unknown path is gated too, not a public 404", async ({ page }) => {

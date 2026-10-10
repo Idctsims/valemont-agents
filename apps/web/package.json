@@ -6,9 +6,10 @@
     "dev": "node scripts/gen-theme-colors.mjs && next dev",
     "build": "node scripts/gen-theme-colors.mjs && next build",
     "start": "next start",
-    "lint": "node scripts/gen-theme-colors.mjs && eslint && node scripts/check-tokens.mjs && node scripts/check-contrast.mjs && node scripts/check-secret-key.mjs",
+    "lint": "node scripts/gen-theme-colors.mjs && eslint && node scripts/check-tokens.mjs && node scripts/check-contrast.mjs && node scripts/check-secret-key.mjs && node scripts/check-ai-import.mjs",
     "check:tokens": "node scripts/check-tokens.mjs",
     "check:contrast": "node scripts/check-contrast.mjs",
+    "check:ai-import": "node scripts/check-ai-import.mjs",
     "check:secret-key": "node scripts/check-secret-key.mjs",
     "test:e2e": "playwright test",
     "test:unit": "playwright test -c playwright.unit.config.ts",
@@ -18,17 +19,24 @@
     "gen:e2e-marker": "node scripts/gen-e2e-marker.mjs"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "3.0.129",
+    "@ai-sdk/provider": "3.0.18",
+    "@ai-sdk/react": "3.0.306",
     "@phosphor-icons/react": "2.1.10",
     "@serwist/turbopack": "9.5.13",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.117.3",
+    "ai": "6.0.303",
     "next": "16.4.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "recharts": "3.10.1",
     "server-only": "^0.0.1",
     "serwist": "9.5.13",
-    "web-push": "3.6.7"
+    "streamdown": "2.7.0",
+    "use-stick-to-bottom": "1.1.6",
+    "web-push": "3.6.7",
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@playwright/test": "1.64.0",

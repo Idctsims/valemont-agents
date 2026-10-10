@@ -1,6 +1,8 @@
 import { DeviceMobile, Heartbeat, Palette } from "@phosphor-icons/react/ssr";
 import Link from "next/link";
 
+import { AskWagsButton } from "@/components/wags/ask-wags-button";
+import { WagsProvider } from "@/components/wags/wags-provider";
 import type { Theme } from "@/lib/theme";
 
 import { AccountMenu } from "./account-menu";
@@ -22,7 +24,7 @@ const SYSTEM_LINKS = [
 
 export function AppShell({ theme, children }: { theme: Theme; children: React.ReactNode }) {
   return (
-    <>
+    <WagsProvider>
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-pill focus:bg-accent focus:px-4 focus:py-2 focus:text-on-accent"
@@ -36,6 +38,9 @@ export function AppShell({ theme, children }: { theme: Theme; children: React.Re
             Valemont
           </Link>
           <p className="label-mono mt-1 text-text-muted">Command</p>
+        </div>
+        <div className="px-3 pb-5">
+          <AskWagsButton />
         </div>
         <div className="flex-1 overflow-y-auto px-3 pb-6">
           <RailNav />
@@ -84,6 +89,6 @@ export function AppShell({ theme, children }: { theme: Theme; children: React.Re
       </main>
 
       <Dock />
-    </>
+    </WagsProvider>
   );
 }

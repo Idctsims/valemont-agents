@@ -8,6 +8,7 @@ raises on contact.
 from __future__ import annotations
 
 import os
+import re
 import unittest
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -32,7 +33,8 @@ class CostMath(unittest.TestCase):
     def test_cache_rates_per_model(self) -> None:
         self.assertEqual(cost_usd("claude-opus-5-5", Usage(0, 0, cache_read=M)), Decimal("0.200000"))
         self.assertEqual(cost_usd("claude-fable-5-1", Usage(0, 0, cache_read=M)), Decimal("0.250000"))
-        self.assertEqual(cost_usd("claude-sonnet-5-5", Usage(0, 0, cache_read=M)), Decimal("0.200000"))
+        # 0.05x input since the 2026-10-10 verification (was wrongly 0.20).
+        self.assertEqual(cost_usd("claude-sonnet-5-5", Usage(0, 0, cache_read=M)), Decimal("0.100000"))
         self.assertEqual(cost_usd("claude-opus-5-5", Usage(0, 0, cache_write_5m=M)), Decimal("5.000000"))
         self.assertEqual(cost_usd("claude-opus-5-5", Usage(0, 0, cache_write_1h=M)), Decimal("8.000000"))
 
@@ -82,8 +84,9 @@ class FakeLedger:
     def notification_sent_this_month(self, kind: str) -> bool:
         return kind in self.sent
 
-    def record_ai_usage(self, **row: Any) -> None:
+    def record_ai_usage(self, **row: Any) -> int:
         self.rows.append(row)
+        return 1000 + len(self.rows)
 
 
 class StubClient:
@@ -137,6 +140,12 @@ class Guarded(unittest.TestCase):
                          ("test_call", "claude-opus-5-5", 1000, 500))
         self.assertEqual(row["cost_usd"], Decimal("0.014000"))  # 1000*$4 + 500*$20 per M
         self.assertEqual(self.pushes, [])
+
+    def test_on_recorded_gets_the_row_id_model_and_cost(self) -> None:
+        seen: list[tuple[int, str, Decimal]] = []
+        self.call(on_recorded=lambda i, m, c: seen.append((i, m, c)))
+        self.assertEqual(seen, [(1001, "claude-opus-5-5", Decimal("0.014000"))])
+        self.assertNotIn("on_recorded", self.client.calls[0], "never passed on to the API")
 
     def test_at_80_percent_non_critical_is_downgraded_and_pushed_once(self) -> None:
         self.ledger.spent = Decimal("8.00")
@@ -209,6 +218,52 @@ class Guarded(unittest.TestCase):
         for raw in ("0", "-5", "ten", "NaN", "inf"):
             with self.subTest(raw=raw), self.assertRaises(AiError):
                 ai.monthly_budget({"AI_MONTHLY_BUDGET_USD": raw})
+
+
+class WebTwinPricing(unittest.TestCase):
+    """apps/web/src/lib/ai/pricing.ts must price every call exactly as core/ai.py
+    does (CLAUDE.md §6, the TypeScript twin). This parses the TS literals."""
+
+    FIELDS = (("input", "input"), ("output", "output"), ("cacheWrite5m", "cache_write_5m"),
+              ("cacheWrite1h", "cache_write_1h"), ("cacheRead", "cache_read"))
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from core.paths import REPO_ROOT
+        cls.source = (REPO_ROOT / "apps/web/src/lib/ai/pricing.ts").read_text(encoding="utf-8")
+
+    def rates(self, text: str) -> ai.Rates:
+        values = {}
+        for ts_name, py_name in self.FIELDS:
+            match = re.search(rf"\b{ts_name}: ([0-9_.]+)", text)
+            self.assertIsNotNone(match, f"{ts_name} missing in {text!r}")
+            values[py_name] = Decimal(match.group(1).replace("_", ""))
+        return ai.Rates(**values)
+
+    def web_pricing(self) -> dict[str, ai.Price]:
+        body = self.source.split("export const PRICING", 1)[1].split("\n};", 1)[0]
+        prices: dict[str, ai.Price] = {}
+        for model, block in re.findall(r'"(claude-[a-z0-9-]+)": \{(.*?)\n  \},', body, re.S):
+            standard = re.search(r"standard: \{([^}]*)\}", block)
+            long_prompt = re.search(r"longPrompt: \{([^}]*)\}", block)
+            over = re.search(r"longPromptOver: ([0-9_]+)", block)
+            prices[model] = ai.Price(
+                standard=self.rates(standard.group(1)),
+                long_prompt=self.rates(long_prompt.group(1)) if long_prompt else None,
+                long_prompt_over=int(over.group(1).replace("_", "")) if over else 100_000,
+            )
+        return prices
+
+    def test_every_model_and_rate_matches(self) -> None:
+        web = self.web_pricing()
+        self.assertEqual(sorted(web), sorted(ai.PRICING), "the same models are priced")
+        for model, price in ai.PRICING.items():
+            with self.subTest(model=model):
+                self.assertEqual(web[model], price)
+
+    def test_the_downgrade_model_matches(self) -> None:
+        match = re.search(r'export const CHEAPEST_MODEL = "([^"]+)"', self.source)
+        self.assertEqual(match.group(1), ai.CHEAPEST_MODEL)
 
 
 if __name__ == "__main__":

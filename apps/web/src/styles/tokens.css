@@ -196,6 +196,13 @@
   /* Capital's entry amounts, in the mono face: "−$999,999.99" fits, so the
      column does not shift from row to row. Larger amounts still grow it. */
   --vm-amount-width: 12ch;
+  /* Wags: the phone sheet (about 92% of the screen), the desktop panel, the
+     dock's raised mark. */
+  --vm-sheet-height: 92dvh;
+  --vm-panel-width: 30rem;
+  --vm-wags-mark: 3.5rem;
+  /* The composer grows to about six lines, then scrolls. */
+  --vm-composer-max: 9.5rem;
 }
 
 /* ------------------------------------------------------------ utilities */
@@ -270,6 +277,35 @@
 @utility min-w-amount {
   min-width: var(--vm-amount-width);
 }
+@utility h-sheet {
+  height: var(--vm-sheet-height);
+}
+@utility w-panel {
+  width: min(var(--vm-panel-width), 100vw);
+}
+@utility size-wags {
+  width: var(--vm-wags-mark);
+  height: var(--vm-wags-mark);
+}
+@utility max-h-composer {
+  max-height: var(--vm-composer-max);
+}
+/* /wags: the conversation fills what the shell leaves (phone: the top bar,
+   the page's top padding and the dock; desktop: the page's padding). */
+@utility h-wags-page {
+  height: calc(100dvh - 3.5rem - env(safe-area-inset-top, 0px) - 2rem - var(--vm-tabbar-height) - env(safe-area-inset-bottom, 0px) - 1.5rem);
+  @media (width >= 64rem) {
+    height: calc(100dvh - 4rem - 5rem);
+  }
+}
+/* use-stick-to-bottom sets scrollbar-gutter: stable both-edges inline, which
+   pushes Wags's conversation ~15px in from the panel's edge on desktop. Keep
+   the gutter on the scrollbar's side only, so text lines up with the header
+   and the composer. */
+@utility scroll-gutter-end {
+  scrollbar-gutter: stable !important;
+}
+
 
 /* A <summary> with no disclosure triangle, in every engine (Safari keeps
    its marker unless the -webkit pseudo-element is hidden too). */
