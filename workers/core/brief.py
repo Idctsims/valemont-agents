@@ -423,13 +423,25 @@ def build_today(*, allow_fallback: bool, client: Any = None, day: date | None = 
     return brief_id
 
 
-def morning_brief_job() -> None:
+def ensure_brief(day: date, *, allow_fallback: bool, conn: Any = None) -> ledger.BriefRow:
+    """`day`'s real brief: the existing one, or one made now. Under
+    ledger.brief_generation_lock, with a re-check inside it, so the generate
+    and push jobs (which start together at boot) never both make one."""
+    with ledger.brief_generation_lock(KIND, day, conn=conn):
+        row = ledger.latest_brief(KIND, day, conn=conn)
+        if row is not None:
+            return row
+        build_today(allow_fallback=allow_fallback, day=day, conn=conn)
+        return ledger.latest_brief(KIND, day, conn=conn)
+
+
+def morning_brief_job(*, conn: Any = None, now: datetime | None = None) -> None:
     """06:15 to 09:30 every 15 min, and at boot."""
-    now = ledger.owner_local_now()
-    decision = generate_decision(now.time(), ledger.latest_brief(KIND, now.date()) is not None)
+    now = now or ledger.owner_local_now(conn=conn)
+    decision = generate_decision(now.time(), ledger.latest_brief(KIND, now.date(), conn=conn) is not None)
     if decision != "generate":
         return
-    build_today(allow_fallback=may_fall_back(now.time()))
+    ensure_brief(now.date(), allow_fallback=may_fall_back(now.time()), conn=conn)
 
 
 def push_message(headline: str, *, late: bool, test: bool = False) -> push.Message:
@@ -464,10 +476,9 @@ def morning_brief_push_job(*, conn: Any = None, now: datetime | None = None,
     if decision == "stale":
         log.info("brief push for %s skipped: past %s", today, STALE_AFTER)
         return
-    brief = ledger.latest_brief(KIND, today, conn=conn)
-    if brief is None:  # a brief always exists by push time
-        build_today(allow_fallback=True, day=today, conn=conn)
-        brief = ledger.latest_brief(KIND, today, conn=conn)
+    # A brief always exists by push time: today's, or one made now (under the
+    # generation lock, so a generate job running alongside is not doubled).
+    brief = ensure_brief(today, allow_fallback=True, conn=conn)
     message = push_message(brief.body["headline"], late=decision == "late")
     ledger.deliver_brief_once(kind=KIND, day=today, brief_id=brief.id, late=decision == "late",
                               send=lambda: _notification_id(send(message)), conn=conn)

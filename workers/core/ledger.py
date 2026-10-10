@@ -113,6 +113,7 @@ __all__ = [
     "latest_brief",
     "insert_brief",
     "brief_cost",
+    "brief_generation_lock",
     "brief_delivered",
     "deliver_brief_once",
     "close_pool",
@@ -1642,6 +1643,31 @@ def insert_brief(*, kind: str, day: date, body: Mapping[str, Any], model: str | 
             {"day": day, "body": Jsonb(dict(body)), "kind": kind, "model": model, "usage": ai_usage_id,
              "fallback": fallback, "voice": voice_version, "words": word_count},
         ).fetchone()[0]
+
+
+@contextmanager
+def brief_generation_lock(kind: str, day: date, *, conn: psycopg.Connection | None = None) -> Iterator[None]:
+    """Hold a database lock while one process makes `day`'s brief.
+
+    The generate job and the push job both make a brief when none exists, and
+    at boot they start together: on 2026-10-10 17:48 both called Claude and
+    wrote two briefs a second apart. Whoever holds this lock re-checks
+    latest_brief() before generating (core/brief.ensure_brief), so the second
+    one finds the first one's row. A session lock on its own pooled
+    connection (the brief is written on others); in tests_live, the given
+    connection's transaction-scoped lock.
+    """
+    key = f"brief_generate:{kind}:{day}"
+    if conn is not None:
+        conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (key,))
+        yield
+        return
+    with _pool().connection() as held:
+        held.execute("SELECT pg_advisory_lock(hashtext(%s))", (key,))
+        try:
+            yield
+        finally:
+            held.execute("SELECT pg_advisory_unlock(hashtext(%s))", (key,))
 
 
 def brief_cost(brief_id: int) -> Decimal | None:
