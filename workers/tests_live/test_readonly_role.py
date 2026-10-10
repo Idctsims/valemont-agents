@@ -79,6 +79,51 @@ class ReadonlyRole(unittest.TestCase):
         self.assertEqual([r[0] for r in rows if not r[1]], [], "tables valemont_readonly cannot read")
         self.assertEqual([r[0] for r in rows if r[2]], [], "tables valemont_readonly can WRITE")
 
+    def _views(self) -> list[str]:
+        with psycopg.connect(self.url) as conn, conn.cursor() as cur:
+            cur.execute("""
+                SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE n.nspname = 'public' AND c.relkind IN ('v', 'm') ORDER BY 1""")
+            return [r[0] for r in cur.fetchall()]
+
+    def test_every_public_view_actually_reads(self) -> None:
+        # has_table_privilege is not enough: a view that calls a helper also
+        # needs EXECUTE on it. v_venture_today and v_capital_today passed the
+        # privilege check above and still failed with "permission denied for
+        # function goal_local_today" until db/028. So SELECT from each one,
+        # as the role, and match the worker's row count (BYPASSRLS).
+        views = self._views()
+        self.assertTrue(views)
+        failed: dict[str, str] = {}
+        for view in views:
+            try:
+                ro = _count(self.url, view)
+            except psycopg.Error as exc:
+                failed[view] = f"{type(exc).__name__}: {exc}".splitlines()[0]
+                continue
+            with self.subTest(view=view):
+                self.assertEqual(ro, _count(os.environ["DATABASE_URL"], view))
+        self.assertEqual(sorted(failed), [], f"views valemont_readonly cannot read: {failed}")
+
+    def test_it_executes_exactly_the_read_only_helpers(self) -> None:
+        # db/028's rule: EXECUTE on every SECURITY INVOKER STABLE/IMMUTABLE
+        # function (they can only read), and never on a SECURITY DEFINER or a
+        # VOLATILE one. A new read helper without the grant fails here by
+        # name; so does a writer that somehow got one.
+        with psycopg.connect(self.url) as conn, conn.cursor() as cur:
+            cur.execute("""
+                SELECT p.proname, p.prosecdef, p.provolatile::text,
+                       has_function_privilege(p.oid, 'EXECUTE')
+                  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                 WHERE n.nspname = 'public' AND p.prorettype <> 'trigger'::regtype
+                 ORDER BY 1""")
+            rows = cur.fetchall()
+        readers = [r for r in rows if not r[1] and r[2] in ("s", "i")]
+        self.assertTrue(readers)
+        self.assertEqual([r[0] for r in readers if not r[3]], [], "read-only helpers it cannot execute")
+        self.assertEqual([r[0] for r in rows if r[3] and (r[1] or r[2] == "v")], [],
+                         "definer or volatile functions it CAN execute")
+
     def test_it_sees_the_same_rows_as_the_worker(self) -> None:
         # Ledger tables have RLS on with no policies, and the db/019 app tables
         # have owner-only policies that do not name this role: without
