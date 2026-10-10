@@ -23,6 +23,7 @@ import {
   toCents,
   type ModeToday,
 } from "../src/lib/capital/types";
+import { decideMarker } from "../src/lib/capital/marker";
 import { NAV, builtGroups } from "../src/lib/nav";
 
 const paper = (value: number, prior: number | null = null): ModeToday => ({
@@ -54,11 +55,11 @@ test("a withdrawal subtracts; deposits and adjustments carry their own sign", ()
   expect(signedCents({ kind: "adjustment", amount: -500 })).toBe(-500);
 });
 
-test("today's change reads against the prior snapshot, and '—' without one", () => {
+test("today's change reads against the prior snapshot, and '— today' without one", () => {
   expect(changeLabel(changeOf({ source: "total", value: 125000, prior: 100000 }))).toBe("+$250.00 · +25.0% today");
   expect(changeLabel(changeOf({ source: "total", value: 96000, prior: 100000 }))).toBe("−$40.00 · −4.0% today");
   expect(changeLabel(changeOf({ source: "total", value: 100000, prior: 100000 }))).toBe("$0.00 · 0.0% today");
-  expect(changeLabel(changeOf({ source: "total", value: 100000, prior: null }))).toBe("—");
+  expect(changeLabel(changeOf({ source: "total", value: 100000, prior: null }))).toBe("— today");
   expect(changeOf({ source: "total", value: 5000, prior: 0 })?.pct).toBeNull();
   expect(changeOf({ source: "total", value: 125000, prior: 100000 })?.tone).toBe("up");
 });
@@ -137,4 +138,21 @@ test("Capital Tracker is built and reachable from the nav", () => {
   const pillar = NAV.flatMap((g) => g.pillars).find((p) => p.href === "/capital");
   expect(pillar?.built).toBe(true);
   expect(builtGroups().flatMap((g) => g.pages).map((p) => p.href)).toContain("/capital");
+});
+
+test("the e2e marker: honoured only when it matches, never in production", () => {
+  const env = { E2E_TEST_MARKER: "s3cret-marker" };
+  expect(decideMarker(null, env)).toEqual({ kind: "none" });
+  expect(decideMarker("", env)).toEqual({ kind: "none" });
+  expect(decideMarker("s3cret-marker", env)).toEqual({ kind: "test", marker: "s3cret-marker" });
+  // Present but not verified: refused, never treated as a real entry.
+  expect(decideMarker("wrong", env).kind).toBe("refused");
+  expect(decideMarker("s3cret-marke", env).kind).toBe("refused");
+  expect(decideMarker("s3cret-marker", {}).kind).toBe("refused"); // the server has no marker
+  // Vercel production refuses the marker even if the variable were ever set there.
+  expect(decideMarker("s3cret-marker", { ...env, VERCEL_ENV: "production" })).toEqual({
+    kind: "refused",
+    reason: "production never accepts the test marker",
+  });
+  expect(decideMarker("s3cret-marker", { ...env, VERCEL_ENV: "preview" }).kind).toBe("test");
 });

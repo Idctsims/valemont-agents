@@ -61,6 +61,33 @@ Remove-Item Env:E2E_OWNER_EMAIL, Env:E2E_OWNER_PASSWORD
 Its screenshots land in `e2e-screenshots/` (gitignored). The HTML report:
 `pnpm exec playwright show-report`.
 
+### Running one owner spec: use its exact path
+
+A bare name is a regular expression matched against every spec's path, so
+`capital.spec` also matches `screens-capital.spec.ts`, and `screens` matches
+all three screenshot specs. Two specs writing to the same real account in
+parallel see each other's rows (2026-10-10: `screens-capital` saw
+`capital.spec`'s $12.34 mid-test). Always pass the full path:
+
+```
+pnpm test:e2e e2e/goals.spec.ts
+pnpm test:e2e e2e/ventures.spec.ts --project=phone
+pnpm test:e2e e2e/capital.spec.ts --project=phone
+pnpm test:e2e e2e/screens.spec.ts --workers=1
+pnpm test:e2e e2e/screens-ventures.spec.ts --workers=1
+pnpm test:e2e e2e/screens-capital.spec.ts --workers=1
+```
+
+### The e2e marker (capital)
+
+Bankroll entries are append-only, so the capital specs write **test
+entries** (db/027: `is_test`, excluded from every number, snapshot and the
+normal page). They do it by sending the `x-valemont-e2e` header with
+`E2E_TEST_MARKER` from `.env.local`; the server verifies it before honouring
+it, and refuses a request whose marker does not verify. Create it once with
+`pnpm gen:e2e-marker` (prints only its SHA-256, which db/027 stores). **Never
+set `E2E_TEST_MARKER` on Vercel**: production refuses the header regardless.
+
 ## Layout
 
 - `src/proxy.ts`: session refresh, owner gate and CSP nonce on every request

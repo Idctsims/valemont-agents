@@ -1,14 +1,21 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { headers } from "next/headers";
 
 import { requireOwner } from "@/lib/auth";
+import { MARKER_HEADER, decideMarker } from "@/lib/capital/marker";
 import { KINDS, MODES, centsToDecimal, type Kind, type Mode } from "@/lib/capital/types";
 import { createClient } from "@/lib/supabase/server";
 
 // Append one bankroll entry, through the owner's session (db/026's RLS and
 // column grants apply: the database sets owner_id and created_at). Entries
 // are never edited or deleted; a mistake is corrected with an adjustment.
+//
+// is_test (db/027) is not writable by this role. A test entry goes through
+// add_test_bankroll_entry, and only when the request carries the e2e marker
+// and this server verifies it (src/lib/capital/marker.ts). A marker that does
+// not verify refuses the write; it never falls back to a real entry.
 
 const MAX_CENTS = 1e14 - 1; // numeric(14,2)
 
@@ -37,10 +44,24 @@ export async function addEntry(input: {
   const note = typeof input.note === "string" ? input.note.trim() || null : null;
   if (note && note.length > 500) throw new Error("The note is too long (500 characters at most).");
 
+  const marker = decideMarker((await headers()).get(MARKER_HEADER), process.env);
+  if (marker.kind === "refused") throw new Error(`Test marker refused: ${marker.reason}.`);
+
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("bankroll_entries")
-    .insert({ mode: input.mode, kind: input.kind, amount: centsToDecimal(cents), note });
-  if (error) throw new Error(`Couldn't save the entry: ${error.message}`);
+  if (marker.kind === "test") {
+    if (input.mode !== "paper") throw new Error("Test entries are paper only.");
+    const { error } = await supabase.rpc("add_test_bankroll_entry", {
+      p_marker: marker.marker,
+      p_kind: input.kind,
+      p_amount: centsToDecimal(cents),
+      p_note: note,
+    });
+    if (error) throw new Error(`Couldn't save the test entry: ${error.message}`);
+  } else {
+    const { error } = await supabase
+      .from("bankroll_entries")
+      .insert({ mode: input.mode, kind: input.kind, amount: centsToDecimal(cents), note });
+    if (error) throw new Error(`Couldn't save the entry: ${error.message}`);
+  }
   refresh();
 }

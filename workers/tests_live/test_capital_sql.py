@@ -301,6 +301,130 @@ class Seed(CapitalTestCase):
             cur.execute("SELECT count(*) FROM bankroll_entries WHERE note = 'Paper bankroll seed'")
             self.assertEqual(cur.fetchone()[0], 1)
 
+# ------------------------------------------------- db/027: test entries
+
+class TestEntriesTestCase(CapitalTestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        with _rolled_back() as (_, cur):
+            cur.execute("SELECT to_regclass('public.e2e_markers')")
+            if cur.fetchone()[0] is None:
+                raise unittest.SkipTest("db/027 not pasted")
+
+    def flagged(self, cur: psycopg.Cursor, kind: str, amount: str, *, mode: str = "paper",
+                   at: datetime | None = None) -> int:
+        cur.execute(
+            """
+            INSERT INTO bankroll_entries (owner_id, mode, kind, amount, note, created_at, is_test)
+            VALUES (%s, %s, %s, %s, 'tests_live is_test', coalesce(%s, now()), true) RETURNING id
+            """,
+            (self.owner, mode, kind, D(amount), at),
+        )
+        return cur.fetchone()[0]
+
+    def own_marker(self, cur: psycopg.Cursor) -> str:
+        """A marker only this transaction knows: its hash becomes the newest
+        e2e_markers row until the rollback."""
+        marker = f"tests_live-{uuid.uuid4()}"
+        cur.execute("INSERT INTO e2e_markers (marker_sha256) VALUES (encode(sha256(convert_to(%s, 'UTF8')), 'hex'))",
+                    (marker,))
+        return marker
+
+
+class TestEntriesExcluded(TestEntriesTestCase):
+    def test_value_as_of_ignores_them(self) -> None:
+        with _rolled_back() as (_, cur):
+            later = JAN + timedelta(days=5)
+            before = self.value(cur, "paper", later), self.value(cur, "paper", datetime.now(timezone.utc))
+            self.flagged(cur, "deposit", "300.00", at=JAN)
+            self.flagged(cur, "adjustment", "-12.00")
+            self.assertEqual((self.value(cur, "paper", later),
+                              self.value(cur, "paper", datetime.now(timezone.utc))), before)
+
+    def test_a_mode_with_only_test_rows_has_no_data(self) -> None:
+        with _rolled_back() as (_, cur):
+            self.flagged(cur, "deposit", "50.00", mode="live", at=JAN)
+            cur.execute("SELECT capital_first_at('live')")
+            self.assertIsNone(cur.fetchone()[0])
+            self.assertFalse([k for k in self.view(cur) if k[0] == "live"])
+
+    def test_the_view_is_unchanged_by_them(self) -> None:
+        with _rolled_back() as (_, cur):
+            before = self.view(cur)
+            self.flagged(cur, "deposit", "999.00")
+            self.flagged(cur, "withdrawal", "1.00")
+            self.assertEqual(self.view(cur), before)
+
+    def test_snapshots_ignore_them(self) -> None:
+        with _rolled_back() as (_, cur):
+            day1, day2 = date(2020, 1, 1), date(2020, 1, 2)
+            self.entry(cur, "deposit", "100.00", mode="live", at=JAN)
+            self.flagged(cur, "deposit", "5000.00", mode="live", at=JAN)
+            cur.execute(CAPITAL_SNAPSHOT_SQL, {"mode": "live", "first": day1, "last": day2})
+            cur.execute("SELECT snap_date, value FROM capital_snapshots WHERE mode = 'live' "
+                        "AND snap_date BETWEEN %s AND %s ORDER BY 1", (day1, day2))
+            self.assertEqual(cur.fetchall(), [(day1, D("100.00")), (day2, D("100.00"))])
+
+    def test_existing_rows_are_all_real(self) -> None:
+        # The flag came with a false default: nothing written before db/027
+        # was reclassified (append-only, no exceptions).
+        with _rolled_back() as (_, cur):
+            cur.execute("SELECT count(*) FROM bankroll_entries WHERE is_test AND note = 'Paper bankroll seed'")
+            self.assertEqual(cur.fetchone()[0], 0)
+
+
+class TestEntriesWriter(TestEntriesTestCase):
+    def test_the_web_role_cannot_set_is_test(self) -> None:
+        with _rolled_back() as (conn, cur):
+            _act_as(cur, "authenticated", self.owner)
+            self.refused(conn, cur, "INSERT INTO bankroll_entries (kind, amount, is_test) VALUES ('deposit', 1, true)",
+                         containing="permission denied")
+
+    def test_the_marker_function_writes_a_paper_test_row_for_the_owner(self) -> None:
+        with _rolled_back() as (_, cur):
+            marker = self.own_marker(cur)
+            paper_now = self.view(cur)[("paper", True, "total")]
+            _act_as(cur, "authenticated", self.owner)
+            cur.execute("SELECT add_test_bankroll_entry(%s, 'deposit', 25, 'tests_live marker')", (marker,))
+            eid = cur.fetchone()[0]
+            cur.execute("SELECT owner_id, mode, is_test, amount FROM bankroll_entries WHERE id = %s", (eid,))
+            self.assertEqual(cur.fetchone(), (self.owner, "paper", True, D("25.00")))
+            self.assertEqual(self.view(cur)[("paper", True, "total")], paper_now, "a test row moves no number")
+
+    def test_absent_or_wrong_markers_are_refused(self) -> None:
+        with _rolled_back() as (conn, cur):
+            marker = self.own_marker(cur)
+            _act_as(cur, "authenticated", self.owner)
+            for bad in (None, "", "wrong", marker + "x"):
+                with self.subTest(marker=bad):
+                    self.refused(conn, cur, "SELECT add_test_bankroll_entry(%s, 'deposit', 1, 'x')", (bad,),
+                                 "test marker refused")
+
+    def test_a_stranger_is_refused_even_with_the_marker(self) -> None:
+        with _rolled_back() as (conn, cur):
+            marker = self.own_marker(cur)
+            _act_as(cur, "authenticated", uuid.uuid4())
+            self.refused(conn, cur, "SELECT add_test_bankroll_entry(%s, 'deposit', 1, 'x')", (marker,), "owner only")
+
+    def test_anon_cannot_call_it_or_read_the_hashes(self) -> None:
+        with _rolled_back() as (conn, cur):
+            _act_as(cur, "anon")
+            self.refused(conn, cur, "SELECT add_test_bankroll_entry('x', 'deposit', 1, 'x')",
+                         containing="permission denied")
+            self.refused(conn, cur, "SELECT 1 FROM e2e_markers", containing="permission denied")
+
+    def test_the_owner_cannot_read_the_hashes(self) -> None:
+        with _rolled_back() as (conn, cur):
+            _act_as(cur, "authenticated", self.owner)
+            self.refused(conn, cur, "SELECT 1 FROM e2e_markers", containing="permission denied")
+
+    def test_the_marker_hashes_are_append_only(self) -> None:
+        with _rolled_back() as (conn, cur):
+            self.refused(conn, cur, "UPDATE e2e_markers SET marker_sha256 = repeat('0', 64)", containing="append-only")
+            self.refused(conn, cur, "DELETE FROM e2e_markers", containing="append-only")
+            self.refused(conn, cur, "TRUNCATE e2e_markers", containing="TRUNCATE is refused")
+
 
 if __name__ == "__main__":
     unittest.main()

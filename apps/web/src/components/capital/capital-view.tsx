@@ -180,7 +180,7 @@ export function ModeSection({
         >
           {money(mode.total.value)}
         </p>
-        <ModeTag mode={mode.mode} />
+        <ModeTag mode={mode.mode} large={hero} />
       </div>
       <p className="mt-2 flex flex-wrap gap-x-3 font-mono text-sm tabular-nums">
         <span data-testid="capital-change" className={toneClass(change?.tone)}>
@@ -196,11 +196,11 @@ export function ModeSection({
 }
 
 /** PAPER or LIVE, beside the total. A status chip, never small grey text. */
-export function ModeTag({ mode }: { mode: Mode }) {
+export function ModeTag({ mode, large = false }: { mode: Mode; large?: boolean }) {
   return (
     <span
       data-testid="mode-tag"
-      className={`label-mono inline-flex h-8 shrink-0 items-center gap-1.5 rounded-pill border px-3 ${
+      className={`label-mono inline-flex h-8 shrink-0 items-center gap-1.5 rounded-pill border px-3 ${large ? "lg:h-10 lg:gap-2 lg:px-4 lg:text-xs" : ""} ${
         mode === "live" ? "border-live bg-live-fill text-live" : "border-on-pace bg-on-pace-fill text-on-pace"
       }`}
     >
@@ -305,9 +305,12 @@ function SourceRow({ source, total, live }: { source: SourceToday; total: number
             style={{ "--vm-share": share(source.value, total) } as React.CSSProperties}
           />
         </span>
-        <span data-testid="source-change" className={`shrink-0 font-mono text-xs tabular-nums ${toneClass(change?.tone)}`}>
-          {change ? signedMoney(change.cents) : "—"}
-        </span>
+        {/* No prior snapshot yet: no change to show, and no stray dash. */}
+        {change && (
+          <span data-testid="source-change" className={`shrink-0 font-mono text-xs tabular-nums ${toneClass(change.tone)}`}>
+            {signedMoney(change.cents)}
+          </span>
+        )}
       </div>
     </li>
   );
@@ -324,6 +327,7 @@ export function EntryRow({ entry, showMode, onCorrect }: { entry: Entry; showMod
           <span>{entryStamp(entry.created_at)}</span>
           <span className="rounded-pill border border-border px-1.5">{entry.kind}</span>
           {showMode && <span className={entry.mode === "live" ? "text-live" : "text-on-pace"}>{entry.mode}</span>}
+          {entry.is_test && <span className="text-danger">test</span>}
           {entry.pending && <span>saving</span>}
         </p>
         {entry.note && <p className="mt-1 text-sm text-text text-pretty">{entry.note}</p>}
@@ -373,7 +377,7 @@ export function Composer({
       ref={ref}
       data-testid="entry-composer"
       aria-label="New entry"
-      className="mt-6 flex flex-col gap-4"
+      className="mt-10 flex flex-col gap-4"
       onSubmit={(e) => {
         e.preventDefault();
         if (cents === null || signed === null || !liveReady) return;
@@ -389,6 +393,7 @@ export function Composer({
         );
       }}
     >
+      <SectionLabel>New entry</SectionLabel>
       <Chips label="Entry kind" options={KINDS} value={draft.kind} onChange={(k) => k && set({ kind: k })} />
       {draft.kind === "adjustment" && (
         <Chips

@@ -35,6 +35,8 @@ export type Entry = {
   note: string | null;
   created_at: string;
   pending?: boolean;
+  /** A test entry (db/027): shown only to a verified e2e request, never counted. */
+  is_test?: boolean;
 };
 
 export type Point = { date: string; value: number };
@@ -83,9 +85,9 @@ export function changeOf(t: SourceToday): Change | null {
   };
 }
 
-/** '+$250.00 · +25.0% today', or '—' with no prior snapshot. */
+/** '+$250.00 · +25.0% today', or '— today' with no prior snapshot. */
 export function changeLabel(c: Change | null): string {
-  if (!c) return "—";
+  if (!c) return "— today";
   const pct =
     c.pct === null ? "" : ` · ${c.pct > 0 ? "+" : c.pct < 0 ? "−" : ""}${(Math.abs(c.pct) * 100).toFixed(1)}%`;
   return `${signedMoney(c.cents)}${pct} today`;
