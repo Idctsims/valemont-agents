@@ -33,7 +33,7 @@ const isToolPart = (p: unknown): p is { type: string; toolCallId: string; state:
   !!p && typeof p === "object" && typeof (p as { type?: unknown }).type === "string" &&
   (p as { type: string }).type.startsWith("tool-") && "toolCallId" in p;
 
-export function rowsToMessages(rows: MessageRow[]): WagsUIMessage[] {
+export function rowsToMessages(rows: MessageRow[], ventures: Record<string, string> = {}): WagsUIMessage[] {
   const out: WagsUIMessage[] = [];
   const byCall = new Map<string, { type: string; state: string; output?: unknown }>();
   for (const r of rows) {
@@ -56,6 +56,7 @@ export function rowsToMessages(rows: MessageRow[]): WagsUIMessage[] {
               model: r.model ?? undefined,
               incomplete: r.incomplete || undefined,
               costUsd: r.cost_usd == null ? undefined : Number(r.cost_usd),
+              ventures,
             }
           : undefined,
     });

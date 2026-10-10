@@ -499,3 +499,24 @@ export async function wagsMessages(threadId: string): Promise<{ role: string; co
     return data as { role: string; content: string; model: string | null }[];
   });
 }
+
+// ------------------------------------------------------------ Morning brief
+
+/**
+ * A TEST brief (db/030 add_test_brief, the verified marker): is_test, so no
+ * real view, no ctx_brief and no delivery ever sees it. Briefs are
+ * append-only, so it stays; only a marked request shows it.
+ */
+export async function addTestBrief(day: string, body: { headline: string; sections: { key: string; title: string; lines: string[] }[]; one_move: string }): Promise<number> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.rpc("add_test_brief", { p_marker: e2eMarker(), p_brief_date: day, p_body: body });
+    if (error) throw new Error(`test brief failed: ${error.message}`);
+    return data as number;
+  });
+}
+
+/** The owner's local date (America/Chicago), as the app computes it. */
+export function chicagoDay(offsetDays = 0): string {
+  const d = new Date(Date.now() + offsetDays * 86_400_000);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}

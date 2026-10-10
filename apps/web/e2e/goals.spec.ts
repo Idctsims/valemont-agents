@@ -163,6 +163,7 @@ test("navigation shows only built pages", async ({ page }, testInfo) => {
     await expect(sheet.getByRole("link")).toHaveText([
       "Home",
       "Goals",
+      "Morning brief",
       "Wags",
       "Ventures HQ",
       "Capital Tracker",
@@ -174,7 +175,7 @@ test("navigation shows only built pages", async ({ page }, testInfo) => {
     await expect(sheet).toHaveCount(0);
   } else {
     const rail = page.getByRole("navigation", { name: "Pages" });
-    await expect(rail.getByRole("link")).toHaveText(["Home", "Goals", "Wags", "Ventures HQ", "Capital Tracker"]);
+    await expect(rail.getByRole("link")).toHaveText(["Home", "Goals", "Morning brief", "Wags", "Ventures HQ", "Capital Tracker"]);
     await expect(page.getByTestId("rail-wags")).toBeVisible();
   }
   // An unbuilt pillar has no page at all.

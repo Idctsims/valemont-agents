@@ -8,7 +8,7 @@ export function AskWagsButton() {
   return (
     <button
       type="button"
-      onClick={wags.open}
+      onClick={() => wags.open()}
       aria-expanded={wags.isOpen}
       data-testid="rail-wags"
       className="tap flex w-full items-center gap-3 rounded-pill border border-border px-3 text-sm text-text transition-colors hover:border-accent hover:text-accent"

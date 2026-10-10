@@ -111,9 +111,10 @@ class MutationGapsClosed(LiveLedgerTestCase):
             conn.rollback()
 
     def test_a_brief_cannot_be_rewritten_or_deleted(self) -> None:
+        # body is jsonb since db/030 (a chief-of-staff brief stores {"text": ...}).
         insert = ("INSERT INTO briefs (period_start, period_end, body, stats) "
-                  "VALUES (now() - interval '1 day', now(), 'tests_live', '{}') RETURNING id")
-        self._insert_then(insert, "UPDATE briefs SET body = 'rewritten' WHERE id = %s")
+                  "VALUES (now() - interval '1 day', now(), '{\"text\": \"tests_live\"}', '{}') RETURNING id")
+        self._insert_then(insert, "UPDATE briefs SET body = '{\"text\": \"rewritten\"}' WHERE id = %s")
         self._insert_then(insert, "DELETE FROM briefs WHERE id = %s")
 
     def test_the_migration_stamp_cannot_be_moved(self) -> None:

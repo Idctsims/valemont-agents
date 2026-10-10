@@ -4,6 +4,7 @@ import { ArrowDown, X } from "@phosphor-icons/react";
 import { Streamdown, type Components } from "streamdown";
 
 import { button } from "@/components/ui/button";
+import { describeProposal, type VentureNames } from "@/lib/wags/proposals";
 import type { ProposalOutcome, WagsToolName } from "@/lib/wags/tools";
 
 // Wags's pieces, with no data hooks, so /design can render every state from
@@ -95,20 +96,6 @@ const KIND: Record<WagsToolName, string> = {
   propose_next_action: "Next action",
 };
 
-const HORIZON: Record<string, string> = { weekly: "this week", monthly: "this month", long_term: "long term" };
-
-/** What a proposal will change, in one line. */
-export function describeProposal(tool: WagsToolName, input: Record<string, unknown>): string {
-  const q = (v: unknown) => `“${String(v ?? "").trim()}”`;
-  if (tool === "propose_goal") {
-    const where = [HORIZON[String(input.horizon)] ?? "a goal", input.area, input.venture_slug].filter(Boolean).join(" · ");
-    return `Add ${q(input.title)} · ${where}`;
-  }
-  if (tool === "propose_venture_log") return `Log a ${String(input.kind ?? "note")} on ${input.venture_slug}: ${q(input.entry)}`;
-  const on = input.workstream ? `${input.venture_slug} · ${input.workstream}` : String(input.venture_slug);
-  return `Set the next action on ${on} to ${q(input.next_action)}`;
-}
-
 export type ProposalState =
   | { kind: "drafting" }
   | { kind: "pending"; busy?: boolean; error?: string | null }
@@ -118,12 +105,15 @@ export function ProposalRow({
   tool,
   input,
   state,
+  names,
   onConfirm,
   onDismiss,
 }: {
   tool: WagsToolName;
   input: Record<string, unknown>;
   state: ProposalState;
+  /** slug -> venture name, so the row names the venture. */
+  names?: VentureNames;
   onConfirm?: () => void;
   onDismiss?: () => void;
 }) {
@@ -144,7 +134,7 @@ export function ProposalRow({
         )}
       </p>
       <p className={`mt-1 text-sm text-pretty ${answered?.status === "dismissed" ? "text-text-muted line-through" : "text-text"}`}>
-        {state.kind === "drafting" ? "Drafting a proposal…" : describeProposal(tool, input)}
+        {state.kind === "drafting" ? "Drafting a proposal…" : describeProposal(tool, input, names)}
       </p>
       {answered?.status === "confirmed" && answered.summary && (
         <p className="mt-1 font-mono text-xs text-text-muted">{answered.summary}</p>

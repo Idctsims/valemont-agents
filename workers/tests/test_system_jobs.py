@@ -367,7 +367,8 @@ class Registry(unittest.TestCase):
     def test_default_jobs(self) -> None:
         built = {j.name: j for j in system_jobs.build_system_jobs({})}
         self.assertEqual(set(built), {"heartbeat", "health_monitor", "db_size", "job_queue",
-                                     "goals_rollover", "goals_monday_push", "capital_snapshot"})
+                                     "goals_rollover", "goals_monday_push", "capital_snapshot",
+                          "morning_brief", "morning_brief_push"})
         self.assertEqual(built["heartbeat"].expected_interval_s, 60)
         self.assertEqual(built["job_queue"].expected_interval_s, 10)
         self.assertEqual(built["db_size"].expected_interval_s, 86400)
@@ -398,8 +399,9 @@ class SystemOnlyBoot(SystemTestCase):
         self.assertEqual(ids, {"system:heartbeat", "system:health_monitor",
                                "system:db_size", "system:job_queue",
                                "system:goals_rollover", "system:goals_monday_push",
-                               "system:capital_snapshot"})
-        self.assertEqual(self.ledger.names().count("job_register"), 7)
+                               "system:capital_snapshot", "system:morning_brief",
+                               "system:morning_brief_push"})
+        self.assertEqual(self.ledger.names().count("job_register"), 9)
 
     def test_disabled_agents_plus_system_jobs_start_rather_than_refuse(self) -> None:
         from tests.support import ScriptedAgent
@@ -444,7 +446,8 @@ class SystemOnlyBoot(SystemTestCase):
         self.assertEqual(started[0].agents, [])
         self.assertEqual({j.name for j in started[0].system_jobs},
                          {"heartbeat", "health_monitor", "db_size", "job_queue",
-                          "goals_rollover", "goals_monday_push", "capital_snapshot"})
+                          "goals_rollover", "goals_monday_push", "capital_snapshot",
+                          "morning_brief", "morning_brief_push"})
 
 
 if __name__ == "__main__":

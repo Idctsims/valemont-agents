@@ -119,7 +119,7 @@ test("a proposed goal, confirmed, exists; then it is removed by id", async () =>
   await send(`propose goal: ${title}`);
   const row = sheet().getByTestId("wags-proposal").last();
   await expect(row).toHaveAttribute("data-state", "pending");
-  await expect(row).toContainText(`Add “${title}” · this week · business`);
+  await expect(row).toContainText(`Add goal “${title}” · this week · business`);
   await row.getByRole("button", { name: "Confirm" }).click();
   await expect(row).toHaveAttribute("data-state", "confirmed");
   await expect(row).toContainText("Added to this week.");
@@ -146,6 +146,28 @@ test("a dismissed proposal writes nothing and stays dismissed", async () => {
   await page.reload();
   await openSheet();
   await expect(sheet().getByTestId("wags-proposal").last()).toHaveAttribute("data-state", "dismissed");
+});
+
+test("a proposal-only turn gets a generated sentence, and rows name the venture", async () => {
+  // The mock sends a propose_goal call and no text (Phase 5 Step 0 item 4);
+  // the route must add a line built from the proposal, marked generated.
+  const title = `${P}silent goal`;
+  await send(`propose silently: ${title} @sail-beach-club`);
+  const turn = lastWags();
+  const line = turn.getByTestId("wags-generated");
+  await expect(line).toHaveText(`Proposing: add goal “${title}” · this week · business · Sail Beach Club. · auto`);
+  // The confirm row says the venture's name, not its slug.
+  await expect(turn.getByTestId("wags-proposal")).toContainText("Sail Beach Club");
+  await expect(turn.getByTestId("wags-proposal")).not.toContainText("sail-beach-club");
+  // Stored with the answer: it is there after a reload, and in the row's content.
+  await page.reload();
+  await openSheet();
+  await expect(lastWags().getByTestId("wags-generated")).toContainText(`Proposing: add goal “${title}”`);
+  const stored = await wagsMessages(threads[0]);
+  expect(stored.at(-1)?.content).toBe(`Proposing: add goal “${title}” · this week · business · Sail Beach Club.`);
+  await lastWags().getByTestId("wags-proposal").getByRole("button", { name: "Dismiss" }).click();
+  await expect(lastWags().getByTestId("wags-proposal")).toHaveAttribute("data-state", "dismissed");
+  expect(await goalIdsTitled(title)).toHaveLength(0);
 });
 
 test("the rate limit refuses in a plain sentence and keeps the words", async () => {

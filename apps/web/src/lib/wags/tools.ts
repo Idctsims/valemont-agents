@@ -65,6 +65,8 @@ export type WagsMetadata = {
   budgetMode?: boolean;
   incomplete?: boolean;
   costUsd?: number;
+  /** slug -> venture name for this answer's proposals. */
+  ventures?: Record<string, string>;
 };
 
 export type WagsUIMessage = UIMessage<WagsMetadata, never, InferUITools<typeof wagsTools>>;

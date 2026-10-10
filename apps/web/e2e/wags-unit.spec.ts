@@ -131,7 +131,7 @@ test.describe("a thread rebuilt from its rows", () => {
     const part = ms[1].parts[1] as { state: string; output: unknown };
     expect(part.state).toBe("output-available");
     expect(part.output).toEqual({ status: "confirmed", summary: "Added to this week." });
-    expect(ms[1].metadata).toEqual({ model: "claude-sonnet-5-5", incomplete: undefined, costUsd: 0.0047 });
+    expect(ms[1].metadata).toEqual({ model: "claude-sonnet-5-5", incomplete: undefined, costUsd: 0.0047, ventures: {} });
   });
 
   test("the model's copy answers an unanswered proposal as not_answered, and the UI copy stays pending", () => {
@@ -170,5 +170,100 @@ test.describe("page context", () => {
     expect(pageSlice(payload, { route: "/ventures/sbc", label: "Ventures · SBC", pillar: "ventures", slug: "sbc" })).toEqual({ slug: "sbc", name: "SBC" });
     expect(pageSlice(payload, { route: "/goals", label: "Goals", pillar: "goals" })).toEqual({ week: { done: 1 } });
     expect(pageSlice(payload, { route: "/design", label: "Design tokens" })).toBeNull();
+  });
+});
+
+// ------------------------------------------------- Phase 5 Step 0: proposals
+
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+import { VOICE, VOICE_VERSION } from "../src/generated/wags-voice";
+import { GENERATED, describeProposal, isGenerated, proposalLine, proposalLineTransform } from "../src/lib/wags/proposals";
+import { PERSONA, PERSONA_VERSION } from "../src/lib/wags/persona";
+
+const NAMES = { "sail-beach-club": "Sail Beach Club" };
+const GOAL = { title: "Call Kendrick about the renders", horizon: "weekly", area: "business", venture_slug: "sail-beach-club" };
+
+test.describe("proposals name the venture", () => {
+  test("rows say the venture's name, not its slug", () => {
+    expect(describeProposal("propose_goal", GOAL, NAMES)).toBe("Add goal “Call Kendrick about the renders” · this week · business · Sail Beach Club");
+    expect(describeProposal("propose_next_action", { venture_slug: "sail-beach-club", workstream: "Permits", next_action: "File it" }, NAMES)).toBe(
+      "Set the next action on Sail Beach Club · Permits to “File it”",
+    );
+    expect(describeProposal("propose_venture_log", { venture_slug: "sail-beach-club", kind: "decision", entry: "No rooftop" }, NAMES)).toBe(
+      "Log a decision on Sail Beach Club: “No rooftop”",
+    );
+  });
+  test("an unknown slug falls back to the slug", () => {
+    expect(describeProposal("propose_goal", { ...GOAL, venture_slug: "ghost" }, NAMES)).toContain("· ghost");
+  });
+  test("the generated line", () => {
+    expect(proposalLine("propose_goal", GOAL, NAMES)).toBe("Proposing: add goal “Call Kendrick about the renders” · this week · business · Sail Beach Club.");
+  });
+});
+
+async function run(parts: { type: string; [k: string]: unknown }[]) {
+  const out: { type: string; [k: string]: unknown }[] = [];
+  const stream = new ReadableStream({ start: (c) => (parts.forEach((p) => c.enqueue(p)), c.close()) }).pipeThrough(proposalLineTransform(NAMES)());
+  const reader = stream.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return out;
+    out.push(value);
+  }
+}
+
+const call = (toolName = "propose_goal", input: Record<string, unknown> = GOAL) => ({ type: "tool-call", toolCallId: "c1", toolName, input });
+
+test.describe("a proposal never arrives without words", () => {
+  test("a proposal-only step gets the generated line before its finish-step, marked generated", async () => {
+    const out = await run([{ type: "start-step" }, { type: "reasoning-start", id: "r" }, call(), { type: "finish-step" }, { type: "finish" }]);
+    const types = out.map((p) => p.type);
+    expect(types).toEqual(["start-step", "reasoning-start", "tool-call", "text-start", "text-delta", "text-end", "finish-step", "finish"]);
+    const delta = out.find((p) => p.type === "text-delta")!;
+    expect(delta.text).toBe("Proposing: add goal “Call Kendrick about the renders” · this week · business · Sail Beach Club.");
+    for (const p of out.filter((x) => x.type.startsWith("text-"))) {
+      expect(p.providerMetadata).toEqual(GENERATED);
+      expect(isGenerated(p)).toBe(true);
+    }
+  });
+  test("a step that already said something is left alone", async () => {
+    const out = await run([
+      { type: "start-step" },
+      { type: "text-start", id: "t" },
+      { type: "text-delta", id: "t", text: "Lock it in." },
+      { type: "text-end", id: "t" },
+      call(),
+      { type: "finish-step" },
+    ]);
+    expect(out.filter((p) => p.type === "text-delta")).toHaveLength(1);
+  });
+  test("whitespace is not a sentence", async () => {
+    const out = await run([{ type: "start-step" }, { type: "text-delta", id: "t", text: "  \n" }, call(), { type: "finish-step" }]);
+    expect(out.filter((p) => isGenerated(p))).toHaveLength(3);
+  });
+  test("text alone, or a step with no proposal, gets nothing", async () => {
+    const out = await run([{ type: "start-step" }, { type: "text-delta", id: "t", text: "Hi." }, { type: "finish-step" }, { type: "start-step" }, { type: "finish-step" }]);
+    expect(out.some((p) => isGenerated(p))).toBe(false);
+  });
+  test("two proposals in one silent step make one line naming both", async () => {
+    const out = await run([{ type: "start-step" }, call(), call("propose_venture_log", { venture_slug: "sail-beach-club", kind: "note", entry: "x" }), { type: "finish-step" }]);
+    const deltas = out.filter((p) => p.type === "text-delta");
+    expect(deltas).toHaveLength(1);
+    expect(String(deltas[0].text)).toMatch(/^Proposing: add goal .*\. Proposing: log a note on Sail Beach Club: “x”\.$/);
+  });
+});
+
+test.describe("one voice: Wags speaks from prompts/wags_voice.md", () => {
+  test("the generated module is the shared file, and PERSONA is built on it", () => {
+    const raw = readFileSync(resolve(__dirname, "../../../prompts/wags_voice.md"), "utf8").replace(/\r\n/g, "\n");
+    const body = raw.replace(/^<!--[\s\S]*?-->\s*/, "");
+    const m = body.match(/^VOICE_VERSION:\s*(\S+)\s*\n/)!;
+    expect(VOICE_VERSION).toBe(m[1]);
+    expect(VOICE).toBe(body.slice(m[0].length).trim());
+    expect(PERSONA.startsWith(VOICE), "PERSONA opens with the shared voice").toBe(true);
+    expect(PERSONA_VERSION.startsWith(`${VOICE_VERSION}+`)).toBe(true);
+    expect(PERSONA).toContain("ALWAYS write one plain sentence before any propose_* call");
   });
 });

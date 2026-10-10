@@ -15,7 +15,8 @@ import type { PageContext, Pillar } from "@/lib/wags/page-context";
 const WagsSheet = dynamic(() => import("./wags-sheet").then((m) => m.WagsSheet), { ssr: false });
 
 type Ctx = {
-  open: () => void;
+  /** Open the sheet; with a context, open it on that instead of the page's. */
+  open: (ctx?: Omit<PageContext, "route">) => void;
   isOpen: boolean;
   /** A page names itself more precisely than its path can (a venture's name). */
   setPageContext: (route: string, ctx: Omit<PageContext, "route">) => void;
@@ -29,11 +30,21 @@ export function useWags(): Ctx {
   return ctx;
 }
 
-const PILLAR_OF: Record<string, Pillar> = { "/": "goals", "/goals": "goals", "/ventures": "ventures", "/capital": "capital" };
+const PILLAR_OF: Record<string, Pillar> = {
+  "/": "goals",
+  "/goals": "goals",
+  "/ventures": "ventures",
+  "/capital": "capital",
+  "/brief": "brief",
+};
+
+/** "Context · Brief": what Ask Wags about this opens with. */
+export const BRIEF_CONTEXT = { label: "Brief", pillar: "brief" } as const;
 
 /** What the chip says for a path, before (or without) a page's own label. */
 export function derivePageContext(pathname: string): PageContext | null {
   if (pathname.startsWith("/wags")) return null;
+  if (pathname.startsWith("/brief")) return { route: pathname, ...BRIEF_CONTEXT };
   const venture = pathname.match(/^\/ventures\/([a-z0-9-]+)/);
   if (venture) return { route: pathname, label: `Ventures · ${venture[1]}`, pillar: "ventures", slug: venture[1] };
   const pages = [
@@ -59,18 +70,22 @@ export function WagsProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [isOpen, setOpen] = useState(false);
   const [named, setNamed] = useState<PageContext | null>(null);
+  // A context the opener asked for (Ask Wags about this), for this opening only.
+  const [forced, setForced] = useState<PageContext | null>(null);
   const [dropped, setDropped] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
   const opener = useRef<HTMLElement | null>(null);
 
   const page = useMemo(() => {
     if (dropped) return null;
+    if (forced) return forced;
     if (named?.route === pathname) return named;
     return derivePageContext(pathname);
-  }, [dropped, named, pathname]);
+  }, [dropped, forced, named, pathname]);
 
-  const open = useCallback(() => {
+  const open = useCallback((ctx?: Omit<PageContext, "route">) => {
     opener.current = document.activeElement as HTMLElement | null;
+    setForced(ctx ? { route: window.location.pathname, ...ctx } : null);
     setThreadId((t) => t ?? storedThread() ?? crypto.randomUUID());
     setDropped(false);
     setOpen(true);
@@ -78,6 +93,7 @@ export function WagsProvider({ children }: { children: React.ReactNode }) {
 
   const close = useCallback(() => {
     setOpen(false);
+    setForced(null);
     opener.current?.focus?.({ preventScroll: true });
   }, []);
 

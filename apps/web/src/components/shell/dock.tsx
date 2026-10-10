@@ -79,7 +79,7 @@ export function Dock() {
           <li className="flex flex-1 justify-center">
             <button
               type="button"
-              onClick={wags.open}
+              onClick={() => wags.open()}
               aria-label="Wags"
               aria-expanded={wags.isOpen}
               data-testid="dock-wags"
