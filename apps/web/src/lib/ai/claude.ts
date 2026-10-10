@@ -26,16 +26,18 @@ export async function languageModel(id: string): Promise<WagsModel> {
 }
 
 /**
- * Chat settings per model. Thinking off, so the answer gets the whole output
- * budget: Sonnet 5.5 turns thinking off with `between_tools` (it rejects
- * `disabled`), Haiku 5.5 accepts `disabled` at its default effort.
+ * Chat settings per model: thinking as far off as each model allows, so the
+ * answer gets the output budget. Verified 2026-10-10 in the AI SDK Anthropic
+ * provider docs (ai-sdk.dev/providers/ai-sdk-providers/anthropic): Sonnet 5.5
+ * cannot turn thinking off; its lowest setting is `between_tools` (no upfront
+ * thinking), accepted only at effort low/medium/high, and its API default
+ * effort is high. So Sonnet runs `between_tools` at effort `low` (Phase 5
+ * Step 0 item 4: a high-effort turn thought for ~500 tokens and wrote no
+ * sentence). Haiku 5.5 accepts `disabled` at its default effort.
  */
 export function chatProviderOptions(id: string) {
-  return {
-    anthropic: {
-      thinking: id === CHEAPEST_MODEL ? ({ type: "disabled" } as const) : ({ type: "between_tools" } as const),
-    },
-  };
+  if (id === CHEAPEST_MODEL) return { anthropic: { thinking: { type: "disabled" as const } } };
+  return { anthropic: { thinking: { type: "between_tools" as const }, effort: "low" as const } };
 }
 
 /** The SDK's usage, in pricing.ts's terms (every write here is the 5-minute TTL). */

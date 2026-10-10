@@ -6,6 +6,7 @@ import { ContextChip, Exchange, Markdown, ProposalRow, Refusal, StatusLine, Turn
 // confirmed, dismissed), budget mode, a refusal, the context chip.
 
 const noop = () => {};
+const NAMES = { "sail-beach-club": "Sail Beach Club" };
 const goal = { title: "Sign the SBC permit application", horizon: "weekly", area: "business", venture_slug: "sail-beach-club" };
 
 export function WagsConversationSamples() {
@@ -17,7 +18,7 @@ export function WagsConversationSamples() {
           <Markdown
             text={"**Permits.** Goals: 1 of 10 done, and the SBC permit has carried twice. Ventures · SBC: next action is still *call the city*.\n\n- Call the city before noon\n- Leave Gravity Club alone this week"}
           />
-          <ProposalRow tool="propose_goal" input={goal} state={{ kind: "pending" }} onConfirm={noop} onDismiss={noop} />
+          <ProposalRow names={NAMES} tool="propose_goal" input={goal} state={{ kind: "pending" }} onConfirm={noop} onDismiss={noop} />
         </Turn>
       </Exchange>
       <Exchange>
@@ -34,13 +35,20 @@ export function WagsProposalSamples() {
   return (
     <div className="max-w-xl">
       <p className="text-sm text-text-muted">Pending</p>
-      <ProposalRow tool="propose_next_action" input={{ venture_slug: "sail-beach-club", workstream: "Permits", next_action: "File the variance request" }} state={{ kind: "pending" }} onConfirm={noop} onDismiss={noop} />
+      <ProposalRow names={NAMES} tool="propose_next_action" input={{ venture_slug: "sail-beach-club", workstream: "Permits", next_action: "File the variance request" }} state={{ kind: "pending" }} onConfirm={noop} onDismiss={noop} />
       <p className="mt-6 text-sm text-text-muted">Saving, then a refusal from the server action</p>
-      <ProposalRow tool="propose_venture_log" input={{ venture_slug: "sail-beach-club", kind: "decision", entry: "Rooftop is out until the lease is signed." }} state={{ kind: "pending", busy: false, error: "There is no active venture “sail-beach-club”." }} onConfirm={noop} onDismiss={noop} />
+      <ProposalRow names={NAMES} tool="propose_venture_log" input={{ venture_slug: "sail-beach-club", kind: "decision", entry: "Rooftop is out until the lease is signed." }} state={{ kind: "pending", busy: false, error: "There is no active venture “sail-beach-club”." }} onConfirm={noop} onDismiss={noop} />
+      <p className="mt-6 text-sm text-text-muted">A proposal that arrived without words: the route adds the line, marked auto</p>
+      <Turn role="assistant">
+        <p className="text-text-muted">
+          Proposing: add goal “Sign the SBC permit application” · this week · business · Sail Beach Club. <span className="label-mono">· auto</span>
+        </p>
+        <ProposalRow names={NAMES} tool="propose_goal" input={goal} state={{ kind: "pending" }} onConfirm={noop} onDismiss={noop} />
+      </Turn>
       <p className="mt-6 text-sm text-text-muted">Confirmed</p>
-      <ProposalRow tool="propose_goal" input={goal} state={{ kind: "answered", outcome: { status: "confirmed", summary: "Added to this week." } }} />
+      <ProposalRow names={NAMES} tool="propose_goal" input={goal} state={{ kind: "answered", outcome: { status: "confirmed", summary: "Added to this week." } }} />
       <p className="mt-6 text-sm text-text-muted">Dismissed</p>
-      <ProposalRow tool="propose_goal" input={goal} state={{ kind: "answered", outcome: { status: "dismissed", summary: "Dismissed." } }} />
+      <ProposalRow names={NAMES} tool="propose_goal" input={goal} state={{ kind: "answered", outcome: { status: "dismissed", summary: "Dismissed." } }} />
     </div>
   );
 }

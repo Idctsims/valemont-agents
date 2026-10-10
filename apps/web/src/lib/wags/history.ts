@@ -12,11 +12,18 @@ export { forModel, rowsToMessages, type MessageRow, type ThreadRow } from "./thr
 // the conversation from these rows, never from messages a client sends.
 // The row-to-message rules are in ./thread.ts.
 
+/** slug -> name for every venture the owner can see (proposal rows name them). */
+export async function ventureNames(supabase: SupabaseClient): Promise<Record<string, string>> {
+  const { data, error } = await supabase.from("ventures").select("slug, name");
+  if (error) throw new Error(`Couldn't read venture names: ${error.message}`);
+  return Object.fromEntries((data ?? []).map((v) => [v.slug as string, v.name as string]));
+}
+
 export async function loadThread(
   supabase: SupabaseClient,
   threadId: string,
 ): Promise<{ thread: ThreadRow | null; messages: WagsUIMessage[] }> {
-  const [t, m] = await Promise.all([
+  const [t, m, names] = await Promise.all([
     supabase
       .from("wags_threads")
       .select("id, title, origin_page, created_at, updated_at, archived_at")
@@ -27,8 +34,9 @@ export async function loadThread(
       .select("id, role, content, parts, model, incomplete, cost_usd, created_at")
       .eq("thread_id", threadId)
       .order("id"),
+    ventureNames(supabase),
   ]);
   if (t.error) throw new Error(`Couldn't read the thread: ${t.error.message}`);
   if (m.error) throw new Error(`Couldn't read the thread's messages: ${m.error.message}`);
-  return { thread: t.data as ThreadRow | null, messages: rowsToMessages((m.data ?? []) as MessageRow[]) };
+  return { thread: t.data as ThreadRow | null, messages: rowsToMessages((m.data ?? []) as MessageRow[], names) };
 }

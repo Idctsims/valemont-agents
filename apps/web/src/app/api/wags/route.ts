@@ -6,7 +6,8 @@ import { mockAllowed } from "@/lib/ai/policy";
 import { costUsd, CHEAPEST_MODEL, WAGS_MODEL, type Usage } from "@/lib/ai/pricing";
 import { requireOwner } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { forModel, loadThread } from "@/lib/wags/history";
+import { forModel, loadThread, ventureNames } from "@/lib/wags/history";
+import { proposalLineTransform } from "@/lib/wags/proposals";
 import { pageSlice, parsePageContext } from "@/lib/wags/page-context";
 import { PERSONA, PERSONA_VERSION } from "@/lib/wags/persona";
 import { wagsTools, type WagsMetadata, type WagsUIMessage } from "@/lib/wags/tools";
@@ -133,7 +134,7 @@ export async function POST(req: Request) {
     return refuse(503, e instanceof Error ? e.message : "Wags is not configured.");
   }
 
-  const { messages: history } = await loadThread(supabase, threadId);
+  const [{ messages: history }, names] = await Promise.all([loadThread(supabase, threadId), ventureNames(supabase)]);
   const context = Object.fromEntries(Object.entries(payload).filter(([k]) => !(CLOCK_KEYS as readonly string[]).includes(k)));
   const system: SystemModelMessage[] = [
     { role: "system", content: PERSONA },
@@ -173,6 +174,8 @@ export async function POST(req: Request) {
     tools: wagsTools,
     maxOutputTokens: MAX_OUTPUT_TOKENS,
     providerOptions: chatProviderOptions(modelId),
+    // A proposal never arrives without words (src/lib/wags/proposals.ts).
+    experimental_transform: proposalLineTransform(names) as never,
     abortSignal: req.signal,
     includeRawChunks: true,
     onChunk: ({ chunk }) => {
@@ -188,7 +191,7 @@ export async function POST(req: Request) {
   // Keep consuming if the phone drops the connection, so onFinish still runs.
   void result.consumeStream();
 
-  const metadataFor = (extra: WagsMetadata = {}): WagsMetadata => ({ model: model.id, budgetMode, ...extra });
+  const metadataFor = (extra: WagsMetadata = {}): WagsMetadata => ({ model: model.id, budgetMode, ventures: names, ...extra });
 
   return result.toUIMessageStreamResponse<WagsUIMessage>({
     originalMessages: history,

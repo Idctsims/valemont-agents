@@ -10,6 +10,7 @@ import { createGoal } from "@/app/(app)/goals/actions";
 import { addLogEntry, updateVenture, updateWorkstream } from "@/app/(app)/ventures/actions";
 import { getWagsStatus, recordProposalOutcome, resolveVenture, type WagsStatus } from "@/app/(app)/wags/actions";
 import type { PageContext } from "@/lib/wags/page-context";
+import { isGenerated } from "@/lib/wags/proposals";
 import type { ProposalOutcome, WagsToolName, WagsUIMessage } from "@/lib/wags/tools";
 
 import {
@@ -246,11 +247,19 @@ function Message({
     const text = message.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
     return <Turn role="user">{text}</Turn>;
   }
-  const text = message.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
+  const said = message.parts.filter((p) => p.type === "text" && !isGenerated(p));
+  const generated = message.parts.filter((p) => p.type === "text" && isGenerated(p));
+  const text = said.map((p) => (p.type === "text" ? p.text : "")).join("");
   const tools = message.parts.filter(isToolUIPart);
   return (
     <Turn role="assistant" streaming={streaming} incomplete={!!message.metadata?.incomplete}>
       {text && <Markdown text={text} streaming={streaming} />}
+      {generated.map((p, i) => (
+        // Built by the route from the proposal itself: Wags proposed without a sentence.
+        <p key={`g${i}`} data-testid="wags-generated" className="text-text-muted">
+          {p.type === "text" ? p.text : ""} <span className="label-mono">· auto</span>
+        </p>
+      ))}
       {tools.map((p) => {
         const tool = getToolName(p) as WagsToolName;
         const input = (p.input ?? {}) as Record<string, unknown>;
@@ -264,6 +273,7 @@ function Message({
             tool={tool}
             input={input}
             state={state}
+            names={message.metadata?.ventures}
             onConfirm={() => onAnswer(tool, p.toolCallId, input, true)}
             onDismiss={() => onAnswer(tool, p.toolCallId, input, false)}
           />
