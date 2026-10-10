@@ -92,7 +92,31 @@ test("goals CRUD on the phone", async ({ page }, testInfo) => {
   await expect(row(page, edited)).toHaveAttribute("data-state", "done");
 });
 
-test("an 11th weekly goal shows the cap warning", async ({ page }, testInfo) => {
+test("a server-side refusal reads as its message, not a React error", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "phone", "phone project");
+  await signIn(page, "/goals");
+  const title = `${runPrefix()}gone`;
+  await addGoal(page, title);
+  await expect(row(page, title)).not.toContainText("saving");
+
+  // Delete the goal behind the page's back. The next tap reaches the server,
+  // which finds no row and refuses. Not a network abort: the POST succeeds.
+  // A thrown refusal showed "Minified React error" (number 441) here in production
+  // builds (2026-10-10); actions now return { ok: false, error }.
+  await deleteE2eGoals({ titlePrefix: title });
+  const post = page.waitForResponse(
+    (r) => r.request().method() === "POST" && !!r.request().headers()["next-action"],
+  );
+  await row(page, title).getByRole("checkbox").click();
+  expect((await post).status(), "the action itself answered").toBe(200);
+
+  await expect(week(page).getByRole("alert")).toHaveText("That goal no longer exists.");
+  await expect(week(page)).toHaveAttribute("aria-busy", "false");
+  // The optimistic "done" is reverted.
+  await expect(row(page, title)).toHaveAttribute("data-state", "open");
+});
+
+test("an 11th weekly goal shows the cap warning",async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "phone", "phone project");
   await signIn(page, "/goals");
   const held = await week(page).locator('[data-segment="done"], [data-segment="open"]').count();
@@ -138,6 +162,7 @@ test("navigation shows only built pages", async ({ page }, testInfo) => {
       "Home",
       "Goals",
       "Ventures HQ",
+      "Capital Tracker",
       "System health",
       "Phone setup",
       "Design tokens",
@@ -146,7 +171,7 @@ test("navigation shows only built pages", async ({ page }, testInfo) => {
     await expect(sheet).toHaveCount(0);
   } else {
     const rail = page.getByRole("navigation", { name: "Pages" });
-    await expect(rail.getByRole("link")).toHaveText(["Home", "Goals", "Ventures HQ"]);
+    await expect(rail.getByRole("link")).toHaveText(["Home", "Goals", "Ventures HQ", "Capital Tracker"]);
   }
   // An unbuilt pillar has no page at all.
   const res = await page.goto("/betting");

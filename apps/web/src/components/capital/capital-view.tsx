@@ -5,6 +5,7 @@ import { useEffect, useId, useOptimistic, useRef, useState, useTransition } from
 
 import { addEntry } from "@/app/(app)/capital/actions";
 import { Chips, MoreMenu, SectionLabel } from "@/components/ventures/parts";
+import { Fold } from "@/components/ui/fold";
 import type { CapitalData } from "@/lib/capital/data";
 import {
   KINDS,
@@ -63,6 +64,9 @@ export type Draft = {
   confirm: string;
 };
 
+/** Entries listed before the rest fold under "All entries · N". */
+export const LATEST = 10;
+
 export const BLANK: Draft = { kind: "deposit", sign: "add", amount: "", note: "", mode: "paper", confirm: "" };
 
 export function CapitalView({ data, today }: { data: CapitalData; today: string }) {
@@ -82,16 +86,18 @@ export function CapitalView({ data, today }: { data: CapitalData; today: string 
     startTransition(async () => {
       add({ ...entry, id: `pending-${crypto.randomUUID()}`, created_at: new Date().toISOString(), pending: true });
       try {
-        await addEntry({
+        const r = await addEntry({
           mode: entry.mode,
           kind: entry.kind,
           cents: entry.amount,
           note: entry.note,
           confirm,
         });
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "That didn't save. Try again.");
+        setError(r.ok ? null : r.error);
+      } catch {
+        // Only the network can throw here: an action reports its own
+        // failures in its result (src/lib/action-result.ts).
+        setError("That didn't save. Check the connection and try again.");
       }
     });
   }
@@ -109,6 +115,10 @@ export function CapitalView({ data, today }: { data: CapitalData; today: string 
     composer.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     composer.current?.querySelector<HTMLInputElement>('input[name="amount"]')?.focus({ preventScroll: true });
   }
+
+  const entryRow = (e: Entry) => (
+    <EntryRow key={e.id} entry={e} showMode={showModeTags} onCorrect={() => correct(e)} />
+  );
 
   return (
     <div aria-busy={saving} data-testid="capital" className="lg:max-w-3xl">
@@ -143,11 +153,16 @@ export function CapitalView({ data, today }: { data: CapitalData; today: string 
         {model.entries.length === 0 ? (
           <p className="border-t border-border py-3 text-sm text-text-muted">No entries yet.</p>
         ) : (
-          <ul data-testid="entries" className="border-t border-border">
-            {model.entries.map((e) => (
-              <EntryRow key={e.id} entry={e} showMode={showModeTags} onCorrect={() => correct(e)} />
-            ))}
-          </ul>
+          <>
+            <ul data-testid="entries" className="border-t border-border">
+              {model.entries.slice(0, LATEST).map(entryRow)}
+            </ul>
+            {model.entries.length > LATEST && (
+              <Fold label="All entries" count={model.entries.length} testId="all-entries">
+                {model.entries.slice(LATEST).map(entryRow)}
+              </Fold>
+            )}
+          </>
         )}
         <Composer
           ref={composer}
@@ -220,8 +235,10 @@ export function ModeTag({ mode, large = false }: { mode: Mode; large?: boolean }
   );
 }
 
+/** A fall is primary text with its minus sign, never danger red: on paper a
+ * withdrawal is not a loss, and red is kept for real losses. */
 function toneClass(tone: "up" | "down" | "flat" | undefined): string {
-  return tone === "up" ? "text-hit" : tone === "down" ? "text-danger" : "text-text-muted";
+  return tone === "up" ? "text-hit" : tone === "down" ? "text-text" : "text-text-muted";
 }
 
 function History({
@@ -290,14 +307,31 @@ function Breakdown({ mode }: { mode: ModeToday }) {
       </SectionLabel>
       <ul data-testid="capital-breakdown" className="border-t border-border">
         {mode.sources.map((s) => (
-          <SourceRow key={s.source} source={s} total={mode.total.value} live={mode.mode === "live"} />
+          <SourceRow
+            key={s.source}
+            source={s}
+            total={mode.total.value}
+            live={mode.mode === "live"}
+            showShare={mode.sources.length > 1}
+          />
         ))}
       </ul>
     </div>
   );
 }
 
-function SourceRow({ source, total, live }: { source: SourceToday; total: number; live: boolean }) {
+function SourceRow({
+  source,
+  total,
+  live,
+  showShare,
+}: {
+  source: SourceToday;
+  total: number;
+  live: boolean;
+  /** One source is always 100%: a full bar says nothing, so it is left out. */
+  showShare: boolean;
+}) {
   const change = changeOf(source);
   return (
     <li data-testid="source-row" data-source={source.source} className="border-b border-border py-3">
@@ -307,52 +341,85 @@ function SourceRow({ source, total, live }: { source: SourceToday; total: number
           {money(source.value)}
         </span>
       </div>
-      <div className="mt-2 flex items-center gap-3">
-        <span className="relative h-0.5 flex-1 overflow-hidden rounded-pill bg-surface-2">
-          <span
-            aria-hidden
-            className={`absolute inset-y-0 left-0 w-share ${live ? "bg-live" : "bg-accent"}`}
-            style={{ "--vm-share": share(source.value, total) } as React.CSSProperties}
-          />
-        </span>
-        {/* No prior snapshot yet: no change to show, and no stray dash. */}
-        {change && (
-          <span data-testid="source-change" className={`shrink-0 font-mono text-xs tabular-nums ${toneClass(change.tone)}`}>
-            {signedMoney(change.cents)}
-          </span>
-        )}
-      </div>
+      {(showShare || change) && (
+        <div className="mt-2 flex items-center gap-3">
+          {showShare && (
+            <span data-testid="source-share" className="relative h-0.5 flex-1 overflow-hidden rounded-pill bg-surface-2">
+              <span
+                aria-hidden
+                className={`absolute inset-y-0 left-0 w-share ${live ? "bg-live" : "bg-accent"}`}
+                style={{ "--vm-share": share(source.value, total) } as React.CSSProperties}
+              />
+            </span>
+          )}
+          {/* No prior snapshot yet: no change to show, and no stray dash. */}
+          {change && (
+            <span
+              data-testid="source-change"
+              className={`ml-auto shrink-0 font-mono text-xs tabular-nums ${toneClass(change.tone)}`}
+            >
+              {signedMoney(change.cents)}
+            </span>
+          )}
+        </div>
+      )}
     </li>
   );
 }
 
 // ----------------------------------------------------------------- entries
 
+/**
+ * Two lines. Line 1: the note in primary text, the amount on the right in a
+ * fixed-width column. Line 2: mono meta, "Oct 10 · 10:23 AM · adjustment ·
+ * test". An entry with no note leads with its kind, and line 2 then skips it.
+ */
 export function EntryRow({ entry, showMode, onCorrect }: { entry: Entry; showMode: boolean; onCorrect: () => void }) {
   const cents = signedCents(entry);
+  const meta: React.ReactNode[] = [<span key="at">{entryStamp(entry.created_at)}</span>];
+  if (entry.note) meta.push(<span key="kind">{entry.kind}</span>);
+  if (entry.is_test) {
+    meta.push(
+      <span key="test" data-testid="test-tag" className="rounded-pill border border-text-muted px-1.5 text-text">
+        test
+      </span>,
+    );
+  }
+  if (showMode) {
+    meta.push(
+      <span key="mode" className={entry.mode === "live" ? "text-live" : "text-on-pace"}>
+        {entry.mode}
+      </span>,
+    );
+  }
+  if (entry.pending) meta.push(<span key="saving">saving</span>);
+
   return (
     <li data-testid="entry-row" data-kind={entry.kind} data-mode={entry.mode} className="flex gap-2 border-b border-border py-3">
       <div className="min-w-0 flex-1">
-        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs text-text-muted">
-          <span>{entryStamp(entry.created_at)}</span>
-          <span className="rounded-pill border border-border px-1.5">{entry.kind}</span>
-          {showMode && <span className={entry.mode === "live" ? "text-live" : "text-on-pace"}>{entry.mode}</span>}
-          {entry.is_test && <span className="text-danger">test</span>}
-          {entry.pending && <span>saving</span>}
-        </p>
-        {entry.note && <p className="mt-1 text-sm text-text text-pretty">{entry.note}</p>}
-      </div>
-      <span
-        data-testid="entry-amount"
-        className={`shrink-0 pt-0.5 font-mono text-base tabular-nums ${cents < 0 ? "text-danger" : "text-text"}`}
-      >
-        {signedMoney(cents)}
-      </span>
-      {!entry.pending && (
-        <div className="-my-2 -mr-2">
-          <MoreMenu label="Entry actions" items={[{ label: "Correct with adjustment", onSelect: onCorrect }]} />
+        <div className="flex items-baseline gap-3">
+          <p data-testid="entry-title" className={`min-w-0 flex-1 text-base text-text text-pretty ${entry.note ? "" : "capitalize"}`}>
+            {entry.note ?? entry.kind}
+          </p>
+          <span
+            data-testid="entry-amount"
+            className="min-w-amount shrink-0 whitespace-nowrap text-right font-mono text-base text-text tabular-nums"
+          >
+            {signedMoney(cents)}
+          </span>
         </div>
-      )}
+        <p data-testid="entry-meta" className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 font-mono text-xs text-text-muted">
+          {meta.flatMap((m, n) => (n === 0 ? [m] : [<span key={`dot${n}`} aria-hidden>·</span>, m]))}
+        </p>
+      </div>
+      <div className="-my-2 -mr-2 self-center">
+        {entry.pending ? (
+          // Holds the menu's place, so the amount does not jump when the save lands.
+          <span aria-hidden className="tap block" />
+        ) : (
+          <MoreMenu label="Entry actions" items={[{ label: "Correct with adjustment", onSelect: onCorrect }]} />
+        )}
+      </div>
     </li>
   );
 }

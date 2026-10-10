@@ -1143,6 +1143,12 @@ absent row as "I never looked."
   - **Owner e2e helper lessons:**
     - Set the theme cookie at path `/` (a nested-page `url:` cookie lost to the `/` one).
     - Sign in once per worker; per-call sign-ins tripped Supabase Auth's rate limit.
+- **Capital Tracker (Chat 2 Phase 3, 2026-10-10), paper only:**
+  - **db/026** (bankroll_entries, crypto_holdings, capital_snapshots; all append-only, all carry `mode`), **db/027** (`is_test` entries, written only by `add_test_bankroll_entry` with a verified e2e marker, excluded from every total and snapshot) and **db/028** (valemont_readonly can read every view) are applied. A mistake is corrected with an adjustment, never an edit.
+  - **Worker:** `capital_snapshot`, 00:05 America/Chicago and at boot, writes each ended day's closing value per mode and source. By hand: `-m scripts.capital_snapshot --backfill` (prints rows per mode; 0 = already complete).
+  - **Web `/capital`:** the paper total is the hero, tagged PAPER. LIVE appears only when live rows exist and needs LIVE typed before an entry. The share bar shows only with 2+ sources. Entries: the latest 10, then "All entries · N". Each is two lines: the note (or, with no note, its kind) and the amount in a fixed 12ch column, then mono meta with an outlined neutral `test` tag inline.
+  - **Colour rule: negative amounts and a falling daily change are primary text with a minus sign, never danger red,** because on paper a withdrawal is not a loss. **Once Chat 9/10 sources (bets, bots) feed capital, a negative daily change returns to the loss colour.** Red is reserved for real losses.
+- **Server actions never throw an expected failure (2026-10-10).** Every action in `apps/web` returns `ActionResult` (`{ ok: true, … } | { ok: false, error }`) via `settle()` in `src/lib/action-result.ts`. Inside an action, say no with `throw new Refusal("…")`. Why: in a production build Next redacts a thrown message, so the page showed "Minified React error" (number 441) instead of the reason. Pages show `error` in their alert and revert; only a network failure can still throw on the client. `e2e/goals.spec.ts` forces a real server-side refusal and checks the readable message.
     - After sign-in, wait out "JWT issued at future" with a harmless read before any write.
 - **Next:**
   - **Zero-attempt database invariant** (db/024, db/025, both applied): merged from branch `db-zero-attempt-invariant`. `tests/` 479 OK; `tests_live/` 181 OK, 0 skipped (2026-10-09).

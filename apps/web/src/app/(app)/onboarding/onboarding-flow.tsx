@@ -132,8 +132,9 @@ export function OnboardingFlow() {
       const reg = await navigator.serviceWorker.ready;
       clearTimeout(timer);
       const sub = await reg.pushManager.getSubscription();
-      const state = await getDeviceState(sub?.endpoint ?? null);
-      if (live) setDevice({ endpoint: sub?.endpoint ?? null, state });
+      const r = await getDeviceState(sub?.endpoint ?? null);
+      if (!r.ok) throw new Error(r.error);
+      if (live) setDevice({ endpoint: sub?.endpoint ?? null, state: r.state });
     })().catch((e) => live && setNotice(`Couldn't read this device: ${reason(e)}`));
     return () => {
       live = false;
@@ -160,13 +161,14 @@ export function OnboardingFlow() {
           applicationServerKey: applicationServerKey(PUBLIC_KEY),
         }));
       const keys = sub.toJSON().keys ?? {};
-      const state = await saveSubscription({
+      const r = await saveSubscription({
         endpoint: sub.endpoint,
         p256dh: keys.p256dh ?? "",
         auth: keys.auth ?? "",
         standalone: !!env?.standalone,
       });
-      setDevice({ endpoint: sub.endpoint, state });
+      if (!r.ok) throw new Error(r.error);
+      setDevice({ endpoint: sub.endpoint, state: r.state });
     } catch (e) {
       setNotice(`Couldn't turn on notifications: ${reason(e)}`);
     } finally {
@@ -182,8 +184,9 @@ export function OnboardingFlow() {
       const sub = await reg.pushManager.getSubscription();
       const endpoint = sub?.endpoint ?? device?.endpoint;
       await sub?.unsubscribe();
-      const state = endpoint ? await removeSubscription(endpoint) : { subscribed: false, label: null };
-      setDevice({ endpoint: null, state });
+      const r = endpoint ? await removeSubscription(endpoint) : null;
+      if (r && !r.ok) throw new Error(r.error);
+      setDevice({ endpoint: null, state: r ? r.state : { subscribed: false, label: null } });
     } catch (e) {
       setNotice(`Couldn't turn off notifications: ${reason(e)}`);
     } finally {
@@ -195,7 +198,9 @@ export function OnboardingFlow() {
     setBusy("test");
     setNotice(null);
     try {
-      const r: PushSummary = await sendTestPush();
+      const result = await sendTestPush();
+      if (!result.ok) throw new Error(result.error);
+      const r: PushSummary = result.summary;
       setNotice(
         r.status === "no_devices"
           ? "No device has notifications on yet."

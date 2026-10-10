@@ -193,6 +193,9 @@
   --vm-composer-height: 4.5rem;
   /* Swipe distance that commits a gesture on a goal row. */
   --vm-swipe-commit: 4.5rem;
+  /* Capital's entry amounts, in the mono face: "−$999,999.99" fits, so the
+     column does not shift from row to row. Larger amounts still grow it. */
+  --vm-amount-width: 12ch;
 }
 
 /* ------------------------------------------------------------ utilities */
@@ -263,6 +266,9 @@
 }
 @utility w-swipe {
   width: var(--vm-swipe-commit);
+}
+@utility min-w-amount {
+  min-width: var(--vm-amount-width);
 }
 
 /* A <summary> with no disclosure triangle, in every engine (Safari keeps

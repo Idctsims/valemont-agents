@@ -137,6 +137,11 @@ test("Correct with adjustment pre-fills the negation and restores the prior tota
   const fix = page.getByTestId("entry-row").filter({ hasText: `${NOTE} correction` });
   await expect(fix.getByTestId("entry-amount")).toHaveText("−$12.34");
   await expect(fix).toHaveAttribute("data-kind", "adjustment");
+  // A negative amount is primary text with its minus sign, not danger red:
+  // the same colour as the deposit's positive amount.
+  const deposit = page.getByTestId("entry-row").filter({ hasText: `${NOTE} deposit` }).getByTestId("entry-amount");
+  const colour = (l: typeof deposit) => l.evaluate((el) => getComputedStyle(el).color);
+  expect(await colour(fix.getByTestId("entry-amount"))).toBe(await colour(deposit));
 });
 
 test("a failed save reverts and says so", async () => {
@@ -181,8 +186,32 @@ test("this run's entries are listed as test entries", async () => {
     page.getByTestId("entry-row").filter({ hasText: `${NOTE} correction` }),
   ]) {
     await expect(row).toHaveCount(1);
-    await expect(row).toContainText("test");
+    await expect(row.getByTestId("test-tag")).toHaveText("test");
   }
+});
+
+test("the latest 10 entries are listed, the rest fold under All entries · N", async () => {
+  const listed = page.getByTestId("entries").getByTestId("entry-row");
+  const fold = page.getByTestId("all-entries");
+  // The section's aside, "N entries", counts every listed entry.
+  const aside = await page.getByRole("region", { name: "Entries" }).getByText(/^\d+ entr(y|ies)$/).textContent();
+  const total = Number.parseInt(aside!, 10);
+  if (total <= 10) {
+    await expect(listed).toHaveCount(total);
+    await expect(fold).toHaveCount(0);
+    return;
+  }
+  await expect(listed).toHaveCount(10);
+  const toggle = fold.getByRole("button", { name: `All entries · ${total}` });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.click();
+  await expect(fold.getByTestId("entry-row")).toHaveCount(total - 10);
+  await toggle.click();
+});
+
+test("the share bar shows only when a mode has more than one source", async () => {
+  const sources = await paper().getByTestId("source-row").count();
+  await expect(paper().getByTestId("source-share")).toHaveCount(sources > 1 ? sources : 0);
 });
 
 test("a marker that does not verify is refused, and nothing is written", async () => {

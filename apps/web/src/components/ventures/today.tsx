@@ -23,10 +23,12 @@ export function TodayModule({ rows }: { rows: TodayRow[] }) {
     startTransition(async () => {
       remove(row.id);
       try {
-        await setDateDone(row.id, true);
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "That didn't save. Try again.");
+        const r = await setDateDone(row.id, true);
+        setError(r.ok ? null : r.error);
+      } catch {
+        // Only the network can throw here: an action reports its own
+        // failures in its result (src/lib/action-result.ts).
+        setError("That didn't save. Check the connection and try again.");
       }
     });
   }
