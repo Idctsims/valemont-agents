@@ -352,7 +352,8 @@ each in phases with a "done when" checklist). It supersedes the former steps
 - **Sweep starvation fix** (PR #10, §8) ✓
 - **Chat 2, Phase 2** (Ventures HQ) ✓ (merged 2026-10-09; see Current State). **Owner's phone checklist: ALL GREEN, 2026-10-09.**
 - **Follow-up, own branch and PR:** the "never abandon an untried commitment" database invariant (db/024, db/025) ✓
-- **Chat 2, Phase 3** (Capital Tracker) ← **you are here**
+- **Chat 2, Phase 3** (Capital Tracker, paper) ✓ (PR #14, merge `95a7c2a`, live 2026-10-10). Owner's signed-in runs on the final code: `capital.spec` 9/9, `screens-capital` 2/2, `goals.spec` 6/6 (phone project).
+- **Chat 2, Phase 4** (context layer and Wags, with the TypeScript twin of the AI budget guard) ← **you are here**
 
 Reason for deploying at step 4 and not at the end: "works locally, dies
 silently at 3am in production" is the classic failure here. Hit it while
@@ -917,7 +918,8 @@ absent row as "I never looked."
   - **`db/022_ventures.sql` applied 2026-10-09 22:20:20 UTC; `db/023_job_health_retired.sql` applied 22:22:06 UTC** (`migration_log`). The 022 verify was checked via db_inspect: 7 ventures in order; SBC with 5 workstreams (2 parked) and 1 log row; 0 anon grants; `v_venture_today` `security_invoker=true`.
   - **`db/024_no_untried_abandon.sql` applied 2026-10-09 23:27:30 UTC** (`migration_log`).
   - **`db/025_answered_attempts.sql` applied 2026-10-09 23:36:41 UTC** (`migration_log`; CHECK read back via db_inspect: deferred, error, answered). It adds `answered` to `resolution_attempts.result`.
-    - Next new file: `db/026`.
+  - **`db/026_capital.sql` applied 2026-10-10 00:52:43 UTC; `db/027_capital_is_test.sql` 02:18:31; `db/028_readonly_views.sql` 09:56:58** (`migration_log`).
+    - Next new file: `db/029`.
 - **Immutability audit (2026-10-01, empirical).** UPDATE and DELETE were attempted on a `_test` row of every table, rolled back.
   - **Refused by trigger:** `commitments`, `events`, `resolution_attempts`, `commitment_factors`, `closing_snapshots`, `selections`, `model_versions`, `kalshi_markets`, `kalshi_candles`. `legs` UPDATE was refused too, by `legs_frozen`.
   - **ACCEPTED:**
@@ -929,6 +931,7 @@ absent row as "I never looked."
   - **Refused only by a foreign key**, so not protected: `runs` and `agents` DELETE.
   - **Fix:** `db/015_close_mutation_gaps.sql`, pasted. `tests_live/test_mutation_gaps.py` now runs and passes.
   - **`db/015` applied_at: 2026-10-08 04:41:03.069615 UTC** (from `migration_log`). **Rows written before that timestamp in `resolutions`, `legs`, `briefs`, `runs` and `agents` were protected by convention only.** There is no history to prove none was altered.
+- **Tests (2026-10-10, after Chat 2 Phase 3):** `tests/` **493** OK; `tests_live/` **210** OK, 0 skipped. Web: `pnpm test:unit` 42; `pnpm test:e2e` logged out 51 pass, 55 skip; owner runs (phone) `capital.spec` 9, `screens-capital` 2, `goals.spec` 6, all pass.
 - **Tests (2026-10-09, after Chat 2 Phase 2):** `tests/` **472** OK; `tests_live/` **170** OK, 0 skipped, **0 failing** (Phase 2 added `test_ventures_sql.py` 17 and 2 retired-job tests). Web: `pnpm test:unit` 30; `pnpm test:e2e` logged out 49 pass, 33 skip; owner run `ventures goals owner` 20 pass, 8 skip. Run both from `workers/` with **`..\venv\Scripts\python.exe`**.
   - The 3 `test_attempt_budgets.py` failures that predated Chat 2 Phase 1 are fixed by PR #10 (§8, sweep starvation). PR #10 added 9 to `tests/` (`test_first_look.py`) and 1 to `tests_live/` (`test_sweep_order.py`, about 90 s: it waits out 70 fixtures' deadlines and runs real sweeps).
   - **`tests_live` fixtures:** a parked fixture (`due=False`) is parked for both sweeps; only `due=True` fixtures enter a due set, and they are sealed. Never give a parked fixture a near close.
@@ -1147,12 +1150,13 @@ absent row as "I never looked."
   - **db/026** (bankroll_entries, crypto_holdings, capital_snapshots; all append-only, all carry `mode`), **db/027** (`is_test` entries, written only by `add_test_bankroll_entry` with a verified e2e marker, excluded from every total and snapshot) and **db/028** (valemont_readonly can read every view) are applied. A mistake is corrected with an adjustment, never an edit.
   - **Worker:** `capital_snapshot`, 00:05 America/Chicago and at boot, writes each ended day's closing value per mode and source. By hand: `-m scripts.capital_snapshot --backfill` (prints rows per mode; 0 = already complete).
   - **Web `/capital`:** the paper total is the hero, tagged PAPER. LIVE appears only when live rows exist and needs LIVE typed before an entry. The share bar shows only with 2+ sources. Entries: the latest 10, then "All entries · N". Each is two lines: the note (or, with no note, its kind) and the amount in a fixed 12ch column, then mono meta with an outlined neutral `test` tag inline.
+  - **Live 2026-10-10:** Railway deployment `579b757b` (boot 15:43:33 UTC; `job_health.capital_snapshot` ok 15:43:34, no error). Production `--backfill` printed `paper 1` (bankroll, 2026-10-09, 1000.00, written 15:43:10 UTC); live has no data. Vercel production `dpl_3AtKLEbpSLm1tMtKDTq83TrPcdiB`; logged out, `/capital` redirects to `/login?next=%2Fcapital`.
   - **Colour rule: negative amounts and a falling daily change are primary text with a minus sign, never danger red,** because on paper a withdrawal is not a loss. **Once Chat 9/10 sources (bets, bots) feed capital, a negative daily change returns to the loss colour.** Red is reserved for real losses.
 - **Server actions never throw an expected failure (2026-10-10).** Every action in `apps/web` returns `ActionResult` (`{ ok: true, … } | { ok: false, error }`) via `settle()` in `src/lib/action-result.ts`. Inside an action, say no with `throw new Refusal("…")`. Why: in a production build Next redacts a thrown message, so the page showed "Minified React error" (number 441) instead of the reason. Pages show `error` in their alert and revert; only a network failure can still throw on the client. `e2e/goals.spec.ts` forces a real server-side refusal and checks the readable message.
     - After sign-in, wait out "JWT issued at future" with a harmless read before any write.
 - **Next:**
   - **Zero-attempt database invariant** (db/024, db/025, both applied): merged from branch `db-zero-attempt-invariant`. `tests/` 479 OK; `tests_live/` 181 OK, 0 skipped (2026-10-09).
-  - **Chat 2 Phase 3:** Capital Tracker.
+  - **Chat 2 Phase 4:** context layer and Wags (MASTER_PLAN §6). Needs the Anthropic API key set up first.
   - **~2026-10-18:** the Railway trial ends; redeploy the worker by hand on the Free plan.
   - Still pending from before: owner review of the crypto track, owner go-live, and the weekly archive.
   - Any new idea needs a new pre-registration and forward-only validation.
