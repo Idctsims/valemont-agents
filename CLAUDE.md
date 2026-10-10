@@ -1184,12 +1184,18 @@ absent row as "I never looked."
   - **UI:** the dock's centre is the WAGS mark (opens a 92% sheet, drag to dismiss); desktop has "Ask Wags" on the rail (right panel); `/wags` lists threads (a toggle on phones, a column on desktop), rename and archive. The Wags bundle loads on first open only.
   - **Live 2026-10-10:** Vercel `dpl_8AbJCcZpQMzN92KNrqqnGF98Nwig`, Railway `97a33d2b`. `ai_smoke` (local): Haiku, 18 in / 4 out, $0.000004, `ai_usage` id 64.
   - **The owner's first real thread** (18:49–18:52 UTC, from Ventures · Sail Beach Club, read via `db_inspect`): `ai_usage` 69 (title, Haiku, $0.000014), 70 (Sonnet, 430 in, 520 out, 2,999 cache written, $0.013558), 71 (987 in, 544 out, **2,999 cache read**, $0.007714), 72 ($0.012596); each matches the pricing arithmetic to the micro-dollar. Snapshots 19 and 21 (all three pillars, no error, ~1.6 KB); turn 2 reused 19 (dedupe), turn 3 got 21 after a confirmed next action changed the data. One proposal dismissed, one next action and one goal confirmed, each a tool row. Thread auto-titled "Weekly Deadlines Overview".
-  - **Known: a proposal can arrive with no sentence.** Sonnet's chat mode (`thinking: between_tools`) may still think right before a tool call; message 188 was a reasoning block plus a proposal, no text, against the persona's "say in one line what the proposal does". Its 544 output tokens were mostly thinking. Open for a later persona or setting change; not a fault in the record.
+  - **Known: a proposal can arrive with no sentence.** Sonnet's chat mode (`thinking: between_tools`) may still think right before a tool call; message 188 was a reasoning block plus a proposal, no text, against the persona's "say in one line what the proposal does". Its 544 output tokens were mostly thinking. Not a fault in the record. **Scheduled as Chat 2 Phase 5, Step 0 item 4** (owner, 2026-10-10), below.
 - **Server actions never throw an expected failure (2026-10-10).** Every action in `apps/web` returns `ActionResult` (`{ ok: true, … } | { ok: false, error }`) via `settle()` in `src/lib/action-result.ts`. Inside an action, say no with `throw new Refusal("…")`. Why: in a production build Next redacts a thrown message, so the page showed "Minified React error" (number 441) instead of the reason. Pages show `error` in their alert and revert; only a network failure can still throw on the client. `e2e/goals.spec.ts` forces a real server-side refusal and checks the readable message.
     - After sign-in, wait out "JWT issued at future" with a harmless read before any write.
 - **Next:**
   - **Zero-attempt database invariant** (db/024, db/025, both applied): merged from branch `db-zero-attempt-invariant`. `tests/` 479 OK; `tests_live/` 181 OK, 0 skipped (2026-10-09).
   - **Chat 2 Phase 5:** the Morning Brief generator (MASTER_PLAN §6). It reads `context_snapshot()` (db/029) as the worker; push at 09:45 America/Chicago (owner decision).
+    - **Step 0 item 4, silent proposals (owner, 2026-10-10):**
+      - Wags turns run with thinking OFF by default. Verify the exact setting for `claude-sonnet-5-5` in the AI SDK Anthropic provider docs before changing `chatProviderOptions`.
+      - The persona requires one plain sentence before any `propose_*` call.
+      - The route enforces it: a turn that ends with a proposal and no text part gets a server-side line built from the proposal ("Proposing: add goal X · this week · SBC"), marked as generated.
+      - Tests: a unit test, plus a mock e2e for a proposal-only turn.
+      - After deploy, report the output tokens on a comparable real proposal turn, before and after. The "before" is message 188: 544 out, no text.
   - **~2026-10-18:** the Railway trial ends; redeploy the worker by hand on the Free plan.
   - Still pending from before: owner review of the crypto track, owner go-live, and the weekly archive.
   - Any new idea needs a new pre-registration and forward-only validation.
