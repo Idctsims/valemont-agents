@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from contextlib import contextmanager
 from datetime import date, datetime, time
 from types import SimpleNamespace
 from typing import Any
@@ -129,6 +130,16 @@ class FakeLedger:
         self.deliveries.append({"brief_id": brief_id, "late": late, "notification_id": nid})
         return len(self.deliveries)
 
+    #: Set by a test to simulate another job finishing while this one waited.
+    on_lock: Any = None
+
+    @contextmanager
+    def brief_generation_lock(self, kind: str, day: date, conn: Any = None):
+        self.locks = getattr(self, "locks", 0) + 1
+        if self.on_lock:
+            self.on_lock()
+        yield
+
     def context_snapshot(self, conn: Any = None) -> dict:
         return PAYLOAD
 
@@ -151,7 +162,8 @@ class PushJob(unittest.TestCase):
             return [SimpleNamespace(notification_id=99)]
 
         with mock.patch.multiple(ledger, owner_local_now=fake.owner_local_now, brief_delivered=fake.brief_delivered,
-                                 latest_brief=fake.latest_brief, deliver_brief_once=fake.deliver_brief_once), \
+                                 latest_brief=fake.latest_brief, deliver_brief_once=fake.deliver_brief_once,
+                                 brief_generation_lock=fake.brief_generation_lock), \
                 mock.patch.object(push, "send", fake_send):
             brief.morning_brief_push_job()
         return fake, sent
@@ -194,10 +206,41 @@ class PushJob(unittest.TestCase):
             raise push.PushError("no devices")
 
         with mock.patch.multiple(ledger, owner_local_now=fake.owner_local_now, brief_delivered=fake.brief_delivered,
-                                 latest_brief=fake.latest_brief, deliver_brief_once=fake.deliver_brief_once), \
+                                 latest_brief=fake.latest_brief, deliver_brief_once=fake.deliver_brief_once,
+                                 brief_generation_lock=fake.brief_generation_lock), \
                 mock.patch.object(push, "send", boom), self.assertRaises(push.PushError):
             brief.morning_brief_push_job()
         self.assertEqual(fake.deliveries, [], "a push that failed can be retried")
+
+
+class BootRace(unittest.TestCase):
+    """2026-10-10 17:48: at boot the generate and push jobs started together,
+    both found no brief, and both called Claude (briefs 124 and 125). Now
+    generation is under a lock with a re-check inside it."""
+
+    def test_the_push_job_uses_the_brief_the_generate_job_made_while_it_waited(self) -> None:
+        fake = FakeLedger(datetime(2026, 10, 10, 17, 48), brief_exists=False)
+        # The generate job finishes while the push job waits for the lock.
+        fake.on_lock = lambda: fake.briefs.append({"id": 124, "body": GOOD}) if not fake.briefs else None
+        built: list = []
+        sent: list = []
+        with mock.patch.multiple(ledger, owner_local_now=fake.owner_local_now, brief_delivered=fake.brief_delivered,
+                                 latest_brief=fake.latest_brief, deliver_brief_once=fake.deliver_brief_once,
+                                 brief_generation_lock=fake.brief_generation_lock),                 mock.patch.object(brief, "build_today", side_effect=lambda **kw: built.append(kw)),                 mock.patch.object(push, "send", lambda m: sent.append(m) or [SimpleNamespace(notification_id=1)]):
+            brief.morning_brief_push_job()
+        self.assertEqual(built, [], "no second brief, no second AI call")
+        self.assertEqual(fake.deliveries[0]["brief_id"], 124)
+        self.assertEqual(len(sent), 1)
+
+    def test_with_no_brief_at_all_exactly_one_is_made_under_the_lock(self) -> None:
+        fake = FakeLedger(datetime(2026, 10, 11, 6, 15), brief_exists=False)
+        with mock.patch.multiple(ledger, owner_local_now=fake.owner_local_now, latest_brief=fake.latest_brief,
+                                 brief_generation_lock=fake.brief_generation_lock, context_snapshot=fake.context_snapshot,
+                                 brief_sections=fake.brief_sections, insert_brief=fake.insert_brief),                 mock.patch.object(brief, "generate_ai", side_effect=brief.BriefRefused("no")):
+            brief.morning_brief_job()
+            brief.morning_brief_job()  # the next quarter-hour finds it
+        self.assertEqual(len(fake.briefs), 1)
+        self.assertEqual(fake.locks, 1, "the second run never needed the lock")
 
 
 class Validator(unittest.TestCase):

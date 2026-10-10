@@ -88,11 +88,13 @@ class BriefTestCase(unittest.TestCase):
 
 
 class AppendOnly(BriefTestCase):
+    # Deliveries here use far-future dates: a real delivery for today may
+    # already exist (one per date), and these rows are always rolled back.
     def test_briefs_and_deliveries_refuse_update_delete_truncate(self) -> None:
         with _rolled_back() as cur:
-            b = self.brief(cur)
+            b = self.brief(cur, day="2031-05-01")
             d = self.one(cur, "INSERT INTO brief_deliveries (brief_id, kind, brief_date) "
-                              "VALUES (%s, 'morning', goal_local_today()) RETURNING id", (b,))
+                              "VALUES (%s, 'morning', '2031-05-01') RETURNING id", (b,))
             _refused(cur, "UPDATE briefs SET body = '{}' WHERE id = %s", (b,))
             _refused(cur, "DELETE FROM briefs WHERE id = %s", (b,))
             _refused(cur, "UPDATE brief_deliveries SET late = true WHERE id = %s", (d,))
@@ -102,15 +104,15 @@ class AppendOnly(BriefTestCase):
 
     def test_one_delivery_per_date_and_only_for_a_real_brief(self) -> None:
         with _rolled_back() as cur:
-            b = self.brief(cur)
-            cur.execute("INSERT INTO brief_deliveries (brief_id, kind, brief_date) VALUES (%s, 'morning', goal_local_today())", (b,))
+            b = self.brief(cur, day="2031-05-02")
+            cur.execute("INSERT INTO brief_deliveries (brief_id, kind, brief_date) VALUES (%s, 'morning', '2031-05-02')", (b,))
             self.assertIn("brief_deliveries_once", _refused(cur,
-                          "INSERT INTO brief_deliveries (brief_id, kind, brief_date) VALUES (%s, 'morning', goal_local_today())", (b,)))
+                          "INSERT INTO brief_deliveries (brief_id, kind, brief_date) VALUES (%s, 'morning', '2031-05-02')", (b,)))
             t = self.brief(cur, day="2026-01-02", is_test=True)
             self.assertIn("not a real", _refused(cur,
                           "INSERT INTO brief_deliveries (brief_id, kind, brief_date) VALUES (%s, 'morning', '2026-01-02')", (t,)))
             self.assertIn("not a real", _refused(cur,
-                          "INSERT INTO brief_deliveries (brief_id, kind, brief_date) VALUES (%s, 'morning', '2026-01-03')", (b,)))
+                          "INSERT INTO brief_deliveries (brief_id, kind, brief_date) VALUES (%s, 'morning', '2031-05-03')", (b,)))
 
     def test_the_morning_shape_is_enforced(self) -> None:
         with _rolled_back() as cur:
@@ -232,8 +234,8 @@ class Registry(BriefTestCase):
 class Access(BriefTestCase):
     def test_the_owner_reads_and_cannot_write(self) -> None:
         with _rolled_back() as cur:
-            b = self.brief(cur)
-            cur.execute("INSERT INTO brief_deliveries (brief_id, kind, brief_date) VALUES (%s, 'morning', goal_local_today())", (b,))
+            b = self.brief(cur, day="2031-05-04")
+            cur.execute("INSERT INTO brief_deliveries (brief_id, kind, brief_date) VALUES (%s, 'morning', '2031-05-04')", (b,))
             _act_as(cur, "authenticated", self.owner)
             self.assertGreaterEqual(self.one(cur, "SELECT count(*) FROM briefs WHERE id = %s", (b,)), 1)
             self.assertEqual(self.one(cur, "SELECT count(*) FROM brief_deliveries WHERE brief_id = %s", (b,)), 1)
