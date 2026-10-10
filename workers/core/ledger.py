@@ -100,6 +100,10 @@ __all__ = [
     "goal_periods_to_roll",
     "add_goal",
     "this_week_goal_counts",
+    "CAPITAL_MODES",
+    "capital_local_today",
+    "capital_first_day",
+    "write_capital_snapshots",
     "close_pool",
 ]
 
@@ -1456,6 +1460,72 @@ def this_week_goal_counts() -> WeekGoalCounts:
     with _pool().connection() as conn:
         row = conn.execute(WEEK_GOAL_COUNTS_SQL).fetchone()
     return WeekGoalCounts(*(int(v) for v in row))
+
+
+# ---------------------------------------------------------------------------
+# Capital (db/026): money tables, append-only, every row carries mode. Values
+# come from one SQL function, capital_value_as_of(mode, at), so the worker's
+# snapshots and the web's v_capital_today read the same numbers. Paper and
+# live are separate rows everywhere here; nothing sums across modes.
+# ---------------------------------------------------------------------------
+
+CapitalMode = Literal["paper", "live"]
+CAPITAL_MODES: Final[tuple[CapitalMode, ...]] = ("paper", "live")
+
+
+def capital_local_today() -> date:
+    """Today in the owner's timezone, by the database's clock (db/021)."""
+    with _pool().connection() as conn:
+        row = conn.execute("SELECT goal_local_today()").fetchone()
+    return row[0]
+
+
+def capital_first_day(mode: CapitalMode) -> date | None:
+    """The local date of the earliest data any source has for `mode`; None
+    when the mode has none (no snapshots are written for it)."""
+    with _pool().connection() as conn:
+        row = conn.execute(
+            """
+            SELECT (capital_first_at(%s) AT TIME ZONE coalesce(
+                       (SELECT timezone FROM app_settings LIMIT 1), 'America/Chicago'))::date
+            """,
+            (mode,),
+        ).fetchone()
+    return row[0]
+
+
+#: Every day in [first, last] gets each source's closing value as of the end
+#: of that local day. Days already written are skipped before the insert (so
+#: a nightly pass over the whole history burns no ids), and ON CONFLICT covers
+#: a race with another writer. db/026's trigger refuses any day not yet ended.
+#: tests_live/test_capital_sql.py runs this exact text.
+CAPITAL_SNAPSHOT_SQL: Final = """
+    INSERT INTO capital_snapshots (owner_id, snap_date, mode, source, value)
+    SELECT s.owner_id, d.day, %(mode)s, v.source, v.value
+      FROM app_settings s
+     CROSS JOIN LATERAL (
+           SELECT g::date AS day
+             FROM generate_series(%(first)s::date, %(last)s::date, interval '1 day') g
+          ) d
+     CROSS JOIN LATERAL capital_value_as_of(%(mode)s, capital_day_end(d.day)) v
+     WHERE NOT EXISTS (
+           SELECT 1 FROM capital_snapshots x
+            WHERE x.owner_id = s.owner_id AND x.snap_date = d.day
+              AND x.mode = %(mode)s AND x.source = v.source)
+    ON CONFLICT (owner_id, snap_date, mode, source) DO NOTHING
+"""
+
+
+def write_capital_snapshots(mode: CapitalMode, first: date, last: date) -> int:
+    """Write the closing value of every source for each day first..last
+    (inclusive) not yet snapshotted. Returns rows inserted."""
+    if mode not in CAPITAL_MODES:
+        raise LedgerError(f"unknown capital mode {mode!r}")
+    if last < first:
+        raise LedgerError(f"capital snapshot range is empty: {first} > {last}")
+    with _pool().connection() as conn:
+        cur = conn.execute(CAPITAL_SNAPSHOT_SQL, {"mode": mode, "first": first, "last": last})
+        return cur.rowcount
 
 
 # ---------------------------------------------------------------------------

@@ -193,6 +193,9 @@
   --vm-composer-height: 4.5rem;
   /* Swipe distance that commits a gesture on a goal row. */
   --vm-swipe-commit: 4.5rem;
+  /* Capital's entry amounts, in the mono face: "−$999,999.99" fits, so the
+     column does not shift from row to row. Larger amounts still grow it. */
+  --vm-amount-width: 12ch;
 }
 
 /* ------------------------------------------------------------ utilities */
@@ -264,6 +267,9 @@
 @utility w-swipe {
   width: var(--vm-swipe-commit);
 }
+@utility min-w-amount {
+  min-width: var(--vm-amount-width);
+}
 
 /* A <summary> with no disclosure triangle, in every engine (Safari keeps
    its marker unless the -webkit pseudo-element is hidden too). */
@@ -299,6 +305,51 @@
   letter-spacing: var(--text-label--letter-spacing);
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
+}
+
+/* Capital chart (Recharts). Colours and type are set here in CSS, which
+   outranks the SVG presentation attributes Recharts writes, so the chart
+   follows the theme like everything else. One series colour per mode:
+   chart-paper (accent) or chart-live (live red); paper and live are never
+   drawn as one series. No gridlines, no axis lines: only the curve, its
+   wash, the mono tick labels and the hover cursor. */
+@utility chart-capital {
+  & .recharts-cartesian-axis-tick-value {
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+    fill: var(--vm-text-muted);
+  }
+  & .recharts-area-curve {
+    stroke: var(--vm-chart-line);
+    stroke-width: 2px;
+  }
+  & .recharts-area-area {
+    fill: var(--vm-chart-line);
+    fill-opacity: 0.14;
+  }
+  & .recharts-active-dot circle,
+  & .recharts-area-dot {
+    fill: var(--vm-chart-line);
+    stroke: var(--vm-bg);
+  }
+  & .recharts-tooltip-cursor {
+    stroke: var(--vm-border);
+  }
+  & .recharts-surface:focus,
+  & .recharts-wrapper:focus {
+    outline: none;
+  }
+}
+@utility chart-paper {
+  --vm-chart-line: var(--vm-accent);
+}
+@utility chart-live {
+  --vm-chart-line: var(--vm-live);
+}
+
+/* A share bar's fill width, set per row from a 0..1 share (--vm-share). */
+@utility w-share {
+  width: calc(var(--vm-share, 0) * 100%);
 }
 
 /* Hairline rule in wood, for the one place a divider carries meaning. */

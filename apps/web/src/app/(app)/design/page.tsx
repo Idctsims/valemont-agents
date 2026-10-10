@@ -10,6 +10,7 @@ import type { Venture, VentureDate } from "@/lib/ventures/types";
 import { VentureRow } from "@/components/ventures/venture-row";
 
 import { LogSamples, TodaySamples, WorkstreamSamples } from "./venture-samples";
+import { CapitalComposerSamples, CapitalEntrySamples, CapitalHeroSamples, CapitalTagSamples } from "./capital-samples";
 import { PaperBadge, StatusChip } from "@/components/ui/badges";
 import { button, chip } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -366,6 +367,32 @@ function ThemePanel({ theme }: { theme: Theme }) {
         <div>
           <SubHead>Today</SubHead>
           <TodaySamples />
+        </div>
+
+        <div>
+          <SubHead>Capital · hero, change, history, breakdown</SubHead>
+          <CapitalHeroSamples />
+        </div>
+
+        <div>
+          <SubHead>Capital · mode tags</SubHead>
+          <CapitalTagSamples />
+          <p className="mt-3 text-sm text-text-muted">
+            Beside every money total. Paper in the on-pace (warning) token, live in the live token; never small grey text.
+          </p>
+        </div>
+
+        <div>
+          <SubHead>Capital · entries</SubHead>
+          <CapitalEntrySamples />
+          <p className="mt-3 text-sm text-text-muted">
+            Newest first, never editable. The ⋯ menu offers Correct with adjustment. The mode shows on each row only once live rows exist.
+          </p>
+        </div>
+
+        <div>
+          <SubHead>Capital · composer</SubHead>
+          <CapitalComposerSamples />
         </div>
 
         <div>

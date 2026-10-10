@@ -16,6 +16,7 @@ import {
   type WorkstreamFields,
 } from "@/app/(app)/ventures/actions";
 import { Fold } from "@/components/ui/fold";
+import type { ActionResult } from "@/lib/action-result";
 import type { Goal } from "@/lib/goals/types";
 import {
   LOG_KINDS,
@@ -85,14 +86,16 @@ export function VentureDetail({
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(startEditing);
 
-  function run(c: Change, action: () => Promise<unknown>) {
+  function run(c: Change, action: () => Promise<ActionResult>) {
     startTransition(async () => {
       change(c);
       try {
-        await action();
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "That didn't save. Try again.");
+        const r = await action();
+        setError(r.ok ? null : r.error);
+      } catch {
+        // Only the network can throw here: an action reports its own
+        // failures in its result (src/lib/action-result.ts).
+        setError("That didn't save. Check the connection and try again.");
       }
     });
   }

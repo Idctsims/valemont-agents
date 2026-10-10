@@ -13,7 +13,7 @@ import { addTempDate, createTempVenture, deleteVenturesById, hasOwner, setTheme,
 // For TODAY it creates one temporary venture ("e2e <run id> …") with a date
 // due today, by id, and deletes it by id afterwards. The owner's real
 // ventures are only read, and are checked unchanged at the end.
-//   pnpm test:e2e screens --workers=1
+//   pnpm test:e2e e2e/screens-ventures.spec.ts --workers=1
 
 test.skip(!hasOwner, "set E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD to run");
 

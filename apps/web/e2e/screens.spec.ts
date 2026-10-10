@@ -25,7 +25,7 @@ import {
 //   - afterwards it checks every goal the owner had is still there, unchanged.
 // Owner-only. Run it ALONE and on one worker, so the two projects don't seed
 // over each other or over goals.spec:
-//   pnpm test:e2e screens --workers=1
+//   pnpm test:e2e e2e/screens.spec.ts --workers=1
 
 test.skip(!hasOwner, "set E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD to run");
 

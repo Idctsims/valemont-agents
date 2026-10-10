@@ -10,6 +10,7 @@ import {
   moveGoalToNext,
   uncompleteGoal,
 } from "@/app/(app)/goals/actions";
+import type { ActionResult } from "@/lib/action-result";
 import { WEEKLY_CAP, type Area, type Horizon } from "@/lib/goals/period";
 import {
   countLabel,
@@ -105,14 +106,16 @@ export function GoalLedger({
   const [error, setError] = useState<string | null>(null);
   const copy = COPY[horizon];
 
-  function run(c: Change, action: () => Promise<void>) {
+  function run(c: Change, action: () => Promise<ActionResult>) {
     startTransition(async () => {
       change(c);
       try {
-        await action();
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "That didn't save. Try again.");
+        const r = await action();
+        setError(r.ok ? null : r.error);
+      } catch {
+        // Only the network can throw here: an action reports its own
+        // failures in its result (src/lib/action-result.ts).
+        setError("That didn't save. Check the connection and try again.");
       }
     });
   }

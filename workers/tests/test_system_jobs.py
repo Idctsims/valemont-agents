@@ -11,7 +11,7 @@ import os
 import sys
 import unittest
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Any
 from unittest import mock
 
@@ -68,6 +68,10 @@ class FakeLedger:
     def goal_periods_to_roll(self, horizon): return []
     def carry_over_goals(self, horizon, from_date): self._rec("carry_over_goals", horizon, from_date); return 0
     def this_week_goal_counts(self): return ledger.WeekGoalCounts(open=0, done=0, carried_in=0)
+    # capital (tests/test_capital.py drives these; here no mode has data)
+    def capital_local_today(self): return date(2026, 10, 9)
+    def capital_first_day(self, mode): return None
+    def write_capital_snapshots(self, mode, first, last): self._rec("write_capital_snapshots", mode, first, last); return 0
 
 
 class SystemTestCase(unittest.TestCase):
@@ -76,7 +80,8 @@ class SystemTestCase(unittest.TestCase):
         names = ("job_register", "job_started", "job_succeeded", "job_failed", "job_health_rows",
                  "set_job_alert_state", "database_size", "notification_sent_since",
                  "queue_fail_exhausted", "queue_claim", "queue_done", "queue_retry", "queue_fail",
-                 "goal_periods_to_roll", "carry_over_goals", "this_week_goal_counts")
+                 "goal_periods_to_roll", "carry_over_goals", "this_week_goal_counts",
+                 "capital_local_today", "capital_first_day", "write_capital_snapshots")
         for name in names:
             p = mock.patch.object(ledger, name, getattr(self.ledger, name))
             p.start()
@@ -362,7 +367,7 @@ class Registry(unittest.TestCase):
     def test_default_jobs(self) -> None:
         built = {j.name: j for j in system_jobs.build_system_jobs({})}
         self.assertEqual(set(built), {"heartbeat", "health_monitor", "db_size", "job_queue",
-                                     "goals_rollover", "goals_monday_push"})
+                                     "goals_rollover", "goals_monday_push", "capital_snapshot"})
         self.assertEqual(built["heartbeat"].expected_interval_s, 60)
         self.assertEqual(built["job_queue"].expected_interval_s, 10)
         self.assertEqual(built["db_size"].expected_interval_s, 86400)
@@ -392,8 +397,9 @@ class SystemOnlyBoot(SystemTestCase):
         ids = {j.id for j in orchestrator._scheduler.get_jobs()}
         self.assertEqual(ids, {"system:heartbeat", "system:health_monitor",
                                "system:db_size", "system:job_queue",
-                               "system:goals_rollover", "system:goals_monday_push"})
-        self.assertEqual(self.ledger.names().count("job_register"), 6)
+                               "system:goals_rollover", "system:goals_monday_push",
+                               "system:capital_snapshot"})
+        self.assertEqual(self.ledger.names().count("job_register"), 7)
 
     def test_disabled_agents_plus_system_jobs_start_rather_than_refuse(self) -> None:
         from tests.support import ScriptedAgent
@@ -438,7 +444,7 @@ class SystemOnlyBoot(SystemTestCase):
         self.assertEqual(started[0].agents, [])
         self.assertEqual({j.name for j in started[0].system_jobs},
                          {"heartbeat", "health_monitor", "db_size", "job_queue",
-                          "goals_rollover", "goals_monday_push"})
+                          "goals_rollover", "goals_monday_push", "capital_snapshot"})
 
 
 if __name__ == "__main__":

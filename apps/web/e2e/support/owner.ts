@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { expect, type Page } from "@playwright/test";
+import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 // Shared by the owner-only specs. Credentials come from the shell session
@@ -42,6 +42,32 @@ function publicEnv(): { url: string; key: string } {
   const text = readFileSync(resolve(__dirname, "..", "..", ".env.local"), "utf8");
   const get = (name: string) => text.match(new RegExp(`^${name}=(.*)$`, "m"))?.[1]?.trim() ?? "";
   return { url: get("NEXT_PUBLIC_SUPABASE_URL"), key: get("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY") };
+}
+
+/**
+ * The e2e marker (db/027) from .env.local. Server-only on the app side; a
+ * spec reads it to send it, and never prints it. Missing: the capital specs
+ * fail at once rather than write real entries.
+ */
+export function e2eMarker(): string {
+  const text = readFileSync(resolve(__dirname, "..", "..", ".env.local"), "utf8");
+  const marker = text.match(/^E2E_TEST_MARKER=(\S+)$/m)?.[1];
+  if (!marker) throw new Error("E2E_TEST_MARKER is not in apps/web/.env.local: run pnpm gen:e2e-marker");
+  return marker;
+}
+
+/** The header name the server checks (src/lib/capital/marker.ts). */
+export const MARKER_HEADER = "x-valemont-e2e";
+
+/**
+ * Send the marker on every request to the app itself (pages and Server
+ * Actions), and on nothing else: never to Supabase or any other origin.
+ */
+export async function useE2eMarker(context: BrowserContext, baseURL: string) {
+  const marker = e2eMarker();
+  await context.route(`${baseURL}/**`, (route) =>
+    route.fallback({ headers: { ...route.request().headers(), [MARKER_HEADER]: marker } }),
+  );
 }
 
 /** Seeded goals read like real ones on screen; this note is what marks them. */
@@ -292,6 +318,103 @@ export async function deleteVenturesById(ids: string[]) {
   await asOwner(async (supabase) => {
     const { error } = await supabase.from("ventures").delete().in("id", ids);
     if (error) throw new Error(`venture cleanup failed: ${error.message}`);
+  });
+}
+
+// ----------------------------------------------------------------- capital
+
+export type CapitalState = {
+  /** The REAL paper total now, in cents (v_capital_today: test rows excluded). */
+  paperTotal: number;
+  /** Real paper total at the latest snapshot before today, cents; null if none. */
+  paperPrior: number | null;
+  /** Rows v_capital_today has for live. Today: none. */
+  liveRows: number;
+  /** Every REAL bankroll entry (is_test = false), id → its fields. None may change, none may be added. */
+  entries: Map<string, string>;
+  /** Net of every test entry (db/027), cents: what /capital adds on top for a marked e2e request. */
+  testNet: number;
+};
+
+const cents = (v: string | number) => Math.round(Number(v) * 100);
+const signed = (r: { kind: string; amount: string | number }) => (r.kind === "withdrawal" ? -cents(r.amount) : cents(r.amount));
+
+/**
+ * The owner's real capital, read as the owner (RLS applies), plus the test
+ * entries' net. Taken before and after a spec: the real total and every real
+ * entry must be exactly as they were, and no real entry may be added (a
+ * spec's writes are test entries, db/027).
+ */
+export async function snapshotCapital(): Promise<CapitalState> {
+  return asOwner(async (supabase) => {
+    const [t, e] = await Promise.all([
+      supabase.from("v_capital_today").select("mode, is_total, value, prior_value"),
+      supabase.from("bankroll_entries").select("id, mode, kind, amount, note, created_at, owner_id, is_test"),
+    ]);
+    if (t.error) throw new Error(`capital read failed: ${t.error.message}`);
+    if (e.error) throw new Error(`entries read failed: ${e.error.message}`);
+    const total = t.data.find((r) => r.mode === "paper" && r.is_total);
+    if (!total) throw new Error("no paper total: is db/026 pasted and seeded?");
+    return {
+      paperTotal: cents(total.value),
+      paperPrior: total.prior_value === null ? null : cents(total.prior_value),
+      liveRows: t.data.filter((r) => r.mode === "live").length,
+      entries: new Map(e.data.filter((r) => !r.is_test).map((r) => [String(r.id), JSON.stringify(r)])),
+      testNet: e.data.filter((r) => r.is_test).reduce((s, r) => s + signed(r), 0),
+    };
+  });
+}
+
+/**
+ * Append one TEST entry (db/027: is_test, paper only, never counted) through
+ * add_test_bankroll_entry, as the owner, with the marker. There is no way to
+ * write a real or a live row from here.
+ */
+export async function addTestEntry(kind: "deposit" | "adjustment", amount: string, note: string) {
+  await asOwner(async (supabase) => {
+    const { error } = await supabase.rpc("add_test_bankroll_entry", {
+      p_marker: e2eMarker(),
+      p_kind: kind,
+      p_amount: amount,
+      p_note: note,
+    });
+    if (error) throw new Error(`test entry failed: ${error.message}`);
+  });
+}
+
+/**
+ * If earlier runs left the test entries netting to anything but zero (a run
+ * that died between a deposit and its correction, or 2026-10-10's row 34),
+ * write one TEST adjustment that brings the net back to zero, so a marked
+ * page shows exactly the real total. Test rows only; the real record is
+ * never touched. Returns the state after.
+ */
+export async function balanceTestEntries(): Promise<CapitalState> {
+  const state = await snapshotCapital();
+  if (state.testNet === 0) return state;
+  const fix = -state.testNet;
+  const text = `${fix < 0 ? "-" : ""}${Math.floor(Math.abs(fix) / 100)}.${String(Math.abs(fix) % 100).padStart(2, "0")}`;
+  await addTestEntry("adjustment", text, `e2e rebalance ${RUN_ID}`);
+  const after = await snapshotCapital();
+  if (after.testNet !== 0) throw new Error(`test entries still net ${after.testNet} cents after rebalancing`);
+  return after;
+}
+
+/** The entries `notePrefix` marks (this run's). */
+export async function capitalEntriesNoted(notePrefix: string) {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase
+      .from("bankroll_entries")
+      .select("id, mode, kind, amount, note, is_test")
+      .like("note", `${notePrefix}%`);
+    if (error) throw new Error(`entries read failed: ${error.message}`);
+    return data.map((r) => ({
+      id: String(r.id),
+      mode: r.mode as string,
+      kind: r.kind as string,
+      amount: cents(r.amount),
+      isTest: r.is_test === true,
+    }));
   });
 }
 

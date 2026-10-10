@@ -19,6 +19,13 @@
                              midnight the worker was down for.
     goals_monday_push weekly Monday 07:00 America/Chicago, never at boot:
                              "Set your week", linking to /goals.
+    capital_snapshot daily   00:05 America/Chicago, and once at boot: each
+                             mode with data gets every source's closing value
+                             (db/026 capital_value_as_of) for every ended day
+                             since its first entry that has none yet. Nightly
+                             that is yesterday; at boot it is the backfill; a
+                             missed night repairs itself on the next pass.
+                             Paper and live are written separately, never summed.
 
 Alerts go through core/push.py with deep link /settings/health.
 """
@@ -27,7 +34,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Any, Callable, Iterable, Mapping
 
 from apscheduler.triggers.combining import OrTrigger
@@ -290,6 +297,32 @@ def goals_monday_push() -> None:
     push.send(monday_message(ledger.this_week_goal_counts()))
 
 
+# -------------------------------------------------------------------- capital
+
+def capital_span(first: date, today: date) -> tuple[date, date] | None:
+    """The ended days a mode's history covers: its first day through
+    yesterday (owner's timezone). None when its first day is today, because
+    no day with data has ended yet."""
+    yesterday = today - timedelta(days=1)
+    return None if first > yesterday else (first, yesterday)
+
+
+def snapshot_capital() -> dict[str, int]:
+    """Snapshot every mode that has data, separately. Returns rows written
+    per mode. Idempotent: days already snapshotted are skipped."""
+    today = ledger.capital_local_today()
+    written: dict[str, int] = {}
+    for mode in ledger.CAPITAL_MODES:
+        first = ledger.capital_first_day(mode)
+        if first is None:
+            continue  # no data in this mode: nothing to snapshot, no rows at all
+        span = capital_span(first, today)
+        written[mode] = 0 if span is None else ledger.write_capital_snapshots(mode, *span)
+    if any(written.values()):
+        log.info("capital: wrote %s", ", ".join(f"{m} {n}" for m, n in written.items()))
+    return written
+
+
 # ---------------------------------------------------------------------- drill
 
 def health_drill() -> None:
@@ -314,6 +347,9 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
         SystemJob("goals_monday_push", WEEK_S,
                   CronTrigger(day_of_week="mon", hour=7, minute=0, timezone=OWNER_TZ),
                   goals_monday_push, misfire_grace=3600, run_at_boot=False),
+        SystemJob("capital_snapshot", 24 * 60 * 60,
+                  CronTrigger(hour=0, minute=5, timezone=OWNER_TZ),
+                  snapshot_capital, misfire_grace=3600),
     ]
     if env.get("HEALTH_DRILL", "").strip().lower() == "true":
         log.warning("HEALTH_DRILL=true: scheduling health_drill, which always fails")

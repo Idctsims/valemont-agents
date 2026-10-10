@@ -35,10 +35,12 @@ export function NewVenture() {
         if (!clean) return;
         startTransition(async () => {
           try {
-            const slug = await createVenture(clean);
-            router.push(`/ventures/${slug}?edit=1`);
-          } catch (err) {
-            setError(err instanceof Error ? err.message : "That didn't save. Try again.");
+            const r = await createVenture(clean);
+            if (r.ok) router.push(`/ventures/${r.slug}?edit=1`);
+            else setError(r.error);
+          } catch {
+            // Only the network can throw here (src/lib/action-result.ts).
+            setError("That didn't save. Check the connection and try again.");
           }
         });
       }}
