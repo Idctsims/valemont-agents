@@ -1135,17 +1135,20 @@ def notification_sent_this_month(kind: str) -> bool:
 
 def record_ai_usage(*, purpose: str, model: str, tokens_in: int, tokens_out: int,
                     cache_read_tokens: int, cache_write_tokens: int, batch: bool,
-                    cost_usd: Decimal, critical: bool) -> None:
+                    cost_usd: Decimal, critical: bool) -> int:
+    """Append one row; returns its id."""
     with _pool().connection() as conn:
-        conn.execute(
+        row = conn.execute(
             """
             INSERT INTO ai_usage (purpose, model, tokens_in, tokens_out, cache_read_tokens,
                                   cache_write_tokens, batch, cost_usd, critical)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
             """,
             (purpose, model, tokens_in, tokens_out, cache_read_tokens, cache_write_tokens,
              batch, cost_usd, critical),
-        )
+        ).fetchone()
+    return int(row[0])
 
 
 def ai_spend_month_to_date() -> Decimal:

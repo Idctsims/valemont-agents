@@ -11,6 +11,7 @@ import { VentureRow } from "@/components/ventures/venture-row";
 
 import { LogSamples, TodaySamples, WorkstreamSamples } from "./venture-samples";
 import { CapitalComposerSamples, CapitalEntrySamples, CapitalHeroSamples, CapitalTagSamples } from "./capital-samples";
+import { WagsChromeSamples, WagsConversationSamples, WagsProposalSamples } from "./wags-samples";
 import { PaperBadge, StatusChip } from "@/components/ui/badges";
 import { button, chip } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -393,6 +394,27 @@ function ThemePanel({ theme }: { theme: Theme }) {
         <div>
           <SubHead>Capital · composer</SubHead>
           <CapitalComposerSamples />
+        </div>
+
+        <div>
+          <SubHead>Wags · conversation, streaming</SubHead>
+          <WagsConversationSamples />
+          <p className="mt-3 text-sm text-text-muted">
+            Editorial, not bubbles: a mono label per turn, Tsims muted, Wags primary, a hairline between exchanges. The pulse marks a turn still streaming.
+          </p>
+        </div>
+
+        <div>
+          <SubHead>Wags · proposals</SubHead>
+          <WagsProposalSamples />
+          <p className="mt-3 text-sm text-text-muted">
+            Wags never changes anything itself. Confirm runs the existing goals and ventures actions; the outcome is written back to the thread.
+          </p>
+        </div>
+
+        <div>
+          <SubHead>Wags · chip, budget line, refusals, cut short</SubHead>
+          <WagsChromeSamples />
         </div>
 
         <div>

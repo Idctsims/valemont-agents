@@ -163,9 +163,9 @@ Views the app reads: `v_model_performance` (hit rate, ROI net of fees and CLV by
 
 ## 4. API and services inventory
 
-**(as built) Expected spend is about $0–10/month until the worker grows:** the Railway free plan (about $0.45–0.51/month of usage against a $1 credit) and the Claude API (starting with $5 prepaid and a $10 monthly cap). Everything else runs on free tiers. Original estimate, for when the full build is running: about **$40–60/month**, with Railway Hobby (about $7–10) and the Claude API (about $30–50). The Claude API has no free tier, and a Claude Pro subscription doesn't cover API usage.
+**(as built) Expected spend is about $0–20/month until the worker grows:** the Railway free plan (about $0.45–0.51/month of usage against a $1 credit) and the Claude API (starting with $5 prepaid and a **$20 monthly cap**, owner decision Oct 9; it was $10). Everything else runs on free tiers. Original estimate, for when the full build is running: about **$40–60/month**, with Railway Hobby (about $7–10) and the Claude API (about $30–50). The Claude API has no free tier, and a Claude Pro subscription doesn't cover API usage.
 
-**How the Claude estimate is built.** Assumes about 300 summaries a day on the Haiku tier through the Batch API (about $5), Wags at about 20 messages a day on Sonnet 5.5 with prompt caching (about $14), and the Morning Brief, Arsenal, slip parsing, Lookbook tagging and bot reasoning together at about $15. Every call is logged to `ai_usage`, and a budget guard downgrades non-critical calls to Haiku if the month runs hot. **(as built)** The guard lives in `workers/core/ai.py`, the only file allowed to call Claude: at 80% of `AI_MONTHLY_BUDGET_USD` (default $10) non-critical calls downgrade to the cheapest model; at 100% they're refused; one push per threshold per month. The web side gets a TypeScript twin in Chat 2, reading the same table.
+**How the Claude estimate is built.** Assumes about 300 summaries a day on the Haiku tier through the Batch API (about $5), Wags at about 20 messages a day on Sonnet 5.5 with prompt caching (about $14), and the Morning Brief, Arsenal, slip parsing, Lookbook tagging and bot reasoning together at about $15. Every call is logged to `ai_usage`, and a budget guard downgrades non-critical calls to Haiku if the month runs hot. **(as built)** The guard lives in `workers/core/ai.py`, the only file allowed to call Claude: at 80% of `AI_MONTHLY_BUDGET_USD` (code default $10; the owner set **$20**, Oct 9) non-critical calls downgrade to the cheapest model; at 100% they're refused; one push per threshold per month. The web side gets a TypeScript twin in Chat 2, reading the same table.
 
 ### Core platform
 
@@ -174,7 +174,7 @@ Views the app reads: `v_model_performance` (hit rate, ROI net of fees and CLV by
 | Vercel | Next.js app, API routes, watchdog route | Hobby, free (personal use). **Live at `valemont-command.vercel.app`**; builds only when `apps/web` changes | 0 | Vercel account linked to GitHub; env: Supabase URL, publishable key, `OWNER_USER_ID`, VAPID keys, `SUPABASE_SECRET_KEY` (watchdog only), `WATCHDOG_TOKEN`, `WATCHDOG_PING_URL` | Cloudflare Pages |
 | Supabase | Postgres, Auth, Storage, pgvector, Edge Functions | Free: 500 MB DB, 1 GB storage, pauses after 7 idle days (the heartbeat prevents it) | 0 | Existing project; publishable key (browser), a dedicated `vercel-watchdog` secret key (server, one route), Session pooler URL, read-only role URL | Pro at $25 if the cap is hit |
 | Railway | All Python workers and the scheduler | **Free plan for now (as built):** $1/month usage credit, 0.5 GB RAM per service. The system-jobs-only worker uses about 45–50 MB, about $0.45–0.51/month. Move to Hobby ($5 including $5 usage) when real agents or bots push past $1 | 0 now; 5+ later | Existing account; trial ends about Oct 18, after which the service must be redeployed by hand | Hobby; Fly.io or Render |
-| Claude API | Summaries, vision, Brief, Wags, Arsenal, reasoning | Pay as you go | Start: $5 prepaid, $10 cap | Console API key with a monthly spend limit set (Chat 2) | Haiku-only mode via budget guard |
+| Claude API | Summaries, vision, Brief, Wags, Arsenal, reasoning | Pay as you go | Start: $5 prepaid, $20 cap (Oct 9; was $10) | Console API key with a monthly spend limit set (Chat 2) | Haiku-only mode via budget guard |
 | Embeddings | Learning engine, Lookbook similarity | Supabase built-in gte-small (384-dim) in Edge Functions, free | 0 | None | sentence-transformers on Railway |
 | Web Push | All push alerts | Self-hosted VAPID: `web-push` on Vercel, `pywebpush` on the worker, free. **Proven on a locked iPhone from both senders** | 0 | VAPID key pair in Vercel and Railway | Email digest |
 | cron-job.org **(added)** | Calls the watchdog route every 5 minutes | Free | 0 | Account; job sends `Authorization: Bearer WATCHDOG_TOKEN` | GitHub Actions cron |
@@ -280,7 +280,7 @@ Thirteen build chats after this one, each split into phases with a test you run 
 ### Chat 2 — Command core ← next
 
 **Set up in this chat:**
-- Anthropic API key: $5 prepaid credit, $10 monthly spend limit.
+- Anthropic API key: $5 prepaid credit, $20 monthly spend limit (owner decision Oct 9; was $10).
 - Google Cloud project with the Calendar API and an OAuth client (optional; calendar highlights can wait).
 - Your nine ventures' current state (stage, next action, blockers, deadlines), as a braindump, to seed Ventures HQ.
 
@@ -508,7 +508,7 @@ Approved by Tsims on Oct 7, 2026: all six decisions below are locked. Chat 1 sta
 - [x] Betting runs on the market-consensus engine; the old NFL models stay research-only until a new model passes a pre-registered holdout (Read first, points 1–2)
 - [x] Amend CLAUDE.md: paper by default, live only by an explicit per-bot flip with separate keys and hard limits (point 5)
 - [x] Alpaca for the core bot; memecoin live mode as FOMO signals you execute by hand (point 6)
-- [x] Pay for Railway Hobby and the Claude API (about $40–60/month); everything else free (section 4). **Amended Oct 8:** Railway stays on the Free plan until the worker outgrows its $1 credit; the Claude API starts at $5 prepaid with a $10 cap.
+- [x] Pay for Railway Hobby and the Claude API (about $40–60/month); everything else free (section 4). **Amended Oct 8:** Railway stays on the Free plan until the worker outgrows its $1 credit; the Claude API starts at $5 prepaid with a $10 cap. **Amended Oct 9:** the cap is $20/month.
 - [x] Thirteen-chat sequence with Wags and the Morning Brief framework built in Chat 2 (section 6)
 
 **Owner decisions still parked** (recorded in CLAUDE.md, not part of this build's critical path): go-live of the existing Kalshi roster (`db/013`), the `nfl_ml` commit-window question, the crypto research track review, and the weekly NFL props archive run every Tuesday (first: Oct 13, week 5).

@@ -213,6 +213,13 @@ reaches the browser. Migrations stay numbered files in `db/`, pasted by hand.
 RLS on with NO policies, so anon and authenticated see nothing. The owner
 policies arrive in db/019+ before apps/web reads any table. db/019 (push_subscriptions, notifications) carries the first ones: owner-only, TO authenticated, anon revoked.
 
+- **Vercel never holds a database URL** (owner, 2026-10-10). The web app
+  reaches Supabase only through the publishable key and the owner's session
+  (RLS applies), plus the watchdog's scoped secret key (`SUPABASE_SECRET_KEY`,
+  read only in `/api/watchdog`, `check:secret-key`). `DATABASE_URL` and
+  `DATABASE_URL_READONLY` were found on Vercel Production and Preview, unused
+  by `apps/web`, and deleted from every environment on 2026-10-10. Never add
+  either back.
 - Workers connect **only** from `DATABASE_URL` in `.env`. Never a hardcoded host.
 - Use the **Session pooler** connection string (port 5432), not the direct
   `db.<ref>` host, which is IPv6-only.
@@ -354,6 +361,7 @@ each in phases with a "done when" checklist). It supersedes the former steps
 - **Follow-up, own branch and PR:** the "never abandon an untried commitment" database invariant (db/024, db/025) ✓
 - **Chat 2, Phase 3** (Capital Tracker, paper) ✓ (PR #14, merge `95a7c2a`, live 2026-10-10). Owner's signed-in runs on the final code: `capital.spec` 9/9, `screens-capital` 2/2, `goals.spec` 6/6 (phone project).
 - **Chat 2, Phase 4** (context layer and Wags, with the TypeScript twin of the AI budget guard) ← **you are here**
+  - **AI SDK stays on the maintained v6 line** (`ai` 6.0.303, `@ai-sdk/anthropic` 3.0.129, `@ai-sdk/react` 3.0.306, pinned). v7 was latest on 2026-10-10; **upgrade in Chat 13 hardening**, never a major bump mid-phase (owner, 2026-10-10).
 
 Reason for deploying at step 4 and not at the end: "works locally, dies
 silently at 3am in production" is the classic failure here. Hit it while
@@ -919,7 +927,8 @@ absent row as "I never looked."
   - **`db/024_no_untried_abandon.sql` applied 2026-10-09 23:27:30 UTC** (`migration_log`).
   - **`db/025_answered_attempts.sql` applied 2026-10-09 23:36:41 UTC** (`migration_log`; CHECK read back via db_inspect: deferred, error, answered). It adds `answered` to `resolution_attempts.result`.
   - **`db/026_capital.sql` applied 2026-10-10 00:52:43 UTC; `db/027_capital_is_test.sql` 02:18:31; `db/028_readonly_views.sql` 09:56:58** (`migration_log`).
-    - Next new file: `db/029`.
+  - **`db/029_wags.sql` applied 2026-10-10 17:23:55 UTC** (`migration_log`). The context layer and Wags (below).
+    - Next new file: `db/030`.
 - **Immutability audit (2026-10-01, empirical).** UPDATE and DELETE were attempted on a `_test` row of every table, rolled back.
   - **Refused by trigger:** `commitments`, `events`, `resolution_attempts`, `commitment_factors`, `closing_snapshots`, `selections`, `model_versions`, `kalshi_markets`, `kalshi_candles`. `legs` UPDATE was refused too, by `legs_frozen`.
   - **ACCEPTED:**
@@ -1085,7 +1094,8 @@ absent row as "I never looked."
     - Seen in production at 03:00, 03:05 and 03:30 UTC on 2026-10-09 (500s on the old route), and in local calls.
     - The route now retries once (rescued the 04:35 drill call). Persistent skew is a 503 plus healthchecks `/fail`.
     - The worker connects to Postgres directly and is unaffected. Worth reporting to Supabase if it continues.
-  - **AI budget guard** `core/ai.py` (§6). There's no `ANTHROPIC_API_KEY` yet, so every AI call is refused loudly.
+    - **2026-10-10: it reached web server reads** (Home's `ensureRollover`: "Couldn't check goal rollover: JWT issued at future"). The web's server-side client now retries any PGRST303 request **once** after 250 ms, writes included (the skew rejects before PostgREST does anything), with one log line naming method and path (`src/lib/supabase/skew-retry.ts`; `e2e/supabase-unit.spec.ts`).
+  - **AI budget guard** `core/ai.py` (§6). `ANTHROPIC_API_KEY` is set on Railway, Vercel (Production) and in the root `.env` since 2026-10-10.
   - **Drill 1 (failure) PASSED 2026-10-09:**
 
     | UTC | Event |
@@ -1152,6 +1162,15 @@ absent row as "I never looked."
   - **Web `/capital`:** the paper total is the hero, tagged PAPER. LIVE appears only when live rows exist and needs LIVE typed before an entry. The share bar shows only with 2+ sources. Entries: the latest 10, then "All entries · N". Each is two lines: the note (or, with no note, its kind) and the amount in a fixed 12ch column, then mono meta with an outlined neutral `test` tag inline.
   - **Live 2026-10-10:** Railway deployment `579b757b` (boot 15:43:33 UTC; `job_health.capital_snapshot` ok 15:43:34, no error). Production `--backfill` printed `paper 1` (bankroll, 2026-10-09, 1000.00, written 15:43:10 UTC); live has no data. Vercel production `dpl_3AtKLEbpSLm1tMtKDTq83TrPcdiB`; logged out, `/capital` redirects to `/login?next=%2Fcapital`.
   - **Colour rule: negative amounts and a falling daily change are primary text with a minus sign, never danger red,** because on paper a withdrawal is not a loss. **Once Chat 9/10 sources (bets, bots) feed capital, a negative daily change returns to the loss colour.** Red is reserved for real losses.
+- **Wags and the context layer (Chat 2 Phase 4, 2026-10-10):**
+  - **db/029:** `context_providers` (the registry; only migrations write it) naming one SECURITY INVOKER STABLE function per pillar (`ctx_goals`, `ctx_ventures`, `ctx_capital`; paper and live never summed). `context_snapshot()` runs every enabled provider; one that raises is reported as `{"error"}` under its key. `context_snapshot_record()` stores it in `context_snapshots`, deduped by a hash of the data without the clock. `wags_threads`; `wags_messages` append-only (role user/assistant/tool; a tool row is a proposal's outcome; the only delete is a thread delete's cascade). `ai_budget_state()` and `wags_user_messages_since()`. The read-only role executes the readers only.
+  - **The context layer is SQL** so the Morning Brief (Phase 5, worker) reads the same implementation as Wags. A new pillar adds a provider function and a registry row in its own migration.
+  - **Web AI twin** (`src/lib/ai/`): `pricing.ts` mirrors `core/ai.py` PRICING (`tests/test_ai.py` WebTwinPricing fails on any difference); `budget.ts` reads `ai_budget_state()` and shares the worker's 80%/100% alert state; every call writes `ai_usage`; `claude.ts` is the only importer of the Anthropic provider (`pnpm check:ai-import`).
+  - **Pricing verified 2026-10-10** against platform.claude.com/docs/en/about-claude/pricing: the 2026-10-06 table had Sonnet 5.5 cache reads at $0.20; it is **$0.10** (0.05x). Fixed in both files. No row had been costed at the old rate.
+  - **`/api/wags`:** owner only; 12 user messages per rolling minute (database clock); 4,000 characters; budget (Sonnet, Haiku from 80%, refused at 100%); history rebuilt from the database, never from the client; system = persona + context, cache breakpoint on the last system block; the clock and the page note ride on the newest turn only. `maxDuration` 300 (Hobby with Fluid compute). A stopped stream keeps what arrived, marked `incomplete`, with input tokens from Anthropic and output estimated at ~4 characters a token.
+  - **Mock model** only when `VERCEL` is unset AND `WAGS_MOCK=1` (`playwright.config.ts` sets it for every e2e run). Mock turns write no `ai_usage` and no `context_snapshots` row. Local e2e may also send `x-wags-e2e-rate-limit` and `x-wags-e2e-budget`, honoured in mock mode only.
+  - **Persona** is versioned (`src/lib/wags/persona.ts`, `PERSONA_VERSION`, stored on each answer). Wags is read-only: it proposes (`propose_goal`, `propose_venture_log`, `propose_next_action`); Confirm runs the existing server actions.
+  - **UI:** the dock's centre is the WAGS mark (opens a 92% sheet, drag to dismiss); desktop has "Ask Wags" on the rail (right panel); `/wags` lists threads (a toggle on phones, a column on desktop), rename and archive. The Wags bundle loads on first open only.
 - **Server actions never throw an expected failure (2026-10-10).** Every action in `apps/web` returns `ActionResult` (`{ ok: true, … } | { ok: false, error }`) via `settle()` in `src/lib/action-result.ts`. Inside an action, say no with `throw new Refusal("…")`. Why: in a production build Next redacts a thrown message, so the page showed "Minified React error" (number 441) instead of the reason. Pages show `error` in their alert and revert; only a network failure can still throw on the client. `e2e/goals.spec.ts` forces a real server-side refusal and checks the readable message.
     - After sign-in, wait out "JWT issued at future" with a harmless read before any write.
 - **Next:**

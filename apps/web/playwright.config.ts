@@ -27,6 +27,9 @@ export default defineConfig({
     command: `pnpm build && pnpm start --port ${PORT}`,
     url: `http://localhost:${PORT}/privacy`,
     reuseExistingServer: !process.env.CI,
+    // Wags answers from the scripted mock in every e2e run, so no run spends
+    // a cent (src/lib/ai/policy.ts mockAllowed: VERCEL unset AND WAGS_MOCK=1).
+    env: { ...process.env, WAGS_MOCK: "1" } as Record<string, string>,
     timeout: 240_000,
     stdout: "ignore",
     stderr: "pipe",

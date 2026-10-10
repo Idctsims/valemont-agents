@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { VentureDetail } from "@/components/ventures/venture-detail";
+import { WagsPageContext } from "@/components/wags/wags-provider";
 import { requireOwner } from "@/lib/auth";
 import { localToday } from "@/lib/goals/period";
 import { createClient } from "@/lib/supabase/server";
@@ -23,12 +24,16 @@ export default async function VenturePage({ params, searchParams }: PageProps<"/
   if (!detail) notFound();
 
   return (
-    <VentureDetail
+    <>
+      {/* Wags's chip names the venture: "Context · Ventures · Sail Beach Club". */}
+      <WagsPageContext label={`Ventures · ${detail.venture.name}`} pillar="ventures" slug={slug} />
+      <VentureDetail
       // Remount on a new server snapshot of a different venture only.
       key={detail.venture.id}
       {...detail}
       today={today}
       startEditing={(await searchParams).edit === "1"}
-    />
+      />
+    </>
   );
 }

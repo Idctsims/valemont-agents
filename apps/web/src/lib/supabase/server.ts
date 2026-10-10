@@ -5,14 +5,18 @@ import { cookies } from "next/headers";
 
 import { supabaseEnv } from "@/lib/env";
 
+import { withSkewRetry } from "./skew-retry";
+
 // One client per request: @supabase/ssr hands its no-cache headers to the
 // first cookie write only, so a shared client would leak cacheable auth
-// responses.
+// responses. Every request it makes retries once on the gateway's clock skew
+// (PGRST303, "JWT issued at future"): src/lib/supabase/skew-retry.ts.
 export async function createClient() {
   const cookieStore = await cookies();
   const { url, key } = supabaseEnv();
 
   return createServerClient(url, key, {
+    global: { fetch: withSkewRetry(fetch) },
     cookies: {
       getAll() {
         return cookieStore.getAll();

@@ -447,3 +447,55 @@ export async function snapshotVentures(): Promise<Map<string, string>> {
     return out;
   });
 }
+
+// ------------------------------------------------------------------- Wags
+
+/** A venture's slug by its exact name (read-only). */
+export async function ventureSlugNamed(name: string): Promise<string | null> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.from("ventures").select("slug").eq("name", name).maybeSingle();
+    if (error) throw new Error(`venture lookup failed: ${error.message}`);
+    return (data?.slug as string | undefined) ?? null;
+  });
+}
+
+/** Goals with exactly this title: what a confirmed Wags proposal created. */
+export async function goalIdsTitled(title: string): Promise<string[]> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.from("goals").select("id").eq("title", title);
+    if (error) throw new Error(`goal lookup failed: ${error.message}`);
+    return data.map((g) => g.id as string);
+  });
+}
+
+/** Delete exactly these goals (by id, as the spec recorded them). */
+export async function deleteGoalIds(ids: string[]) {
+  if (!ids.length) return;
+  await asOwner((supabase) => deleteGoalsById(supabase, ids));
+}
+
+/**
+ * Delete exactly the Wags threads a spec created, by id. Their messages go
+ * with them (db/029's cascade, the only delete wags_messages allows).
+ */
+export async function deleteWagsThreads(ids: string[]) {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return;
+  await asOwner(async (supabase) => {
+    const { error } = await supabase.from("wags_threads").delete().in("id", unique);
+    if (error) throw new Error(`thread cleanup failed: ${error.message}`);
+  });
+}
+
+/** A thread's stored messages, oldest first: what survives a reload. */
+export async function wagsMessages(threadId: string): Promise<{ role: string; content: string; model: string | null }[]> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase
+      .from("wags_messages")
+      .select("role, content, model")
+      .eq("thread_id", threadId)
+      .order("id");
+    if (error) throw new Error(`message read failed: ${error.message}`);
+    return data as { role: string; content: string; model: string | null }[];
+  });
+}

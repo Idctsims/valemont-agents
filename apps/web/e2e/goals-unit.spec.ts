@@ -173,7 +173,7 @@ test.describe("navigation registry", () => {
     );
   });
 
-  test("only built pages render: today, Home, Goals, Ventures HQ and Capital Tracker", () => {
+  test("only built pages render: today, Home, Goals, Wags, Ventures HQ and Capital Tracker", () => {
     expect(builtGroups()).toEqual([
       {
         key: "command",
@@ -181,6 +181,7 @@ test.describe("navigation registry", () => {
         pages: [
           { label: "Home", href: "/" },
           { label: "Goals", href: "/goals" },
+          { label: "Wags", href: "/wags" },
           { label: "Ventures HQ", href: "/ventures" },
           { label: "Capital Tracker", href: "/capital" },
         ],

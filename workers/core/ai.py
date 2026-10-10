@@ -4,7 +4,8 @@ Every call goes through `complete()`, which:
 
   1. refuses loudly if ANTHROPIC_API_KEY is missing (AiUnavailable). This is
      an exception the caller's job records, never a crash of the worker;
-  2. applies the monthly budget (AI_MONTHLY_BUDGET_USD, default $10, summed
+  2. applies the monthly budget (AI_MONTHLY_BUDGET_USD, default $10; the
+     owner decided $20 on 2026-10-09; summed
      from ai_usage since the 1st of the owner's month):
        >= 80%   non-critical calls are downgraded to the cheapest model;
                 one push that month
@@ -25,20 +26,24 @@ import logging
 import os
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from core import ledger, push
 
 log = logging.getLogger("valemont.ai")
 
 # ---------------------------------------------------------------------------
-# Pricing, USD per million tokens. Anthropic first-party API rates as of
-# 2026-10-06 (the claude-api reference's cached model table and per-model
-# migration notes). Update together with the web twin's pricing file; a test
-# in Chat 2 keeps the two in sync.
+# Pricing, USD per million tokens. Anthropic first-party API rates, VERIFIED
+# 2026-10-10 against https://platform.claude.com/docs/en/about-claude/pricing
+# (docs.claude.com redirects there) and .../models/overview for the IDs.
+# The 2026-10-06 entry had Sonnet 5.5 cache reads at $0.20; the page says
+# $0.10 (0.05x input, footnote 2). Every other rate below was unchanged.
+# Update together with apps/web/src/lib/ai/pricing.ts; tests/test_ai.py
+# (WebTwinPricing) fails if the two disagree.
 #
 #   cache writes: 1.25x input (5-minute TTL), 2x input (1-hour TTL)
-#   cache reads:  0.1x input, except Opus 5.5 (0.05x) and Fable 5.1 (0.025x)
+#   cache reads:  0.1x input, except Opus 5.5 and Sonnet 5.5 (0.05x) and
+#                 Fable 5.1 (0.025x)
 #   batch:        50% of every rate (multipliers stack)
 #   Haiku 5.5:    two rate cards by prompt length: <= 100K tokens, and longer
 # ---------------------------------------------------------------------------
@@ -69,7 +74,7 @@ def _rates(i: str, o: str, w5: str, w1: str, r: str) -> Rates:
 PRICING: Mapping[str, Price] = {
     "claude-fable-5-1": Price(_rates("10", "50", "12.50", "20", "0.25")),
     "claude-opus-5-5": Price(_rates("4", "20", "5", "8", "0.20")),
-    "claude-sonnet-5-5": Price(_rates("2", "10", "2.50", "4", "0.20")),
+    "claude-sonnet-5-5": Price(_rates("2", "10", "2.50", "4", "0.10")),
     "claude-haiku-5-5": Price(
         _rates("0.10", "0.50", "0.125", "0.20", "0.01"),
         long_prompt=_rates("0.50", "2.50", "0.625", "1.00", "0.05"),
@@ -207,15 +212,21 @@ def guard(model: str, *, critical: bool) -> str:
 
 # ------------------------------------------------------------------ calls
 
+#: Called after a call's ai_usage row is written: (row id, model, cost).
+OnRecorded = Callable[[int, str, Decimal], None]
+
+
 def record_usage(*, purpose: str, model: str, usage: Usage, critical: bool,
-                 batch: bool = False) -> Decimal:
+                 batch: bool = False, on_recorded: OnRecorded | None = None) -> Decimal:
     """Write the ai_usage row for one call; returns its cost."""
     cost = cost_usd(model, usage, batch=batch)
-    ledger.record_ai_usage(
+    usage_id = ledger.record_ai_usage(
         purpose=purpose, model=model, tokens_in=usage.tokens_in, tokens_out=usage.tokens_out,
         cache_read_tokens=usage.cache_read, cache_write_tokens=usage.cache_write,
         batch=batch, cost_usd=cost, critical=critical,
     )
+    if on_recorded is not None:
+        on_recorded(usage_id, model, cost)
     return cost
 
 
@@ -232,12 +243,13 @@ def _client() -> Any:
 
 def complete(*, purpose: str, messages: list[Any], model: str = DEFAULT_MODEL,
              critical: bool = False, max_tokens: int = 16_000, client: Any = None,
-             **params: Any) -> Any:
+             on_recorded: OnRecorded | None = None, **params: Any) -> Any:
     """`client.messages.create(...)` under the budget, with its usage recorded.
 
     `purpose` is snake_case (ai_usage CHECK): what the call is for, e.g.
     'morning_brief'. `critical` calls run even when the budget is spent and
     are never downgraded; use it for what the owner must not lose.
+    `on_recorded(usage_id, model, cost)` runs once the ai_usage row exists.
     Extra keyword arguments pass straight to messages.create (system,
     output_config, thinking, tools...).
     """
@@ -253,6 +265,6 @@ def complete(*, purpose: str, messages: list[Any], model: str = DEFAULT_MODEL,
         log.error("response served by unpriced model %r; costing it as %r", served, chosen)
         served = chosen
     cost = record_usage(purpose=purpose, model=served, usage=Usage.from_response(response.usage),
-                        critical=critical)
+                        critical=critical, on_recorded=on_recorded)
     log.info("ai %s: %s, $%s", purpose, served, cost)
     return response
