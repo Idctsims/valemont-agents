@@ -369,7 +369,8 @@ each in phases with a "done when" checklist). It supersedes the former steps
 - **Chat 2, Phase 2** (Ventures HQ) ✓ (merged 2026-10-09; see Current State). **Owner's phone checklist: ALL GREEN, 2026-10-09.**
 - **Follow-up, own branch and PR:** the "never abandon an untried commitment" database invariant (db/024, db/025) ✓
 - **Chat 2, Phase 3** (Capital Tracker, paper) ✓ (PR #14, merge `95a7c2a`, live 2026-10-10). Owner's signed-in runs on the final code: `capital.spec` 9/9, `screens-capital` 2/2, `goals.spec` 6/6 (phone project).
-- **Chat 2, Phase 4** (context layer and Wags, with the TypeScript twin of the AI budget guard) ← **you are here**
+- **Chat 2, Phase 4** (context layer and Wags, with the TypeScript twin of the AI budget guard) ✓ (PR #16, merge `7709d22`, live 2026-10-10; owner's real call and phone checklist green). Owner runs on the mock model: `wags.spec` 10/10, `screens-wags` 2/2.
+- **Chat 2, Phase 5** (Morning Brief generator on Railway, sections switching on as pillars register) ← **you are here**
   - **AI SDK stays on the maintained v6 line** (`ai` 6.0.303, `@ai-sdk/anthropic` 3.0.129, `@ai-sdk/react` 3.0.306, pinned). v7 was latest on 2026-10-10; **upgrade in Chat 13 hardening**, never a major bump mid-phase (owner, 2026-10-10).
 
 Reason for deploying at step 4 and not at the end: "works locally, dies
@@ -949,6 +950,7 @@ absent row as "I never looked."
   - **Refused only by a foreign key**, so not protected: `runs` and `agents` DELETE.
   - **Fix:** `db/015_close_mutation_gaps.sql`, pasted. `tests_live/test_mutation_gaps.py` now runs and passes.
   - **`db/015` applied_at: 2026-10-08 04:41:03.069615 UTC** (from `migration_log`). **Rows written before that timestamp in `resolutions`, `legs`, `briefs`, `runs` and `agents` were protected by convention only.** There is no history to prove none was altered.
+- **Tests (2026-10-10, after Chat 2 Phase 4):** `tests/` **496** OK; `tests_live/` **229** OK, 0 skipped (19 in `test_wags_sql.py`). Web: `pnpm test:unit` 72; `pnpm test:e2e` logged out 55 pass, 77 skip; owner runs (phone, mock model) `wags.spec` 10, `screens-wags` 2.
 - **Tests (2026-10-10, after Chat 2 Phase 3):** `tests/` **493** OK; `tests_live/` **210** OK, 0 skipped. Web: `pnpm test:unit` 42; `pnpm test:e2e` logged out 51 pass, 55 skip; owner runs (phone) `capital.spec` 9, `screens-capital` 2, `goals.spec` 6, all pass.
 - **Tests (2026-10-09, after Chat 2 Phase 2):** `tests/` **472** OK; `tests_live/` **170** OK, 0 skipped, **0 failing** (Phase 2 added `test_ventures_sql.py` 17 and 2 retired-job tests). Web: `pnpm test:unit` 30; `pnpm test:e2e` logged out 49 pass, 33 skip; owner run `ventures goals owner` 20 pass, 8 skip. Run both from `workers/` with **`..\venv\Scripts\python.exe`**.
   - The 3 `test_attempt_budgets.py` failures that predated Chat 2 Phase 1 are fixed by PR #10 (§8, sweep starvation). PR #10 added 9 to `tests/` (`test_first_look.py`) and 1 to `tests_live/` (`test_sweep_order.py`, about 90 s: it waits out 70 fixtures' deadlines and runs real sweeps).
@@ -1180,11 +1182,14 @@ absent row as "I never looked."
   - **Mock model** only when `VERCEL` is unset AND `WAGS_MOCK=1` (`playwright.config.ts` sets it for every e2e run). Mock turns write no `ai_usage` and no `context_snapshots` row. Local e2e may also send `x-wags-e2e-rate-limit` and `x-wags-e2e-budget`, honoured in mock mode only.
   - **Persona** is versioned (`src/lib/wags/persona.ts`, `PERSONA_VERSION`, stored on each answer). Wags is read-only: it proposes (`propose_goal`, `propose_venture_log`, `propose_next_action`); Confirm runs the existing server actions.
   - **UI:** the dock's centre is the WAGS mark (opens a 92% sheet, drag to dismiss); desktop has "Ask Wags" on the rail (right panel); `/wags` lists threads (a toggle on phones, a column on desktop), rename and archive. The Wags bundle loads on first open only.
+  - **Live 2026-10-10:** Vercel `dpl_8AbJCcZpQMzN92KNrqqnGF98Nwig`, Railway `97a33d2b`. `ai_smoke` (local): Haiku, 18 in / 4 out, $0.000004, `ai_usage` id 64.
+  - **The owner's first real thread** (18:49–18:52 UTC, from Ventures · Sail Beach Club, read via `db_inspect`): `ai_usage` 69 (title, Haiku, $0.000014), 70 (Sonnet, 430 in, 520 out, 2,999 cache written, $0.013558), 71 (987 in, 544 out, **2,999 cache read**, $0.007714), 72 ($0.012596); each matches the pricing arithmetic to the micro-dollar. Snapshots 19 and 21 (all three pillars, no error, ~1.6 KB); turn 2 reused 19 (dedupe), turn 3 got 21 after a confirmed next action changed the data. One proposal dismissed, one next action and one goal confirmed, each a tool row. Thread auto-titled "Weekly Deadlines Overview".
+  - **Known: a proposal can arrive with no sentence.** Sonnet's chat mode (`thinking: between_tools`) may still think right before a tool call; message 188 was a reasoning block plus a proposal, no text, against the persona's "say in one line what the proposal does". Its 544 output tokens were mostly thinking. Open for a later persona or setting change; not a fault in the record.
 - **Server actions never throw an expected failure (2026-10-10).** Every action in `apps/web` returns `ActionResult` (`{ ok: true, … } | { ok: false, error }`) via `settle()` in `src/lib/action-result.ts`. Inside an action, say no with `throw new Refusal("…")`. Why: in a production build Next redacts a thrown message, so the page showed "Minified React error" (number 441) instead of the reason. Pages show `error` in their alert and revert; only a network failure can still throw on the client. `e2e/goals.spec.ts` forces a real server-side refusal and checks the readable message.
     - After sign-in, wait out "JWT issued at future" with a harmless read before any write.
 - **Next:**
   - **Zero-attempt database invariant** (db/024, db/025, both applied): merged from branch `db-zero-attempt-invariant`. `tests/` 479 OK; `tests_live/` 181 OK, 0 skipped (2026-10-09).
-  - **Chat 2 Phase 4:** context layer and Wags (MASTER_PLAN §6). Needs the Anthropic API key set up first.
+  - **Chat 2 Phase 5:** the Morning Brief generator (MASTER_PLAN §6). It reads `context_snapshot()` (db/029) as the worker; push at 09:45 America/Chicago (owner decision).
   - **~2026-10-18:** the Railway trial ends; redeploy the worker by hand on the Free plan.
   - Still pending from before: owner review of the crypto track, owner go-live, and the weekly archive.
   - Any new idea needs a new pre-registration and forward-only validation.

@@ -291,7 +291,7 @@ Thirteen build chats after this one, each split into phases with a test you run 
 3. Capital Tracker on paper data, labeled PAPER, with history chart.
    - [ ] A paper bankroll entry shows in the total and the breakdown within a minute
 4. Context layer and Wags: page-aware floating button, saved threads, provider registry. Includes the TypeScript twin of the AI budget guard.
-   - [ ] Wags answers "what's due this week" from real venture and goal data
+   - [x] Wags answers "what's due this week" from real venture and goal data **(Oct 10: owner's real call, `ai_usage` 70, snapshot 19)**
 5. Morning Brief generator on Railway, sections that switch on as pillars register.
    - [ ] A brief generates at the scheduled time and arrives as a push
 
