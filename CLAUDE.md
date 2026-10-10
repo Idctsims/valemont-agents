@@ -280,6 +280,15 @@ policies arrive in db/019+ before apps/web reads any table. db/019 (push_subscri
   says. No `&&`, `||`, ternaries or `??`.
 - **Merge PRs with a merge commit, never squash.** Each step's commit, and
   the evidence in its message, stays visible in `main`'s history.
+- **Never use `git stash` inside a commit flow.** Before every commit,
+  `git status --short` must show the expected file set; after it,
+  `git show --stat HEAD` must match that set. A mismatch is a stop: fix it
+  before anything is pushed.
+  - Why: on 2026-10-10 a `git stash push --keep-index` in a commit command
+    silently set aside the 22 modified files of Chat 2 Phase 4 (including
+    `package.json` and `core/ai.py`), so both commits were missing them.
+    It was caught before the push and recovered from the stash and a
+    backup branch.
 - **Reports back to the planning chat state only what was actually verified.
   Anything not checked is recorded as pending, never as passed.** That
   includes anything taken from a template the owner pasted without filling
