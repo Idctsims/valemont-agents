@@ -12,6 +12,7 @@ import { VentureRow } from "@/components/ventures/venture-row";
 import { LogSamples, TodaySamples, WorkstreamSamples } from "./venture-samples";
 import { CapitalComposerSamples, CapitalEntrySamples, CapitalHeroSamples, CapitalTagSamples } from "./capital-samples";
 import { WagsChromeSamples, WagsConversationSamples, WagsProposalSamples } from "./wags-samples";
+import { BriefCardSamples, BriefPageSamples } from "./brief-samples";
 import { PaperBadge, StatusChip } from "@/components/ui/badges";
 import { button, chip } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -394,6 +395,19 @@ function ThemePanel({ theme }: { theme: Theme }) {
         <div>
           <SubHead>Capital · composer</SubHead>
           <CapitalComposerSamples />
+        </div>
+
+        <div>
+          <SubHead>Morning brief · Home</SubHead>
+          <BriefCardSamples />
+          <p className="mt-3 text-sm text-text-muted">
+            Above TODAY once today&apos;s brief exists. The date stays Home&apos;s hero; the headline is one step down. Fallback briefs say plain mode; a brief written after 9:45 says late.
+          </p>
+        </div>
+
+        <div>
+          <SubHead>Morning brief · /brief</SubHead>
+          <BriefPageSamples />
         </div>
 
         <div>

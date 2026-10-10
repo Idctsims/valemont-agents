@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
 
+import { headers } from "next/headers";
+
+import { BriefCard } from "@/components/brief/brief-card";
 import { GoalLedger } from "@/components/goals/goal-ledger";
 import { TodayModule } from "@/components/ventures/today";
 import { requireOwner } from "@/lib/auth";
+import { briefFor } from "@/lib/brief/data";
+import { MARKER_HEADER, decideMarker } from "@/lib/capital/marker";
 import { ensureRollover, weekGoals } from "@/lib/goals/data";
 import { localToday, longDate, weekRange, weekStamp, weekStart } from "@/lib/goals/period";
 import { createClient } from "@/lib/supabase/server";
 import { ventureLinks, ventureToday } from "@/lib/ventures/data";
 
 export const metadata: Metadata = { title: "Home" };
-
-/** Morning Brief (Chat 2 Phase 5). Renders nothing until the brief exists. */
-function MorningBriefSlot() {
-  return null;
-}
 
 /** Personalized feed (Chat 3). Renders nothing until the feed exists. */
 function FeedSlot() {
@@ -25,10 +25,12 @@ export default async function Home() {
   const supabase = await createClient();
   const today = localToday();
   await ensureRollover(supabase);
-  const [goals, todayRows, links] = await Promise.all([
+  const withTests = decideMarker((await headers()).get(MARKER_HEADER), process.env).kind === "test";
+  const [goals, todayRows, links, brief] = await Promise.all([
     weekGoals(supabase, today),
     ventureToday(supabase),
     ventureLinks(supabase),
+    briefFor(supabase, today, { withTests }),
   ]);
 
   return (
@@ -38,7 +40,8 @@ export default async function Home() {
         <p className="mt-2 font-mono text-sm text-text-muted">{weekStamp(today)}</p>
       </header>
 
-      <MorningBriefSlot />
+      {/* The Morning Brief, above TODAY, once today's brief exists. */}
+      {brief && <BriefCard brief={brief} />}
 
       <div className="lg:max-w-3xl">
         {/* Venture dates due today or earlier; renders nothing when none are. */}

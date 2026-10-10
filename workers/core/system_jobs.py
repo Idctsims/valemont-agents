@@ -26,6 +26,13 @@
                              that is yesterday; at boot it is the backfill; a
                              missed night repairs itself on the next pass.
                              Paper and live are written separately, never summed.
+    morning_brief    daily   06:15, then every 15 min to 09:30, and at boot:
+                             today's brief from the registry's brief sections
+                             (core/brief.py). AI first; the deterministic
+                             fallback from 09:30, so a brief always exists.
+    morning_brief_push daily 09:45, and at boot: "Morning brief" -> /brief,
+                             once per date (brief_deliveries); "Late ·" after
+                             09:50, skipped after 18:00.
 
 Alerts go through core/push.py with deep link /settings/health.
 """
@@ -41,7 +48,7 @@ from apscheduler.triggers.combining import OrTrigger
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from core import ledger, push
+from core import brief, ledger, push
 from core.jobs import SystemJob, describe
 
 log = logging.getLogger("valemont.system")
@@ -331,6 +338,17 @@ def health_drill() -> None:
 
 # ------------------------------------------------------------------- registry
 
+def brief_trigger() -> OrTrigger:
+    """Every quarter-hour attempt from 06:15 to 09:30 (core/brief.retry_times)."""
+    by_hour: dict[int, list[int]] = {}
+    for t in brief.retry_times():
+        by_hour.setdefault(t.hour, []).append(t.minute)
+    return OrTrigger([
+        CronTrigger(hour=h, minute=",".join(str(m) for m in ms), timezone=OWNER_TZ)
+        for h, ms in sorted(by_hour.items())
+    ])
+
+
 def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
     jobs = [
         SystemJob("heartbeat", 60, IntervalTrigger(seconds=60), heartbeat),
@@ -350,6 +368,10 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
         SystemJob("capital_snapshot", 24 * 60 * 60,
                   CronTrigger(hour=0, minute=5, timezone=OWNER_TZ),
                   snapshot_capital, misfire_grace=3600),
+        SystemJob("morning_brief", 24 * 60 * 60, brief_trigger(), brief.morning_brief_job, misfire_grace=600),
+        SystemJob("morning_brief_push", 24 * 60 * 60,
+                  CronTrigger(hour=brief.PUSH_AT.hour, minute=brief.PUSH_AT.minute, timezone=OWNER_TZ),
+                  brief.morning_brief_push_job, misfire_grace=600),
     ]
     if env.get("HEALTH_DRILL", "").strip().lower() == "true":
         log.warning("HEALTH_DRILL=true: scheduling health_drill, which always fails")
