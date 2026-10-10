@@ -382,6 +382,24 @@ export async function addTestEntry(kind: "deposit" | "adjustment", amount: strin
   });
 }
 
+/**
+ * If earlier runs left the test entries netting to anything but zero (a run
+ * that died between a deposit and its correction, or 2026-10-10's row 34),
+ * write one TEST adjustment that brings the net back to zero, so a marked
+ * page shows exactly the real total. Test rows only; the real record is
+ * never touched. Returns the state after.
+ */
+export async function balanceTestEntries(): Promise<CapitalState> {
+  const state = await snapshotCapital();
+  if (state.testNet === 0) return state;
+  const fix = -state.testNet;
+  const text = `${fix < 0 ? "-" : ""}${Math.floor(Math.abs(fix) / 100)}.${String(Math.abs(fix) % 100).padStart(2, "0")}`;
+  await addTestEntry("adjustment", text, `e2e rebalance ${RUN_ID}`);
+  const after = await snapshotCapital();
+  if (after.testNet !== 0) throw new Error(`test entries still net ${after.testNet} cents after rebalancing`);
+  return after;
+}
+
 /** The entries `notePrefix` marks (this run's). */
 export async function capitalEntriesNoted(notePrefix: string) {
   return asOwner(async (supabase) => {

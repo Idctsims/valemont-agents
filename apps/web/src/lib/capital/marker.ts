@@ -4,7 +4,8 @@ import { createHash, timingSafeEqual } from "node:crypto";
 // bankroll entry to be written as is_test, which keeps it out of every
 // capital number. The server honours that only when the header matches
 // E2E_TEST_MARKER, a server-only variable that exists in apps/web/.env.local
-// for the local test build and is never set on Vercel.
+// for the local test build and is never set on Vercel, AND the server is not
+// a Vercel deployment at all (VERCEL unset).
 //
 // A request that carries the header and does NOT verify is refused outright,
 // never written as a real entry: an e2e run pointed at the wrong server must
@@ -25,7 +26,10 @@ export function decideMarker(
   env: Readonly<Record<string, string | undefined>>,
 ): MarkerDecision {
   if (header === null || header === undefined || header === "") return { kind: "none" };
-  if (env.VERCEL_ENV === "production") return { kind: "refused", reason: "production never accepts the test marker" };
+  // Local builds only. Vercel sets VERCEL on every deployment, production
+  // AND preview, and previews read the same real database, so any Vercel
+  // deployment refuses the marker, whatever VERCEL_ENV says.
+  if (env.VERCEL) return { kind: "refused", reason: "a Vercel deployment never accepts the test marker" };
   const expected = env.E2E_TEST_MARKER;
   if (!expected) return { kind: "refused", reason: "this server has no test marker" };
   // Compare digests, so the comparison is constant-time and length-blind.

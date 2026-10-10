@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { money } from "../src/lib/capital/types";
 
-import { RUN_ID, addTestEntry, hasOwner, setTheme, signIn, snapshotCapital, useE2eMarker } from "./support/owner";
+import { RUN_ID, addTestEntry, balanceTestEntries, hasOwner, setTheme, signIn, snapshotCapital, useE2eMarker } from "./support/owner";
 
 // Screenshot review for Chat 2 Phase 3: /capital in both themes, first as it
 // stands, then with a deposit and its correcting adjustment applied. Phone:
@@ -41,7 +41,7 @@ test("capital screens", async ({ page }, testInfo) => {
   if (!phone) await page.setViewportSize({ width: 1440, height: 900 });
   const note = `e2e ${RUN_ID}`;
 
-  const before = await snapshotCapital();
+  const before = await balanceTestEntries(); // test net to zero, so the shots show the real total
   const shown = before.paperTotal + before.testNet;
   await useE2eMarker(page.context(), testInfo.project.use.baseURL!);
   await signIn(page, "/capital");

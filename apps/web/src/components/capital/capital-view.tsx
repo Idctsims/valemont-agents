@@ -75,6 +75,8 @@ export function CapitalView({ data, today }: { data: CapitalData; today: string 
   const paper = model.modes.find((m) => m.mode === "paper") ?? emptyMode("paper");
   const live = model.modes.find((m) => m.mode === "live");
   const showModeTags = !!live;
+  const tests = data.entries.filter((e) => e.is_test);
+  const testNet = tests.length ? tests.reduce((s, e) => s + signedCents(e), 0) : null;
 
   function submit(entry: Omit<Entry, "id" | "created_at" | "pending">, confirm: string) {
     startTransition(async () => {
@@ -113,6 +115,14 @@ export function CapitalView({ data, today }: { data: CapitalData; today: string 
       <h1 className="sr-only">Capital</h1>
 
       <ModeSection mode={paper} snapshots={data.snapshots.paper} today={today} saving={saving} hero />
+
+      {testNet !== null && (
+        // Only a verified e2e request ever gets here (db/027): say plainly that
+        // the numbers above are not the real record.
+        <p data-testid="test-view" className="mt-3 font-mono text-xs text-danger">
+          Test view · includes test entries ({signedMoney(testNet)} net)
+        </p>
+      )}
 
       {error && (
         <p role="alert" className="mt-4 text-sm text-danger">

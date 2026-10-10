@@ -32,6 +32,7 @@ const ENTRIES: Entry[] = [
   { id: "e4", mode: "paper", kind: "adjustment", amount: -5000, note: "Correction: deposit +$50.00, Oct 9 · 2:41 PM", created_at: "2026-10-09T19:44:00Z" },
   { id: "e3", mode: "paper", kind: "withdrawal", amount: 4000, note: null, created_at: "2026-10-09T19:41:00Z" },
   { id: "e2", mode: "live", kind: "deposit", amount: 50000, note: "First live dollars", created_at: "2026-10-08T15:00:00Z" },
+  { id: "e0", mode: "paper", kind: "deposit", amount: 1234, note: "e2e run deposit (a test entry: only a verified e2e request sees it)", created_at: "2026-10-08T12:00:00Z", is_test: true },
   { id: "e1", mode: "paper", kind: "deposit", amount: 100000, note: "Paper bankroll seed", created_at: "2026-10-08T03:00:00Z" },
 ];
 

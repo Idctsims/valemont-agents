@@ -140,7 +140,7 @@ test("Capital Tracker is built and reachable from the nav", () => {
   expect(builtGroups().flatMap((g) => g.pages).map((p) => p.href)).toContain("/capital");
 });
 
-test("the e2e marker: honoured only when it matches, never in production", () => {
+test("the e2e marker: honoured only on a local build, and only when it matches", () => {
   const env = { E2E_TEST_MARKER: "s3cret-marker" };
   expect(decideMarker(null, env)).toEqual({ kind: "none" });
   expect(decideMarker("", env)).toEqual({ kind: "none" });
@@ -149,10 +149,14 @@ test("the e2e marker: honoured only when it matches, never in production", () =>
   expect(decideMarker("wrong", env).kind).toBe("refused");
   expect(decideMarker("s3cret-marke", env).kind).toBe("refused");
   expect(decideMarker("s3cret-marker", {}).kind).toBe("refused"); // the server has no marker
-  // Vercel production refuses the marker even if the variable were ever set there.
-  expect(decideMarker("s3cret-marker", { ...env, VERCEL_ENV: "production" })).toEqual({
-    kind: "refused",
-    reason: "production never accepts the test marker",
-  });
-  expect(decideMarker("s3cret-marker", { ...env, VERCEL_ENV: "preview" }).kind).toBe("test");
+  // Any Vercel deployment refuses, production and preview alike (both read
+  // the real database), even if the variable were ever set there.
+  for (const VERCEL_ENV of ["production", "preview", "development", undefined, ""]) {
+    expect(decideMarker("s3cret-marker", { ...env, VERCEL: "1", VERCEL_ENV })).toEqual({
+      kind: "refused",
+      reason: "a Vercel deployment never accepts the test marker",
+    });
+  }
+  // Without VERCEL, VERCEL_ENV alone does not matter: the build is local.
+  expect(decideMarker("s3cret-marker", { ...env, VERCEL_ENV: "production" }).kind).toBe("test");
 });

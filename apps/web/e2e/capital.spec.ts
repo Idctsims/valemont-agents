@@ -5,6 +5,7 @@ import { changeLabel, changeOf, money, signedMoney } from "../src/lib/capital/ty
 import {
   MARKER_HEADER,
   RUN_ID,
+  balanceTestEntries,
   capitalEntriesNoted,
   hasOwner,
   signIn,
@@ -41,7 +42,9 @@ let page: Page;
 
 test.beforeAll(async ({ browser }, testInfo) => {
   if (testInfo.project.name !== "phone") return;
-  before = await snapshotCapital();
+  // Any test net left by earlier runs is zeroed first (with a test row), so
+  // the marked page shows exactly the real total.
+  before = await balanceTestEntries();
   context = await browser.newContext(testInfo.project.use);
   await useE2eMarker(context, testInfo.project.use.baseURL!);
   page = await context.newPage();
@@ -88,6 +91,8 @@ test("the hero is the paper total, tagged PAPER, and LIVE is absent", async () =
   await expect(paper().getByTestId("capital-change")).toHaveText(expectedChange(shown()));
   await expect(page.getByTestId("capital-live")).toHaveCount(0);
   await expect(page.getByTestId("mode-tag").filter({ hasText: /live/i })).toHaveCount(0);
+  // A marked request is told it is looking at a test view, net zero after the rebalance.
+  await expect(page.getByTestId("test-view")).toHaveText("Test view · includes test entries ($0.00 net)");
 });
 
 test("a paper deposit moves the total, breakdown and change with no reload", async () => {
@@ -145,7 +150,7 @@ test("a failed save reverts and says so", async () => {
   await composer().getByRole("textbox", { name: "Note" }).fill(`${NOTE} must not stick`);
   await composer().getByRole("button", { name: "Add +$5.00" }).click();
 
-  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.getByTestId("capital").getByRole("alert")).toBeVisible();
   await settled();
   await expect(paper().getByTestId("capital-total")).toHaveText(money(shown()));
   await expect(page.getByTestId("entry-row").filter({ hasText: `${NOTE} must not stick` })).toHaveCount(0);
@@ -181,18 +186,22 @@ test("this run's entries are listed as test entries", async () => {
 });
 
 test("a marker that does not verify is refused, and nothing is written", async () => {
-  // Overrides the context's marker for app requests: a wrong marker must
+  // Overrides the context's marker for the Server Action: a wrong marker must
   // fail the save outright, never fall back to writing a real entry.
+  // continue(), not fallback(): page routes run before context routes, and
+  // fallback() handed the request on to useE2eMarker's context route, which
+  // put the right marker back (2026-10-10: the "wrong" write went through as
+  // a test entry, row 34).
   await page.route("**/*", (route) =>
     route.request().method() === "POST" && route.request().headers()["next-action"]
-      ? route.fallback({ headers: { ...route.request().headers(), [MARKER_HEADER]: "wrong" } })
+      ? route.continue({ headers: { ...route.request().headers(), [MARKER_HEADER]: "wrong" } })
       : route.fallback(),
   );
   await composer().getByRole("button", { name: "deposit", exact: true }).click();
   await composer().getByRole("textbox", { name: "Amount" }).fill("7.00");
   await composer().getByRole("textbox", { name: "Note" }).fill(`${NOTE} wrong marker`);
   await composer().getByRole("button", { name: "Add +$7.00" }).click();
-  await expect(page.getByRole("alert")).toContainText("Test marker refused");
+  await expect(page.getByTestId("capital").getByRole("alert")).toContainText("Test marker refused");
   await settled();
   await page.unroute("**/*");
   await expect(paper().getByTestId("capital-total")).toHaveText(money(shown()));

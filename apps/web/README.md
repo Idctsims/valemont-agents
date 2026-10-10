@@ -86,7 +86,7 @@ normal page). They do it by sending the `x-valemont-e2e` header with
 `E2E_TEST_MARKER` from `.env.local`; the server verifies it before honouring
 it, and refuses a request whose marker does not verify. Create it once with
 `pnpm gen:e2e-marker` (prints only its SHA-256, which db/027 stores). **Never
-set `E2E_TEST_MARKER` on Vercel**: production refuses the header regardless.
+set `E2E_TEST_MARKER` on Vercel**: every Vercel deployment (`VERCEL` set: production and preview, which share the real database) refuses the header regardless.
 
 ## Layout
 
