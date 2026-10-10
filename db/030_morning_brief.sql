@@ -57,6 +57,8 @@ ALTER TABLE briefs
     ADD COLUMN IF NOT EXISTS is_test        BOOLEAN     NOT NULL DEFAULT false;
 
 ALTER TABLE briefs DROP CONSTRAINT IF EXISTS briefs_morning_shape;
+-- Superseded by db/031: as written here a missing field made the CHECK NULL,
+-- which passes. db/031 wraps the condition in coalesce(..., false).
 ALTER TABLE briefs ADD CONSTRAINT briefs_morning_shape CHECK (
     kind <> 'morning' OR (
         brief_date IS NOT NULL

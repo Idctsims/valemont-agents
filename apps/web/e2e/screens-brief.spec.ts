@@ -41,7 +41,9 @@ test("brief screens", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   const phone = testInfo.project.name === "phone";
   if (!phone) await page.setViewportSize({ width: 1440, height: 900 });
-  if (phone) await addTestBrief(chicagoDay(), BODY);
+  // Each project seeds its own: the latest brief for today wins, and another
+  // spec's test brief may be newer.
+  await addTestBrief(chicagoDay(), BODY);
   await useE2eMarker(page.context(), testInfo.project.use.baseURL!);
   await signIn(page, "/");
 

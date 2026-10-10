@@ -149,6 +149,63 @@ class LatestAndContext(BriefTestCase):
             self.assertEqual(self.one(cur, "SELECT context_snapshot()")["brief"]["headline"], "tests-live today")
 
 
+class TestBriefsAreNeverTodaysBrief(BriefTestCase):
+    """The owner's hard requirement (2026-10-10): a test brief (is_test, the
+    e2e marker path) is invisible to EVERY selector of today's brief: ctx_brief,
+    the web's real views (v_briefs_latest: Home, /brief, /brief/[date],
+    history) and the 09:45 delivery job. Run against the real database, in a
+    rolled-back transaction; the push is stubbed and the AI never called."""
+
+    def test_a_newer_test_brief_for_today_never_beats_the_real_one(self) -> None:
+        with _rolled_back() as cur:
+            today = self.one(cur, "SELECT goal_local_today()")
+            real = self.brief(cur, body=dict(BODY, headline="tests-live REAL"))
+            test = self.brief(cur, body=dict(BODY, headline="tests-live TEST"), is_test=True)
+            self.assertGreater(test, real, "the test brief is the newer row")
+            # Wags (ctx_brief, and so context_snapshot).
+            self.assertEqual(self.one(cur, "SELECT ctx_brief() ->> 'headline'"), "tests-live REAL")
+            # The 09:45 delivery job's selector, through the ledger itself.
+            row = ledger.latest_brief("morning", today, conn=cur.connection)
+            self.assertEqual((row.id, row.body["headline"]), (real, "tests-live REAL"))
+            # The web's real views (Home, /brief, /brief/[date], history).
+            cur.execute("SELECT id FROM v_briefs_latest WHERE kind = 'morning' AND brief_date = %s", (today,))
+            self.assertEqual(cur.fetchall(), [(real,)])
+            self.assertEqual(self.one(cur, "SELECT count(*) FROM v_briefs_latest WHERE id = %s", (test,)), 0)
+
+    def test_with_only_a_test_brief_the_push_job_makes_a_real_one_and_never_pushes_the_test(self) -> None:
+        from datetime import date, datetime
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from core import brief
+
+        day = date(2031, 3, 4)  # a date with no real brief: the test brief is all there is
+        sent: list = []
+
+        def fake_send(message):
+            sent.append(message)
+            return [SimpleNamespace(notification_id=None)]
+
+        with _rolled_back() as cur:
+            test = self.brief(cur, day=day.isoformat(), body=dict(BODY, headline="tests-live TEST ONLY"), is_test=True)
+            conn = cur.connection
+            self.assertIsNone(ledger.latest_brief("morning", day, conn=conn), "the selector does not see it")
+            with mock.patch.object(brief, "generate_ai", side_effect=brief.BriefRefused("tests-live: no AI call")):
+                brief.morning_brief_push_job(conn=conn, now=datetime(2031, 3, 4, 10, 0), send=fake_send)
+                brief.morning_brief_push_job(conn=conn, now=datetime(2031, 3, 4, 10, 15), send=fake_send)
+            cur.execute("SELECT brief_id, late FROM brief_deliveries WHERE kind = 'morning' AND brief_date = %s", (day,))
+            [(delivered, late)] = cur.fetchall()
+            cur.execute("SELECT is_test, fallback, body ->> 'headline' FROM briefs WHERE id = %s", (delivered,))
+            is_test, fallback, headline = cur.fetchone()
+        self.assertNotEqual(delivered, test, "the test brief is never delivered")
+        self.assertFalse(is_test, "a REAL brief was made for the push")
+        self.assertTrue(fallback, "with the AI unavailable, the fallback")
+        self.assertTrue(late)
+        self.assertEqual(len(sent), 1, "one push, once: the second run found the delivery")
+        self.assertEqual(sent[0].body, f"Late · {headline}")
+        self.assertNotIn("TEST ONLY", sent[0].body)
+
+
 class Registry(BriefTestCase):
     def test_the_brief_sections_are_goals_ventures_capital_and_never_the_brief(self) -> None:
         with _rolled_back() as cur:

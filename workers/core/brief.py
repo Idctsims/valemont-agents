@@ -393,14 +393,16 @@ def fallback_brief(payload: Mapping[str, Any], sections: Sequence[ledger.BriefSe
 
 # ------------------------------------------------------------------ the jobs
 
-def build_today(*, allow_fallback: bool, client: Any = None) -> int:
-    """Generate and store today's brief; returns the new row id.
-    Refusal or two invalid briefs fall back at once; an API failure falls
-    back only when `allow_fallback`, else it raises for a later retry."""
-    payload = ledger.context_snapshot()
+def build_today(*, allow_fallback: bool, client: Any = None, day: date | None = None,
+                conn: Any = None) -> int:
+    """Generate and store a brief for `day` (default: today, the owner's);
+    returns the new row id. Refusal or two invalid briefs fall back at once;
+    an API failure falls back only when `allow_fallback`, else it raises for a
+    later retry. `conn` is for tests_live only (a rolled-back transaction)."""
+    payload = ledger.context_snapshot(conn=conn)
     # Registered brief sections that have a slice in the snapshot. A reserved
     # key (calendar) appears only once its provider is registered and enabled.
-    sections = [s for s in ledger.brief_sections() if s.key in payload]
+    sections = [s for s in ledger.brief_sections(conn=conn) if s.key in payload]
     try:
         made = generate_ai(payload, sections, client=client)
     except (BriefRefused, BriefInvalid) as exc:
@@ -411,10 +413,10 @@ def build_today(*, allow_fallback: bool, client: Any = None) -> int:
             raise
         log.exception("brief: AI failed at the deadline; falling back")
         made = fallback_brief(payload, sections)
-    day = date.fromisoformat(str(payload["local_date"]))
+    day = day or date.fromisoformat(str(payload["local_date"]))
     brief_id = ledger.insert_brief(
         kind=KIND, day=day, body=made.body, model=made.model, ai_usage_id=made.ai_usage_id,
-        fallback=made.fallback, voice_version=load_voice().version, word_count=made.words,
+        fallback=made.fallback, voice_version=load_voice().version, word_count=made.words, conn=conn,
     )
     log.info("brief %d for %s: %d words, %s", brief_id, day, made.words,
              "fallback" if made.fallback else made.model)
@@ -445,20 +447,27 @@ def _notification_id(results: Sequence[Any]) -> int | None:
     return next((i for i in ids if i is not None), None)
 
 
-def morning_brief_push_job() -> None:
-    """09:45, and at boot: once per date, late after 09:50, never after 18:00."""
-    now = ledger.owner_local_now()
+def morning_brief_push_job(*, conn: Any = None, now: datetime | None = None,
+                           send: Callable[[push.Message], Sequence[Any]] | None = None) -> None:
+    """09:45, and at boot: once per date, late after 09:50, never after 18:00.
+
+    Pushes the latest REAL brief for today (ledger.LATEST_BRIEF_SQL: a test
+    brief never counts, however new). With none, it first makes one (AI or
+    fallback), so the push is always a real brief. conn/now/send are for
+    tests_live only; production passes nothing."""
+    send = send or push.send
+    now = now or ledger.owner_local_now(conn=conn)
     today = now.date()
-    decision = push_decision(now.time(), ledger.brief_delivered(KIND, today))
+    decision = push_decision(now.time(), ledger.brief_delivered(KIND, today, conn=conn))
     if decision in ("wait", "done"):
         return
     if decision == "stale":
         log.info("brief push for %s skipped: past %s", today, STALE_AFTER)
         return
-    brief = ledger.latest_brief(KIND, today)
+    brief = ledger.latest_brief(KIND, today, conn=conn)
     if brief is None:  # a brief always exists by push time
-        build_today(allow_fallback=True)
-        brief = ledger.latest_brief(KIND, today)
+        build_today(allow_fallback=True, day=today, conn=conn)
+        brief = ledger.latest_brief(KIND, today, conn=conn)
     message = push_message(brief.body["headline"], late=decision == "late")
     ledger.deliver_brief_once(kind=KIND, day=today, brief_id=brief.id, late=decision == "late",
-                              send=lambda: _notification_id(push.send(message)))
+                              send=lambda: _notification_id(send(message)), conn=conn)

@@ -109,19 +109,19 @@ class FakeLedger:
         if brief_exists:
             self.briefs.append({"id": 1, "body": GOOD})
 
-    def owner_local_now(self) -> datetime:
+    def owner_local_now(self, conn: Any = None) -> datetime:
         return self.now
 
-    def brief_delivered(self, kind: str, day: date) -> bool:
+    def brief_delivered(self, kind: str, day: date, conn: Any = None) -> bool:
         return self.delivered or bool(self.deliveries)
 
-    def latest_brief(self, kind: str, day: date) -> Any:
+    def latest_brief(self, kind: str, day: date, conn: Any = None) -> Any:
         if not self.briefs:
             return None
         b = self.briefs[-1]
         return ledger.BriefRow(b["id"], day, b["body"], False, "m", 10, self.now)
 
-    def deliver_brief_once(self, *, kind, day, brief_id, late, send) -> int | None:
+    def deliver_brief_once(self, *, kind, day, brief_id, late, send, conn: Any = None) -> int | None:
         # The SQL holds a lock and checks; the fake models the same contract.
         if self.deliveries:
             return None
@@ -129,13 +129,14 @@ class FakeLedger:
         self.deliveries.append({"brief_id": brief_id, "late": late, "notification_id": nid})
         return len(self.deliveries)
 
-    def context_snapshot(self) -> dict:
+    def context_snapshot(self, conn: Any = None) -> dict:
         return PAYLOAD
 
-    def brief_sections(self) -> list:
+    def brief_sections(self, conn: Any = None) -> list:
         return SECTIONS
 
     def insert_brief(self, **row: Any) -> int:
+        row.pop("conn", None)
         self.briefs.append({"id": len(self.briefs) + 1, **row})
         return len(self.briefs)
 

@@ -23,13 +23,14 @@ Numerics are `Decimal` end to end. Floats are accepted and converted via
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import logging
 import os
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Callable, Final, Literal, Mapping, Sequence
+from typing import Any, Callable, Final, Iterator, Literal, Mapping, Sequence
 
 import psycopg
 from psycopg.types.json import Jsonb
@@ -1556,6 +1557,17 @@ class BriefSection:
     sort: int
 
 
+@contextmanager
+def _brief_conn(conn: psycopg.Connection | None) -> Iterator[psycopg.Connection]:
+    """The given connection (a tests_live transaction that is rolled back),
+    else one from the pool. Production never passes one."""
+    if conn is not None:
+        yield conn
+    else:
+        with _pool().connection() as pooled:
+            yield pooled
+
+
 #: tests_live/test_brief_sql.py runs this exact text.
 BRIEF_SECTIONS_SQL: Final = """
     SELECT key, label, sort FROM context_providers
@@ -1563,25 +1575,33 @@ BRIEF_SECTIONS_SQL: Final = """
      ORDER BY sort, key
 """
 
+#: THE selector of "today's brief" for the worker (the push job, the script):
+#: v_briefs_latest, which never contains a test brief (is_test). The web's
+#: real views read the same view; ctx_brief() does too.
+LATEST_BRIEF_SQL: Final = """
+    SELECT id, brief_date, body, fallback, model, word_count, created_at
+      FROM v_briefs_latest WHERE kind = %s AND brief_date = %s
+"""
 
-def brief_sections() -> list[BriefSection]:
-    with _pool().connection() as conn:
-        rows = conn.execute(BRIEF_SECTIONS_SQL).fetchall()
+
+def brief_sections(*, conn: psycopg.Connection | None = None) -> list[BriefSection]:
+    with _brief_conn(conn) as c:
+        rows = c.execute(BRIEF_SECTIONS_SQL).fetchall()
     return [BriefSection(*r) for r in rows]
 
 
-def context_snapshot() -> dict[str, Any]:
+def context_snapshot(*, conn: psycopg.Connection | None = None) -> dict[str, Any]:
     """Every enabled provider's slice plus the clock (db/029). Not recorded:
     context_snapshots is Wags's record of what it knew."""
-    with _pool().connection() as conn:
-        return conn.execute("SELECT context_snapshot()").fetchone()[0]
+    with _brief_conn(conn) as c:
+        return c.execute("SELECT context_snapshot()").fetchone()[0]
 
 
-def owner_local_now() -> datetime:
+def owner_local_now(*, conn: psycopg.Connection | None = None) -> datetime:
     """The owner's wall-clock time, by the DATABASE's clock (never the
     worker's: Kalshi adapter notes). Naive, in America/Chicago (app_settings)."""
-    with _pool().connection() as conn:
-        return conn.execute(
+    with _brief_conn(conn) as c:
+        return c.execute(
             "SELECT now() AT TIME ZONE coalesce((SELECT timezone FROM app_settings LIMIT 1), 'America/Chicago')"
         ).fetchone()[0]
 
@@ -1597,25 +1617,20 @@ class BriefRow:
     created_at: datetime
 
 
-def latest_brief(kind: str, day: date) -> BriefRow | None:
-    """The newest real brief of `kind` for `day` (test briefs never count)."""
-    with _pool().connection() as conn:
-        row = conn.execute(
-            """
-            SELECT id, brief_date, body, fallback, model, word_count, created_at
-              FROM v_briefs_latest WHERE kind = %s AND brief_date = %s
-            """,
-            (kind, day),
-        ).fetchone()
+def latest_brief(kind: str, day: date, *, conn: psycopg.Connection | None = None) -> BriefRow | None:
+    """The newest REAL brief of `kind` for `day`. A test brief never counts,
+    however new (LATEST_BRIEF_SQL reads v_briefs_latest)."""
+    with _brief_conn(conn) as c:
+        row = c.execute(LATEST_BRIEF_SQL, (kind, day)).fetchone()
     return BriefRow(*row) if row else None
 
 
 def insert_brief(*, kind: str, day: date, body: Mapping[str, Any], model: str | None,
                  ai_usage_id: int | None, fallback: bool, voice_version: str,
-                 word_count: int) -> int:
+                 word_count: int, conn: psycopg.Connection | None = None) -> int:
     """A new brief row (never an edit). period_* is the owner's local day."""
-    with _pool().connection() as conn:
-        return conn.execute(
+    with _brief_conn(conn) as c:
+        return c.execute(
             """
             INSERT INTO briefs (period_start, period_end, body, kind, brief_date, model,
                                 ai_usage_id, fallback, voice_version, word_count)
@@ -1639,33 +1654,35 @@ def brief_cost(brief_id: int) -> Decimal | None:
     return row[0] if row else None
 
 
-def brief_delivered(kind: str, day: date) -> bool:
-    with _pool().connection() as conn:
-        return bool(conn.execute(
+def brief_delivered(kind: str, day: date, *, conn: psycopg.Connection | None = None) -> bool:
+    with _brief_conn(conn) as c:
+        return bool(c.execute(
             "SELECT EXISTS (SELECT 1 FROM brief_deliveries WHERE kind = %s AND brief_date = %s)",
             (kind, day),
         ).fetchone()[0])
 
 
 def deliver_brief_once(*, kind: str, day: date, brief_id: int, late: bool,
-                       send: Callable[[], int | None]) -> int | None:
+                       send: Callable[[], int | None],
+                       conn: psycopg.Connection | None = None) -> int | None:
     """Push a brief at most once per kind and date.
 
     In one transaction: take a lock on (kind, date), return None if a
     delivery is already recorded, else call `send()` (which pushes and returns
     the notification id) and record the delivery. A send that raises rolls
     the claim back, so a failed push can be retried; two workers, or a cron
-    fire and a boot catch-up, can never both push.
+    fire and a boot catch-up, can never both push. The database refuses a
+    delivery of a test brief (db/030 brief_deliveries_match).
     """
-    with _pool().connection() as conn, conn.transaction():
-        conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"brief_delivery:{kind}:{day}",))
-        if conn.execute(
+    with _brief_conn(conn) as c, c.transaction():
+        c.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (f"brief_delivery:{kind}:{day}",))
+        if c.execute(
             "SELECT EXISTS (SELECT 1 FROM brief_deliveries WHERE kind = %s AND brief_date = %s)",
             (kind, day),
         ).fetchone()[0]:
             return None
         notification_id = send()
-        return conn.execute(
+        return c.execute(
             """
             INSERT INTO brief_deliveries (brief_id, kind, brief_date, notification_id, late)
             VALUES (%s, %s, %s, %s, %s) RETURNING id

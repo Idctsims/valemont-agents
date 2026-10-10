@@ -119,7 +119,7 @@ test("a proposed goal, confirmed, exists; then it is removed by id", async () =>
   await send(`propose goal: ${title}`);
   const row = sheet().getByTestId("wags-proposal").last();
   await expect(row).toHaveAttribute("data-state", "pending");
-  await expect(row).toContainText(`Add “${title}” · this week · business`);
+  await expect(row).toContainText(`Add goal “${title}” · this week · business`);
   await row.getByRole("button", { name: "Confirm" }).click();
   await expect(row).toHaveAttribute("data-state", "confirmed");
   await expect(row).toContainText("Added to this week.");
