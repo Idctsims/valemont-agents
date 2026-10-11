@@ -10,3 +10,7 @@ node_modules/
 .DS_Store
 .cache/
 .playwright-mcp/
+
+# Supabase CLI local state
+supabase/.temp/
+supabase/.branches/
