@@ -1207,7 +1207,19 @@ absent row as "I never looked."
   - **Chat 3:** Learning engine, Home feed, Sports News (MASTER_PLAN §6). Not started.
   - **Carried out of Chat 2, pending until seen:**
     - Goals' first real Monday, **Mon 2026-10-12** (Chicago): the 00:01 rollover and the 07:00 "Set your week" push.
-    - Silent proposals: the output tokens on a comparable real proposal turn after the fix, against message 188 (544 out, no text). Not yet recorded.
+  - **Silent proposals, verified after the fix (2026-10-11, phone app, read via `db_inspect`):**
+
+    | | Before: message 188 (2026-10-10) | After: message 260 (2026-10-11 22:12:53 UTC) |
+    |---|---|---|
+    | Tool | `propose_next_action` | `propose_goal` (confirmed, tool row 261) |
+    | Parts | step-start, **reasoning**, tool call; **no text** | step-start, **text**, tool call; **no reasoning part** |
+    | Text before proposal | none | model-written, 2 sentences ("Proposing it as a weekly goal tied to Sail Beach Club…"); not the server's generated fallback (no `providerMetadata.wags.generated`) |
+    | Output tokens | 544 | **254** (−53%) |
+    | Persona | `2026-10-10.1` | `2026-10-10.2+web.2` |
+    | `ai_usage` | 71: $0.007714 (2,999 cache read) | 86: $0.010932 (131 in, 3,252 cache written, first turn of a new thread) |
+
+    - The turns aren't identical: different tool, different thread. The cost is higher only because a new thread writes the cache; output tokens are the like-for-like figure.
+    - The generated "Proposing: …" fallback has not fired on a real turn yet.
   - **~2026-10-18:** the Railway trial ends; redeploy the worker by hand on the Free plan.
   - Still pending from before: owner review of the crypto track, owner go-live, and the weekly archive.
   - Any new idea needs a new pre-registration and forward-only validation.
