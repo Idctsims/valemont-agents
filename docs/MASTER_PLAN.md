@@ -297,7 +297,7 @@ Thirteen build chats after this one, each split into phases with a test you run 
 **Carried out of Chat 2:**
 - Goals' first real Monday: the 00:01 rollover and the 07:00 "Set your week" push are first due Mon Oct 12 (Chicago). Pending until seen.
 - Railway trial ends about Oct 18; redeploy the worker by hand on Free.
-- The silent-proposals before/after output-token comparison on a real proposal turn (the "before" is message 188: 544 out, no text) has not been recorded. Pending.
+- ~~The silent-proposals before/after token comparison~~ **Done Oct 11:** message 260 has a model-written sentence before its proposal and no reasoning part, 254 output tokens against message 188's 544 with no text.
 
 ### Chat 3 — Learning engine, Home feed, Sports News ← next
 
