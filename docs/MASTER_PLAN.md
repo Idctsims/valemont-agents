@@ -1,16 +1,17 @@
 # Valemont Command — Master Plan
 
-Oct 7, 2026 · @Terrell Sims · **Updated Oct 8, 2026: Chat 1 (Foundation) complete**
+Oct 7, 2026 · @Terrell Sims · **Updated Oct 11, 2026: Chat 2 (Command core) complete**
 
 ## Build status
 
 | Chat | Status | Closed |
 | --- | --- | --- |
 | Chat 1 — Foundation | **Done.** All four phases green, both monitoring drills passed | Oct 8, 2026 |
-| Chat 2 — Command core | **Next.** Setup listed under Chat 2 in §6 | — |
-| Chats 3–13 | Not started | — |
+| Chat 2 — Command core | **Done.** All five phases live; first scheduled Morning Brief pushed at 09:45 | Oct 11, 2026 |
+| Chat 3 — Learning engine, Home feed, Sports News | **Next.** Setup listed under Chat 3 in §6 | — |
+| Chats 4–13 | Not started | — |
 
-What changed from this plan during Chat 1 is recorded where it applies, marked **(as built)**. The repo's `CLAUDE.md` Current State holds the full detail: commits, test counts, drill timelines.
+What changed from this plan during Chats 1 and 2 is recorded where it applies, marked **(as built)**. The repo's `CLAUDE.md` Current State holds the full detail: commits, test counts, drill timelines.
 
 ## Read first: six calls that shape everything
 
@@ -277,25 +278,28 @@ Thirteen build chats after this one, each split into phases with a test you run 
 - "JWT issued at future" (clock skew inside Supabase, between its API gateway and PostgREST, not the caller) shows up occasionally; the watchdog retry absorbs it. Escalate to Supabase only if 503s appear in the watchdog logs.
 - Pinterest trial access pending. On approval, move the privacy URL to `https://valemont-command.vercel.app/privacy`.
 
-### Chat 2 — Command core ← next
+### Chat 2 — Command core ✅ Done Oct 11, 2026
 
-**Set up in this chat:**
-- Anthropic API key: $5 prepaid credit, $20 monthly spend limit (owner decision Oct 9; was $10).
-- Google Cloud project with the Calendar API and an OAuth client (optional; calendar highlights can wait).
-- Your nine ventures' current state (stage, next action, blockers, deadlines), as a braindump, to seed Ventures HQ.
+**Set up in this chat (as built):** Anthropic API key on Railway, Vercel (Production) and the root `.env` (Oct 10); $20 monthly budget (owner decision Oct 9; was $10). **Changed from plan:** the Google Calendar project is deferred (owner, Oct 9); seven ventures seeded, not nine (NCLEXCompass and Senior Care Systems dropped).
 
-1. Goals (weekly and long-term, Monday reset, carry-over, history).
-   - [ ] Unfinished goals carry to the next week automatically
-2. Ventures HQ (all nine ventures seeded, detail view, running log, dates).
-   - [ ] A venture item due today appears in the Today list
-3. Capital Tracker on paper data, labeled PAPER, with history chart.
-   - [ ] A paper bankroll entry shows in the total and the breakdown within a minute
-4. Context layer and Wags: page-aware floating button, saved threads, provider registry. Includes the TypeScript twin of the AI budget guard.
+1. Goals (weekly and long-term, Monday reset, carry-over, history). PR #8.
+   - [x] Unfinished goals carry to the next week automatically **(Oct 9: production rollover returned 1, then 0; the carried copy landed in week 2026-10-05)**
+2. Ventures HQ (seven ventures seeded, detail view, append-only running log, dates). db/022–023.
+   - [x] A venture item due today appears in the Today list **(Oct 9: owner's Phase 2 phone checklist, all green; Home TODAY reads `v_venture_today`)**
+3. Capital Tracker on paper data, labeled PAPER, with history (daily `capital_snapshots`). PR #14.
+   - [x] A paper bankroll entry shows in the total and the breakdown **(Oct 10: owner's signed-in `capital.spec` 9/9)**
+4. Context layer and Wags: page-aware floating button, saved threads, provider registry. Includes the TypeScript twin of the AI budget guard. PR #16.
    - [x] Wags answers "what's due this week" from real venture and goal data **(Oct 10: owner's real call, `ai_usage` 70, snapshot 19)**
-5. Morning Brief generator on Railway, sections that switch on as pillars register.
-   - [ ] A brief generates at the scheduled time and arrives as a push
+5. Morning Brief generator on Railway, sections that switch on as pillars register. PRs #20, #21.
+   - [x] A brief generates at the scheduled time and arrives as a push **(Sun Oct 11: brief 173 generated 06:15 Chicago, Sonnet, 185 words, `ai_usage` 84 at $0.010789; delivery 45 / notification 134 sent 09:45:02, not late; owner confirmed arrival on the phone)**
+   - Also: silent Wags proposals fixed (a generated "Proposing: …" line when a turn ends with no text); one shared Wags voice file; server actions return readable refusals instead of throwing; a zero-attempt void/missed invariant added in the database (db/024–025).
 
-### Chat 3 — Learning engine, Home feed, Sports News
+**Carried out of Chat 2:**
+- Goals' first real Monday: the 00:01 rollover and the 07:00 "Set your week" push are first due Mon Oct 12 (Chicago). Pending until seen.
+- Railway trial ends about Oct 18; redeploy the worker by hand on Free.
+- The silent-proposals before/after output-token comparison on a real proposal turn (the "before" is message 188: 544 out, no text) has not been recorded. Pending.
+
+### Chat 3 — Learning engine, Home feed, Sports News ← next
 
 **Set up in this chat:** nothing new; RSS needs no keys.
 

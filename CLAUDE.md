@@ -370,7 +370,9 @@ each in phases with a "done when" checklist). It supersedes the former steps
 - **Follow-up, own branch and PR:** the "never abandon an untried commitment" database invariant (db/024, db/025) ✓
 - **Chat 2, Phase 3** (Capital Tracker, paper) ✓ (PR #14, merge `95a7c2a`, live 2026-10-10). Owner's signed-in runs on the final code: `capital.spec` 9/9, `screens-capital` 2/2, `goals.spec` 6/6 (phone project).
 - **Chat 2, Phase 4** (context layer and Wags, with the TypeScript twin of the AI budget guard) ✓ (PR #16, merge `7709d22`, live 2026-10-10; owner's real call and phone checklist green). Owner runs on the mock model: `wags.spec` 10/10, `screens-wags` 2/2.
-- **Chat 2, Phase 5** (Morning Brief generator on Railway, sections switching on as pillars register) ← **you are here**
+- **Chat 2, Phase 5** (Morning Brief generator on Railway, sections switching on as pillars register) ✓ (PRs #20, #21). **First scheduled brief pushed Sun 2026-10-11 09:45 Chicago; owner confirmed arrival.**
+- **Chat 2 complete (2026-10-11).**
+- **Chat 3** (Learning engine, Home feed, Sports News; MASTER_PLAN §6) ← **you are here**
   - **AI SDK stays on the maintained v6 line** (`ai` 6.0.303, `@ai-sdk/anthropic` 3.0.129, `@ai-sdk/react` 3.0.306, pinned). v7 was latest on 2026-10-10; **upgrade in Chat 13 hardening**, never a major bump mid-phase (owner, 2026-10-10).
 
 Reason for deploying at step 4 and not at the end: "works locally, dies
@@ -1196,17 +1198,16 @@ absent row as "I never looked."
   - **One voice:** `prompts/wags_voice.md` is the Wags voice for both Wags and the brief. The web generates `src/generated/wags-voice.ts` from it at build; the worker reads it via `core/paths.VOICE_FILE`. Railway builds from `workers/` only, so `workers/prompts/wags_voice.md` is a byte-identical copy in the image (`tests/test_voice.py` fails on drift). Edit the root file, copy it over, bump `VOICE_VERSION`.
   - **Silent proposals fixed:** Sonnet cannot turn thinking off (AI SDK provider docs); Wags runs `between_tools` at effort `low`, the persona demands a sentence before any proposal, and the route inserts a generated "Proposing: …" line (marked `providerMetadata.wags.generated`) when a turn ends with a proposal and no text. Proposal rows name the venture, not its slug.
   - **Web:** Home's brief card above TODAY; `/brief`, `/brief/[date]` with a Past briefs fold; Ask Wags about this opens the sheet with Context · Brief; nav (More, rail).
+  - **First scheduled brief, Sun 2026-10-11 (read via `db_inspect`):** brief 173 (the only row for the date, real), created 11:15:07 UTC (06:15 Chicago), `claude-sonnet-5-5`, 185 words, not fallback, voice `2026-10-10.2`; `ai_usage` 84 (1,167 in, 485 out, 1,442 cache written, $0.010789, critical). Delivery 45 → notification 134 `sent`, no error, 14:45:02 UTC (09:45 Chicago), `late = false`. `job_health`: `morning_brief` last ok 14:30:00, `morning_brief_push` last ok 14:45:02, both 0 failures, `alert_state` ok. The owner confirmed the push arrived.
 - **Server actions never throw an expected failure (2026-10-10).** Every action in `apps/web` returns `ActionResult` (`{ ok: true, … } | { ok: false, error }`) via `settle()` in `src/lib/action-result.ts`. Inside an action, say no with `throw new Refusal("…")`. Why: in a production build Next redacts a thrown message, so the page showed "Minified React error" (number 441) instead of the reason. Pages show `error` in their alert and revert; only a network failure can still throw on the client. `e2e/goals.spec.ts` forces a real server-side refusal and checks the readable message.
     - After sign-in, wait out "JWT issued at future" with a harmless read before any write.
 - **Next:**
   - **Zero-attempt database invariant** (db/024, db/025, both applied): merged from branch `db-zero-attempt-invariant`. `tests/` 479 OK; `tests_live/` 181 OK, 0 skipped (2026-10-09).
-  - **Chat 2 Phase 5:** the Morning Brief generator (MASTER_PLAN §6). It reads `context_snapshot()` (db/029) as the worker; push at 09:45 America/Chicago (owner decision).
-    - **Step 0 item 4, silent proposals (owner, 2026-10-10):**
-      - Wags turns run with thinking OFF by default. Verify the exact setting for `claude-sonnet-5-5` in the AI SDK Anthropic provider docs before changing `chatProviderOptions`.
-      - The persona requires one plain sentence before any `propose_*` call.
-      - The route enforces it: a turn that ends with a proposal and no text part gets a server-side line built from the proposal ("Proposing: add goal X · this week · SBC"), marked as generated.
-      - Tests: a unit test, plus a mock e2e for a proposal-only turn.
-      - After deploy, report the output tokens on a comparable real proposal turn, before and after. The "before" is message 188: 544 out, no text.
+  - **Chat 2 COMPLETE (2026-10-11).** Phase 5 closed on the first scheduled brief and push (above).
+  - **Chat 3:** Learning engine, Home feed, Sports News (MASTER_PLAN §6). Not started.
+  - **Carried out of Chat 2, pending until seen:**
+    - Goals' first real Monday, **Mon 2026-10-12** (Chicago): the 00:01 rollover and the 07:00 "Set your week" push.
+    - Silent proposals: the output tokens on a comparable real proposal turn after the fix, against message 188 (544 out, no text). Not yet recorded.
   - **~2026-10-18:** the Railway trial ends; redeploy the worker by hand on the Free plan.
   - Still pending from before: owner review of the crypto track, owner go-live, and the weekly archive.
   - Any new idea needs a new pre-registration and forward-only validation.
