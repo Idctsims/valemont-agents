@@ -1217,16 +1217,18 @@ def job_started(job: str) -> None:
         )
 
 
-def job_succeeded(job: str) -> None:
+def job_succeeded(job: str, note: str | None = None) -> None:
+    """A good run. `note` (already redacted) records a deliberate skip, e.g.
+    'skipped: AI budget spent', in last_error without counting a failure."""
     with _pool().connection() as conn:
         conn.execute(
             """
             UPDATE job_health
-               SET last_ok_at = now(), consecutive_failures = 0, last_error = NULL,
+               SET last_ok_at = now(), consecutive_failures = 0, last_error = left(%s, 500),
                    updated_at = now()
              WHERE job = %s
             """,
-            (job,),
+            (note, job),
         )
 
 
@@ -1715,6 +1717,499 @@ def deliver_brief_once(*, kind: str, day: date, brief_id: int, late: bool,
             """,
             (brief_id, kind, day, notification_id, late),
         ).fetchone()[0]
+
+
+# ---------------------------------------------------------------------------
+# Feed (db/032, db/033): sources, items, stories, rules, the calibration log.
+# App tables the worker edits in place, except content_items, which is frozen
+# after insert but for clearing its embedding. Real and test rows never mix:
+# every story/candidate query takes `is_test`, and the database refuses an
+# item whose is_test differs from its source's or story's.
+# Embeddings travel as pgvector text ('[0.1,0.2,...]') cast to halfvec.
+# ---------------------------------------------------------------------------
+
+FeedFetchStatus = Literal["ok", "not_modified"]
+
+
+def _vec_text(vector: Sequence[float]) -> str:
+    return "[" + ",".join(f"{float(x):.6g}" for x in vector) + "]"
+
+
+def _vec_parse(text: Any) -> tuple[float, ...] | None:
+    if text is None:
+        return None
+    if isinstance(text, (list, tuple)):
+        return tuple(float(x) for x in text)
+    return tuple(float(x) for x in str(text).strip("[]").split(",") if x)
+
+
+@dataclass(frozen=True)
+class FeedSource:
+    id: int
+    slug: str
+    name: str
+    pillars: tuple[str, ...]
+    sport: str | None
+    kind: str
+    url: str
+    priority: int
+    include_categories: tuple[str, ...] | None
+    etag: str | None
+    last_modified: str | None
+    #: None until the first successful fetch: that is "first fetch".
+    last_ok_at: datetime | None
+    consecutive_failures: int
+    alerted: bool
+    is_test: bool
+
+
+_FEED_SOURCE_COLS = """
+    id, slug, name, pillars, sport, kind, url, priority, include_categories, etag, last_modified,
+    last_ok_at, consecutive_failures, alerted_at IS NOT NULL, is_test
+"""
+
+
+def _feed_source(row: Sequence[Any]) -> FeedSource:
+    r = list(row)
+    r[3] = tuple(r[3])
+    r[8] = tuple(r[8]) if r[8] else None
+    return FeedSource(*r)
+
+
+def feed_sync_sources(specs: Sequence[Any], *, conn: psycopg.Connection | None = None) -> tuple[int, int]:
+    """Upsert every spec by slug (feed/sources.py SourceSpec); set active =
+    false on every real source whose slug is no longer listed. Never deletes.
+    A changed URL resets the conditional-GET state. Returns (upserted,
+    deactivated)."""
+    with _brief_conn(conn) as c, c.transaction():
+        for s in specs:
+            c.execute(
+                """
+                INSERT INTO sources (slug, name, pillars, sport, kind, url, priority, active,
+                                     include_categories, gnews_window_days, notes)
+                VALUES (%(slug)s, %(name)s, %(pillars)s, %(sport)s, %(kind)s, %(url)s, %(priority)s,
+                        %(active)s, %(cats)s, %(window)s, %(notes)s)
+                ON CONFLICT (slug) DO UPDATE SET
+                    name = EXCLUDED.name, pillars = EXCLUDED.pillars, sport = EXCLUDED.sport,
+                    kind = EXCLUDED.kind, priority = EXCLUDED.priority, active = EXCLUDED.active,
+                    include_categories = EXCLUDED.include_categories,
+                    gnews_window_days = EXCLUDED.gnews_window_days, notes = EXCLUDED.notes,
+                    etag = CASE WHEN sources.url = EXCLUDED.url THEN sources.etag END,
+                    last_modified = CASE WHEN sources.url = EXCLUDED.url THEN sources.last_modified END,
+                    url = EXCLUDED.url
+                 WHERE NOT sources.is_test
+                """,
+                {"slug": s.slug, "name": s.name, "pillars": list(s.pillars), "sport": s.sport,
+                 "kind": s.kind, "url": s.url, "priority": s.priority, "active": s.active,
+                 "cats": list(s.include_categories) if s.include_categories else None,
+                 "window": s.window_days, "notes": s.notes},
+            )
+        gone = c.execute(
+            "UPDATE sources SET active = false WHERE active AND NOT is_test AND NOT (slug = ANY(%s))",
+            ([s.slug for s in specs],),
+        ).rowcount
+    return len(specs), gone
+
+
+def feed_active_sources(*, conn: psycopg.Connection | None = None) -> list[FeedSource]:
+    """Active real sources, lowest priority number first."""
+    with _brief_conn(conn) as c:
+        rows = c.execute(f"SELECT {_FEED_SOURCE_COLS} FROM sources WHERE active AND NOT is_test "
+                         "ORDER BY priority, slug").fetchall()
+    return [_feed_source(r) for r in rows]
+
+
+def feed_source(slug: str, *, conn: psycopg.Connection | None = None) -> FeedSource:
+    with _brief_conn(conn) as c:
+        row = c.execute(f"SELECT {_FEED_SOURCE_COLS} FROM sources WHERE slug = %s", (slug,)).fetchone()
+    if row is None:
+        raise LedgerError(f"no source with slug {slug!r}")
+    return _feed_source(row)
+
+
+def feed_rules(*, conn: psycopg.Connection | None = None) -> list[tuple[int, str, str | None, str]]:
+    """Active rules as (id, kind, pillar, pattern)."""
+    with _brief_conn(conn) as c:
+        return [tuple(r) for r in c.execute(
+            "SELECT id, kind, pillar, pattern FROM feed_rules WHERE active ORDER BY id").fetchall()]
+
+
+def feed_source_ok(source_id: int, *, status: FeedFetchStatus, etag: str | None,
+                   last_modified: str | None, conn: psycopg.Connection | None = None) -> None:
+    """A good fetch: failures reset, the one-shot alert re-armed."""
+    with _brief_conn(conn) as c:
+        c.execute(
+            """
+            UPDATE sources
+               SET last_fetched_at = now(), last_ok_at = now(), last_status = %s, last_error = NULL,
+                   consecutive_failures = 0, alerted_at = NULL,
+                   etag = left(%s, 500), last_modified = left(%s, 100)
+             WHERE id = %s
+            """,
+            (status, etag, last_modified, source_id),
+        )
+
+
+def feed_source_failed(source_id: int, error: str, *,
+                       conn: psycopg.Connection | None = None) -> tuple[int, bool]:
+    """Count a failed fetch. `error` must already be redacted (core/jobs.describe).
+    Returns (consecutive failures, already alerted for this outage)."""
+    with _brief_conn(conn) as c:
+        row = c.execute(
+            """
+            UPDATE sources
+               SET last_fetched_at = now(), last_status = 'error', last_error = left(%s, 500),
+                   consecutive_failures = consecutive_failures + 1
+             WHERE id = %s
+         RETURNING consecutive_failures, alerted_at IS NOT NULL
+            """,
+            (error, source_id),
+        ).fetchone()
+    return int(row[0]), bool(row[1])
+
+
+def feed_source_alerted(source_id: int, *, conn: psycopg.Connection | None = None) -> None:
+    with _brief_conn(conn) as c:
+        c.execute("UPDATE sources SET alerted_at = now() WHERE id = %s", (source_id,))
+
+
+def feed_known(source_id: int, external_ids: Sequence[str], urls: Sequence[str], *,
+               conn: psycopg.Connection | None = None) -> tuple[set[str], set[str]]:
+    """Exact dedupe, level 1: which of these external ids this source already
+    has, and which of these canonical URLs exist anywhere."""
+    with _brief_conn(conn) as c:
+        ext = {r[0] for r in c.execute(
+            "SELECT external_id FROM content_items WHERE source_id = %s AND external_id = ANY(%s)",
+            (source_id, list(external_ids))).fetchall()}
+        known_urls = {r[0] for r in c.execute(
+            "SELECT url FROM content_items WHERE url = ANY(%s)", (list(urls),)).fetchall()} if urls else set()
+    return ext, known_urls
+
+
+@dataclass(frozen=True)
+class FeedItemIn:
+    external_id: str
+    url: str | None
+    google_url: str | None
+    title: str
+    teaser: str | None
+    published_at: datetime
+    decode_failed: bool
+
+
+def feed_insert_seeded(source: FeedSource, items: Sequence[FeedItemIn], *,
+                       conn: psycopg.Connection | None = None) -> int:
+    """Record items as seen without ingesting them (an undated source's first
+    fetch). No story, no embedding; never shown. Returns rows written."""
+    written = 0
+    with _brief_conn(conn) as c, c.transaction():
+        for it in items:
+            written += c.execute(
+                """
+                INSERT INTO content_items (source_id, external_id, url, google_url, title, teaser,
+                                           published_at, fetched_at, seeded, decode_failed, is_test)
+                -- LEAST: the worker's clock can run ahead of the database's
+                -- now(), and db/032 refuses published_at > fetched_at.
+                VALUES (%s, %s, %s, %s, %s, %s, LEAST(%s, now()), now(), true, %s, %s)
+                ON CONFLICT DO NOTHING
+                """,
+                (source.id, it.external_id, it.url, it.google_url, it.title, it.teaser,
+                 it.published_at, it.decode_failed, source.is_test),
+            ).rowcount
+    return written
+
+
+#: The story candidates an item is compared with, one row per MEMBER: stories
+#: of the same world (real or test) FIRST seen within `hours` (feed/cluster.py:
+#: a story stops absorbing items 48 h after it began, however recently its
+#: last item came), each member's title and title-only embedding.
+#: tests_live/test_feed_ledger.py runs this exact text.
+FEED_CANDIDATES_SQL: Final = """
+    SELECT st.id, st.item_count, i.title, i.title_embedding::text
+      FROM stories st
+      JOIN content_items i ON i.story_id = st.id
+     WHERE st.is_test = %(is_test)s
+       AND st.first_seen_at > now() - make_interval(hours => %(hours)s)
+       AND i.title_embedding IS NOT NULL
+     ORDER BY st.id, i.id
+"""
+
+
+@dataclass(frozen=True)
+class CandidateStory:
+    story_id: int
+    item_count: int
+    #: (title, title-only embedding) per member.
+    members: tuple[tuple[str, tuple[float, ...]], ...]
+
+
+def feed_candidates(hours: int, *, is_test: bool = False,
+                    conn: psycopg.Connection | None = None) -> list[CandidateStory]:
+    with _brief_conn(conn) as c:
+        rows = c.execute(FEED_CANDIDATES_SQL, {"is_test": is_test, "hours": hours}).fetchall()
+    stories: dict[int, tuple[int, list[tuple[str, tuple[float, ...]]]]] = {}
+    for sid, count, title, vec in rows:
+        stories.setdefault(sid, (count, []))[1].append((title, _vec_parse(vec)))
+    return [CandidateStory(sid, count, tuple(members)) for sid, (count, members) in stories.items()]
+
+
+@dataclass(frozen=True)
+class SimilarityRow:
+    story_id: int
+    kind: Literal["join", "near_miss", "cap_overflow"]
+    cosine: float
+    fuzz: float
+    joined_by: str | None = None
+
+
+def _log_similarity(c: psycopg.Connection, item_id: int, rows: Sequence[SimilarityRow]) -> None:
+    for r in rows:
+        c.execute(
+            """
+            INSERT INTO feed_similarity_log (item_id, story_id, kind, cosine, fuzz, joined_by)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (item_id, r.story_id, r.kind, max(-1.0, min(1.0, r.cosine)), r.fuzz, r.joined_by),
+        )
+
+
+def _insert_item(c: psycopg.Connection, source: FeedSource, it: FeedItemIn, story_id: int,
+                 vector: Sequence[float], title_vector: Sequence[float]) -> int | None:
+    row = c.execute(
+        """
+        INSERT INTO content_items (source_id, external_id, url, google_url, title, teaser,
+                                   published_at, fetched_at, story_id, embedding, title_embedding,
+                                   decode_failed, is_test)
+        VALUES (%s, %s, %s, %s, %s, %s, LEAST(%s, now()), now(), %s, %s::extensions.halfvec,
+                %s::extensions.halfvec, %s, %s)
+        ON CONFLICT DO NOTHING
+        RETURNING id
+        """,
+        (source.id, it.external_id, it.url, it.google_url, it.title, it.teaser, it.published_at,
+         story_id, _vec_text(vector), _vec_text(title_vector), it.decode_failed, source.is_test),
+    ).fetchone()
+    return int(row[0]) if row else None
+
+
+def feed_new_story(source: FeedSource, it: FeedItemIn, vector: Sequence[float],
+                   title_vector: Sequence[float], *,
+                   filtered_reason: str | None, seed: tuple[float, int] | None,
+                   near_misses: Sequence[SimilarityRow] = (),
+                   conn: psycopg.Connection | None = None) -> tuple[int, int] | None:
+    """Found a story with this item as its first member (and lead, when it has
+    a url). One transaction. Returns (story id, item id), or None when the
+    item turned out to exist already (a race on the exact-dedupe keys)."""
+    try:
+        return _new_story(source, it, vector, title_vector, filtered_reason=filtered_reason, seed=seed,
+                          near_misses=near_misses, conn=conn)
+    except _ItemExists:
+        return None
+
+
+class _ItemExists(Exception):
+    """Raised inside the transaction to roll back a story whose item already existed."""
+
+
+def _new_story(source: FeedSource, it: FeedItemIn, vector: Sequence[float],
+               title_vector: Sequence[float], *,
+               filtered_reason: str | None, seed: tuple[float, int] | None,
+               near_misses: Sequence[SimilarityRow], conn: psycopg.Connection | None) -> tuple[int, int]:
+    with _brief_conn(conn) as c, c.transaction():
+        story_id = c.execute(
+            """
+            INSERT INTO stories (pillars, sport, title, centroid, filtered_reason, seed_score,
+                                 seed_rule_id, is_test)
+            VALUES (%s, %s, %s, %s::extensions.halfvec, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (list(source.pillars), source.sport, it.title, _vec_text(vector), filtered_reason,
+             seed[0] if seed else None, seed[1] if seed else None, source.is_test),
+        ).fetchone()[0]
+        item_id = _insert_item(c, source, it, story_id, vector, title_vector)
+        if item_id is None:
+            # Nothing to found: undo the story (same transaction, so nothing leaks).
+            raise _ItemExists()
+        if it.url is not None:
+            c.execute("UPDATE stories SET lead_item_id = %s WHERE id = %s", (item_id, story_id))
+        _log_similarity(c, item_id, near_misses)
+    return story_id, item_id
+
+
+def feed_join_story(source: FeedSource, it: FeedItemIn, vector: Sequence[float],
+                    title_vector: Sequence[float], story_id: int, *,
+                    seed: tuple[float, int] | None, logged: Sequence[SimilarityRow],
+                    conn: psycopg.Connection | None = None) -> int | None:
+    """Add this item to `story_id`: running-mean centroid, count, last seen,
+    pillars union, sport if unset, best seed score, and the lead (lowest
+    source priority, then earliest published, then lowest id; url required).
+    The story's title follows its lead. One transaction, the story row locked.
+    Returns the item id, or None when the item already existed."""
+    with _brief_conn(conn) as c, c.transaction():
+        row = c.execute(
+            "SELECT centroid::text, item_count FROM stories WHERE id = %s FOR UPDATE", (story_id,)
+        ).fetchone()
+        if row is None:
+            raise LedgerError(f"story {story_id} vanished before the join")
+        centroid, count = _vec_parse(row[0]) or tuple(vector), int(row[1])
+        item_id = _insert_item(c, source, it, story_id, vector, title_vector)
+        if item_id is None:
+            return None
+        mean = [(a * count + b) / (count + 1) for a, b in zip(centroid, vector)]
+        c.execute(
+            """
+            UPDATE stories
+               SET centroid = %(mean)s::extensions.halfvec,
+                   item_count = item_count + 1,
+                   last_seen_at = greatest(last_seen_at, now()),
+                   pillars = ARRAY(SELECT DISTINCT unnest(pillars || %(pillars)s::text[]) ORDER BY 1),
+                   sport = coalesce(sport, %(sport)s),
+                   seed_score = CASE WHEN %(seed)s::real IS NOT NULL
+                                      AND (seed_score IS NULL OR %(seed)s::real > seed_score)
+                                     THEN %(seed)s::real ELSE seed_score END,
+                   seed_rule_id = CASE WHEN %(seed)s::real IS NOT NULL
+                                        AND (seed_score IS NULL OR %(seed)s::real > seed_score)
+                                       THEN %(seed_rule)s ELSE seed_rule_id END
+             WHERE id = %(story)s
+            """,
+            {"mean": _vec_text(mean), "pillars": list(source.pillars), "sport": source.sport,
+             "seed": seed[0] if seed else None, "seed_rule": seed[1] if seed else None, "story": story_id},
+        )
+        # The lead: the best linkable member by (priority, published, id).
+        c.execute(
+            """
+            UPDATE stories st
+               SET lead_item_id = best.id, title = best.title
+              FROM (SELECT i.id, i.title
+                      FROM content_items i JOIN sources s ON s.id = i.source_id
+                     WHERE i.story_id = %(story)s AND i.url IS NOT NULL
+                     ORDER BY s.priority, i.published_at, i.id
+                     LIMIT 1) best
+             WHERE st.id = %(story)s AND st.lead_item_id IS DISTINCT FROM best.id
+            """,
+            {"story": story_id},
+        )
+        _log_similarity(c, item_id, logged)
+    return item_id
+
+
+@dataclass(frozen=True)
+class SummaryJob:
+    story_id: int
+    title: str
+    teaser: str | None
+    source_name: str
+    sport: str | None
+    attempts: int
+
+
+#: The summarizer's queue: kept, real, linkable stories not yet summarized and
+#: with a try left, newest PUBLISHED first: the order Home shows them in
+#: (v_feed_stories by lead_published_at). Ordering by first_seen_at instead
+#: summarized an arbitrary slice of a big ingest, where every story shares one
+#: first-seen time: after the 2026-10-12 re-ingest only 1 of Home's first 30
+#: cards had a summary.
+FEED_SUMMARY_QUEUE_SQL: Final = """
+    SELECT st.id, st.title, i.teaser, s.name, st.sport, st.summary_attempts
+      FROM stories st
+      JOIN content_items i ON i.id = st.lead_item_id
+      JOIN sources s ON s.id = i.source_id
+     WHERE st.summary IS NULL AND st.filtered_reason IS NULL AND NOT st.is_test
+       AND st.summary_attempts < %(max_attempts)s
+     ORDER BY i.published_at DESC, st.id DESC
+     LIMIT %(limit)s
+"""
+
+_LOCAL_DAY_START = """
+    (date_trunc('day', now() AT TIME ZONE coalesce((SELECT timezone FROM app_settings), 'America/Chicago'))
+     AT TIME ZONE coalesce((SELECT timezone FROM app_settings), 'America/Chicago'))
+"""
+
+
+def feed_summary_queue(limit: int, max_attempts: int, *,
+                       conn: psycopg.Connection | None = None) -> list[SummaryJob]:
+    with _brief_conn(conn) as c:
+        rows = c.execute(FEED_SUMMARY_QUEUE_SQL, {"limit": limit, "max_attempts": max_attempts}).fetchall()
+    return [SummaryJob(*r) for r in rows]
+
+
+def feed_summarized_today(*, conn: psycopg.Connection | None = None) -> int:
+    """Real stories sent to Haiku since local midnight (each counted once,
+    whether or not its summary was accepted)."""
+    with _brief_conn(conn) as c:
+        return int(c.execute(
+            f"SELECT count(*) FROM stories WHERE NOT is_test AND summarized_at >= {_LOCAL_DAY_START}"
+        ).fetchone()[0])
+
+
+@dataclass(frozen=True)
+class SummaryOut:
+    story_id: int
+    #: None: the attempt failed validation; only the attempt is counted.
+    summary: str | None
+    entities: tuple[str, ...] = ()
+    topics: tuple[str, ...] = ()
+    sport: str | None = None
+    drop: str | None = None
+    #: Set only when the drop filter is live: 'drop:<category>'.
+    filtered_reason: str | None = None
+    #: Attempts this run used: 1, or 2 with the same-run targeted retry.
+    attempts: int = 1
+
+
+def feed_save_summaries(results: Sequence[SummaryOut], ai_usage_id: int | None, *,
+                        conn: psycopg.Connection | None = None) -> None:
+    """One transaction for a group's results. Every story gets an attempt
+    counted and summarized_at stamped; accepted ones get their summary."""
+    with _brief_conn(conn) as c, c.transaction():
+        for r in results:
+            if r.summary is None:
+                c.execute(
+                    """
+                    UPDATE stories SET summary_attempts = least(summary_attempts + %s, 5), summarized_at = now()
+                     WHERE id = %s
+                    """,
+                    (r.attempts, r.story_id),
+                )
+                continue
+            c.execute(
+                """
+                UPDATE stories
+                   SET summary = %s, entities = %s, topics = %s, sport = coalesce(sport, %s),
+                       drop_category = %s, filtered_reason = coalesce(filtered_reason, %s),
+                       summary_attempts = least(summary_attempts + %s, 5), summarized_at = now(),
+                       ai_usage_id = %s
+                 WHERE id = %s
+                """,
+                (r.summary, list(r.entities), list(r.topics), r.sport, r.drop, r.filtered_reason,
+                 r.attempts, ai_usage_id, r.story_id),
+            )
+
+
+#: The nightly prune, in order. Kept stories are never deleted here (Phase 2
+#: adds the 90-day prune for unreacted ones); tests_live runs these texts.
+FEED_PRUNE_SQL: Final = {
+    "embeddings_cleared": """
+        UPDATE content_items SET embedding = NULL, title_embedding = NULL
+         WHERE (embedding IS NOT NULL OR title_embedding IS NOT NULL)
+           AND fetched_at < now() - interval '72 hours'
+    """,
+    "filtered_stories_deleted": """
+        DELETE FROM stories
+         WHERE filtered_reason IS NOT NULL AND last_seen_at < now() - interval '30 days'
+    """,
+    "seeded_items_deleted": """
+        DELETE FROM content_items
+         WHERE seeded AND fetched_at < now() - interval '30 days'
+    """,
+    "similarity_log_deleted": """
+        DELETE FROM feed_similarity_log WHERE created_at < now() - interval '30 days'
+    """,
+}
+
+
+def feed_prune(*, conn: psycopg.Connection | None = None) -> dict[str, int]:
+    with _brief_conn(conn) as c, c.transaction():
+        return {name: c.execute(sql).rowcount for name, sql in FEED_PRUNE_SQL.items()}
 
 
 # ---------------------------------------------------------------------------

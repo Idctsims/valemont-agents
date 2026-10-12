@@ -7,7 +7,7 @@ import { expect, test } from "@playwright/test";
 const webRoot = resolve(__dirname, "..");
 
 test.describe("logged out", () => {
-  for (const path of ["/goals", "/goals?view=history", "/ventures", "/ventures/sail-beach-club", "/capital", "/wags", "/brief", "/brief/2026-10-11", "/betting", "/design", "/onboarding", "/settings/health"]) {
+  for (const path of ["/goals", "/goals?view=history", "/ventures", "/ventures/sail-beach-club", "/capital", "/wags", "/brief", "/brief/2026-10-11", "/betting", "/design", "/onboarding", "/settings/health", "/settings/sources"]) {
     test(`${path} redirects to /login with next`, async ({ page }) => {
       await page.goto(path);
       await expect(page).toHaveURL(
@@ -19,6 +19,16 @@ test.describe("logged out", () => {
   test("/ redirects to /login", async ({ page }) => {
     await page.goto("/");
     await expect(page).toHaveURL((url) => url.pathname === "/login" && !url.search);
+  });
+
+  test("the feed leaks nothing: Home's Latest pages and the sources page land on /login empty", async ({ page }) => {
+    for (const path of ["/?latest=2", "/settings/sources"]) {
+      await page.goto(path);
+      await expect(page).toHaveURL((url) => url.pathname === "/login");
+      await expect(page.getByTestId("feed-latest")).toHaveCount(0);
+      await expect(page.getByTestId("feed-card")).toHaveCount(0);
+      await expect(page.getByTestId("source-row")).toHaveCount(0);
+    }
   });
 
   test("/api/wags answers no one but the owner, and never reaches the model", async ({ request }) => {

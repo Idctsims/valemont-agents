@@ -4,3 +4,11 @@ apscheduler>=3.10
 tzdata>=2024.1
 pywebpush==2.5.0
 anthropic==1.12.1
+# Feed ingest (Chat 3). httpx fetches feeds (anthropic itself runs on httpx2;
+# the two do not clash). googlenewsdecoder 0.2.1 imports selectolax's Modest
+# backend, removed in selectolax 1.0: keep selectolax below 1.0.
+httpx==0.28.1
+feedparser==6.0.14
+googlenewsdecoder==0.2.1
+selectolax==0.4.13
+rapidfuzz==3.14.6

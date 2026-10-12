@@ -294,6 +294,8 @@ class Orchestrator:
         now = datetime.now(timezone.utc)
         for name, job in self._system_jobs.items():
             ledger.job_register(name, job.expected_interval_s)
+            if not job.scheduled:
+                continue  # run by another job (core/jobs.SystemJob.scheduled)
             # Without next_run_time, APScheduler takes the trigger's first fire time.
             first = ({"next_run_time": now + timedelta(seconds=job.start_delay_s)}
                      if job.run_at_boot else {})

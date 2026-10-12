@@ -86,6 +86,7 @@ export const NAV: NavGroup[] = [
 /** Pages that keep the system running. Not pillars; always built. */
 export const SYSTEM_PAGES: NavPage[] = [
   { label: "System health", href: "/settings/health" },
+  { label: "Sources", href: "/settings/sources" },
   { label: "Phone setup", href: "/onboarding" },
   { label: "Design tokens", href: "/design" },
 ];

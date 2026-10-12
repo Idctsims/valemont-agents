@@ -75,12 +75,22 @@ class SystemJob:
     #: False for a job whose run is an event in its own right (the Monday
     #: goals push): it runs only when its trigger fires, never on a deploy.
     run_at_boot: bool = True
+    #: False for a job another job runs (feed_summarize, chained after each
+    #: feed_ingest through run_tracked): it gets its job_health row and the
+    #: health monitor watches it, but the scheduler never fires it itself.
+    scheduled: bool = True
 
     def __post_init__(self) -> None:
         if not _NAME.match(self.name):
             raise ValueError(f"system job names are snake_case, got {self.name!r}")
         if self.expected_interval_s <= 0:
             raise ValueError("expected_interval_s must be positive")
+
+
+class JobSkipped(Exception):
+    """Raised by a job that chose not to run this time for an expected reason
+    (the AI budget is spent). run_tracked records it as a success with the
+    reason as a note: no failure counted, no alert, but visible in job_health."""
 
 
 def run_tracked(job: SystemJob) -> None:
@@ -91,6 +101,15 @@ def run_tracked(job: SystemJob) -> None:
         log.error("%s: could not record start (database unreachable?)", job.name, exc_info=True)
     try:
         job.fn()
+    except JobSkipped as skip:
+        note = describe(skip).replace("JobSkipped: ", "skipped: ", 1)
+        log.info("%s %s", job.name, note)
+        try:
+            ledger.job_succeeded(job.name, note)
+        except Exception:
+            log.error("%s: skipped, but could not record it", job.name, exc_info=True)
+            raise
+        return
     except Exception as exc:
         detail = describe(exc)
         log.error("%s failed: %s", job.name, detail)

@@ -33,6 +33,19 @@
     morning_brief_push daily 09:45, and at boot: "Morning brief" -> /brief,
                              once per date (brief_deliveries); "Late ·" after
                              09:50, skipped after 18:00.
+    feed_ingest      30 min  and 20 s after boot: syncs workers/feed/sources.toml
+                             (first run only), fetches every active source,
+                             dedupes and clusters into stories (feed/ingest.py).
+                             Then runs feed_summarize, whatever the outcome.
+    feed_summarize   chained Haiku summaries for new stories (feed/summarize.py).
+                             Never scheduled on its own (SystemJob.scheduled
+                             False) but registered and watched: stale after an
+                             hour means ingest has stopped calling it.
+    feed_prune       daily   03:15 America/Chicago, never at boot: clears item
+                             embeddings older than 72 h; deletes filtered
+                             stories (with their items), seeded items and
+                             similarity-log rows older than 30 days. Kept
+                             stories are never deleted here.
 
 Alerts go through core/push.py with deep link /settings/health.
 """
@@ -49,7 +62,9 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from core import brief, ledger, push
-from core.jobs import SystemJob, describe
+from core.jobs import SystemJob, describe, run_tracked
+from feed import ingest as feed_ingest
+from feed import summarize as feed_summarize
 
 log = logging.getLogger("valemont.system")
 
@@ -330,6 +345,36 @@ def snapshot_capital() -> dict[str, int]:
     return written
 
 
+# ----------------------------------------------------------------------- feed
+
+FEED_INTERVAL_S = 30 * 60
+
+#: Run by feed_ingest_job, never by the scheduler (scheduled=False). The
+#: trigger is required by SystemJob and unused.
+FEED_SUMMARIZE = SystemJob("feed_summarize", FEED_INTERVAL_S, IntervalTrigger(seconds=FEED_INTERVAL_S),
+                           feed_summarize.summarize_job, scheduled=False)
+
+
+def feed_ingest_job() -> None:
+    """Ingest, then summarize whatever ingest produced, even if ingest failed
+    partway (its stories so far are worth summarizing). A summarize failure is
+    recorded in its own job_health row by run_tracked and does not mark
+    ingest failed; an ingest failure still propagates."""
+    try:
+        feed_ingest.ingest_job()
+    finally:
+        try:
+            run_tracked(FEED_SUMMARIZE)
+        except Exception:
+            pass  # recorded in job_health and logged by run_tracked
+
+
+def feed_prune() -> dict[str, int]:
+    counts = ledger.feed_prune()
+    log.info("feed prune: %s", ", ".join(f"{k} {v}" for k, v in counts.items()))
+    return counts
+
+
 # ---------------------------------------------------------------------- drill
 
 def health_drill() -> None:
@@ -372,6 +417,11 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
         SystemJob("morning_brief_push", 24 * 60 * 60,
                   CronTrigger(hour=brief.PUSH_AT.hour, minute=brief.PUSH_AT.minute, timezone=OWNER_TZ),
                   brief.morning_brief_push_job, misfire_grace=600),
+        SystemJob("feed_ingest", FEED_INTERVAL_S, IntervalTrigger(seconds=FEED_INTERVAL_S),
+                  feed_ingest_job, misfire_grace=600, start_delay_s=20),
+        FEED_SUMMARIZE,
+        SystemJob("feed_prune", 24 * 60 * 60, CronTrigger(hour=3, minute=15, timezone=OWNER_TZ),
+                  feed_prune, misfire_grace=3600, run_at_boot=False),
     ]
     if env.get("HEALTH_DRILL", "").strip().lower() == "true":
         log.warning("HEALTH_DRILL=true: scheduling health_drill, which always fails")

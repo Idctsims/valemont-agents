@@ -368,7 +368,12 @@ class Registry(unittest.TestCase):
         built = {j.name: j for j in system_jobs.build_system_jobs({})}
         self.assertEqual(set(built), {"heartbeat", "health_monitor", "db_size", "job_queue",
                                      "goals_rollover", "goals_monday_push", "capital_snapshot",
-                          "morning_brief", "morning_brief_push"})
+                          "morning_brief", "morning_brief_push",
+                          "feed_ingest", "feed_summarize", "feed_prune"})
+        self.assertEqual(built["feed_ingest"].expected_interval_s, 1800)
+        self.assertFalse(built["feed_summarize"].scheduled)
+        self.assertFalse(built["feed_prune"].run_at_boot)
+        self.assertEqual(str(built["feed_prune"].trigger.timezone), "America/Chicago")
         self.assertEqual(built["heartbeat"].expected_interval_s, 60)
         self.assertEqual(built["job_queue"].expected_interval_s, 10)
         self.assertEqual(built["db_size"].expected_interval_s, 86400)
@@ -400,8 +405,12 @@ class SystemOnlyBoot(SystemTestCase):
                                "system:db_size", "system:job_queue",
                                "system:goals_rollover", "system:goals_monday_push",
                                "system:capital_snapshot", "system:morning_brief",
-                               "system:morning_brief_push"})
-        self.assertEqual(self.ledger.names().count("job_register"), 9)
+                               "system:morning_brief_push", "system:feed_ingest",
+                               "system:feed_prune"})
+        # feed_summarize is registered (job_health row, watched) but never
+        # scheduled: feed_ingest runs it.
+        self.assertEqual(self.ledger.names().count("job_register"), 12)
+        self.assertNotIn("system:feed_summarize", ids)
 
     def test_disabled_agents_plus_system_jobs_start_rather_than_refuse(self) -> None:
         from tests.support import ScriptedAgent
@@ -447,7 +456,8 @@ class SystemOnlyBoot(SystemTestCase):
         self.assertEqual({j.name for j in started[0].system_jobs},
                          {"heartbeat", "health_monitor", "db_size", "job_queue",
                           "goals_rollover", "goals_monday_push", "capital_snapshot",
-                          "morning_brief", "morning_brief_push"})
+                          "morning_brief", "morning_brief_push",
+                          "feed_ingest", "feed_summarize", "feed_prune"})
 
 
 if __name__ == "__main__":
