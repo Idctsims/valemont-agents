@@ -49,14 +49,25 @@ needs no credentials and makes one deliberately failing sign-in per run.
 
 The owner suite (`e2e/owner.spec.ts`: sign in, active pillar, theme
 screenshots, log out) skips unless the owner's credentials are set **in the
-shell session only**, never in a file:
+shell session only**, never in a file.
+
+**Credentials only through `Read-Host`, the password as a SecureString;
+never typed as a literal** (owner, 2026-10-11). PSReadLine saves every typed
+line to its history file (`(Get-PSReadLineOption).HistorySavePath`), so
+`$env:E2E_OWNER_PASSWORD = 'secret'` would leave the password on disk. The
+`Read-Host` prompt is not a typed command line, and `-AsSecureString` masks
+it on screen. One line per step:
 
 ```
-$env:E2E_OWNER_EMAIL = 'you@example.com'
-$env:E2E_OWNER_PASSWORD = '...'
-pnpm test:e2e
-Remove-Item Env:E2E_OWNER_EMAIL, Env:E2E_OWNER_PASSWORD
+Set-Location C:\Users\12563\Projects\valemont-agents\apps\web
+$env:E2E_OWNER_EMAIL = Read-Host 'Owner email'
+$env:E2E_OWNER_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR((Read-Host 'Owner password' -AsSecureString)))
+pnpm test:e2e e2e/feed.spec.ts --project=phone
+Remove-Item Env:E2E_OWNER_PASSWORD, Env:E2E_OWNER_EMAIL
 ```
+
+Swap the `pnpm test:e2e ...` line for the spec you need (below); the other
+lines stay exactly as they are.
 
 Its screenshots land in `e2e-screenshots/` (gitignored). The HTML report:
 `pnpm exec playwright show-report`.

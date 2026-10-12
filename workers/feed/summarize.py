@@ -24,7 +24,11 @@ drop_category), filters nothing. DROP_LIVE flips it after the owner approves
 the 24-hour list; then a non-none drop also sets filtered_reason.
 
 Validation (validate()): known id, once; sentence and word counts; the copy
-check. An invalid story keeps no summary and counts an attempt; it is retried
+check: no run of COPY_RUN consecutive words shared with the teaser or the
+headline, counting ordinary words only. Number tokens and capitalized-name
+tokens are left out of the measure (owner, 2026-10-11): on the first passes
+the check rejected ~20% of summaries, many for restating "the Denver Broncos
+(2-2) and Los Angeles Chargers (3-1)". An invalid story keeps no summary and counts an attempt; it is retried
 in the next run, then left NULL for good (MAX_ATTEMPTS): its card shows the
 headline only.
 
@@ -146,14 +150,41 @@ def words(text: str | None) -> list[str]:
     return [w.lower().strip("'") for w in _WORD.findall(text or "") if w.strip("'")]
 
 
+#: Capitalized function words are ordinary prose, not names: "The", "In"...
+#: at the start of a sentence still count toward the overlap.
+_FUNCTION_WORDS = frozenset(
+    "a an the and or but nor so yet in on at to for of with by from as into onto over under after before "
+    "about against between during without within it its this that these those he she they we you i his "
+    "her their our your who which what when where why how is are was were be been has have had will would "
+    "can could may might should not no".split())
+
+
+def measured_words(text: str | None) -> list[str]:
+    """The words the copy check measures (owner, 2026-10-11): every word
+    except number tokens (any digit: "2-2", "35", "2027") and capitalized-name
+    tokens (team, person, company names: "Denver", "Broncos", "LIV"), so a
+    summary may repeat the facts and names its teaser states. Capitalized
+    function words still count."""
+    out = []
+    for raw in _WORD.findall(text or ""):
+        w = raw.strip("'")
+        if not w or any(ch.isdigit() for ch in w):
+            continue
+        if w[0].isupper() and w.lower() not in _FUNCTION_WORDS:
+            continue
+        out.append(w.lower())
+    return out
+
+
 def copied_run(summary: str, source: str | None, run: int = COPY_RUN) -> str | None:
-    """The first run of `run` consecutive words the summary shares with
-    `source`, or None."""
-    src = words(source)
+    """The first run of `run` consecutive MEASURED words the summary shares
+    with `source`, or None. Names and numbers are left out of both texts
+    before comparing (measured_words); the threshold is unchanged."""
+    src = measured_words(source)
     if len(src) < run:
         return None
     grams = {tuple(src[i:i + run]) for i in range(len(src) - run + 1)}
-    s = words(summary)
+    s = measured_words(summary)
     for i in range(len(s) - run + 1):
         if tuple(s[i:i + run]) in grams:
             return " ".join(s[i:i + run])

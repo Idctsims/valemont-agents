@@ -362,6 +362,46 @@ class FilterRules(unittest.TestCase):
         for t in keep:
             self.assertFalse(any(r.search(t) for r in rx), t)
 
+    def test_db037_junk_rules(self) -> None:
+        import re
+        from core.paths import REPO_ROOT
+        sql = (REPO_ROOT / "db" / "037_feed_junk_rules.sql").read_text(encoding="utf-8")
+        rules = re.findall(r"\('(title_regex|url_regex)',\s+NULL,\s+'((?:[^']|'')*)'", sql)
+        self.assertEqual(len(rules), 4)
+        url_rx = [re.compile(p.replace("''", "'"), re.I) for k, p in rules if k == "url_regex"]
+        title_rx = [re.compile(p.replace("''", "'"), re.I) for k, p in rules if k == "title_regex"]
+        # Complex: shop, store and tag pages go; articles stay.
+        for u in ("https://www.complex.com/shop/products/uprs-la-rise-white-t-shirt",
+                  "https://www.complex.com/shop/products/uprs-la-rise-black-t-shirt?Color=BLACK",
+                  "https://www.complex.com/shop/artists/Sabrina%20Carpente",
+                  "https://www.complex.com/tag/rivian", "https://complex.com/tags/presley-gerber",
+                  "https://www.complex.com/store"):
+            self.assertTrue(any(r.search(u) for r in url_rx), u)
+        for u in ("https://www.complex.com/music/a/treyalston/megan-thee-stallion-miso-adopt",
+                  "https://www.complex.com/pop-culture/a/markelibert/kelly-clarkson-art-play-brooklyn-pretty-woman",
+                  "https://www.complex.com/sports/a/markelibert/tony-parker-chateau-joakim-noah-tour",
+                  "https://www.complex.com/style/a/x/shopping-season-sneakers",
+                  "https://www.notcomplex.com/tag/x"):
+            self.assertFalse(any(r.search(u) for r in url_rx), u)
+        drop = ["- NFL Communications", "NFL Communications", "Latest News", "Videos",
+                "“Severance” Season 3 Review: The Office Strikes Back",
+                "'Hamnet' Movie Review: Quiet Grief",
+                "Netflix's 'Wednesday' Season 2 Part 1 Review: Darker",
+                "‘The Sea Speaks His Name’ Review: Absorbing"]
+        keep = ["Paramount Board Launches Strategic Review",
+                "Deal Under Regulatory Review",
+                "Warner Bros. Discovery Faces Antitrust Review",
+                "Variety's Year in Review: Box Office Up 12%",
+                "Year in Review: The Deals That Shaped Sports Business",
+                "Disney's board and Iger's succession review: what comes next",
+                "NFL Communications chief steps down after 12 years",
+                "Sports business news: Fenway buys stake in PGA Tour Enterprises",
+                "Kalshi's 'sports event contracts' face a new CFTC review"]
+        for t in drop:
+            self.assertTrue(any(r.search(t) for r in title_rx), t)
+        for t in keep:
+            self.assertFalse(any(r.search(t) for r in title_rx), t)
+
     def test_every_seeded_db032_pattern_compiles_in_python(self) -> None:
         import re
         from core.paths import REPO_ROOT
@@ -402,17 +442,30 @@ class SummaryValidator(unittest.TestCase):
         self.assertEqual(summarize.sentence_count("The U.S. team beat Mexico. C.J. Stroud starts Sunday."), 2)
         self.assertEqual(summarize.sentence_count("Mr. Ross and Inc. filings show a loss"), 1)
 
-    def test_a_copied_run_of_8_words(self) -> None:
-        copied = "The Houston Texans traded for Arizona Cardinals receiver, a big move."
+    PROSE = ("Officials said the plan would move forward only after the board finished its review "
+             "of the costs and the timeline.")
+
+    def test_a_lifted_8_word_run_of_ordinary_prose_still_fails(self) -> None:
+        copied = "The plan would move forward only after the board finished, officials said."
         with self.assertRaisesRegex(summarize.SummaryInvalid, "copies 8 words from the teaser"):
-            summarize.validate(dict(GOOD, summary=copied), job(1, teaser=self.TEASER))
-        seven = "The Houston Texans traded for Arizona Cardinals, then rested."
-        summarize.validate(dict(GOOD, summary=seven), job(1, teaser=self.TEASER))
+            summarize.validate(dict(GOOD, summary=copied), job(1, teaser=self.PROSE))
+        seven = "The plan would move forward only after a vote, officials said."
+        summarize.validate(dict(GOOD, summary=seven), job(1, teaser=self.PROSE))
+
+    def test_names_and_numbers_are_not_measured(self) -> None:
+        # The owner's case: a run of names and records is facts, not copying.
+        teaser = "The Denver Broncos (2-2) and Los Angeles Chargers (3-1) meet Sunday in a game with playoff stakes."
+        summary = "The Denver Broncos (2-2) and Los Angeles Chargers (3-1) play Sunday, and the result shapes the division."
+        summarize.validate(dict(GOOD, summary=summary), job(1, teaser=teaser))
+        self.assertEqual(summarize.measured_words("The Denver Broncos (2-2) and Los Angeles Chargers (3-1)"),
+                         ["the", "and"])
+        # A capitalized function word at a sentence start is still measured.
+        self.assertEqual(summarize.measured_words("After the Texans won 31-7"), ["after", "the", "won"])
 
     def test_copying_the_headline_is_caught_too(self) -> None:
-        title = "Rahm leaving LIV Golf in blow to future of bankrupt league"
+        title = "Why the plan would move forward only after the board finished"
         with self.assertRaisesRegex(summarize.SummaryInvalid, "headline"):
-            summarize.validate(dict(GOOD, summary="Rahm leaving LIV Golf in blow to future of the tour."),
+            summarize.validate(dict(GOOD, summary="The plan would move forward only after the board finished."),
                                job(1, title=title))
 
     def test_unknown_duplicate_and_missing_ids(self) -> None:

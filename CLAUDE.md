@@ -280,6 +280,22 @@ policies arrive in db/019+ before apps/web reads any table. db/019 (push_subscri
   a secret, pipe it through redaction or don't run it. Why: on 2026-10-08 that
   command printed `DATABASE_URL` with its password into a session transcript,
   and the password had to be rotated.
+- **Owner e2e credentials only through `Read-Host`, the password as a
+  SecureString; never a typed literal.** Exactly this form, one line per
+  step (apps/web/README.md, "Owner suite"):
+
+  ```
+  Set-Location C:\Users\12563\Projects\valemont-agents\apps\web
+  $env:E2E_OWNER_EMAIL = Read-Host 'Owner email'
+  $env:E2E_OWNER_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR((Read-Host 'Owner password' -AsSecureString)))
+  pnpm test:e2e <exact spec path> --project=phone
+  Remove-Item Env:E2E_OWNER_PASSWORD, Env:E2E_OWNER_EMAIL
+  ```
+
+  - Why (2026-10-11): PSReadLine saves every typed line to its history
+    file, so `$env:E2E_OWNER_PASSWORD = '...'` leaves the password on disk.
+    A `Read-Host` prompt is not a command line, and `-AsSecureString` masks
+    it. Hand the owner this form, never a literal to fill in.
 - **Never use another account's CLI session for this repo** (Vercel, Railway,
   `gh`, Supabase or anything else). Before the first CLI call of a session,
   confirm the account by name only: `vercel whoami` must print `idctsims`.
@@ -956,7 +972,8 @@ absent row as "I never looked."
   - **`db/029_wags.sql` applied 2026-10-10 17:23:55 UTC** (`migration_log`). The context layer and Wags (below).
   - **`db/030_morning_brief.sql` applied 2026-10-10 22:17:09 UTC; `db/031_brief_shape_null.sql` 22:24:10** (`migration_log`). 031 fixes 030's morning-shape CHECK, which a missing field made NULL (a NULL CHECK passes).
   - **`db/032_feed.sql` applied 2026-10-11 23:10:36 UTC; `db/033_feed_calibration.sql` 23:58:01; `db/034_feed_reset.sql` 2026-10-12 00:54:44; `db/035_frozen_fix.sql` 01:19:10** (`migration_log`). Chat 3 Phase 1's feed: sources, items, stories, rules, the calibration log, title embeddings; 034 deleted the first ingest's mis-clustered rows (214 stories, 853 items, 10 seeded) and 035 fixed 034's freeze trigger.
-    - Next new file: `db/036`.
+  - **`db/036_feed_review_rules.sql` applied 2026-10-12 03:07:17 UTC** (`migration_log`): three title rules dropping film/TV/album reviews. `db/037_feed_junk_rules.sql` is written and **not yet pasted**.
+    - Next new file: `db/038`.
 - **Immutability audit (2026-10-01, empirical).** UPDATE and DELETE were attempted on a `_test` row of every table, rolled back.
   - **Refused by trigger:** `commitments`, `events`, `resolution_attempts`, `commitment_factors`, `closing_snapshots`, `selections`, `model_versions`, `kalshi_markets`, `kalshi_candles`. `legs` UPDATE was refused too, by `legs_frozen`.
   - **ACCEPTED:**
