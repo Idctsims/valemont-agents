@@ -468,8 +468,11 @@ class SummaryValidator(unittest.TestCase):
         self.assertEqual(v.drop, "none")
 
     def test_too_long(self) -> None:
-        with self.assertRaisesRegex(summarize.SummaryInvalid, "words"):
-            summarize.validate(dict(GOOD, summary="word " * 46 + "."), job(1))
+        self.assertEqual((summarize.MAX_WORDS, summarize.MAX_SENTENCES), (35, 2))
+        summarize.validate(dict(GOOD, summary=" ".join(["word"] * 35) + "."), job(1))
+        with self.assertRaisesRegex(summarize.SummaryInvalid, "36 words; the cap is 35"):
+            summarize.validate(dict(GOOD, summary=" ".join(["word"] * 36) + "."), job(1))
+        self.assertIn("at most 35 words", summarize.SYSTEM)
         with self.assertRaisesRegex(summarize.SummaryInvalid, "sentences"):
             summarize.validate(dict(GOOD, summary="One. Two. Three."), job(1))
 

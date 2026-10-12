@@ -43,7 +43,7 @@ export function FeedCard({ story, when }: { story: FeedStory; when: string }) {
         </a>
       </h3>
       {story.summary && (
-        <p data-testid="feed-summary" className="mt-2 text-base text-text-muted text-pretty">
+        <p data-testid="feed-summary" className="mt-2 text-sm text-text-muted text-pretty">
           {story.summary}
         </p>
       )}

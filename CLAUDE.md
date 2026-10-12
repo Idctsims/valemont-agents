@@ -972,8 +972,8 @@ absent row as "I never looked."
   - **`db/029_wags.sql` applied 2026-10-10 17:23:55 UTC** (`migration_log`). The context layer and Wags (below).
   - **`db/030_morning_brief.sql` applied 2026-10-10 22:17:09 UTC; `db/031_brief_shape_null.sql` 22:24:10** (`migration_log`). 031 fixes 030's morning-shape CHECK, which a missing field made NULL (a NULL CHECK passes).
   - **`db/032_feed.sql` applied 2026-10-11 23:10:36 UTC; `db/033_feed_calibration.sql` 23:58:01; `db/034_feed_reset.sql` 2026-10-12 00:54:44; `db/035_frozen_fix.sql` 01:19:10** (`migration_log`). Chat 3 Phase 1's feed: sources, items, stories, rules, the calibration log, title embeddings; 034 deleted the first ingest's mis-clustered rows (214 stories, 853 items, 10 seeded) and 035 fixed 034's freeze trigger.
-  - **`db/036_feed_review_rules.sql` applied 2026-10-12 03:07:17 UTC** (`migration_log`): three title rules dropping film/TV/album reviews. `db/037_feed_junk_rules.sql` is written and **not yet pasted**.
-    - Next new file: `db/038`.
+  - **`db/036_feed_review_rules.sql` applied 2026-10-12 03:07:17 UTC; `db/037_feed_junk_rules.sql` 03:13:03; `db/038_feed_boat_rules.sql` 03:19:10** (`migration_log`, rules read back via db_inspect). Rule rows only: film/TV/album reviews (036, extended in 037); Complex shop/tag pages, dash-led and bare section-name titles (037); Boat International directory and profile pages (038). 49 active feed rules.
+    - Next new file: `db/039`.
 - **Immutability audit (2026-10-01, empirical).** UPDATE and DELETE were attempted on a `_test` row of every table, rolled back.
   - **Refused by trigger:** `commitments`, `events`, `resolution_attempts`, `commitment_factors`, `closing_snapshots`, `selections`, `model_versions`, `kalshi_markets`, `kalshi_candles`. `legs` UPDATE was refused too, by `legs_frozen`.
   - **ACCEPTED:**

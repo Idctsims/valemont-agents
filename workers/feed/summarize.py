@@ -9,7 +9,7 @@ Input is the title and the lead item's teaser ONLY. No article page is ever
 fetched.
 
 Per story the model returns:
-    summary   at most 2 sentences and 45 words, plain and direct, nothing
+    summary   at most 2 sentences and 35 words, plain and direct, nothing
               beyond the teaser, no run of COPY_RUN consecutive words copied
               from the teaser or the title; a thin teaser gets one sentence
               restating the headline in new words.
@@ -61,7 +61,7 @@ RUN_CAP = 60
 DAILY_CAP = 600  # owner, 2026-10-11 (was 250)
 MAX_ATTEMPTS = 2
 MAX_SENTENCES = 2
-MAX_WORDS = 45
+MAX_WORDS = 35  # owner, 2026-10-11 (was 45)
 COPY_RUN = 8
 MAX_ENTITIES = 10
 MAX_TOPICS = 6
