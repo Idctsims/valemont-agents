@@ -2152,6 +2152,8 @@ class SummaryOut:
     drop: str | None = None
     #: Set only when the drop filter is live: 'drop:<category>'.
     filtered_reason: str | None = None
+    #: Attempts this run used: 1, or 2 with the same-run targeted retry.
+    attempts: int = 1
 
 
 def feed_save_summaries(results: Sequence[SummaryOut], ai_usage_id: int | None, *,
@@ -2163,10 +2165,10 @@ def feed_save_summaries(results: Sequence[SummaryOut], ai_usage_id: int | None, 
             if r.summary is None:
                 c.execute(
                     """
-                    UPDATE stories SET summary_attempts = summary_attempts + 1, summarized_at = now()
+                    UPDATE stories SET summary_attempts = least(summary_attempts + %s, 5), summarized_at = now()
                      WHERE id = %s
                     """,
-                    (r.story_id,),
+                    (r.attempts, r.story_id),
                 )
                 continue
             c.execute(
@@ -2174,12 +2176,12 @@ def feed_save_summaries(results: Sequence[SummaryOut], ai_usage_id: int | None, 
                 UPDATE stories
                    SET summary = %s, entities = %s, topics = %s, sport = coalesce(sport, %s),
                        drop_category = %s, filtered_reason = coalesce(filtered_reason, %s),
-                       summary_attempts = summary_attempts + 1, summarized_at = now(),
+                       summary_attempts = least(summary_attempts + %s, 5), summarized_at = now(),
                        ai_usage_id = %s
                  WHERE id = %s
                 """,
                 (r.summary, list(r.entities), list(r.topics), r.sport, r.drop, r.filtered_reason,
-                 ai_usage_id, r.story_id),
+                 r.attempts, ai_usage_id, r.story_id),
             )
 
 

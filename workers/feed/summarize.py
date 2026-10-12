@@ -28,7 +28,12 @@ check: no run of COPY_RUN consecutive words shared with the teaser or the
 headline, counting ordinary words only. Number tokens and capitalized-name
 tokens are left out of the measure (owner, 2026-10-11): on the first passes
 the check rejected ~20% of summaries, many for restating "the Denver Broncos
-(2-2) and Los Angeles Chargers (3-1)". An invalid story keeps no summary and counts an attempt; it is retried
+(2-2) and Los Angeles Chargers (3-1)".
+
+A story that fails ONLY the copy check is retried in the same run, once:
+the retry names the copied phrase and asks for a rewrite in different words
+(retry_message; owner, 2026-10-11). The first call and the retry are its two
+attempts. Any other failure is retried in the next run. An invalid story keeps no summary and counts an attempt; it is retried
 in the next run, then left NULL for good (MAX_ATTEMPTS): its card shows the
 headline only.
 
@@ -213,7 +218,7 @@ def validate(item: dict[str, Any], job: ledger.SummaryJob) -> Valid:
     for name, text in (("teaser", job.teaser), ("headline", job.title)):
         run = copied_run(summary, text)
         if run:
-            raise SummaryInvalid(f"copies {COPY_RUN} words from the {name}: {run!r}")
+            raise CopyInvalid(f"copies {COPY_RUN} words from the {name}: {run!r}", run, summary)
     drop = item.get("drop")
     if drop not in DROPS:
         raise SummaryInvalid(f"unknown drop {drop!r}")
@@ -225,32 +230,57 @@ def validate(item: dict[str, Any], job: ledger.SummaryJob) -> Valid:
                  sport if sport in SPORTS and sport != "none" else None, drop)
 
 
-def results_for(group: Sequence[ledger.SummaryJob], payload: Any) -> tuple[list[ledger.SummaryOut], list[str]]:
+class CopyInvalid(SummaryInvalid):
+    """The copy check failed: `phrase` is the shared run (measured words) and
+    `summary` the text that copied it, for the targeted retry."""
+
+    def __init__(self, message: str, phrase: str, summary: str) -> None:
+        super().__init__(message)
+        self.phrase, self.summary = phrase, summary
+
+
+@dataclass(frozen=True)
+class Copied:
+    story_id: int
+    summary: str
+    phrase: str
+
+
+def results_for(group: Sequence[ledger.SummaryJob], payload: Any, *,
+                attempts: int = 1) -> tuple[list[ledger.SummaryOut], list[str], list[Copied]]:
     """Every story in the group gets a SummaryOut: accepted, or summary None
-    (an attempt counted). Returns (results, problems) for the log."""
+    (`attempts` counted). Returns (results, problems for the log, the stories
+    that failed ONLY the copy check, for the targeted retry)."""
     by_id = {j.story_id: j for j in group}
     accepted: dict[int, ledger.SummaryOut] = {}
     problems: list[str] = []
+    copied: dict[int, Copied] = {}
     items = payload.get("stories") if isinstance(payload, dict) else None
     for item in items if isinstance(items, list) else []:
         sid = item.get("id") if isinstance(item, dict) else None
         if sid not in by_id:
             problems.append(f"unknown story id {sid!r}")
             continue
-        if sid in accepted:
+        if sid in accepted or sid in copied:
             problems.append(f"story {sid} returned twice")
             continue
         try:
             v = validate(item, by_id[sid])
+        except CopyInvalid as exc:
+            problems.append(f"story {sid}: {exc}")
+            copied[sid] = Copied(sid, exc.summary, exc.phrase)
+            continue
         except SummaryInvalid as exc:
             problems.append(f"story {sid}: {exc}")
             continue
         accepted[sid] = ledger.SummaryOut(
             story_id=sid, summary=v.summary, entities=v.entities, topics=v.topics, sport=v.sport,
-            drop=v.drop, filtered_reason=f"drop:{v.drop}" if DROP_LIVE and v.drop != "none" else None)
+            drop=v.drop, filtered_reason=f"drop:{v.drop}" if DROP_LIVE and v.drop != "none" else None,
+            attempts=attempts)
     missing = [sid for sid in by_id if sid not in accepted]
-    return [accepted.get(sid) or ledger.SummaryOut(sid, None) for sid in by_id], problems + (
-        [f"no valid result for {len(missing)} of {len(by_id)}"] if missing else [])
+    return ([accepted.get(sid) or ledger.SummaryOut(sid, None, attempts=attempts) for sid in by_id],
+            problems + ([f"no valid result for {len(missing)} of {len(by_id)}"] if missing else []),
+            list(copied.values()))
 
 
 # ------------------------------------------------------------------ the job
@@ -261,49 +291,102 @@ def user_message(group: Sequence[ledger.SummaryJob]) -> str:
          "sport": j.sport, "teaser": j.teaser or ""} for j in group], ensure_ascii=False)
 
 
-def summarize_group(group: Sequence[ledger.SummaryJob], *, client: Any = None) -> tuple[int, int]:
-    """One call for up to GROUP_SIZE stories. Returns (accepted, rejected)."""
-    recorded: list[int] = []
+def retry_message(group: Sequence[ledger.SummaryJob], copied: Sequence[Copied]) -> str:
+    """The targeted retry (owner, 2026-10-11): each story's rejected summary
+    and the phrase it copied, with a request to rewrite in different words."""
+    by_id = {j.story_id: j for j in group}
+    return (
+        "REWRITE: each summary below repeated wording from its teaser or headline. For each story, write a "
+        "new summary in different words: keep the same facts and follow every rule above, and do not reuse "
+        "the copied phrase (names and numbers may stay).\nSTORIES:\n"
+        + json.dumps([{"id": c.story_id, "headline": by_id[c.story_id].title,
+                       "outlet": by_id[c.story_id].source_name, "sport": by_id[c.story_id].sport,
+                       "teaser": by_id[c.story_id].teaser or "", "rejected_summary": c.summary,
+                       "copied_phrase": c.phrase} for c in copied], ensure_ascii=False))
+
+
+def _ask(content: str, client: Any, recorded: list[int], label: str) -> Any:
     response = ai.complete(
         purpose=PURPOSE, model=MODEL, critical=False, max_tokens=4000, client=client,
         system=[{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}],
-        messages=[{"role": "user", "content": user_message(group)}],
+        messages=[{"role": "user", "content": content}],
         thinking={"type": "disabled"},
         output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema()}},
         on_recorded=lambda usage_id, _model, _cost: recorded.append(usage_id),
     )
     if getattr(response, "stop_reason", None) == "refusal":
-        payload: Any = None
-        log.warning("feed summarize: the model declined a group of %d", len(group))
-    else:
-        text = "".join(getattr(b, "text", "") for b in response.content if getattr(b, "type", "") == "text")
-        try:
-            payload = json.loads(text)
-        except json.JSONDecodeError:
-            payload = None
-            log.warning("feed summarize: the answer was not JSON")
-    results, problems = results_for(group, payload)
+        log.warning("feed summarize: the model declined a %s", label)
+        return None
+    text = "".join(getattr(b, "text", "") for b in response.content if getattr(b, "type", "") == "text")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        log.warning("feed summarize: the %s answer was not JSON", label)
+        return None
+
+
+@dataclass
+class SummaryRun:
+    accepted: int = 0
+    rejected: int = 0
+    #: Stories sent back once, in the same run, for copying wording.
+    retried: int = 0
+    #: Of those, accepted on the retry.
+    retry_passed: int = 0
+
+    def add(self, other: "SummaryRun") -> None:
+        self.accepted += other.accepted
+        self.rejected += other.rejected
+        self.retried += other.retried
+        self.retry_passed += other.retry_passed
+
+
+def summarize_group(group: Sequence[ledger.SummaryJob], *, client: Any = None) -> SummaryRun:
+    """One call for up to GROUP_SIZE stories, then one targeted retry for the
+    stories that failed only the copy check and have a try left: the retry
+    names the copied phrase (retry_message). The first call and the retry are
+    the story's two attempts; any other failure is retried in the next run."""
+    first: list[int] = []
+    results, problems, copied = results_for(group, _ask(user_message(group), client, first, "group"))
+    run = SummaryRun()
+    attempts_left = {j.story_id: MAX_ATTEMPTS - j.attempts - 1 for j in group}
+    copied = [c for c in copied if attempts_left[c.story_id] > 0]
+    retried: list[ledger.SummaryOut] = []
+    second: list[int] = []
+    if copied:
+        retry_ids = {c.story_id for c in copied}
+        retried, retry_problems, _ = results_for(
+            [j for j in group if j.story_id in retry_ids],
+            _ask(retry_message(group, copied), client, second, "retry"), attempts=2)
+        problems += [f"retry: {p}" for p in retry_problems]
+        results = [r for r in results if r.story_id not in retry_ids]
+        run.retried = len(copied)
+        run.retry_passed = sum(1 for r in retried if r.summary is not None)
     for p in problems:
         log.warning("feed summarize: %s", p)
-    ledger.feed_save_summaries(results, recorded[-1] if recorded else None)
-    ok = sum(1 for r in results if r.summary is not None)
-    return ok, len(results) - ok
+    # Each story names the call its summary came from.
+    ledger.feed_save_summaries(results, first[-1] if first else None)
+    if retried:
+        ledger.feed_save_summaries(retried, second[-1] if second else None)
+    run.accepted = sum(1 for r in results + retried if r.summary is not None)
+    run.rejected = len(results) + len(retried) - run.accepted
+    return run
 
 
-def summarize_job(*, client: Any = None) -> tuple[int, int]:
-    """The feed_summarize system job. Returns (accepted, rejected)."""
+def summarize_job(*, client: Any = None) -> SummaryRun:
+    """The feed_summarize system job."""
+    total = SummaryRun()
     room = min(RUN_CAP, DAILY_CAP - ledger.feed_summarized_today())
     if room <= 0:
         log.info("feed summarize: daily cap of %d reached", DAILY_CAP)
-        return 0, 0
+        return total
     queue = ledger.feed_summary_queue(room, MAX_ATTEMPTS)
-    accepted = rejected = 0
     for i in range(0, len(queue), GROUP_SIZE):
         try:
-            ok, bad = summarize_group(queue[i:i + GROUP_SIZE], client=client)
+            total.add(summarize_group(queue[i:i + GROUP_SIZE], client=client))
         except ai.BudgetExceeded as exc:
-            raise JobSkipped(f"AI budget spent; headlines only ({accepted} summarized first)") from exc
-        accepted, rejected = accepted + ok, rejected + bad
+            raise JobSkipped(f"AI budget spent; headlines only ({total.accepted} summarized first)") from exc
     if queue:
-        log.info("feed summarize: %d accepted, %d rejected of %d", accepted, rejected, len(queue))
-    return accepted, rejected
+        log.info("feed summarize: %d accepted, %d rejected of %d; %d retried for copying, %d passed the retry",
+                 total.accepted, total.rejected, len(queue), total.retried, total.retry_passed)
+    return total

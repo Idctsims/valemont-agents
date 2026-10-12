@@ -402,6 +402,36 @@ class FilterRules(unittest.TestCase):
         for t in keep:
             self.assertFalse(any(r.search(t) for r in title_rx), t)
 
+    def test_db038_drops_boat_international_directory_pages_never_news(self) -> None:
+        import re
+        from core.paths import REPO_ROOT
+        sql = (REPO_ROOT / "db" / "038_feed_boat_rules.sql").read_text(encoding="utf-8")
+        (pattern,) = re.findall(r"\('url_regex',\s+NULL,\s+'((?:[^']|'')*)'", sql)
+        rx = re.compile(pattern.replace("''", "'"), re.I)
+        rules = Rules([Rule(9, "url_regex", None, pattern.replace("''", "'"))])
+        drop = [("Wajer 77", "https://www.boatinternational.com/yachts/the-superyacht-directory/wajer-77--16833"),
+                ("Sunreef 80 Power", "https://www.boatinternational.com/yachts/the-superyacht-directory/sunreef-80-power--16812"),
+                ("Azimut 78 Fly", "https://www.boatinternational.com/yachts/the-superyacht-directory/azimut-78-fly--16670"),
+                ("Blessed yacht (Sunreef Yachts, 23.95m, 2023)",
+                 "https://www.boatinternational.com/yachts/the-superyacht-directory/blessed--16818"),
+                ("Fountaine Pajot Yachts Yachts For Sale and Charter",
+                 "https://www.boatinternational.com/profiles/fountaine-pajot-yachts--17883")]
+        keep = [("Feadship launches 87m Project 1012",
+                 "https://www.boatinternational.com/yachts/news/feadship-launches-87m-project-1012"),
+                ("Sunreef sells 40m catamaran to American owner",
+                 "https://www.boatinternational.com/yachts/news/sunreef-sells-40m-catamaran-american-owner"),
+                ("First look inside first unit of ISA Yachts 40m Viper 130 Fast Naan",
+                 "https://www.boatinternational.com/yachts/news/isa-yachts-40m-viper-130-first-look-fast-naan"),
+                ("Angiola Maiora review", "https://www.boatinternational.com/yachts/reports/angiola-maiora-36-exuma-yacht-review"),
+                ("Superyacht sabbaticals",
+                 "https://www.boatinternational.com/yachts/editorial-features/superyacht-sabbatical-long-term-yacht-tr")]
+        for title, url in drop:
+            self.assertTrue(rx.search(url), url)
+            self.assertEqual(rules.filter_reason(title=title, url=url, pillars=["home"]), "url_regex:9")
+        for title, url in keep:
+            self.assertFalse(rx.search(url), url)
+            self.assertIsNone(rules.filter_reason(title=title, url=url, pillars=["home"]), title)
+
     def test_every_seeded_db032_pattern_compiles_in_python(self) -> None:
         import re
         from core.paths import REPO_ROOT
@@ -471,24 +501,24 @@ class SummaryValidator(unittest.TestCase):
     def test_unknown_duplicate_and_missing_ids(self) -> None:
         group = [job(1, teaser=self.TEASER), job(2)]
         payload = {"stories": [dict(GOOD, id=1), dict(GOOD, id=1), dict(GOOD, id=99)]}
-        results, problems = summarize.results_for(group, payload)
+        results, problems, _ = summarize.results_for(group, payload)
         self.assertEqual([(r.story_id, r.summary is not None) for r in results], [(1, True), (2, False)])
         self.assertTrue(any("unknown story id 99" in p for p in problems))
         self.assertTrue(any("returned twice" in p for p in problems))
 
     def test_garbage_counts_an_attempt_for_every_story(self) -> None:
-        results, _ = summarize.results_for([job(1), job(2)], None)
+        results, _, _ = summarize.results_for([job(1), job(2)], None)
         self.assertTrue(all(r.summary is None for r in results))
 
     def test_drop_is_shadow_by_default_and_filters_only_when_live(self) -> None:
         self.assertFalse(summarize.DROP_LIVE)
         gossip = dict(GOOD, id=1, drop="gossip")
-        (r,), _ = summarize.results_for([job(1)], {"stories": [gossip]})
+        (r,), _, _ = summarize.results_for([job(1)], {"stories": [gossip]})
         self.assertEqual((r.drop, r.filtered_reason), ("gossip", None))
         with mock.patch.object(summarize, "DROP_LIVE", True):
-            (r,), _ = summarize.results_for([job(1)], {"stories": [gossip]})
+            (r,), _, _ = summarize.results_for([job(1)], {"stories": [gossip]})
             self.assertEqual(r.filtered_reason, "drop:gossip")
-            (r,), _ = summarize.results_for([job(1)], {"stories": [dict(GOOD, id=1)]})
+            (r,), _, _ = summarize.results_for([job(1)], {"stories": [dict(GOOD, id=1)]})
             self.assertIsNone(r.filtered_reason)
 
     def test_the_prompt_carries_the_owners_rules(self) -> None:
@@ -525,7 +555,7 @@ class SummaryJobRun(unittest.TestCase):
     def test_groups_of_10_with_haiku_non_critical_thinking_off(self) -> None:
         calls = []
         with mock.patch.object(ai, "complete", lambda **kw: calls.append(kw) or self._complete(**kw)):
-            self.assertEqual(summarize.summarize_job(), (12, 0))
+            r = summarize.summarize_job(); self.assertEqual((r.accepted, r.rejected, r.retried), (12, 0, 0))
         self.assertEqual([len(json.loads(c["messages"][0]["content"].split("\n", 1)[1])) for c in calls], [10, 2])
         for c in calls:
             self.assertEqual((c["model"], c["critical"], c["thinking"]), ("claude-haiku-5-5", False, {"type": "disabled"}))
@@ -537,10 +567,70 @@ class SummaryJobRun(unittest.TestCase):
         self.assertEqual((summarize.RUN_CAP, summarize.DAILY_CAP), (60, 600))
         with mock.patch.object(ledger, "feed_summarized_today", lambda **kw: 595), \
                 mock.patch.object(ai, "complete", self._complete):
-            self.assertEqual(summarize.summarize_job(), (5, 0))
+            r = summarize.summarize_job(); self.assertEqual((r.accepted, r.rejected), (5, 0))
         with mock.patch.object(ledger, "feed_summarized_today", lambda **kw: 600), \
                 mock.patch.object(ai, "complete", side_effect=AssertionError("no call past the cap")):
-            self.assertEqual(summarize.summarize_job(), (0, 0))
+            r = summarize.summarize_job(); self.assertEqual((r.accepted, r.rejected), (0, 0))
+
+    # -- the targeted retry (owner, 2026-10-11) ------------------------------
+
+    TEASER = "Officials said the plan would move forward only after the board finished its review of the costs."
+    COPIED = "The plan would move forward only after the board finished, officials said."
+    REWRITTEN = "Officials tied the project's next step to the board completing its cost check."
+
+    def _scripted(self, first: dict[int, str], retry: dict[int, str], calls: list) -> Any:
+        """First call: per story the summary in `first` (default GOOD). A
+        REWRITE call: per story the summary in `retry`."""
+        def complete(**kw: Any) -> Any:
+            calls.append(kw)
+            content = kw["messages"][0]["content"]
+            stories = json.loads(content.split("STORIES:\n", 1)[1])
+            table = retry if content.startswith("REWRITE") else first
+            kw["on_recorded"](556 if content.startswith("REWRITE") else 555, kw["model"], 0)
+            body = {"stories": [dict(GOOD, id=s["id"], summary=table.get(s["id"], GOOD["summary"])) for s in stories]}
+            return FakeResponse(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=json.dumps(body))])
+        return complete
+
+    def test_a_copy_failure_is_retried_once_naming_the_phrase_and_can_pass(self) -> None:
+        self.queue = [job(1, teaser=self.TEASER), job(2, teaser=self.TEASER)]
+        calls: list = []
+        with mock.patch.object(ai, "complete", self._scripted({1: self.COPIED}, {1: self.REWRITTEN}, calls)):
+            r = summarize.summarize_job()
+        self.assertEqual((r.accepted, r.rejected, r.retried, r.retry_passed), (2, 0, 1, 1))
+        self.assertEqual(len(calls), 2)
+        retry = calls[1]["messages"][0]["content"]
+        self.assertTrue(retry.startswith("REWRITE"))
+        sent = json.loads(retry.split("STORIES:\n", 1)[1])
+        self.assertEqual([s["id"] for s in sent], [1])
+        self.assertEqual(sent[0]["copied_phrase"], "the plan would move forward only after the")
+        self.assertEqual(sent[0]["rejected_summary"], self.COPIED)
+        self.assertEqual(calls[1]["system"], calls[0]["system"])  # same cached prompt
+        # Two saves: the first call's stories with its ai_usage row, the
+        # retried story with the retry's.
+        (first, usage1), (second, usage2) = self.saved
+        self.assertEqual(([x.story_id for x in first], usage1), ([2], 555))
+        self.assertEqual(([x.story_id for x in second], usage2), ([1], 556))
+        self.assertEqual((second[0].summary, second[0].attempts), (self.REWRITTEN, 2))
+        self.assertEqual(first[0].attempts, 1)
+
+    def test_a_retry_that_copies_again_is_final_for_the_story(self) -> None:
+        self.queue = [job(1, teaser=self.TEASER)]
+        calls: list = []
+        with mock.patch.object(ai, "complete", self._scripted({1: self.COPIED}, {1: self.COPIED}, calls)):
+            r = summarize.summarize_job()
+        self.assertEqual((r.accepted, r.rejected, r.retried, r.retry_passed), (0, 1, 1, 0))
+        (out,), _ = self.saved[-1]
+        self.assertEqual((out.summary, out.attempts), (None, 2))
+
+    def test_no_retry_for_other_failures_or_a_last_attempt(self) -> None:
+        too_long = "word " * 50
+        last_try = ledger.SummaryJob(2, "t", self.TEASER, "Variety", None, summarize.MAX_ATTEMPTS - 1)
+        self.queue = [job(1, teaser=self.TEASER), last_try]
+        calls: list = []
+        with mock.patch.object(ai, "complete", self._scripted({1: too_long, 2: self.COPIED}, {}, calls)):
+            r = summarize.summarize_job()
+        self.assertEqual(len(calls), 1)
+        self.assertEqual((r.accepted, r.rejected, r.retried), (0, 2, 0))
 
     def test_a_spent_budget_is_a_skip_recorded_as_a_note_not_a_failure(self) -> None:
         with mock.patch.object(ai, "complete", side_effect=ai.BudgetExceeded("spent")):

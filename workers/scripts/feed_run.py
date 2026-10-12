@@ -49,8 +49,9 @@ def main(argv: list[str] | None = None) -> int:
                       f"known {s.known:3}  decode_failed {s.decode_failed}"
                       + (f"  error: {s.error}" if s.error else ""))
         elif args.summarize:
-            accepted, rejected = summarize.summarize_job()
-            print(f"summarize: {accepted} accepted, {rejected} rejected")
+            r = summarize.summarize_job()
+            print(f"summarize: {r.accepted} accepted, {r.rejected} rejected; "
+                  f"{r.retried} retried for copying, {r.retry_passed} passed the retry")
         else:
             print(f"prune: {ledger.feed_prune()}")
     finally:
