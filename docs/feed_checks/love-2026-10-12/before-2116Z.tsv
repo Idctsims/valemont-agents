@@ -1,0 +1,493 @@
+﻿pos	id	follow_tier	floored	cross_pillar	source_name	topics	title
+1	1400	NULL	False	False	Bisnow South Florida	['retail_construction', 'commercial_real_estate', 'rents']	Miami Retail Construction Pipeline Hits Highest Level In 3 Years
+2	1556	NULL	False	False	Bloomberg	['m_and_a', 'wine_industry']	Billionaire Australian Family Buys Three Wine Brands From Penfolds Maker
+3	2322	NULL	False	False	Variety	['spanish_production', 'trade_events', 'multiplatform_ip']	Where Is Spanish Production Heading at Mipcom 2026?
+4	2393	1	False	True	Yahoo Sports College Football	['rivalry', 'coaching_history']	Tennessee football can overcome coaching disadvantage in Alabama series | Adams
+5	2401	1	False	True	AL.com Alabama Sports	['schedule']	Check out the statewide Alabama college football schedule for Week 7
+6	2382	NULL	False	False	Variety	['scripted_series', 'film_production', 'development_financing']	Cannes Festival Winning Producer Quijote Films Launches In-House Scripted Series Division (EXCLUSIVE)
+7	763	NULL	False	False	Variety	['creator_economy', 'studio_partnership', 'content_production']	Creator Dhar Mann on Partnering With Hollywood Studios and His Vision for Creator City in Los Angeles
+8	2403	1	False	True	AL.com Alabama Sports	['player_performance']	Jameis Winston, Jahmyr Gibbs highlight exciting Week 5 in the NFL
+9	2404	1	False	True	AL.com Alabama Sports	['game_preview']	What to know about Tennessee, Alabama’s next opponent
+10	887	1	False	True	AL.com Alabama Sports	['coaching_comments', 'locker_room']	Kirby Smart reacts to fan heckling, pushing Georgia linebacker after Alabama game
+11	1310	NULL	False	False	Deadline	['film_industry', 'industry_coalition']	Five Organizations Launch Asian Producers Alliance In Busan Market
+12	839	NULL	False	False	Music Business Worldwide	['music_contracts', 'litigation']	UMG’s Interscope sues Summer Walker for $50M+ after she moves to exit her deal under California’s ‘seven-year rule’
+13	1577	NULL	False	False	Robb Report	['hotel_development', 'real_estate']	Old Edwards Reserve Introduces Laurel Village
+14	2313	NULL	False	False	Deadline	['media_rights', 'tv_distribution', 'international_sales']	‘Baywatch’ Sells To Italy’s Rai
+15	2354	NULL	False	False	Variety	['executive_hire', 'original_programming']	Disney+ Taps Amazon Exec Philip Pratt To Oversee Germany, Switzerland and Austria Originals
+16	723	NULL	False	False	TechCrunch	['m_and_a', 'media_industry']	What to know about the landmark Warner Bros. Discovery sale
+17	2321	NULL	False	False	Variety	['media_rights', 'tv_distribution', 'international_sales']	Beta Film Secures Major Deals for Female-Led Dramas ‘Queen Silvia’ and ‘La Vida Barcelona’
+18	2173	NULL	False	False	Variety	['format_sales', 'unscripted_tv']	Banijay Dishes Up Italian Cooking Show ‘Cooking Grandmas,’ Starring Alessandro Borghese, at Mipcom (EXCLUSIVE)
+19	2349	NULL	False	False	The Hollywood Reporter	['tv_market', 'content_acquisition']	What’s Selling at MIPCOM: Spy Thrillers, Royal Romances and a Zulu Epic
+20	2278	NULL	False	False	Deadline	['international_sales', 'media_rights']	Buyers Move For German Crime Drama ‘SOKO’ As ZDF Studios Brings Classic & YA Series To Cannes
+21	2372	NULL	False	False	Variety	['media_merger', 'film_distribution', 'german_language_territories']	Why the Boss of Leonine, Germany’s Top Indie Film and TV Company, Is Backing Skydance: ‘David Ellison and Ynon Kreiz Are a Very Strong Team’
+22	2375	NULL	False	False	Variety	['format_sales', 'game_show', 'mipcom']	Good Formats Brings Two U.S. ‘El Rosco’ Pilots to Mipcom
+23	2410	NULL	False	False	Front Office Sports	['front_office', 'analytics']	NHL’s New Wave of GMs Are Built Different: ‘I Am In the Prediction Business’
+24	2373	NULL	False	False	Variety	['documentary', 'music_industry', 'mipcom']	Story of Jackson Brothers Jackie, Jermaine, Tito and Marlon to Be Told in New Documentary Launching at MIPCOM (EXCLUSIVE)
+25	470	NULL	False	False	Bloomberg	['ipo', 'investment', 'india_markets']	IPO Boom Fuels Wall Street’s India Bets Despite Risks
+26	1112	1	False	False	The Ringer	['college_football', 'playoff_picture', 'game_reaction']	Week 6 Reactions: Georgia Tops Alabama, Texas Trust Issues, Indiana’s Playoff Case, UCLA’s Rise, and More
+27	2309	NULL	False	False	Variety	['international_sales', 'co_production', 'scripted_tv']	Studiocanal Boards Pan-Asian Survival Thriller ‘kiDnap Game’ Starring Kentaro Sakaguchi and Lee Joon-gi (EXCLUSIVE)
+28	2406	NULL	False	False	Variety	['film_casting', 'film_production']	Ella Rumpf, Júlio Andrade, Ana Flávia Cavalcanti to Star in Locarno Winner Andrea Staka’s ‘Ibicaba: O Paraíso Prometido’ for MyMama Entertainment (EXCLUSIVE)
+29	1113	1	False	False	The Ringer	['college_football', 'game_reaction']	CFB Week 6 Live Reactions: Georgia-Alabama—Are These the Best Teams in the SEC?
+30	2351	NULL	False	False	The Hollywood Reporter	['box_office', 'documentary_distribution']	Gaza Doc ‘NAZA’ Surpasses $500K Without Distributor After Sparking Protests
+31	2411	1	False	True	Yahoo Sports College Football	['fan_commentary']	Monday ‘Dawg Bites Loves Hating The Barn
+32	866	1	False	True	AL.com Alabama Sports	['rankings', 'game_result', 'officiating']	College football TV schedule for Week 7 of 2026 season
+33	2395	1	False	True	Yahoo Sports College Football	['cfp_bracket', 'playoff_projections']	Playoff Predictor: Georgia, Alabama lead inevitable SEC domination of CFP field
+34	527	1	False	True	ESPN NBA	[]	LeBron on 10-point Sixers debut: Still adjusting, but 'the game is the game'
+35	877	1	False	True	Yahoo Sports College Football	['transfer_storyline', 'rivalry_game']	Former Tennessee running back will face Vols with Alabama
+36	2389	1	False	True	Yahoo Sports College Football	['rankings', 'power_ratings']	Where Alabama sits in ESPN FPI rankings following loss vs. Georgia
+37	865	1	False	True	Yahoo Sports College Football	['game_result', 'fan_conduct']	Georgia Bulldogs beat Crimson Tide in Tuscaloosa, fans throw trash as players leave field
+38	494	1	False	True	ESPN College Football	['player_discipline', 'coaching_comments']	DeBoer questions DB Lee's 'emotional maturity' on costly personal foul
+39	1101	1	False	True	Roll Bama Roll	['college_football_rankings', 'betting_lines']	Alabama Crimson Tide vs Tennessee Volunteers Opening Odds: Cover or Not?
+40	490	1	False	True	ESPN College Football	['game_result', 'coaching_comments']	Smart satisfied after Bulldogs 'scored enough points' to top Tide
+41	2385	1	False	True	RaceFans	['team_orders', 'pit_strategy']	Hamilton repeatedly urged Ferrari to let him past Leclerc after “hold position” order | Formula 1
+42	638	1	False	True	AL.com Alabama Sports	['cfp_projections', 'playoff_race']	Latest playoff projections for Alabama after the loss to Georgia
+43	634	1	False	True	AL.com Alabama Sports	['fan_conduct', 'game_recap']	What Alabama said about 'unacceptable behavior' from fans at Georgia game
+44	816	1	False	True	RaceFans	['championship_race', 'driver_standings']	How Antonelli can clinch the F1 world championship at the next race in Austin | Formula 1
+45	890	1	False	True	Yahoo Sports College Football	['coaching', 'team_culture', 'viral_moment']	Alabama’s Ha Ha Clinton-Dix Breaks Silence on Viral Kalen DeBoer-Dijon Lee Sideline Moment
+46	2347	1	False	True	Formula1.com	['race_strategy', 'driver_apology', 'championship_standings']	How Hamilton's call helped put Antonelli in reach of the title
+47	2374	NULL	False	False	Variety	[]	ITV Studios Revs Up Scripted Dramas and Format Deals Amid Media Arm Sale Process
+48	923	1	False	True	Yahoo Sports F1	['f1_fan_reaction', 'celebrity_attendance', 'race_promotion']	F1 fans think Kim Kardashian’s presence will give Lewis Hamilton a big Singapore GP boost
+49	2362	NULL	False	False	Variety	['criminal_trial', 'sexual_assault_charges']	Russell Brand’s Criminal Trial Begins in London as He Faces Rape and Sexual Assault Charges
+50	1307	NULL	False	False	Deadline	['reality_tv', 'domestic_violence_charges']	‘Below Deck’s Gael Cameron Speaks Out After S11 Drama & Domestic Violence Charges Against Ex
+51	2352	NULL	False	False	Variety	['film_sales', 'festival_competition']	José Maria Cabral on Tallinn-Bound ‘Sh*t Happens,’ Boarded by Latido Film Sales, ‘It’s About Class, Dependency and Power’
+52	487	1	False	True	ESPN College Football	['rankings', 'college_football_poll']	Georgia new No. 1 in AP poll; Texas falls to 7, Ducks go unranked
+53	2341	NULL	False	False	Deadline	['media_business', 'creator_economy', 'podcasting']	Marina Hyde Begins Her Post-Guardian Era With Goalhanger-Backed Creator Venture Always On
+54	643	1	False	True	AL.com Alabama Sports	['cfp_rankings', 'officiating']	Dinich lists CFP top 12, talks Tide's chances after no-call
+55	2378	NULL	False	False	Bloomberg	['middle_east_conflict', 'ukraine_russia', 'geopolitics']	Houthi-Saudi Attack; Zelenskyy on Russia Deal; More
+56	654	1	False	True	AL.com Alabama Sports	['media_rights', 'broadcast_schedule']	SEC announces final TV assignments for Oct. 17 football games
+57	2340	NULL	False	False	Bloomberg	['uk_budget', 'fiscal_policy', 'water_industry']	UK Chancellor Healey Must Find £35B Ahead of Budget, IFS Warns
+58	2311	NULL	False	False	Deadline	['k_pop', 'unscripted_tv', 'global_strategy']	How A+E Global Media Is Leveraging The “Extraordinary” Power Of K-Pop Stars
+59	2361	NULL	False	False	The Hollywood Reporter	['theatre', 'west_end_production']	Quentin Tarantino’s West End Debut ‘The Popinjay Cavalier’ Sets Launch Date at Phoenix Theatre
+60	1559	NULL	False	False	Sportico	['concussion_research', 'research_funding']	NCAA Won’t Commit to Future Concussion Research Funding
+61	511	1	False	True	ESPN F1	['formula_one', 'celebrity_appearance']	Kim Kardashian jokes about awkward Brundle snub
+62	2408	NULL	False	False	Deadline	['podcast', 'media_launch']	‘FREEAgent:’ Streetwear Pioneer Jeff Staple Among First Guests On Season Two Of Kenny Annan-Jonathan’s Podcast
+63	1092	NULL	False	False	Robb Report	['bourbon_release', 'product_launch']	Taste Test: Maker’s Mark Nailed Its First Mizunara-Finished Bourbon
+64	2308	NULL	False	False	Variety	['international_sales', 'licensing', 'scripted_tv']	Cineflix Rights Sells Nordic Blue Crime Hit ‘Hildur’ to Canal+ in France, Australia’s SBS in Multi-Territory Deal (EXCLUSIVE)
+65	2324	1	False	True	Yahoo Sports College Football	['cfb_game_recap', 'officiating_controversy']	Kirk Herbstreit Breaks Silence on Controversial Alabama-Georgia Ending
+66	899	1	False	True	Yahoo Sports College Football	['officiating_controversy', 'game_recap']	ESPN Analysts Make Major Statement About Controversial Georgia Football Win Over Alabama
+67	1091	NULL	False	False	Robb Report	['magazine_anniversary', 'luxury_goods']	Inside Robb Report’s 50th Anniversary Issue
+68	858	NULL	False	False	The Real Deal Miami	['real_estate_development', 'construction_market']	South Florida Dirt: Why it’s a “very difficult time to build”
+69	2277	NULL	False	False	Variety	['live_music', 'band_lineup']	The Beach Boys Play Nashville’s Ryman in What John Stamos Says ‘Could Be the Last Time I Stand Behind Mike’ Love in Concert
+70	663	1	False	True	AL.com Alabama Sports	['roster_move', 'free_agency']	Former Alabama defensive back Trevon Diggs elevated to Seattle Seahawks 53-man roster
+71	777	NULL	False	False	Front Office Sports	['broadcasting', 'clock_management']	It’s Time for NFL Networks to Hire ‘Clock Management’ Specialists
+72	738	1	False	True	The Race	['race_result', 'strategy', 'formula_one_season']	Verstappen breaks Singapore win drought while Hamilton nosedives
+73	916	1	False	True	Yahoo Sports F1	['championship_standings', 'race_result']	F1 Standings | Antonelli extends championship lead, as Hamilton suffers nightmare
+74	485	1	False	True	ESPN College Football	['week_six_review', 'coaching_hot_seat']	Can Texas bounce back? Will the Big 12 go sideways? Connelly on an eventful Week 6
+75	765	NULL	False	False	Variety	['merchandise_licensing', 'consumer_products']	‘KPop Demon Hunters’ Gets New Tech Collection at Target, Including Ramen-Themed Chargers, Soda Can Speaker, Pat Pat Light and More
+76	756	NULL	False	False	Variety	['film_sales', 'women_directors', 'china_cinema']	Box Office Boom for China’s Women Directors Feeds New Parallax Films Pickups From Shao Yihui, Yin Lichuan and Yang Lina (EXCLUSIVE)
+77	773	NULL	False	False	Deadline	['box_office', 'film_distribution']	Palme d’Or Prestige: ‘Fjord’ Tops Indie Openers, ‘Naza’ Eyes $500k Surge – Specialty Box Office
+78	2383	NULL	False	False	Deadline	['media_valuation', 'debt', 'media_business']	Evan Shapiro Pegs Skydance Value At Only $29B As His Media Universe Map Updates
+79	838	NULL	False	False	Billboard Business	['halftime_show', 'international_games', 'music_strategy']	Inside the Halftime Music Strategy For the NFL’s International Games: ‘The Biggest Challenge Is Expectation’
+80	774	NULL	False	False	Deadline	['box_office', 'theatrical_releases']	Theatrical Is Alive: YTD Domestic B.O. Surges Past $8 Billion, Two Months Sooner Than 2025
+81	2279	NULL	False	False	Deadline	['content_production', 'fast_channels']	‘A Haunting’ Revived At Radial Entertainment With Jupiter Pictures Producing: “We Are Focused On Where The Audience Is”
+82	772	NULL	False	False	Deadline	['film_festival', 'awards']	Bend Film Festival Prizes Go To ‘Hot Water,’ ‘Edward Said: Between Worlds,’ ‘Kikuyu Land,’ ‘The Lake’ & More
+83	1742	NULL	False	False	Variety	['box_office', 'film_distribution', 'anime']	Korea Box Office: Anime Feature ‘Chiikawa’ Edges Past ‘The Assassin(s)’ to Claim Weekend Crown
+84	2350	NULL	False	False	The Hollywood Reporter	['film_production', 'first_look']	Mirren Mack, CJ Beckford Hope to Find Themselves in Romantic Drama ‘Arthur & Clara’: Exclusive Austin First-Look Images
+85	776	NULL	False	False	Front Office Sports	['team_outlook', 'season_analysis']	John Harbaugh’s Giants Are Contenders, Even With a Tie in Washington
+86	1090	NULL	False	False	Robb Report	['wine', 'limited_release']	This Bordeaux-Style Wine Tells the Story of a Sicilian Legend
+87	734	1	False	True	The Race	['race_strategy', 'f1_results']	Our verdict on Hamilton's Singapore strategy failure
+88	912	1	False	True	Yahoo Sports F1	['driver_health', 'race_aftermath']	Lewis Hamilton unwell after Singapore race and apology to Ferrari
+89	880	NULL	False	False	Front Office Sports	['stadium_fines', 'upset_win']	Kentucky Will Pay LSU $500K SEC Field-Storming Fine
+90	645	1	False	True	AL.com Alabama Sports	['game_analysis', 'opinion']	Casagrande: Robbed but not stolen, the hard truth of Alabama’s brutal loss
+91	2320	NULL	False	False	Bloomberg	['stock_movers', 'markets']	Stock Movers: SK Hynix, Westpac, LIG (Podcast)
+92	640	1	False	True	AL.com Alabama Sports	['game_recap', 'coaching', 'sec']	Extra thoughts, notes from Alabama’s loss to Georgia in SEC clash
+93	736	1	False	True	The Race	['race_result', 'driver_performance']	Why Hamilton's Singapore GP really imploded
+94	1304	NULL	False	False	Variety	['film_festival', 'awards']	‘The Riverbank,’ ‘Elza’ Top Rio Film Festival Awards as ‘On Behalf of My Son,’ ‘The French Teacher’ and ‘London’ Scoop Key Prizes
+95	2303	NULL	False	False	Bloomberg	['markets', 'oil_prices']	FTSE 100 Live: European Stocks Poised to Rise as Oil Eases
+96	759	NULL	False	False	Variety	['film_financing', 'asian_cinema', 'co_production']	Sylvia Chang Backs Malaysian Grief Drama ‘One Fine Day,’ About a Family Undone by Their Daughter’s Murder, at Busan Asian Project Market
+97	2174	NULL	False	False	Variety	['series_renewal', 'tv_drama', 'streaming']	‘Heart of a Killer,’ Niv Sultan Medical Thriller From Sipur and North Road, Gets Second Season Order (EXCLUSIVE)
+98	482	NULL	False	False	Bloomberg	['m_and_a', 'bank_consolidation', 'takeover_bid']	Monte Paschi to Hold Monday Board Meeting on M&A Situation
+99	1256	NULL	False	False	Bloomberg	['water_quality', 'public_protest', 'mexico_local_government']	Thousands in Mexico’s Guadalajara Protest Over Water Quality
+100	1562	NULL	False	False	Variety	['box_office', 'film_distribution', 'horror_film']	China Box Office: ‘Resident Evil’ Dethrones ‘Traces of Justice’ to Claim Top Spot as Post-Holiday Market Cools
+101	647	1	False	True	AL.com Alabama Sports	['penalty', 'college_football', 'player_accountability']	Alabama reacts to Dijon Lee penalty ‘He wasn’t up to the standard'
+102	815	1	False	True	RaceFans	['race_data', 'pit_strategy']	2026 Singapore Grand Prix interactive data: lap charts, times and tyres | 2026 Singapore Grand Prix interactive data
+103	660	1	False	True	AL.com Alabama Sports	['injury', 'player_status']	Alabama’s Ryan Coleman-Williams returns after injury vs. Georgia
+104	766	NULL	False	False	Deadline	['theatre_casting', 'west_end_production']	Sacha Baron Cohen Confirmed To Star In Quentin Tarantino’s ‘The Popinjay Cavalier’ West End Stage Play With Dates & On Sale Window Announced
+105	2376	NULL	False	False	Bloomberg	['stock_movers', 'market_news']	Stock Movers: Hays, Cranswick, Hacksaw (Podcast)
+106	716	NULL	False	False	TechCrunch	['consumer_hardware', 'smart_home', 'product_launch']	Will the HomeView be Apple’s first smart home success?
+107	1054	NULL	False	False	Boat International	['yacht_listings']	Stephens Waring Design Yachts For Sale and Charter
+108	2307	NULL	False	False	Variety	['format_licensing', 'unscripted_tv']	TF1 Brings Hit Formats ‘Taskmaster,’ ‘Holey Moley’ to France as Part of Unscripted Push (EXCLUSIVE)
+109	1146	NULL	False	False	Complex	['promotions', 'consumer_finance']	Cash App Users Could Get Up to $2,500 This Month—Here’s Who Qualifies
+110	817	1	False	True	RaceFans	['pit_stop', 'team_error', 'race_strategy']	Hamilton apologises to Ferrari after failing to pit when they told him to | Formula 1
+111	898	1	False	True	Yahoo Sports College Football	['game_recap', 'coaching_change', 'podcast']	Most chaotic week yet? Oklahoma SHOCKS No. 1 Texas, Georgia Beats Bama + UCLA Stuns Oregon
+112	1308	NULL	False	False	Deadline	['government_advertising', 'court_order', 'taxpayer_funds']	Judge Orders Trump Administration To Stop Running Taxpayer Funded Ads That Promote POTUS
+113	1066	NULL	False	False	Boat International	['yacht_listings']	Fountaine Pajot Yachts Yachts For Sale and Charter
+114	1100	1	False	True	Roll Bama Roll	['officiating', 'game_analysis']	10 “so close” graphs from the Georgia game
+115	764	NULL	False	False	Variety	['film_distribution', 'horror_films', 'international_sales']	Thai Horror ‘Rinrada: The Influencer’ Scores Asia, Middle East Deals Around Screamfest Premiere (EXCLUSIVE)
+116	1309	NULL	False	False	Deadline	[]	Pat McAfee Joins ESPN’s In-Game Super Bowl LXI Coverage & Expands MNF Role
+117	779	NULL	False	False	Front Office Sports	['tribute', 'nfl_history']	Bears, Saints, Packers Pay Tribute to Mike Ditka
+118	2359	NULL	False	False	Bloomberg	['geopolitics', 'missile_defense', 'us_ukraine_relations']	Saudis: New Missiles Intercepted, US-Ukraine Rupture Risk, More
+119	1306	NULL	False	False	Variety	['film_premiere', 'film_festival', 'independent_film']	How Busan Title ‘Selvi’ Turns a Nurse’s Working Hours Into an Endurance Test
+120	2280	NULL	False	False	Deadline	[]	John Oliver Has A Message For His New Skydance Overlords
+121	1512	NULL	False	False	Complex	['commentary', 'capital_punishment']	Charlamagne Tha God Rips Decision to Livestream Fort Hood Shooter’s Execution
+122	814	1	False	True	RaceFans	['stewards_decision', 'overtaking']	Norris incorrectly believed Hamilton “would have to let me past” after turn one move | Formula 1
+123	641	1	False	True	AL.com Alabama Sports	['officiating', 'game_commentary']	Herbstreit’s, Fowler’s reaction to no-call says it all
+124	750	NULL	False	False	The Hollywood Reporter	['restaurant_industry', 'non_alcoholic_beverages', 'pricing']	Non-Alcoholic Drink Pairings Up Their Game (and their Prices) at L.A.’s Top Restaurants
+125	650	1	False	True	AL.com Alabama Sports	['injury_report', 'roster_status']	DeBoer shares injury updates for 3 Alabama players after Georgia loss
+126	2368	NULL	False	False	Bloomberg	['geopolitics', 'saudi_arabia', 'us_ukraine_relations']	More Attacks on Saudi, Zelenskyy Risks Trump Rupture, More
+127	646	1	False	True	AL.com Alabama Sports	['postgame_reaction', 'player_future']	What Kirby Smart said about Keelon Russell’s future, beating Alabama
+128	477	NULL	False	False	Bloomberg	['climate_policy', 'retirement', 'dc_redevelopment']	Weekend Law: Climate, Retirement & Trump's DC Makeover (Podcast)
+129	1114	NULL	False	False	The Ringer	['rugby', 'rule_change', 'sports_media']	Black Out: The Bledisloe Cup, a New Tackle Law, and Jason Kelce Playing Rugby
+130	2285	NULL	False	False	Skift	['travel_search', 'consumer_behavior']	India Is Now Skyscanner’s Biggest Market, and Nearly Half Its Searches Go Abroad
+131	642	1	False	True	AL.com Alabama Sports	['college_football_rankings', 'game_recap']	Did Georgia loss hurt Alabama in latest AP top 25, coaches poll rankings?
+132	929	1	False	True	Yahoo Sports F1	['celebrity_travel', 'f1_fandom']	Kim Kardashian's private jet makes 6,700-mile journey for Lewis Hamilton's Singapore GP
+133	762	NULL	False	False	Variety	['film_project', 'asian_cinema', 'film_financing']	Reza Rahadian Turns His Grandmother’s Decades in Exile Into Busan Asian Project Market Drama ‘Casparina’
+134	648	1	False	True	AL.com Alabama Sports	['college_football', 'player_reaction']	‘Definitely hurts’: Alabama players react to loss to Georgia
+135	718	NULL	False	False	TechCrunch	['tech_conference', 'ticket_sales']	48 hours to TechCrunch Disrupt 2026 — hear directly from the people building what’s next
+136	659	1	False	True	AL.com Alabama Sports	['coaching_decision', 'game_strategy']	DeBoer on decision to go for TD at end of half vs. Georgia
+137	508	1	False	True	ESPN F1	['race_strategy', 'pit_call', 'race_result']	Hamilton: Strategy call a 'painful lesson'
+138	2338	NULL	False	False	Bloomberg	['geopolitics', 'middle_east_conflict', 'trade_policy']	Houthi Attacks Threaten Wider War, EU's China Car Cap, More
+139	746	NULL	False	False	The Hollywood Reporter	['celebrity_dispute']	Kelly Clarkson Responds After New York Store Denies She Got the ‘Pretty Woman’ Treatment: “You’re a Liar”
+140	628	NULL	False	False	Semafor Business	['media_coverage', 'data_centers']	Fox stays positive on data centers even as public backlash grows
+141	2312	NULL	False	False	Deadline	['co_production', 'international_sales', 'scripted_tv']	Steven Moffat’s ‘Number 10’ Finds European Co-Producer
+142	757	NULL	False	False	Variety	['film_project', 'unregulated_mining', 'indigenous_culture']	Locarno Title ‘Rapture’ Director Dominic Sangma Confronts Unregulated Stone Mining in Busan Asian Project Market Drama ‘Veil of Dust’
+143	752	NULL	False	False	The Hollywood Reporter	['tattoo_artistry', 'television_production']	You Want Those Tattoos From ‘The Bear’? Call Benny Shields
+144	2171	NULL	False	False	The Hollywood Reporter	['media_acquisition', 'television']	John Oliver Says ‘Last Week Tonight’ Is “Never Gonna Change” Following Skydance Acquisition
+145	748	NULL	False	False	The Hollywood Reporter	['film_release', 'movie_promotion']	Sacha Baron Cohen and 300 Ali G Look-Alikes Descend on London Ahead of New Movie ‘Who Iz I?’
+146	2177	1	False	True	Yahoo Sports F1	['race_incident', 'driver_frustration']	Hamilton frustrated as he gets stuck behind Leclerc at the Singapore Grand Prix
+147	1153	NULL	False	False	Complex	['celebrity_politics', 'presidential_run']	Soulja Boy Teases Running for President in 2028
+148	2304	NULL	False	False	Bloomberg	['airport_attack', 'us_ukraine_relations']	4th Saudi Airport Bombing, US-Ukraine Collision Course, More
+149	656	1	False	True	AL.com Alabama Sports	['fan_conduct', 'postgame_reaction']	Alabama fans throw garbage on field, at Georgia players after loss
+150	471	NULL	False	False	Bloomberg	['geopolitics', 'energy_ceasefire']	Trump: Ukraine-Russia Energy Ceasefire, Saudi Airport Hit Again
+151	661	1	False	True	AL.com Alabama Sports	['college_football', 'rivalry_game']	Rewinding Georgia’s close win over Alabama
+152	2371	NULL	False	False	The Hollywood Reporter	['documentary', 'film_festivals', 'sumo']	‘Sumo: Spirit Weighs Nothing’ Takes Us Inside Rituals and Sacrifice to Make the “Normal Dudes” of Japan’s Ancient Sport Relatable (Exclusive Clip and Chat)
+153	747	NULL	False	False	The Hollywood Reporter	['tv_pilot', 'streaming']	Jake Johnson Teases New Project With ‘New Girl’ Co-Star Damon Wayans Jr.
+154	1103	1	False	True	Roll Bama Roll	['game_recap', 'offense']	Postgame Thread: Alabama drops close one to Georgia
+155	760	NULL	False	False	Variety	['film_projects', 'film_festivals']	Polygamy, Ghosts and Grief Collide in ‘Marlina’ Director Mouly Surya’s Busan Asian Project Market Drama ‘The Wife Who Can See Dead People (Or Jinn)’
+156	473	NULL	False	False	Bloomberg	['news_roundup']	McKinsey, Firmus, Jacinda Ardern: Australia Briefing
+157	479	NULL	False	False	Bloomberg	['ceasefire', 'geopolitics']	Trump: Russia, Ukraine Agree to Energy Ceasefire, Houthi Attacks
+158	1110	NULL	False	False	The Ringer	['game_recap', 'entertainment_crossover']	Drake Puts On a Show, and the Pats Win, With James White
+159	651	1	False	True	AL.com Alabama Sports	['coaching_comments', 'rivalry']	‘It wasn’t about Alabama.’ Kirby Smart downplays meaning of rare Tuscaloosa win
+160	1102	1	False	True	Roll Bama Roll	['game_analysis', 'turnovers']	Alabama vs Georgia: First Half Impressions
+161	2310	NULL	False	False	Deadline	['media_rights', 'documentary', 'licensing']	Prime Video Swoops For Princess Diana Series With Unheard Audio: Streamer Will Launch As ‘Diana: Her Secret Confessions’
+162	476	NULL	False	False	Bloomberg	['armed_conflict', 'energy_ceasefire', 'airport_attacks']	Houthis Renew Airport Attacks, Ukraine Open to Energy Ceasefire
+163	769	NULL	False	False	Deadline	['film_production', 'stunt_coordination', 'movie_release']	Noah Centineo Credits ‘Street Fighter’ Stunt Coordinator With Bringing Game’s “Specific Fighting Style” To Screen: “Insane Fights”
+164	721	NULL	False	False	TechCrunch	['consumer_products', 'startups', 'curly_hair_care']	Dawn Myers is making it easier to style, detangle, and care for curly hair
+165	2377	NULL	False	False	Bloomberg	['middle_east_conflict', 'geopolitics']	Bloomberg Daybreak: Houthi Saudi Strike (Podcast)
+166	2367	NULL	False	False	Bloomberg	['currency', 'central_bank_intervention']	India’s Big Rupee Defense Draws a Line Under the Currency For Now
+167	1094	NULL	False	False	Robb Report	['hotel_development', 'architecture', 'venice']	Inside the Orient Express Venezia, a Maximalist Fever Dream in Venice
+168	657	1	False	True	AL.com Alabama Sports	['game_analysis', 'season_record']	3 takeaways from Alabama’s home loss to Georgia
+169	771	NULL	False	False	Deadline	['animated_series', 'streaming_original', 'book_adaptation']	‘Artemis Fowl’ Animated Series Greenlit At Disney Channel, Disney+ With Author Eoin Colfer As EP — NYCC
+170	475	NULL	False	False	Bloomberg	['ai_spending', 'cfo_outlook', 'smart_glasses']	CFOs Tighten the Purse Strings on AI (WK, WRBY, MTCH, PICS)
+171	655	1	False	True	AL.com Alabama Sports	['officiating', 'postgame_reaction']	Alabama legend after loss to Georgia: ‘We got f---ed by SEC officiating’
+172	2172	NULL	False	False	The Hollywood Reporter	['tv_reunion', 'event_recap']	’30 Rock’ Reunion: Here’s What Happened Inside the Weirdly Stealth Event
+173	715	NULL	False	False	TechCrunch	['conference', 'venture_capital']	The investor’s guide to TechCrunch Disrupt 2026: Everything you need to know
+174	722	NULL	False	False	TechCrunch	['healthcare_startup', 'sepsis', 'medical_device']	Efferon wants to eradicate the devastating toll of pediatric sepsis
+175	1143	NULL	False	False	Complex	['film_casting', 'horror', 'movie_production']	LaKeith Stanfield to Star In New Blumhouse Horror Film 'Molepeople'
+176	1575	NULL	False	False	Yahoo Sports NFL	['fantasy_football', 'nfl_recap']	Fantasy football week 5 recap - we have it figured out!
+177	1018	NULL	False	False	Yahoo Sports NFL	['game_management', 'nfl_week_recap']	NFL Week 5 Winners and Losers: Commanders have game-management gaffe for the ages in tie to Giants
+178	653	1	False	True	AL.com Alabama Sports	['officiating', 'game_controversy', 'alumni_reaction']	Former Alabama players sound off on no-call in Georgia loss
+179	768	NULL	False	False	Deadline	['film_portrayal', 'celebrity_interview']	Robert Pattinson Approached Chris Hansen Portrayal In ‘Primetime’ As “A Fan”: “I Was Trying To Make Him Cool”
+180	914	1	False	True	Yahoo Sports F1	['race_calendar', 'motorsport_expansion']	Lewis Hamilton celebrates breakthrough in push for African Grand Prix
+181	1486	NULL	False	False	Boat International	['construction', 'superyacht_industry']	Construction firm Strategic Builds brings superyacht standards ashore
+182	673	1	False	True	AL.com Alabama Sports	['injury_report', 'player_status']	Pete Thamel updates Alabama’s Josh Ford status, SEC injuries
+183	1096	NULL	False	False	Robb Report	['private_members_clubs', 'travel_guide']	The History Behind London’s Private Members’ Clubs—and the Ones You Can’t Miss
+184	1501	NULL	False	False	The Ringer	['podcast', 'game_recap']	Ravens-Falcons Reactions, Week 5 Recap, and Guess the Lines Week 6 With Bill Simmons and Cousin Sal
+185	1305	NULL	False	False	Variety	['film_industry', 'actor_profile', 'screen_adaptation']	‘Bedford Park’ Star and Busan Juror Moon Choi on Locking Away Her Trophies and Plotting a Screen Version of a Molière-Winning Play
+186	860	NULL	False	False	The Real Deal Miami	['hotel_investment', 'hospitality_development']	Dutch hospitality firm dives into South Beach, dropping $50M-plus on first US hotel investment
+187	1122	NULL	False	False	Complex	['music_industry', 'compensation']	Lance Bass Says NYSYC Were Paid $35 Per Day at Height of Their Fame
+188	1121	NULL	False	False	Complex	['music_industry', 'celebrity_news']	Sean ‘Diddy’ Combs’ Son Says Father Refused to ‘Sugarcoat’ the Music Industry
+189	1145	NULL	False	False	Complex	['celebrity_profile', 'aggregation']	Presley Gerber: Find The Latest Presley Gerber Stories, News & Features
+190	758	NULL	False	False	Variety	['film_review', 'indonesia', 'political_activism']	‘The Sea Speaks His Name’ Review: Absorbing Indonesian Political Thriller Is an Ode to Disappeared Activists
+191	2305	NULL	False	False	Bloomberg	['airport_security', 'middle_east_news']	Bloomberg Daybreak Europe: 4th Saudi Airport Bombing (Podcast)
+192	1127	NULL	False	False	The Hollywood Reporter	['television', 'public_backlash']	Shane Gillis’ ‘SNL’ Monologue Was Wrong Place, Wrong Time (Again)
+193	652	1	False	True	AL.com Alabama Sports	['postgame_reaction', 'injuries', 'officiating']	DeBoer talks refs, injuries and more after Alabama loses to Georgia
+194	2339	NULL	False	False	Bloomberg	['geopolitics', 'middle_east_conflict']	Houthi’s Ramp Up Strikes With Another Saudi Arabia Attack
+195	778	NULL	False	False	Front Office Sports	['sports_ownership', 'government_transparency']	U.K. Prime Minister Vows Transparency Over His Manchester City Meetings
+196	924	1	False	True	Yahoo Sports F1	['f1_profile', 'driver_family']	Who Is Charles Leclerc's Brother Arthur? Ferrari F1 Career, Personal Life, Relationship, and More
+197	1161	NULL	False	False	Complex	['film_franchise', 'horror_movies']	The Next 'Paranormal Activity' Returns to the Home Where Series Started
+198	2353	NULL	False	False	Variety	['ai_in_film', 'actor_interview']	Isabelle Huppert Says AI Hasn’t Replaced Her Yet: ‘It Really Is Me Acting’
+199	1104	1	False	True	Roll Bama Roll	['college_football', 'game_preview']	2026 Alabama Crimson Tide vs Georgia Bulldogs Game Thread
+200	2185	NULL	False	False	Complex	['celebrity_feud', 'political_controversy']	Dolly Parton's Sister Calls Out Marsha Blackburn Over '9 to 5' Rally Walkout
+201	770	NULL	False	False	Deadline	['television_scheduling', 'spinoff', 'broadcast_network']	‘The Rookie’ Season 9 & Spinoff ‘North’ Get Premiere Dates, Teaser & Guest Stars As ABC Sets ‘Rookie’ Block On Wednesday
+202	862	NULL	False	False	The Real Deal Miami	['commercial_real_estate', 'health_care_expansion', 'acquisition']	Baptist Health buys Coral Gables office building for $39M as region’s health care heavyweights compete for space
+203	854	NULL	False	False	Hotel Dive	['hotel_industry', 'm_and_a', 'hotel_development']	Lodging Lowdown: IHG names global sales leader, Series by Marriott expands
+204	1563	NULL	False	False	Variety	['media_ownership', 'late_night_tv']	John Oliver Declares Himself ‘Happy to Be Part of the Skydance Family’ and Vows to ‘Never Change’
+205	649	1	False	True	AL.com Alabama Sports	['officiating', 'game_controversy', 'coaching']	Goodman: Alabama’s DeBoer lost his mind, but so did the refs
+206	775	NULL	False	False	Deadline	['biopic', 'film_production']	James Stewart’s Daughter Praises KJ Apa For “Bringing Him To Life” In ‘Jimmy’ Biopic: “It Was Eerie”
+207	1093	NULL	False	False	Robb Report	['automotive', 'branding']	All the Great Car Names Have Been Taken
+208	667	1	False	True	AL.com Alabama Sports	['coaching_interview', 'quarterback_development']	DeBoer on Russell and man he credits for run game
+209	478	NULL	False	False	Bloomberg	['ceasefire', 'military_conflict']	Zelenskyy Disputes Trump Ceasefire Claim, Houthi Airport Attacks
+210	1109	NULL	False	False	The Ringer	['film_interview', 'filmmaking']	Danny Boyle on Depicting Murdoch, AI, Bond, and ‘28 Years Later’
+211	1105	1	False	True	Roll Bama Roll	['game_preview', 'viewing_guide']	Wake Up! Week 6 Viewing Guide and Morning Open Thread
+212	675	1	False	True	AL.com Alabama Sports	['game_preview', 'rivalry']	3 keys to victory for Alabama in crucial Georgia game
+213	1059	NULL	False	False	Boat International	['yachting']	Wajer 77
+214	761	NULL	False	False	Variety	['awards_buzz', 'film_release']	Andrew Garfield Reacts to Oscar Buzz as ‘Artificial’ Gets Resounding London Reception: ‘So Flattered That Anyone Is Going to See This Film in the First Place’
+215	709	NULL	False	False	Sportico	['team_valuation', 'media_rights']	WNBA Finals Pairs League’s Most and Least Valuable Teams
+216	827	NULL	False	False	Skift	['tourism', 'geopolitics', 'travel_costs']	The War Is Changing the Economics of Saudi Tourism
+217	483	NULL	False	False	Bloomberg	['airport_attack', 'ukraine_politics']	12 Dead in Saudi Airport Attack, Trump Wants New Ukraine Leader
+218	671	1	False	True	AL.com Alabama Sports	['quarterback_play', 'player_evaluation']	Could Keelon Russell become greatest quarterback in Alabama history?
+219	1510	NULL	False	False	Complex	['health_update', 'celebrity_news']	TLC's Chilli Gives Update on T-Boz's Sickle Cell: ‘I’m Going to Continue to Hold It Down’
+220	1125	NULL	False	False	Complex	['celebrity_news', 'public_backlash']	Anne Hathaway Faces Fresh Criticism Over Alleged Treatment of Hollywood Hairstylist
+221	629	NULL	False	False	Semafor Business	['data_breach', 'election_campaign', 'media_relations']	Hack reveals Netanyahu campaign's media ties
+222	481	NULL	False	False	Bloomberg	['geopolitics', 'airport_security']	Houthis Issue New Airport Attack Threats, Trump Slams Zelenskyy
+223	935	1	False	True	Yahoo Sports F1	['track_design', 'race_quality']	Lewis Hamilton calls for Singapore track changes: “Would have been the most boring race without rain”
+224	666	1	False	True	AL.com Alabama Sports	['pregame_show', 'college_football_media']	Saban, Young get physical with McAfee over Alabama pick
+225	474	NULL	False	False	Bloomberg	['regional_conflict', 'airport_attacks']	Houthi Attacks on Saudi Airports Raise Risk of Escalation
+226	754	NULL	False	False	The Hollywood Reporter	['streaming_deal', 'film_adaptation']	R.L. Stine’s ‘The Babysitter’ Adaptation Coming to Tubi in 2027 (Exclusive)
+227	861	NULL	False	False	The Real Deal Miami	['hotel_development', 'real_estate_financing']	Historic Tides Hotel to reopen under Safe Harbor’s ownership with $45M mortgage
+228	678	1	False	True	AL.com Alabama Sports	['college_football', 'weather_disruption']	Hurricane Isaias forces President Trump to change plans for Alabama-Georgia football game
+229	767	NULL	False	False	Deadline	['film_performance', 'movie_release']	‘Artificial’s Ike Barinholtz Teases What Makes His “Menacing” Elon Musk Performance “A Little Ridiculous”
+230	821	1	False	True	RaceFans	['f1_qualifying', 'set_up_changes']	Hamilton admits set-up change spoiled car balance after missing out on pole position | Formula 1
+231	668	1	False	True	AL.com Alabama Sports	['pregame_show', 'coaching_interview']	Kalen DeBoer responds to Pat McAfee’s ‘loaded’ question
+232	480	NULL	False	False	Bloomberg	['podcast', 'aviation_incident']	Bloomberg This Weekend: Saudi Airport Incident (Podcast)
+233	755	NULL	False	False	The Hollywood Reporter	['film_career', 'awards']	Javier Bardem on Declining ‘Skyfall’ Role, Pitching to Sam Mendes: “What If He Wants to Have Sex With Mr. Bond?”
+234	728	NULL	False	False	TechCrunch	['m_and_a', 'developer_platform']	Cloudflare acquires Deno to improve its Workers programming model
+235	751	NULL	False	False	The Hollywood Reporter	['television_casting', 'horror_adaptation']	‘Carrie’ Star Samantha Sloyan Finds the Love Inside Horror’s Most Nefarious Mother
+236	727	NULL	False	False	TechCrunch	['fuel_cells', 'data_center_power', 'startup_funding']	Petra Power looks to modernize energy for data centers and defense vehicles
+237	1144	NULL	False	False	Complex	['film_casting', 'biopic', 'public_reaction']	Damson Idris’ First Look as Miles Davis Sparks Backlash Over Film’s Love Story
+238	1135	NULL	False	False	Complex	['merchandise']	Uprisers | UPRS LA Rise Black T-Shirt | T-Shirts
+239	484	NULL	False	False	Bloomberg	['emerging_markets', 'eurozone', 'markets']	What’s Happening in EM: Resilience to Eurozone Fears (Podcast)
+240	826	NULL	False	False	Skift	['ai_adoption', 'travel_distribution', 'bookings']	Travel AI’s Prove-It Phase, Visibility, and the Booking Gap
+241	720	NULL	False	False	TechCrunch	['autonomous_vehicles', 'trucking_regulation']	TechCrunch Mobility: A roadblock clears for self-driving trucks
+242	1120	NULL	False	False	Complex	['creator_economy', 'equity_stake', 'subscription_platform']	Megan Fox Announces Paid Content Subscription, Takes Ownership Stake in OnlyFans Competitor Subs
+243	726	NULL	False	False	TechCrunch	['m_and_a', 'acquihire', 'ai_podcasts']	Apple discloses deal to hire team and license tech from personalized podcast startup Huxe
+244	719	NULL	False	False	TechCrunch	['data_centers', 'ai_industry', 'public_relations']	Can the AI industry persuade data center opponents by getting rid of NDAs?
+245	791	NULL	False	False	Front Office Sports	['stadium_financing', 'ballpark_development']	Royals $3 Billion Ballpark Development Gets Key Approval
+246	1142	NULL	False	False	Complex	['kpop', 'anniversary', 'music_release']	Girls' Generation Reunites for 2027 Seasons Greetings Ahead of 20th Anniversary
+247	1149	NULL	False	False	Complex	['wnba', 'player_safety', 'public_statement']	Caitlin Clark Blasts Attacks on Kelsey Mitchell: 'That's Not Something I Stand For'
+248	859	NULL	False	False	The Real Deal Miami	['casino_development', 'real_estate', 'redevelopment']	Billionaire Jeffrey Soffer puts chips on the table with plans for Big Easy Casino redevelopment
+249	1053	NULL	False	False	Boat International	['yacht_build', 'luxury_boats']	First look inside first unit of ISA Yachts 40m Viper 130 Fast Naan
+250	1116	NULL	False	False	Tubefilter	['executive_hire', 'film_studio', 'creator_economy']	Hollywood’s creator obsession continues as Sony hires YouTube exec to lead horror label
+251	1130	NULL	False	False	Complex	['music_performance', 'presidential_pardon']	Boosie Badazz Performs “Set It Off” in Front of the White House Amid Presidential Pardon Request
+252	679	1	False	True	AL.com Alabama Sports	['college_football', 'weather_disruption']	Update: How Hurricane Isaias is affecting Georgia vs. Alabama Kalshi prediction markets
+253	782	NULL	False	False	Front Office Sports	['coaching', 'college_football']	Belichick, UNC Score Biggest Win Yet After Rocky Offseason
+254	1140	NULL	False	False	Complex	['celebrity_news']	sabrina carpente
+255	845	NULL	False	False	Billboard Business	[]	Rawayana Unveils New Management Team Led by Carlos Salas at Brocoli Records: ‘We’ve Grown Together’
+256	781	NULL	False	False	Front Office Sports	['womens_soccer', 'world_cup_preparation']	USWNT Gets a Measuring Stick Ahead of the World Cup
+257	852	NULL	False	False	Hotel Dive	['m_and_a', 'hotel_sale', 'shareholder_dispute']	Braemar advances Ashford spinout with $372M Four Seasons sale
+258	1156	NULL	False	False	Complex	['album_anniversary', 'hip_hop']	Lloyd Banks Celebrates 20 Years of Sophomore Album 'Rotten Apple': 'Time Flies!!'
+259	717	NULL	False	False	TechCrunch	['streaming_tv', 'entertainment_industry']	Aaron Sorkin’s ‘Social Reckoning’ is off to a weak start
+260	1141	NULL	False	False	Complex	['documentary', 'music_media', 'release_timeline']	Cole Bennett Gives Update on Chief Keef Documentary, Says It Will Arrive Next Year
+261	835	NULL	False	False	Axios Miami	['gentrification', 'public_art', 'urban_development']	Local artists' bus stop ad challenges Miami's development, gentrification
+262	848	NULL	False	False	Bisnow South Florida	['hotel_development', 'airport_real_estate']	Stephen Ross, Jeffrey Soffer Scrap Plans For Miami Airport Hotel Project
+263	753	NULL	False	False	The Hollywood Reporter	['box_office', 'film_release']	‘Social Reckoning’ Goes Dark With $5.5M as ‘Other Mommy’ Delivers at Box Office
+264	729	NULL	False	False	TechCrunch	['conference', 'startups']	3 days to TechCrunch Disrupt 2026: Meet the startups before they hit mainstream
+265	677	1	False	True	AL.com Alabama Sports	['weather', 'broadcast_appearance']	James Spann will appear on College Gameday before Alabama-Georgia
+266	710	NULL	False	False	Sportico	['executive_hire', 'sports_business', 'sponsorship']	Sportico Transactions: Moves and Mergers Roundup for Oct. 9
+267	1063	NULL	False	False	Boat International	['yacht_listings']	Azimut 78 Fly
+268	1150	NULL	False	False	Complex	['record_attempt', 'fan_events', 'pop_culture']	'Spider-Man' Fans Fall Just Short of Breaking Guinness World Record at NYCC
+269	1433	NULL	False	False	The Real Deal Miami	['real_estate_financing', 'condo_development']	David Martin, partners score $507M loan for South Beach condo tower
+270	1133	NULL	False	False	Complex	['real_estate', 'celebrity_news']	Tony Parker’s Insane French Chateau Includes a Nightclub
+271	847	NULL	False	False	Billboard Business	['live_touring', 'music_industry']	How Live Nation’s Hans Schafer Redefined Latin Touring’s Global Potential: ‘It’s Not One-Size-Fits-All’
+272	472	NULL	False	False	Bloomberg	['semiconductors', 'chip_design', 'manufacturing']	Musk Says Goal Is to Speed Up Chip-Design Iteration Process
+273	1106	1	False	True	Roll Bama Roll	['college_football', 'game_preview']	Alabama Football vs Georgia 2026 Preview: Q&A with Dawg Sports
+274	1147	NULL	False	False	Complex	['health', 'leukemia', 'celebrity_health']	Nivea Says She Knew She'd 'Get Through' Leukemia Fight
+275	784	NULL	False	False	Front Office Sports	['player_health', 'college_hockey']	ASU Hockey Home Opener Marred by Ongoing Fallout From Player’s Collapse
+276	1134	NULL	False	False	Complex	['racism', 'tennis']	Coco Gauff Gets Support From Tennis Legends After Racist Attacks: ‘It’s Really Disturbing’
+277	1095	NULL	False	False	Robb Report	['menswear', 'fashion']	The Soft Power of the Modern Corduroy Suit
+278	1123	NULL	False	False	Complex	['celebrity_news', 'public_discourse']	Charlamagne Tells EJ Johnson to Leave Rihanna Alone: 'There's Levels to This Queen Stuff'
+279	1124	NULL	False	False	Complex	['tour_cancellation', 'legal_proceedings']	Usher and Chris Brown Cancel Tour Dates Ahead of Brown's London Sentencing
+280	787	NULL	False	False	Front Office Sports	['womens_golf', 'sponsorship', 'investment']	Rose Zhang on Investing in Golf’s Future
+281	829	NULL	False	False	Skift	['labor_dispute', 'hotel_industry']	Chicago Hotel Strike Hits Marriott and Hilton Hotels During Marathon Weekend
+282	1087	1	False	True	Liberty Ballers	['preseason', 'starting_lineup']	Watch highlights of Sixers new starting lineup, LeBron James’ preseason debut and more vs. Nets
+283	735	NULL	False	False	The Race	['f1_qualifying', 'driver_performance']	Winners and losers from Singapore GP 2026 F1 qualifying
+284	836	NULL	False	False	Axios Miami	['arts_funding', 'artist_residency', 'museums']	Vizcaya Museum and Gardens launches new artist residency, studio
+285	1108	1	False	True	Roll Bama Roll	['exhibition_game', 'college_basketball']	Crimson Tide Rolls Furman 111-93
+286	1107	1	False	True	Roll Bama Roll	['college_football_preview', 'weather']	Jumbo Package: Alabama football vs Georgia previews and predictions
+287	844	NULL	False	False	Billboard Business	['executive_hires', 'music_industry', 'leadership_changes']	Executive Turntable: Dasha Smith Named COO of CAA, Warner Music MENA Expands Leadership
+288	1126	NULL	False	False	Complex	['celebrity_news', 'collaboration']	Elizabeth Hurley on Her 'Unlikely Pairing' With Billy Ray Cyrus: 'We're Actually Like Twins'
+289	833	NULL	False	False	Skift	['hotel_recovery', 'leisure_travel', 'corporate_travel']	Accor’s Gulf Hotel Recovery Is A Tale Of Two Markets
+290	680	1	False	True	AL.com Alabama Sports	['reader_quiz']	DC or D.C.: Former Alabama defensive coordinator or senator? Play our game!
+291	712	NULL	False	False	Sportico	['franchise_valuation', 'team_valuations']	NBA Franchise Valuations Ranking List: From Warriors to Grizzlies
+292	713	NULL	False	False	Sportico	['franchise_valuation', 'team_valuations']	NBA Valuations 2026: Warriors Lead at $14.5B, Average up 21%
+293	1162	NULL	False	False	Complex	['music_release', 'hip_hop']	Tobe Nwigwe Bridges the Gap With New Album and High-Energy Busta Rhymes Collab
+294	1128	NULL	False	False	Complex	['real_estate', 'celebrity_news']	Dolly Parton’s Former L.A. Home Lists for $8M — But It Looks Nothing Like She Left It
+295	1058	NULL	False	False	Boat International	['yacht_review']	Sunreef 80 Power
+296	842	NULL	False	False	Billboard Business	['music_industry_events', 'calendar']	Billboard’s Music Industry Events Calendar
+297	1152	NULL	False	False	Complex	['nobel_prize', 'public_statement']	Donald Trump Says He Deserves Eight Nobel Peace Prizes After Dissing This Year's Winner
+298	1098	NULL	False	False	Robb Report	['whiskey', 'product_launch']	Jefferson’s Gave Its Core Whiskeys a Serious Upgrade
+299	780	NULL	False	False	Front Office Sports	['player_career', 'nfl_comeback']	Deshaun Watson’s Revived Play Raises Questions About What’s Next
+300	1139	NULL	False	False	Complex	['local_policing']	Savannah Police Department: Find The Latest Savannah Police Department Stories, News & Features
+301	857	NULL	False	False	The Real Deal Miami	['health_care_real_estate', 'commercial_real_estate']	Inside Broward County’s battle for health care real estate
+302	1131	NULL	False	False	Complex	['celebrity_news', 'legal']	Fetty Wap Reflects on Being 'Selfish' During Time of His Arrest
+303	1006	NULL	False	False	Yahoo Sports NBA	['family', 'personal_milestone']	Steph Curry’s reaction at mom Sonya’s surprise wedding says it all
+304	1158	NULL	False	False	Complex	['album_reissue', 'hip_hop']	Main Source Drops Ultimate Collectors Edition of 1991 Debut Album 'Breaking Atoms'
+305	631	NULL	False	False	Semafor Business	['corporate_breakup', 'industrial_conglomerate', 'executive_leadership']	Inside the Breakup of an American Industrial Giant
+306	1155	NULL	False	False	Complex	['colorism', 'public_response']	Gilbert Arenas Pushes Back on Colorism Accusation: ‘Everybody Got Color’
+307	630	NULL	False	False	Semafor Business	['journalism_ethics', 'media_corrections']	ABC News offers contradictory explanation for vanishing Anduril story
+308	1111	NULL	False	False	The Ringer	['baseball_reform', 'sports_commentary']	Dak, Purdy, Skubal, and the Plan to Fix Baseball
+309	1160	NULL	False	False	Complex	['casting', 'television']	Nicolas Cage Seemingly Prematurely Announces 'True Detective' Season 5 Casting
+310	856	NULL	False	False	The Real Deal Miami	['real_estate', 'hotel_development']	Michael Stern’s JDS Dolce & Gabbana supertall site “in play”
+311	1138	NULL	False	False	Complex	['celebrity_news', 'relationships']	Anuel AA Says He's 'Not a Player' as He Asks Karol G to 'Unblock' Him
+312	1148	NULL	False	False	Complex	['missing_person', 'family']	Woah Vicky Says Her Mother Has Been Found After Being Missing for Two Weeks
+313	846	NULL	False	False	Billboard Business	['music_industry', 'executive_recognition']	Latin Power Players: Billboard’s 2026 List Revealed
+314	1320	1	False	False	Sportico	['prediction_markets', 'litigation']	NFL Escalates Prediction Market Frustrations to Supreme Court
+315	1157	NULL	False	False	Complex	['celebrity_interview', 'anime']	Sexyy Red Is Just as Confused About ‘Naruto’ as We Are
+316	832	NULL	False	False	Skift	['airline_earnings', 'fuel_costs', 'guidance_cut']	Delta Air Lines Expects to Absorb $6 Billion Increase in Fuel Costs, Lowers 2026 Profit Outlook
+317	828	NULL	False	False	Skift	['tourism_policy', 'foreign_arrivals']	India’s Foreign Arrivals Are Falling — but the 2047 Tourism Target Is Now 100 Million
+318	843	NULL	False	False	Billboard Business	['music_marketing', 'album_release']	How Tinashe Scored the Biggest Album of Her Career With ‘Popstar’
+319	1159	NULL	False	False	Complex	['concert_cancellation', 'public_safety']	Canceled Ella Langley Concert Had 'No Credible Threat,' Says Tulsa Police
+320	1136	NULL	False	False	Complex	['automotive']	Rivian: Find The Latest Rivian Stories, News & Features
+321	1118	NULL	False	False	Complex	['celebrity_feud', 'public_statement']	Jay-Z Addresses Kanye West's Chris Martin Betrayal Comments: 'We Don't Own People'
+322	1483	NULL	False	False	Boat International	['sailing', 'yachting_events']	Taking on Les Voiles de Saint-Tropez: A sailing novice’s view from the start line
+323	1431	NULL	False	False	The Real Deal Miami	['real_estate', 'beachfront_development', 'zoning']	Hollywood clears path for beachfront towers amid resident pushback
+324	1151	NULL	False	False	Complex	['convention_panel', 'event_recap']	Everything We Learned During the BlumFest Panel at NYCC 2026
+325	855	NULL	False	False	The Real Deal Miami	['construction_accident', 'real_estate_development']	BREAKING: Construction accident at Witkoff’s Ocean Terrace
+326	1099	NULL	False	False	Robb Report	['real_estate', 'celebrity_property', 'price_cut']	Red Hot Chili Peppers Bassist Flea Relisted His Offbeat L.A.-Area Compound for $5.8 Million
+327	788	NULL	False	False	Front Office Sports	['m_and_a', 'club_ownership']	Everton Weighs Sale Less Than Two Years After Friedkin Group Takeover
+328	830	NULL	False	False	Skift	['airline_revenue', 'fare_pricing', 'fuel_costs']	Delta CEO on 20% Fare Hikes (‘Limited Resistance’) and Starlink (‘No Tit-For-Tat’)
+329	853	NULL	False	False	Hotel Dive	['labor_strike', 'hotel_workers', 'union_action']	‘Hundreds’ of union workers at 6 Chicago hotels strike
+330	1295	NULL	False	False	Semafor Business	['m_and_a', 'divestiture']	Coca-Cola looks to sell Costa Coffee
+331	1137	NULL	False	False	Complex	['brand_news']	Savior Worldwide: Find The Latest Savior Worldwide Stories, News & Features
+332	1132	NULL	False	False	Complex	['documentary', 'music']	‘JAŸ-Z in 8’ Recap: Everything We Learned From Hov's Rick Rubin Docuseries
+333	786	NULL	False	False	Front Office Sports	['horse_racing_investment', 'ownership', 'industry_reform']	Mike Repole Invests in Kentucky Derby Owner Amid Push for Change
+334	837	NULL	False	False	Axios Miami	['local_events']	Things to do in Miami this weekend: Art, election conversations and more
+335	1401	NULL	False	False	Bisnow South Florida	['foreclosure', 'commercial_real_estate', 'loan_default']	Deutsche Bank Files $260M Foreclosure Suit For Broward County Mall
+336	789	NULL	False	False	Front Office Sports	['league_realignment', 'league_expansion', 'schedule_change']	MLB’s Next 5 Years: Realignment, Expansion, and 154 Games?
+337	1154	NULL	False	False	Complex	['litigation', 'court_case']	Kevin Hart Wants One Woman Kept Out of His Court Battle — And It's Someone From His Past
+338	831	NULL	False	False	Skift	['luxury_travel', 'experiential_travel']	DuVine Cycling’s Case for Experiences You Have to Earn
+339	1097	NULL	False	False	Robb Report	['model_discontinuation', 'automotive']	McLaren Is Saying Goodbye to the 750S Supercar
+340	1487	NULL	False	False	Boat International	['yacht_launch', 'luxury_boats']	First 40m Custom Line Saetta 128 yacht launched
+341	733	NULL	False	False	TechCrunch	['consumer_hardware', 'product_launch']	Long live the mechanical keyboard
+342	1119	NULL	False	False	Complex	['celebrity_news']	Megan Thee Stallion Finally Adopts Stray Cat That Visited Her at Recording Studio
+343	850	NULL	False	False	Crunchbase News	['venture_funding', 'startup_investing', 'ai_funding']	Active Investors Kept Up The Deal Pace In Q3, Even As Funding Fell
+344	812	NULL	False	False	Music Business Worldwide	['licensing', 'podcasts', 'media_rights']	Spotify renews multi-year licensing deal with Joe Rogan. His last one was reportedly worth $250M.
+345	783	NULL	False	False	Front Office Sports	['wnba_roster', 'media_commentary']	Sophie Cunningham to Athletic Column Calling for Fever Exit: ‘Suck It’
+346	793	NULL	False	False	Front Office Sports	['m_and_a', 'club_valuation', 'relegation']	Is Leicester City’s $264 Million Price Tag Too Rich for Hungry Investors?
+347	1088	1	False	True	Liberty Ballers	['preseason', 'starting_lineup', 'player_performance']	Sixers Bell Ringer: Starting five flashes dominance vs. Nets
+348	731	NULL	False	False	TechCrunch	['satellite_internet', 'competition']	Elon Musk intensifies attack on Ambani over Starlink India launch delay
+349	1288	1	False	True	ESPN NBA	['television', 'cameo']	'Where's LeBron?': Sixers trio makes 'Abbott Elementary' cameo
+350	841	NULL	False	False	Billboard Business	['touring', 'concert_business', 'venue_regulation']	In Canada: Backstreet Boys Set New Touring Record; Vans Warped Tour Not Returning
+351	1089	1	False	True	Liberty Ballers	['preseason', 'starting_lineup', 'game_recap']	Sixers’ starters dazzle at times, play sloppy at others in preseason loss to Nets
+352	810	NULL	False	False	Music Business Worldwide	['deepfakes', 'music_publishing', 'ai_music']	From Sony Music’s 260,000 deepfake takedowns to Suno’s live music expansion… it’s MBW’s Weekly Round-Up
+353	730	NULL	False	False	TechCrunch	['ai_agents', 'consumer_apps']	Here are the top AI agents that can live in your text messages
+354	725	NULL	False	False	TechCrunch	['ai_safety', 'ai_governance']	Microsoft’s Satya Nadella says AI models need an ‘emergency brake’
+355	1383	NULL	False	False	Music Business Worldwide	['music_publishing', 'board_appointment']	Warner Chappell Chair and CEO Guy Moot joins NMPA Board of Directors
+356	849	NULL	False	False	Crunchbase News	['funding_round', 'ai_infrastructure', 'venture_capital']	The Week’s 10 Biggest Funding Rounds: AI And Energy Top A Busy Lineup Of Large Rounds
+357	1117	NULL	False	False	Tubefilter	['news_consumption', 'creator_economy', 'media_research']	YouTube eclipses TV to become the top news source in the U.S.
+358	1129	NULL	False	False	Complex	['music_releases', 'celebrity_news']	Nicki Minaj Jokingly Says Fans Should Expect ‘Nothing’ From Her Next Album
+359	724	NULL	False	False	TechCrunch	['voice_ai', 'context_layer', 'ai_infrastructure']	These execs think voice AI hasn’t reached its ChatGPT moment yet
+360	785	NULL	False	False	Front Office Sports	['womens_golf', 'league_roster', 'player_recruitment']	Rose Zhang Hopes Nelly Korda Joins WTGL In Season 2
+361	1492	NULL	False	False	Boat International	['superyacht_construction', 'shipbuilding']	Construction underway on Sarp Yachts XSR 85 RPH motor yacht
+362	1115	NULL	False	False	Tubefilter	['creator_economy', 'brand_partnership']	Have you heard? Pokimane at Chipotle, a Rooster Teeth reunion, and a Mike Tomlin Minecraft update.
+363	840	NULL	False	False	Billboard Business	['copyright', 'music_publishing', 'litigation']	Travis Scott No Longer Facing Lawsuit Over ‘Alright’ Sample on ‘Astroworld’ and ‘Utopia’
+364	1560	NULL	False	False	Sportico	['season_length', 'media_rights', 'league_revenue']	After Shortening Games, MLB Wants to Shorten Its Season
+365	1438	NULL	False	False	The Real Deal Miami	['campaign_finance', 'florida_governor']	Real estate donations overwhelmingly back Byron Donalds over David Jolly in race for Florida governor
+366	851	NULL	False	False	Crunchbase News	['ai_strategy', 'customer_retention', 'startups']	Why Customer Workflows Are Becoming The Moat In The AI Era
+367	1317	NULL	False	False	Front Office Sports	['media_rights', 'streaming']	Once Focused on Combat Sports, DAZN Expands to MLB, NBA Teams
+368	633	NULL	False	False	Semafor Business	['activist_investing', 'corporate_governance', 'm_and_a']	Ariel goes from listener to caller at Mattel
+369	1439	NULL	False	False	The Real Deal Miami	['foreclosure', 'commercial_real_estate', 'loan_default']	Foreclosure looms for Brookfield’s Pembroke Lakes Mall after alleged $260M loan default
+370	1561	1	False	False	Sportico	['prediction_markets', 'regulation']	Peer-to-Fear: Prediction Markets Worry About CFTC Proposal
+371	792	NULL	False	False	Front Office Sports	['roster_announcement', 'coaching_change']	LSU Finally Reveals 10-Player Roster in Will Wade’s Exhibition Return
+372	1381	NULL	False	False	Music Business Worldwide	['live_music', 'hiring', 'ai_music']	Suno hires Ticketmaster’s Michael Chua to lead its live music team, including Songkick
+373	714	NULL	False	False	Sportico	['tv_ratings', 'media_rights', 'broadcast_schedule']	So-So Cowboys, Rejuvenated Chiefs Power Early NFL Ratings Run
+374	711	NULL	False	False	Sportico	['sports_advertising', 'digital_ads']	Club Sportico: You’re Seeing That Ad Because Your Team Is Losing
+375	1384	NULL	False	False	Music Business Worldwide	['debt_refinancing', 'bond_offering', 'live_entertainment']	Live Nation to sell $730M and €600M of bonds to refinance its 6.5% notes due 2027
+376	1498	NULL	False	False	Boat International	['luxury_yachts', 'boat_review']	On board Azimut’s Seadeck 9: The 26m yacht that brings the sea to your feet
+377	1419	NULL	False	False	The Real Deal Miami	['real_estate', 'waterfront_development']	“Speed is critical”: Two waterfront teardowns trade in Miami Beach for over $50M, following separate bidding wars
+378	1491	NULL	False	False	Boat International	['superyachts', 'luxury_boats']	First look inside Benetti B.Now 67M superyacht Dagger
+379	1315	NULL	False	False	Front Office Sports	['labor_negotiations', 'league_schedule', 'playoff_format']	MLB Owners Pitch 154-Game Season, Expanded Playoffs in Labor Talks
+380	1314	NULL	False	False	Front Office Sports	['playoff_expansion', 'college_sports_legislation']	CFP Director Supportive of 24-Team Playoff, Endorses College Sports Bill
+381	1502	NULL	False	False	Tubefilter	['creator_analytics', 'brand_partnerships', 'product_test']	A YouTube test brought creator analytics directly into brands’ YouTube Studio dashboards
+382	811	NULL	False	False	Music Business Worldwide	[]	Meta bans TikTok parent ByteDance from advertising on its apps in the US and six other countries
+383	834	NULL	False	False	Skift	['travel_industry', 'conference']	Announcing Skift Global Forum East 2026: Can the Gulf’s Momentum Hold?
+384	1428	NULL	False	False	The Real Deal Miami	['condo_sales', 'luxury_real_estate']	Bristol condo asking $15M tops Palm Beach County signed contracts
+385	1311	NULL	False	False	Front Office Sports	['team_ownership', 'governance']	Filing Details Jeanie Buss’s Side Deal to Remain Lakers Governor
+386	1500	NULL	False	False	Boat International	['superyacht_construction', 'shipbuilding']	Hull and superstructure joined on Moonen Yachts tenth 122 Martinique superyacht
+387	632	NULL	False	False	Semafor Business	['data_center_financing', 'ai_infrastructure', 'debt']	Quinn Emanuel issues warning over data-center financing
+388	1505	NULL	False	False	Tubefilter	['creator_funding', 'brand_contest']	Canon’s $100,000 First Cut contest returns to help creators fund their dream projects
+389	1402	NULL	False	False	Bisnow South Florida	['commercial_leasing', 'retail_real_estate', 'miami']	Holographic Zoo Leases 51K SF Coconut Grove Building For First Location
+390	1386	NULL	False	False	Music Business Worldwide	['data_breach', 'class_action', 'consumer_privacy']	Live Nation hit with class action lawsuits over data breach involving Social Security numbers and health records
+391	1316	NULL	False	False	Front Office Sports	['amateur_golf', 'womens_golf']	No. 1 Women’s Amateur Golfer Discusses Life As an ‘Infant Pro’
+392	794	NULL	False	False	Front Office Sports	['cfb_roster_management', 'quarterback_market', 'nil']	How Oregon Beat College Football’s ‘Impossible’ Backup QB Market
+393	1430	NULL	False	False	The Real Deal Miami	['condo_regulation', 'real_estate_law']	“A minefield for the unwary”: Florida condo owners adapt to post-Surfside laws
+394	790	1	False	False	Front Office Sports	['game_attendance', 'weather']	Trump Still Plans to Attend Georgia-Alabama Despite Tropical Storm
+395	1321	NULL	False	False	Front Office Sports	['front_office_changes', 'nfl_business']	Titans Fire Three Business Execs Amid Another Ugly Start
+396	1385	NULL	False	False	Music Business Worldwide	['audiobooks', 'subscription_revenue', 'streaming']	Spotify is expanding audiobooks to more than 180 markets and says its Audiobooks+ add-on has passed $100M in annual recurring revenue
+397	1488	NULL	False	False	Boat International	['yachts', 'boat_show']	The largest yachts attending the Fort Lauderdale International Boat Show 2026 so far
+398	1313	NULL	False	False	Front Office Sports	['sports_media', 'documentary']	Aaron Cohen on the Saban Docuseries
+399	1294	NULL	False	False	Semafor Business	['global_trade', 'ai_exports', 'trade_forecast']	AI export growth will offset trade disruptions this year, WTO says
+400	1392	NULL	False	False	Axios Miami	['municipal_policy', 'outdoor_advertising', 'miami']	Miami commissioners consider advertisements on construction fencing
+401	1429	NULL	False	False	The Real Deal Miami	['asset_shielding', 'waterfront_property', 'legal_dispute']	Denmark accuses Palm Beach resident of shielding assets in waterfront home
+402	1503	NULL	False	False	Tubefilter	['creator_products', 'ai_partnership', 'content_production']	OpenAI brought in Patreon’s Co-Founder. Here’s what he has planned.
+403	1337	1	False	False	Front Office Sports	['coaching', 'college_football_program']	Who Is Alabama Football in Year 3 Under Kalen DeBoer?
+404	732	NULL	False	False	TechCrunch	['ai_safety', 'ai_agents']	Anthropic can’t reliably control its AI agents. It’s cutting off its internal evals from the live internet instead
+405	1296	NULL	False	False	Semafor Business	['management_buyout', 'corporate_governance', 'private_credit']	Blue Owl CEOs rebuff credit fears
+406	1427	NULL	False	False	The Real Deal Miami	['condo_assessment', 'construction_dispute']	After $21M assessment uproar, Brickell association says contractor overbilled, left work undone
+407	1390	NULL	False	False	Axios Miami	['voter_registration', 'state_politics']	Despite recent registration gains, Florida Democrats lag Republicans
+408	1318	NULL	False	False	Front Office Sports	['immigration', 'college_athletes']	ICE Has Detained Another College Basketball Player
+409	1480	NULL	False	False	Boat International	['superyachts', 'yacht_launch']	First look inside the third AB 130 yacht Casa Bri Mare
+410	1420	NULL	False	False	The Real Deal Miami	['commercial_real_estate', 'm_and_a']	Boca’s biggest landlord James Batmasian buys office complex for $38M
+411	1394	NULL	False	False	Axios Miami	['property_tax', 'ballot_measure']	Here's where Miami-Dade officials stand on Amendment 3, the property tax referendum
+412	1382	NULL	False	False	Music Business Worldwide	['grammy_awards', 'music_industry', 'album_releases']	Five-time Grammy winner Drake did not submit any of his three 2026 albums for consideration – joining BTS and Stray Kids in sitting out the 2027 awards (report)
+413	1297	NULL	False	False	Semafor Business	['trade_policy', 'trade_deficit', 'industrial_policy']	EU-China trade war looms closer
+414	1323	NULL	False	False	Front Office Sports	['team_ownership', 'm_and_a', 'family_dispute']	Buss Siblings: Jeanie Has No Legal Power to Block Sale of Lakers Stake
+415	1490	NULL	False	False	Boat International	['superyachts', 'yacht_launch']	First look inside GX Superyachts 42m GX42 flagship Merinos
+416	1387	NULL	False	False	Music Business Worldwide	['ai_music', 'generative_ai', 'api_access']	Elon Musk says Grok Bot will use Suno’s AI music models, alongside Anthropic’s Claude and Midjourney
+417	1426	NULL	False	False	The Real Deal Miami	['land_sale', 'settlement_compliance', 'local_government']	“Garbage crisis”: Broward County risks breach of settlement in vote against selling former waste-disposal site
+418	1329	NULL	False	False	Front Office Sports	['stadium_financing', 'stadium_future', 'local_government']	Arrowhead Stays, Kauffman Goes in County’s Post-Chiefs, Royals Plan
+419	1504	NULL	False	False	Tubefilter	['ai_regulation', 'watermarking', 'eu_ai_act']	AI-generated videos get labels. The European Union is applying the same standards to text.
+420	1298	NULL	False	False	Semafor Business	['public_debt', 'budget', 'fiscal_policy']	France’s challenges mount over ballooning debt
+421	1339	NULL	False	False	Front Office Sports	['media_strategy', 'sports_media']	Sports Is Key to Skydance Becoming ‘Leading Content Engine’
+422	1436	NULL	False	False	The Real Deal Miami	['office_development', 'real_estate_investment']	BH3 joins Design District venture to revive, expand upscale office project
+423	1403	NULL	False	False	Bisnow South Florida	['industrial_real_estate', 'm_and_a', 'south_florida']	Blackstone Sells Fort Lauderdale Industrial For $57M: The South Florida Deal Sheet
+424	1334	NULL	False	False	Front Office Sports	['viewership', 'playoffs', 'media_rights']	WNBA Semifinals Open With 1.15M Viewers, Up 10%
+425	1440	NULL	False	False	The Real Deal Miami	['retail_development', 'anchor_tenant']	Walmart to anchor Terra’s Doral retail development with small-format store
+426	1333	NULL	False	False	Front Office Sports	['player_movement', 'league_bankruptcy']	Jon Rahm Planning to Leave LIV Post-Bankruptcy, Lawyer Says
+427	1507	NULL	False	False	Tubefilter	[]	In the war to control social media feeds, VPNs are a battleground. A “day of action” defended them.
+428	1335	NULL	False	False	Front Office Sports	['sports_betting', 'prediction_markets']	DraftKings, Prediction Markets Put on Notice Amid FanDuel VIP Scrutiny
+429	1437	NULL	False	False	The Real Deal Miami	['residential_sale', 'luxury_real_estate']	Kaufman Rossin co-founder’s Coconut Grove home lands $17M contract
+430	1506	NULL	False	False	Tubefilter	['wearables', 'consumer_electronics', 'data_security']	Meta’s smart glasses are innovative. Are they a security threat?
+431	1322	NULL	False	False	Front Office Sports	['front_office', 'labor_lockout']	Yankees Exit Leaves Boone, Cashman Questions Heading Into Likely Lockout
+432	1319	NULL	False	False	Front Office Sports	['roster_moves', 'wnba']	Caitlin Clark Wants Mitchell Back With Fever Despite Fan Comments
+433	1425	NULL	False	False	The Real Deal Miami	['hotel_development', 'zoning']	Reuben Brothers’ Waldorf Astoria reno partially greenlit — noise limits for pool, restaurant still hang in balance
+434	1336	NULL	False	False	Front Office Sports	['nfl_discipline', 'league_policy']	Kyle Juszczyk Wins Chugging Celebration Appeal, League Adjusts Policy
+435	1330	NULL	False	False	Front Office Sports	['analytics', 'clubhouse_culture', 'front_office']	Jimmy Rollins: MLB Analytics Gurus Undervalue Clubhouse Chemistry
+436	1340	NULL	False	False	Front Office Sports	['golf_business', 'daylight_saving_time']	Daylight Saving Time Remains Complicated for Golf Industry
+437	1312	NULL	False	False	Front Office Sports	['media_controversy', 'apology']	Stephen A. Smith Ditches the ‘Nopology’ in Lane Johnson Mea Culpa
+438	1326	NULL	False	False	Front Office Sports	['sports_ratings', 'mlb_postseason']	MLB Division Series Extends Postseason Ratings Streak
+439	1331	NULL	False	False	Front Office Sports	['concessions', 'stadium_operations']	Yankee Stadium Quietly Suffered a Summer Peanut Shortage
+440	1391	NULL	False	False	Axios Miami	['israel_hamas_war', 'commemoration']	Miami marks 3 years since Oct. 7 attack that sparked Israel-Hamas war
+441	1325	NULL	False	False	Front Office Sports	['officiating', 'penalties']	Why Are NFL Penalty Flags Flying? It’s Complicated
+442	1434	NULL	False	False	The Real Deal Miami	['bankruptcy', 'condo_sales', 'auction']	Bankrupt West Palm Beach condo sells for $14M at auction
+443	1499	NULL	False	False	Boat International	['superyacht', 'shipbuilding', 'product_launch']	Mulder Shipyard expands portfolio with 37m Mulder 122 superyacht
+444	1493	NULL	False	False	Boat International	['yacht_construction', 'shipbuilding']	Construction progresses on ISA Yachts' second 65m Classic model
+445	1324	NULL	False	False	Front Office Sports	['sports_broadcasting', 'mlb_postseason']	Kenny Albert’s Last-Minute NLDS Fill-In Came Mid-Colonoscopy Prep
+446	1327	NULL	False	False	Front Office Sports	['mlb_postseason', 'team_management']	Swisher on Brian Cashman’s Pressure
+447	1423	NULL	False	False	The Real Deal Miami	['real_estate_financing', 'development_financing']	Lenders deal out $436M in financing for South Florida developments
+448	1435	NULL	False	False	The Real Deal Miami	['real_estate_listing', 'developer_debt', 'apartment_development']	As debt woes mount, Alirio Torrealba’s MG Developer lists Hialeah dev site entitled for apartments
+449	1494	NULL	False	False	Boat International	['yacht_construction', 'shipbuilding']	ISA Yachts' second Unica 45M Steel model moves to outfitting
+450	1332	NULL	False	False	Front Office Sports	['roster', 'exhibition_game']	LSU Still Lists Just Four Players on Eve of First Exhibition Game
+451	1328	NULL	False	False	Front Office Sports	['nba_commentary', 'retirement']	Shaquille O’Neal on Charles Barkley Retiring: ‘I Don’t Believe That’
+452	1421	NULL	False	False	The Real Deal Miami	['real_estate', 'land_assemblage']	Mystery buyer builds $311M assemblage in Naples
+453	1338	NULL	False	False	Front Office Sports	['racism_in_sport', 'tennis']	Coco Gauff Says Racist Abuse Has Been ‘Draining’ at China Open
+454	1509	NULL	False	False	Tubefilter	['animation', 'video_game_adaptation', 'media_production']	The studio making Jacksepticeye’s Bloodborne film just tapped MoistCr1TiKaL for a RuneScape adaptation
+455	1489	NULL	False	False	Boat International	['yacht_design']	Studio Segno unveils 47m Japanese-Italian fusion concept MAAI
+456	1497	NULL	False	False	Boat International	['superyacht', 'refit', 'shipyards']	72m Damen Yachting support yacht emerges from Oceanco following extensive refit for Gabe Newell's Inkfish fleet
+457	1393	NULL	False	False	Axios Miami	['wage_theft', 'labor', 'worker_protections']	Miami airport workers allege wage theft, ask for pay protections
+458	1495	NULL	False	False	Boat International	['sailing_racing']	All the highlights from 2026 Rolex Switzerland Sail Grand Prix
+459	1422	NULL	False	False	The Real Deal Miami	['development_completion', 'loan_repayment', 'multifamily']	Related Group, Alta complete Casa Bella tower, pay off $240M loan
+460	1424	NULL	False	False	The Real Deal Miami	['executive_moves', 'real_estate']	Movers & Shakers: Christina Crespi swaps Miami DDA for consulting firm
+461	1508	NULL	False	False	Tubefilter	['health_misinformation', 'social_media', 'medical_influencers']	Some TikTok users trust medical influencers more than their own doctors
+462	1496	NULL	False	False	Boat International	['superyacht', 'refit', 'shipyards']	Lusben relaunches 40m Perini Navi yacht Olympia following extensive refit
+463	1388	NULL	False	False	Axios Miami	['school_libraries', 'book_removals']	Florida ranks second behind Texas for school library book removals
+464	1432	NULL	False	False	The Real Deal Miami	['real_estate_dispute', 'construction_litigation']	Todd Glaser clashes with ex-client over yearslong Golden Beach mansion project
+465	1485	NULL	False	False	Boat International	['yacht_fire', 'marine_incident']	Watch: Fire destroys 30m Sanlorenzo motor yacht John in Marina di Brindisi, Italy
+466	1389	NULL	False	False	Axios Miami	['voter_registration', 'elections']	The last day to register to vote in Florida is Monday, Oct. 5
+467	1482	NULL	False	False	Boat International	['superyachts', 'luxury_travel']	The rise of the superyacht sabbatical: Why owners are choosing to travel now
+468	1481	NULL	False	False	Boat International	['superyachts', 'yacht_design']	Inside Angiola: How Maiora’s 37m yacht makes space go further
+469	1404	NULL	False	False	Bisnow South Florida	['real_estate', 'campus_development', 'land_assemblage']	Ken Griffin Spending $3B To Bring Carnegie Mellon Campus To Miami
+470	1405	NULL	False	False	Bisnow South Florida	['kava', 'kratom', 'consumer_trends']	Kava Bars Are Booming. Kratom Is A Big Reason Why
+471	1406	NULL	False	False	Bisnow South Florida	['school_closures', 'real_estate', 'repurposing']	South Florida Counties Eye Leasing Shuttered Schools To Developers
+472	1407	NULL	False	False	Bisnow South Florida	['office_acquisition', 'real_estate']	Moishe Mana Drops $89M On Fort Lauderdale Office: The South Florida Deal Sheet
+473	1408	NULL	False	False	Bisnow South Florida	['rental_market', 'construction', 'tenant_retention']	Miami's Building Boom Means Keeping Renters Is Just As Hard As Finding Them
+474	1409	NULL	False	False	Bisnow South Florida	['multifamily_sale', 'real_estate']	J.P. Morgan Fund Sells Wellington Apartments For $105M
+475	1410	NULL	False	False	Bisnow South Florida	['refinancing', 'real_estate', 'mixed_use']	Rivani Lands $114M Refi For Playboy HQ Building: The South Florida Deal Sheet
+476	1411	NULL	False	False	Bisnow South Florida	['construction_safety', 'commercial_development', 'stop_work_order']	Citadel Headquarters Project Under Stop-Work Order Following Rig Collapse
+477	1412	NULL	False	False	Bisnow South Florida	['real_estate', 'ai_pivot', 'studio_development']	Digital Media Firm Pivots To AI, Abandons $160M Fort Lauderdale Studio Project
+478	1484	NULL	False	False	Boat International	['yacht_launch', 'luxury_marine']	On board Sanlorenzo’s 72m flagship Silver Fox as she debuts at the Monaco Yacht Show
+479	1413	NULL	False	False	Bisnow South Florida	['defense_industry', 'office_leasing', 'commercial_real_estate']	Defense Tech Firms Setting Up Shop In Trump Family's Palm Beach Orbit
+480	1414	NULL	False	False	Bisnow South Florida	['branded_residences', 'condo_development', 'luxury_real_estate']	Bugatti Lends Brand To 60-Story Miami Condo Tower
+481	1415	NULL	False	False	Bisnow South Florida	['multifamily_acquisition', 'real_estate_investment']	Goldman Sachs Pays $154M For Davie Apartments: The South Florida Deal Sheet
+482	1416	NULL	False	False	Bisnow South Florida	['construction_accident', 'worker_safety', 'investigation']	Rig Collapse At Citadel HQ Site Sends 4 To Hospital
+483	1417	NULL	False	False	Bisnow South Florida	['commercial_real_estate', 'acquisition']	Stephen Ross Expands Palm Beach Empire With Massive Boca Raton Campus
+484	1418	NULL	False	False	Bisnow South Florida	['obituary', 'real_estate_development']	Prolific South Florida Developer Nick Rojo Dies At 44
+485	1266	1	False	True	ESPN F1	['driver_commitment', 'title_outlook']	Monza personifies the passion that enticed Leclerc to commit his future to Ferrari
+486	1271	1	False	True	ESPN F1	['driver_performance', 'season_review']	2026 F1 midterm grades: Antonelli's A+ edges Hamilton's A-
+487	1398	NULL	False	False	Axios Miami	['local_news']	Justin L. Mack
+488	1399	NULL	False	False	Axios Miami	['local_news']	Avery Lotz
+489	1395	NULL	False	False	Axios Miami	['local_news']	Chelsea Brasted
+490	1396	NULL	False	False	Axios Miami	['local_news']	Carly Mallenbaum
+491	1397	NULL	False	False	Axios Miami	['local_news']	Kathryn Varn
+(491 rows)

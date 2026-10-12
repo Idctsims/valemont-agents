@@ -33,9 +33,42 @@ differ, the decisions win. Step 1 is `db/039_feed_ranking.sql`.
    - **The live Love check:** a held-out story of one loved topic, **off page
      one of For you (position 31–80) before the taps**, and ten Love taps on
      other stories of that topic that touch no follow (`follow_tier` NULL).
-     **Pass = the held-out story is on page one after `--rebuild`.** The
+     ~~Pass = the held-out story is on page one after `--rebuild`.~~ The
      Bordeaux wine story (id 1090) is the control. Before and after
      positions of both are reported.
+   - **Pass rule amended by the owner BEFORE any tap (2026-10-12 16:22
+     Chicago), frozen now.** The page-one rule was dropped because ten loves
+     lift the whole topic, and a held-out story can lose page-one places to
+     its own siblings while the topic gains (a synthetic pool: the topic 6 → 13
+     on page one, the held-out story 50 → 35).
+     **PASS = (a) AND (b), both measured against the 21:16 UTC "before"
+     snapshot:**
+     - **(a)** the held-out story's climb exceeds the control's movement by
+       **≥ 15 positions**: `(64 − held_after) − (86 − control_after) ≥ 15`.
+       Positions are 1-based in `feed_for_you('home', 1000, 0)`, and a climb
+       is positive.
+     - **(b)** the topic's page-one count rises **above 9**: `> 9` of
+       positions 1–30.
+     - **The topic, frozen:** a story with `follow_tier` NULL whose
+       lowercased `topics` plus `title` match
+       `international_sales|media_rights|format|co_production|licensing|distribution|acquisition|tv_distribution|film_sales`.
+       On the snapshot that is 9 on page one (positions 14, 17, 18, 19, 20,
+       21, 22, 27, 30: ids 2313, 2321, 2173, 2349, 2278, 2372, 2375, 2309,
+       2351). The same classifier is applied after, including to stories
+       ingested since.
+     - **The pick, made before the rule:** held-out **2308** (Cineflix
+       "Hildur", Variety, #64), control **1090** (#86). Targets: 2313, 2321,
+       2173, 2349, 2278, 2375, 2309, 2374, 2307, 2312, spare 764. The owner
+       loves only the targets they would actually read and names them. The
+       count of loves is reported, and the rule is unchanged whatever it is.
+     - **Snapshot:** `docs/feed_checks/love-2026-10-12/before-2116Z.tsv`
+       (`feed_for_you('home', 1000, 0)` through `db_inspect`, 491 rows, after
+       `--rebuild`; 0 reactions in the profile). The file was written at
+       21:15:41 UTC; "21:16" is the database clock read just after it. It is
+       the one snapshot every position above comes from.
+     - **After:** run `--rebuild` once, read `feed_for_you` the same way, and
+       report both conditions with the numbers. No second rebuild, no
+       re-measure.
 8. **Stale Google News items** are dropped at ingest when published more than
    `gnews_window_days + 2` days before the fetch: a code rule
    (`feed/ingest.py` `STALE_GRACE`, tests `GoogleNews.test_stale_*`), no
