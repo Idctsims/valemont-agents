@@ -2502,6 +2502,26 @@ def feed_why_queue(top: int, *, conn: psycopg.Connection | None = None) -> list[
     return [WhyJob(int(r[0]), r[1], r[2], r[3]) for r in rows]
 
 
+def feed_why_jobs(story_ids: Sequence[int], *, conn: psycopg.Connection | None = None) -> list[WhyJob]:
+    """Named real stories as why-jobs (scripts/feed_profile.py --why --again)."""
+    with _brief_conn(conn) as c:
+        rows = c.execute("""
+            SELECT v.id, v.title, v.summary, v.source_name FROM v_feed_stories v
+             WHERE v.id = ANY(%s) ORDER BY v.id
+        """, (list(story_ids),)).fetchall()
+    return [WhyJob(int(r[0]), r[1], r[2], r[3]) for r in rows]
+
+
+def feed_reset_why(story_ids: Sequence[int], *, conn: psycopg.Connection | None = None) -> int:
+    """Forget that named stories were asked, so they can be asked again (by
+    hand only: the owner's re-check after a context change). Returns rows."""
+    with _brief_conn(conn) as c, c.transaction():
+        return c.execute("""
+            UPDATE stories SET why_it_matters = NULL, why_generated_at = NULL, why_ai_usage_id = NULL
+             WHERE id = ANY(%s) AND NOT is_test
+        """, (list(story_ids),)).rowcount
+
+
 def ai_calls_today(purpose: str, *, conn: psycopg.Connection | None = None) -> int:
     """ai_usage rows for `purpose` since the owner's local midnight."""
     with _brief_conn(conn) as c:

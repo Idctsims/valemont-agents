@@ -304,6 +304,12 @@ class WhyQueue(RankSqlCase):
             self.assertFalse({a, b} & {j.story_id for j in ledger.feed_why_queue(8, conn=conn)})
             row = conn.execute("SELECT why_it_matters FROM v_feed_stories WHERE id = %s", (a,)).fetchone()
             self.assertEqual(row[0], "A Clipd rival raised money.")
+            # By hand: forget and re-ask (scripts.feed_profile --why --again).
+            self.assertEqual([j.story_id for j in ledger.feed_why_jobs([b, a], conn=conn)], sorted([a, b]))
+            self.assertEqual(ledger.feed_reset_why([a], conn=conn), 1)
+            self.assertIn(a, {j.story_id for j in ledger.feed_why_queue(8, conn=conn)})
+            fake = self.story(conn, self.source(conn, is_test=True))
+            self.assertEqual(ledger.feed_reset_why([fake], conn=conn), 0)  # never a test story
 
 
 class Prune(RankSqlCase):

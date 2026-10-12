@@ -192,6 +192,37 @@ class WhyValidator(unittest.TestCase):
         self.assertEqual(why.answers_for(group, payload, NAMES), {1: None, 2: "A Clipd rival raised money."})
         self.assertEqual(why.answers_for(group, None, NAMES), {1: None, 2: None})
 
+    def test_a_refused_line_says_why_and_a_null_says_nothing(self) -> None:
+        long = "Clipd " + " ".join(["word"] * 22) + "."
+        self.assertEqual(why.check({"venture": None, "why": None}, NAMES), (None, None))
+        self.assertEqual(why.check({"venture": "Clipd", "why": long}, NAMES), (None, "23 words; the cap is 20"))
+        self.assertEqual(why.check({"venture": "SBC", "why": "SBC x."}, NAMES)[1], "names no known venture ('SBC')")
+        why.REFUSED.clear()
+        why.answers_for([ledger.WhyJob(5, "t", None, "X")], {"stories": [{"id": 5, "venture": "Clipd", "why": long}]}, NAMES)
+        self.assertEqual([(sid, reason) for sid, _, reason in why.REFUSED], [(5, "23 words; the cap is 20")])
+        why.REFUSED.clear()
+
+    def test_the_context_says_what_every_venture_does(self) -> None:
+        ctx = {"active": [{"name": "Sail Beach Club", "slug": "sail-beach-club", "stage": "pre_launch",
+                           "next_action": "Pick a renderer", "workstreams": [{"name": "Permitting"}]}],
+               "not_set_up": ["Perfect Timing Management", "Freelance web dev", "Brand new venture"]}
+        got = {v["name"]: v for v in why.venture_context(ctx)}
+        self.assertEqual(got["Sail Beach Club"]["what_it_does"],
+                         "Experiential hospitality: a beach/members' club on Biscayne Bay, Miami.")
+        self.assertEqual((got["Sail Beach Club"]["stage"], got["Sail Beach Club"]["workstreams"]), ("pre_launch", ["Permitting"]))
+        self.assertEqual(got["Perfect Timing Management"], {"name": "Perfect Timing Management",
+                                                            "what_it_does": "Artist and influencer management."})
+        # Matched ignoring case; an unknown venture is still listed, by name.
+        self.assertEqual(got["Freelance web dev"]["what_it_does"], "Next.js/Supabase sites (senior care vertical).")
+        self.assertEqual(got["Brand new venture"], {"name": "Brand new venture"})
+        msg = why.user_message(ctx, [ledger.WhyJob(1, "h", None, "o")])
+        self.assertIn("Artist and influencer management.", msg)
+
+    def test_every_owner_venture_has_a_line(self) -> None:
+        for name in ("Sail Beach Club", "Perfect Timing Management", "Excursion", "Clipd", "Valemont Grow",
+                     "Sims & Vale Capital", "Freelance web dev"):
+            self.assertIn(name.lower(), why.VENTURE_ABOUT)
+
     def test_venture_names_skip_archived(self) -> None:
         ctx = {"active": [{"name": "Sail Beach Club"}], "not_set_up": ["Clipd"], "archived": ["Test"]}
         self.assertEqual(why.venture_names(ctx), ["Sail Beach Club", "Clipd"])
@@ -242,6 +273,17 @@ class WhyJob(unittest.TestCase):
         with mock.patch.object(ai, "complete", side_effect=ai.BudgetExceeded("spent")), \
                 self.assertRaises(JobSkipped):
             why.why_job()
+
+    def test_ask_again_forgets_then_asks_the_named_stories(self) -> None:
+        resets: list[list[int]] = []
+        jobs = [ledger.WhyJob(763, "Creator Dhar Mann on studio deals", "s", "Variety")]
+        payload = {"stories": [{"id": 763, "venture": "Clipd", "why": "A Clipd rival raised money."}]}
+        with mock.patch.object(ledger, "feed_why_jobs", lambda ids: jobs), \
+                mock.patch.object(ledger, "feed_reset_why", lambda ids: resets.append(list(ids)) or len(ids)), \
+                mock.patch.object(ai, "complete", self.complete(payload)):
+            got = why.ask_again([763])
+        self.assertEqual((resets, got), ([[763]], {763: "A Clipd rival raised money."}))
+        self.assertEqual(self.db.why_saved, [({763: "A Clipd rival raised money."}, 555)])
 
     def test_no_ventures_is_a_skip_without_a_call(self) -> None:
         self.db.why_queue = [ledger.WhyJob(1, "t", None, "X")]

@@ -10,6 +10,9 @@ r"""The feed's interest profile by hand (feed/profile.py, feed/why.py).
            without its once-a-day skip). Prints counts only.
 --score    scores stories that finished summarizing and have no score yet.
 --why      one feed_why pass (Haiku; the daily cap of 20 calls applies).
+           With --again ID,ID,... it forgets that those stories were asked
+           and asks once more (at most 8), printing each line or null.
+--context  prints the exact venture context feed_why sends Haiku.
 --top N    Home's For you, the first N positions: position, story id,
            floored / cross-pillar flags and the headline. Read-only.
 
@@ -29,10 +32,11 @@ from core.paths import load_env
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     group = parser.add_mutually_exclusive_group(required=True)
-    for flag in ("--rebuild", "--score", "--why"):
+    for flag in ("--rebuild", "--score", "--why", "--context"):
         group.add_argument(flag, action="store_true")
     group.add_argument("--top", type=int, metavar="N")
     parser.add_argument("--pillar", choices=("home", "sports"), default="home", help="for --top")
+    parser.add_argument("--again", metavar="IDS", help="with --why: story ids to ask again, comma-separated")
     args = parser.parse_args(argv)
 
     load_env()
@@ -44,8 +48,21 @@ def main(argv: list[str] | None = None) -> int:
             print(f"rebuild: {profile.rebuild().line()}")
         elif args.score:
             print(f"score: {profile.score_new_job()} scores written")
+        elif args.why and args.again:
+            ids = [int(x) for x in args.again.split(",") if x.strip()]
+            titles = {j.story_id: j.title for j in ledger.feed_why_jobs(ids)}
+            answers = why.ask_again(ids)
+            for sid, line in answers.items():
+                print(f"{sid:7}  {titles.get(sid, "?")[:80]}\n         -> {line if line else "null"}")
+            for sid, line, reason in why.REFUSED:
+                print(f"  refused {sid}: {reason}: {line!r}")
+            print(f"why again: {sum(1 for a in answers.values() if a)} line(s), "
+                  f"{sum(1 for a in answers.values() if not a)} null ({len(why.REFUSED)} refused by the rules), "
+                  f"of {len(answers)}")
         elif args.why:
             print(f"why: {why.why_job()} line(s) kept")
+        elif args.context:
+            print(why.json.dumps(why.venture_context(ledger.ctx_ventures()), ensure_ascii=False, indent=1))
         else:
             rows = ledger.feed_for_you(args.pillar, max(1, args.top))
             for r in rows:
