@@ -242,13 +242,18 @@ class ForYou(RankSqlCase):
                 self.score(conn, self.story(conn, home, hours_ago=i), 41 - i * 0.1, floor=True)
             for i in range(8):
                 self.score(conn, self.story(conn, sports, hours_ago=i), 46 - i * 0.1, cross=True)
-            rows = conn.execute("""
+            # From db/042 the read path adds the window boost (boost_hours);
+            # before it, there is none.
+            boosted = conn.execute(
+                "SELECT to_regprocedure('public.feed_for_you(text, integer, integer, text)') IS NOT NULL").fetchone()[0]
+            rows = conn.execute(f"""
                 SELECT f.id, f.pos, sc.score, extract(epoch FROM now() - f.lead_published_at) / 3600.0,
-                       sc.floor, sc.cross_pillar, coalesce(f.floored, false)
+                       sc.floor, sc.cross_pillar, coalesce(f.floored, false),
+                       {"f.boost_hours" if boosted else "0"}
                   FROM feed_for_you('home', 100000, 0) f
                   JOIN v_story_scores_latest sc ON sc.story_id = f.id AND sc.pillar = 'home'
                  ORDER BY f.pos""").fetchall()
-            cands = [rank.Candidate(r[0], float(r[2]), float(r[3]), r[4], r[5]) for r in rows]
+            cands = [rank.Candidate(r[0], float(r[2]), float(r[3]), r[4], r[5], boost_h=float(r[7])) for r in rows]
             twin = rank.order_for_you(cands)
             self.assertEqual([(p.id, p.pos, p.floored) for p in twin], [(r[0], r[1], r[6]) for r in rows])
             self.assertEqual(sum(1 for r in rows[:rank.PAGE_SIZE] if r[5]), rank.CROSS_CAP)
@@ -330,6 +335,14 @@ class VentureTaglines(RankSqlCase):
 
 
 class Prune(RankSqlCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        with _rolled_back() as conn:
+            # From Chat 3 Phase 3 the prune also keeps a move proposal's story.
+            if conn.execute("SELECT to_regclass('public.entity_link_proposals')").fetchone()[0] is None:
+                raise unittest.SkipTest("the prune reads entity_link_proposals: db/042 not pasted")
+
     def test_a_reacted_story_is_never_pruned(self) -> None:
         with _rolled_back() as conn:
             src = self.source(conn)
