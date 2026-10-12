@@ -2,15 +2,44 @@
 
 Design note for the Sports page, the sports profile and seeds, the LIV term,
 event boosts and following people through moves. Written 2026-10-12 on
-branch `chat3-phase3-sports` (off `chat3-phase2-ranking`). **Awaiting the
-owner's OK.** Step 1 is `db/042_sports.sql`. It builds on
-`docs/feed_ranking.md` (Phase 2); where this note is silent, that one holds.
-Verified dates and names: `docs/sports_calendar_2026.md`.
+branch `chat3-phase3-sports` (off `chat3-phase2-ranking`). **Approved by the
+owner 2026-10-12 17:27 Chicago, with the decisions below**; where this note
+and those decisions differ, the decisions win. Step 1 is
+`db/042_sports.sql`. It builds on `docs/feed_ranking.md` (Phase 2); where
+this note is silent, that one holds. Verified dates and names:
+`docs/sports_calendar_2026.md`.
 
-## 0. Decisions for the owner
+## Owner decisions (2026-10-12 17:27 Chicago)
 
-These go beyond the Phase 3 brief or differ from it. Each has a
-recommendation.
+1. **D1 approved:** `ENTITY_CAP = 6` on Sports page one, `ENTITY_CAP_BOOSTED
+   = 9` while a window for that entity is active.
+2. **D2 approved:** sport-wide windows on Sports only; entity windows on both
+   pages.
+3. **D3 approved:** db/042 deletes the fixed 76ers and Ferrari tier-2 follow
+   rows; the worker derives tier 2 for each tier-1 person's current team.
+4. **D4 approved:** 30 NBA teams, 11 F1 teams and 3 tours as entities, no
+   follow.
+5. **D5 approved:** no repeat of a dismissed (person, kind, to) for 30 days.
+6. **D6: no Hero World Challenge window.**
+7. **D7: yes,** Chattanooga week boosts like the others.
+8. **D8: yes, the summarizer's sport wins for multi-sport sources,** and the
+   source's sport is the fallback when the summarizer returns `none`.
+9. **LIV:** the tour split **includes LIV's business future** (funding,
+   bankruptcy, merger, the PGA Tour–PIF deal). So "Is this the end of LIV
+   Golf?" (1278) is spared. `TOUR_SPLIT_TERMS` (§3) gains `funding`,
+   `future`, `end of liv`, `survive*` and `investor*`; `bankrupt*`, `merger`
+   and `pif` were already in it.
+   - **No keyword is added for the sublease story** (2728); the owner's
+     Hidden taps handle filler.
+10. **Moves coverage:** the summary queue takes **stories whose title names a
+    followed person first** (a tier-1 or tier-2 person follow, or a derived
+    team follow), before the normal publish-time order. This is tested in
+    Step 4 (`tests/`: the queue order; `tests_live/`: the SQL pick).
+
+## 0. Decisions put to the owner (Step 0, as proposed)
+
+These went beyond the Phase 3 brief or differed from it. The owner's answers
+are above.
 
 - **D1. Sports page one is 26 of 30 Alabama today.** Measured with
   `feed_for_you('sports', 30, 0)` through `db_inspect` at about 22:00 UTC on
@@ -167,7 +196,8 @@ liv term   = LIV_PENALTY = -1.0   when liv_story AND NOT top_player AND NOT tour
 - **`TOUR_SPLIT_TERMS`**, lowercase, whole word or phrase, in `feed/rank.py`:
   `pga tour`, `dp world tour`, `european tour`, `tour card`, `tour status`,
   `membership`, `reinstat*`, `merger`, `framework agreement`, `pif`,
-  `bankrupt*`, `ryder cup`.
+  `bankrupt*`, `ryder cup`, and (owner decision 9, LIV's business future)
+  `funding`, `future`, `end of liv`, `survive*`, `investor*`.
 
 **Applied to the 18 LIV stories in the database today:**
 
@@ -185,7 +215,7 @@ liv term   = LIV_PENALTY = -1.0   when liv_story AND NOT top_player AND NOT tour
 | 1333 | Rahm Planning to Leave LIV Post-Bankruptcy | Rahm | bankrupt | 0 |
 | 1285 | LIV's Meronk wins Dunhill Links, secures European tour card | — | european tour | 0 |
 | 1282 | Reed … road back to PGA Tour | — | pga tour | 0 |
-| 1278 | Golf, but quieter: Is this the end of LIV Golf? | — | — | **−1.0** |
+| 1278 | Golf, but quieter: Is this the end of LIV Golf? | — | end of liv (decision 9) | 0 |
 | 1277 | Top takeaways from LIV Golf's bankruptcy filings | — | bankrupt | 0 |
 | 1272 | Rahm leaving LIV Golf… | Rahm | — | 0 |
 | 972 | McIlroy Earns Praise … As LIV Path Clears | McIlroy | dp world tour | 0 |
@@ -194,12 +224,14 @@ liv term   = LIV_PENALTY = -1.0   when liv_story AND NOT top_player AND NOT tour
 
 - **The context:** LIV is in bankruptcy, so this month most LIV news *is*
   the tour split, and the term rightly spares it.
-- **Two calls are arguable:**
-  - 1278 "Is this the end of LIV Golf?" is a split story with no keyword.
-  - 2728, the law-firm sublease, is filler that a keyword spares.
-- **I'm not adding words to fit these 18.** That would be tuning on the
-  answer. The NI seed (§2) and your taps cover what the rule misses. Say if
-  you want either case handled differently.
+- **Two calls were arguable at Step 0.** The owner ruled on both (decision 9):
+  - 1278 "Is this the end of LIV Golf?" is LIV's business future, so it is
+    spared.
+  - 2728, the law-firm sublease, stays spared by `bankrupt*`, and the
+    owner's Hidden taps handle it.
+- With the decision-9 terms, 3051 and 949 are the two stories marked down,
+  judged on their titles. The 1466 match on `survive` was already spared, by
+  Rahm.
 
 ## 4. How boosts enter the score
 
