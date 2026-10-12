@@ -281,5 +281,60 @@ class TenNotInterested(unittest.TestCase):
         self.assertGreater(after, rank.PAGE_SIZE, f"held-out story at {before} -> {after}")
 
 
+class TenLoves(unittest.TestCase):
+    """The live check's rule, frozen by the owner before any tap (2026-10-12,
+    docs/feed_ranking.md decision 7): after ten Love taps on a topic and a
+    rebuild, (a) a held-out story of that topic, off page one before, climbs
+    at least 15 positions more than a control outside it moves, and (b) the
+    topic's page-one count rises. Loved stories stay in For you.
+
+    Not "the held-out story lands on page one": in this pool the topic goes
+    from 6 to 12 on page one while the held-out story, its weakest member,
+    goes 50 -> 35 behind its own siblings. The control goes 51 -> 62, so
+    (a) holds by 26."""
+
+    def test_held_out_climbs_past_the_control_and_the_topic_gains_page_one(self) -> None:
+        rng = random.Random(11)
+        film, deals, other, gossip = 0, 1, 2, 3
+        spec = [(film, 16), (deals, 20), (other, 40), (gossip, 4)]
+        stories, ages = [], {}
+        sid = 0
+        for topic, n in spec:
+            for _ in range(n):
+                sid += 1
+                stories.append(story(sid, topical(topic, rng), topics=(f"t{topic}",)))
+                ages[sid] = rng.uniform(0.5, 12.0)
+        film_ids = {s.id for s in stories if s.topics == (f"t{film}",)}
+        other_ids = [s.id for s in stories if s.topics == (f"t{other}",)]
+        mean = rank.mean([s.vec for s in stories])
+        love_seeds = [topical(deals, rng)]
+        ni_seeds = [topical(gossip, rng)]
+
+        def order(signals) -> dict[int, int]:
+            prof = rank.build_profile("home", mean, len(stories), love_seeds, ni_seeds, signals)
+            cands = [Candidate(s.id, rank.score_story(s, "home", prof, []).score, ages[s.id]) for s in stories]
+            return {p.id: p.pos for p in rank.order_for_you(cands)}
+
+        def page_one(pos: dict[int, int]) -> int:
+            return sum(1 for i in film_ids if pos[i] <= rank.PAGE_SIZE)
+
+        start = order([])
+        # The freshest film story off page one, as TenNotInterested takes the
+        # freshest on it; the control is the unloved, unseeded story nearest it.
+        held = min((i for i in film_ids if start[i] > rank.PAGE_SIZE), key=lambda i: ages[i])
+        control = min(other_ids, key=lambda i: (abs(start[i] - start[held]), i))
+        tapped = [s for s in stories if s.id in film_ids and s.id != held][:10]
+        self.assertEqual(len(tapped), 10)
+        after = order([Signal(s, "love") for s in tapped])
+
+        self.assertGreater(start[held], rank.PAGE_SIZE, "the held-out story must start off page one")
+        climb = start[held] - after[held]
+        moved = start[control] - after[control]
+        self.assertGreaterEqual(climb - moved, 15,
+                                f"held-out {start[held]} -> {after[held]}, control {start[control]} -> {after[control]}")
+        self.assertGreater(page_one(after), page_one(start),
+                           f"topic on page one {page_one(start)} -> {page_one(after)}")
+
+
 if __name__ == "__main__":
     unittest.main()

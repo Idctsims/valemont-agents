@@ -39,8 +39,12 @@ differ, the decisions win. Step 1 is `db/039_feed_ranking.sql`.
    - **Pass rule amended by the owner BEFORE any tap (2026-10-12 16:22
      Chicago), frozen now.** The page-one rule was dropped because ten loves
      lift the whole topic, and a held-out story can lose page-one places to
-     its own siblings while the topic gains (a synthetic pool: the topic 6 → 13
-     on page one, the held-out story 50 → 35).
+     its own siblings while the topic gains (a synthetic pool: the topic 6 → 12
+     on page one, the held-out story 50 → 35; "13" in `fe455e1` was a
+     miscount, corrected in the next commit. The rule below is unchanged).
+     `tests/test_feed_rank.py` `TenLoves` holds the amended rule on that
+     pool: held-out 50 → 35 against control 51 → 62 (26 ≥ 15), and the topic
+     6 → 12.
      **PASS = (a) AND (b), both measured against the 21:16 UTC "before"
      snapshot:**
      - **(a)** the held-out story's climb exceeds the control's movement by
