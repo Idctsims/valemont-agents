@@ -59,16 +59,23 @@ async function settled() {
   await expect(page.getByTestId("feed-latest")).toHaveAttribute("aria-busy", "false");
 }
 
+/** Scroll to mid-screen, clear of the sticky top bar and the dock's raised
+ * Wags button (scrollIntoViewIfNeeded leaves an element that already counts
+ * as visible behind them; see feed.spec). */
+async function centre(target: Locator) {
+  await target.evaluate((el) => el.scrollIntoView({ block: "center" }));
+}
+
 /** Press the centre of a button by coordinates, as a finger does. */
 async function tap(target: Locator) {
-  await target.scrollIntoViewIfNeeded();
+  await centre(target);
   const box = (await target.boundingBox())!;
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
 }
 
 /** Drag the card body horizontally by `dx` px, pointer down to up. */
 async function swipe(card: Locator, dx: number) {
-  await card.scrollIntoViewIfNeeded();
+  await centre(card.getByTestId("feed-summary"));
   const box = (await card.getByTestId("feed-summary").boundingBox())!;
   const y = box.y + box.height / 2;
   const x = box.x + box.width / 2;
@@ -105,7 +112,14 @@ test("Not interested removes the card with an Undo toast; Undo brings it back", 
   await expect(toast).toContainText("Not interested");
   await expect(toast).toContainText(title);
   await settled();
-  await tap(page.getByTestId("feed-undo"));
+  // Undo is fully on a 390 px screen and nothing covers it (2026-10-12: a long
+  // headline pushed it off-screen, so the tap missed and the toast stayed).
+  const undo = page.getByTestId("feed-undo");
+  await expect(undo).toBeInViewport({ ratio: 1 });
+  const ub = (await undo.boundingBox())!;
+  const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest("[data-testid]")?.getAttribute("data-testid"), [ub.x + ub.width / 2, ub.y + ub.height / 2]);
+  expect(hit).toBe("feed-undo");
+  await tap(undo);
   await expect(toast).toHaveCount(0);
   await expect(card).toHaveCount(1);
   await settled();
@@ -149,6 +163,7 @@ test("swipe right is Love and swipe left is Not interested; neither opens the pu
 
 test("opening the publisher writes one 'open' row", async () => {
   const { id, card } = await seed("open beacon");
+  await centre(card.getByTestId("feed-link"));
   const box = (await card.getByTestId("feed-link").boundingBox())!;
   const [popup] = await Promise.all([context.waitForEvent("page"), page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)]);
   await popup.close();

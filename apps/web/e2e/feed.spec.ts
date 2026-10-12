@@ -40,12 +40,25 @@ test.beforeAll(async ({ browser }, testInfo) => {
 });
 
 /**
+ * Scroll `target` to the middle of the screen. The phone shell has a sticky
+ * top bar and a fixed dock with a raised Wags button; scrollIntoViewIfNeeded
+ * does not scroll when the element already counts as visible, so a card
+ * could sit with its summary behind the Wags button, where a real finger
+ * opens Wags (found 2026-10-12: Phase 2's reaction row made cards 44 px
+ * taller and moved the summary into that band).
+ */
+async function centre(target: Locator) {
+  await target.evaluate((el) => el.scrollIntoView({ block: "center" }));
+}
+
+/**
  * Tap the centre of `target` the way a finger does, by coordinates, and
  * return the URL of the tab it opens. Not locator.click(): Playwright refuses
  * to click an element that another element covers, and the headline link's
  * overlay covers the whole row on purpose ("... intercepts pointer events").
  */
 async function tapOpens(target: Locator): Promise<string> {
+  await centre(target);
   const box = await target.boundingBox();
   if (!box) throw new Error("target not on screen");
   const [popup] = await Promise.all([
@@ -89,6 +102,7 @@ test("the whole row opens the publisher: the summary and the source/time line to
   await card.scrollIntoViewIfNeeded();
   for (const part of ["feed-summary", "feed-meta"] as const) {
     // What is under the centre of that part is the headline link's overlay.
+    await centre(card.getByTestId(part));
     const box = (await card.getByTestId(part).boundingBox())!;
     const under = await page.evaluate(
       ([x, y]) => document.elementFromPoint(x, y)?.closest("a")?.getAttribute("href") ?? null,
@@ -110,7 +124,7 @@ test("the +N outlets toggle opens its fold, never the publisher", async ({ brows
   await signIn(p, LATEST);
   const toggle = p.getByTestId("feed-outlets-toggle").first();
   test.skip((await toggle.count()) === 0, "no multi-outlet story on the real first page right now");
-  await toggle.scrollIntoViewIfNeeded();
+  await centre(toggle);
   const opened: string[] = [];
   plain.on("page", (np) => opened.push(np.url()));
   const box = (await toggle.boundingBox())!;

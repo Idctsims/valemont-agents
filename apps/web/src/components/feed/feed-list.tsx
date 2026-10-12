@@ -97,12 +97,16 @@ export function FeedList({ stories, pillar, now, testId }: { stories: FeedStory[
         {saving ? "Saving" : ""}
       </p>
       {toast && (
+        // Phones: above the dock and clear of its raised Wags mark (-mt-5),
+        // so mb-8. The pill is capped at the screen's width (w-full), so a
+        // long headline truncates instead of pushing Undo off-screen (the
+        // owner's 2026-10-12 run: Undo sat at x 363-430 on a 390 px phone).
         <div
           role="status"
           data-testid="feed-toast"
-          className="fixed inset-x-0 bottom-dock z-30 mb-3 flex justify-center px-4 lg:bottom-6 lg:mb-0 lg:pl-rail"
+          className="fixed inset-x-0 bottom-dock z-30 mb-8 flex justify-center px-4 lg:bottom-6 lg:mb-0 lg:pl-rail"
         >
-          <div className="flex max-w-measure items-center gap-3 rounded-pill border border-border bg-surface py-1 pr-1 pl-5 text-sm text-text">
+          <div className="flex w-full max-w-measure min-w-0 items-center gap-3 rounded-pill border border-border bg-surface py-1 pr-1 pl-5 text-sm text-text">
             <span className="min-w-0 truncate">
               {toast.reaction === "neutral" ? "Hidden" : "Not interested"} · {toast.story.title}
             </span>
