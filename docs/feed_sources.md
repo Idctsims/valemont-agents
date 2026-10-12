@@ -220,3 +220,47 @@ gte-small is anisotropic: almost every pair scores above 0.7. Consequences
 - **Story join stays at cosine ≥ 0.86 OR rapidfuzz token_set_ratio ≥ 90.**
   Every join and every near miss (0.78–0.86) is logged with both titles for
   the 24 h calibration report.
+
+## Story join calibration (first ingest, 2026-10-12)
+
+The first ingest (run by hand 00:31 UTC, 853 dated items from 46 sources)
+used the Step 2 rule: cosine >= 0.86 to the story's running-mean centroid,
+or rapidfuzz token_set_ratio >= 90. It over-merged: 214 stories and 639
+joins, one story of 230 unrelated college-football items. 632 joins came in
+on cosine alone, averaging 0.904 with an average title fuzz of 47.
+
+Why: with title + teaser text, gte-small scores ordinary same-sport pairs at
+0.86 to 0.93. Across all 363,378 item pairs the 99th percentile is 0.861
+(title only: 0.844), so 0.86 admits about 1% of every possible pair. The
+centroid then drifted toward a generic topic direction, making each next
+join easier.
+
+**Hand-labelled pairs** (70, stratified; "same" = the same news event):
+
+| cosine (title + teaser) | same story |
+|---|---|
+| >= 0.94 | ~21 of 22 (~95%) |
+| 0.90 to 0.94 | ~11 of 24 (~46%) |
+| 0.86 to 0.90 | ~6 of 24 (~25%) |
+
+Title fuzz barely separates within a band: templated titles score high, and
+token_set_ratio gives 100 when one title's words are a subset of the
+other's ("Constellation FURYK & FRIENDS" vs every birdie clip there).
+
+**The approved rule, simulated offline on the same 853 items** (member
+match, 25-item cap; 10 merges sampled and hand-labelled for each):
+
+| embeddings | stories | multi-item | largest | sampled merges correct |
+|---|---|---|---|---|
+| title + teaser | 700 | 91 | 12 | 5 of 10 |
+| title only | 726 | 82 | 10 | 8 of 10 |
+
+Title + teaser misses (5): 2 sportsbook promos, 2 yacht listings, 1 pair of
+different birdie clips. Title-only misses (2): 2 yacht listings. Both are now dropped by title rules (db/034).
+
+**Decision (owner, 2026-10-11):** cluster on title-only embeddings; keep
+title + teaser embeddings for Phase 2. Join when the best-matching member
+has cosine >= 0.94, or fuzz >= 90 AND cosine >= 0.90; near misses 0.88 to
+0.94 are logged. Candidates are stories first seen within 48 h; at most 25
+items per story (an overflow starts a new story, logged). The mis-clustered
+first ingest was deleted by db/034 and re-ingested.

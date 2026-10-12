@@ -56,6 +56,10 @@ def mix(a: list[float], b: list[float], w: float) -> list[float]:
     return [x * (1 - w) + y * w for x, y in zip(a, b)]
 
 
+def cosine_of(a, b) -> float:
+    return embed.cosine(a, b)
+
+
 # ===================================================================== parsing
 
 class Parsing(unittest.TestCase):
@@ -163,34 +167,95 @@ class SourcesFile(unittest.TestCase):
 
 # ================================================================== clustering
 
+def at_cos(c: float, base: int = 0, other: int = 1) -> list[float]:
+    """A unit vector whose cosine to unit(base) is exactly c."""
+    v = [0.0] * 384
+    v[base], v[other] = c, (1 - c * c) ** 0.5
+    return v
+
+
+def story(sid: int, *members: tuple[str, list[float]], count: int | None = None) -> cluster.Candidate:
+    return cluster.Candidate(sid, count if count is not None else len(members),
+                             tuple(cluster.Member(t, tuple(v)) for t, v in members))
+
+
 class Assignment(unittest.TestCase):
-    def test_joins_on_cosine(self) -> None:
-        story = cluster.Candidate(7, "Ross and Soffer scrap Miami airport hotel", tuple(unit(0)), 1)
-        d = cluster.assign(mix(unit(0), unit(1), 0.1), "Totally different words here", [story])
-        self.assertEqual((d.story_id, d.joined_by), (7, "cosine"))
+    def test_thresholds_are_the_owners(self) -> None:
+        self.assertEqual((cluster.JOIN_COSINE, cluster.JOIN_FUZZ, cluster.FUZZ_MIN_COSINE, cluster.NEAR_MISS_FROM,
+                          cluster.CANDIDATE_HOURS, cluster.MAX_ITEMS), (0.94, 90.0, 0.90, 0.88, 48, 25))
 
-    def test_joins_on_fuzz_when_cosine_is_short(self) -> None:
-        story = cluster.Candidate(7, "Texans trade for Cardinals' Harrison, reunite WR with QB Stroud", tuple(unit(0)), 1)
-        d = cluster.assign(unit(5), "Texans trade for Cardinals Harrison reunite WR with QB Stroud", [story])
-        self.assertEqual((d.story_id, d.joined_by), (7, "fuzz"))
+    def test_joins_on_cosine_at_094_not_below(self) -> None:
+        s = story(7, ("Verstappen wins first Singapore GP from pole", unit(0)))
+        self.assertEqual(cluster.assign(at_cos(0.95), "Different words entirely", [s]).joined_by, "cosine")
+        self.assertIsNone(cluster.assign(at_cos(0.93), "Different words entirely", [s]).story_id)
 
-    def test_no_join_founds_a_story_and_reports_near_misses(self) -> None:
-        near = cluster.Candidate(3, "Something else", tuple(unit(0)), 1)
-        far = cluster.Candidate(4, "Unrelated", tuple(unit(9)), 1)
-        vec = mix(unit(0), unit(1), 0.42)  # cosine to unit(0) ~= 0.81
-        d = cluster.assign(vec, "A new headline", [near, far])
+    def test_fuzz_joins_only_with_cosine_090(self) -> None:
+        s = story(7, ("Texans trade for Cardinals' Harrison, reunite WR with QB Stroud", unit(0)))
+        same_words = "Texans trade for Cardinals Harrison reunite WR with QB Stroud"
+        self.assertEqual(cluster.assign(at_cos(0.91), same_words, [s]).joined_by, "fuzz")
+        # The FURYK case: a title that is a subset scores fuzz 100, but a low
+        # cosine keeps it out.
+        furyk = story(8, ("Constellation FURYK & FRIENDS", unit(0)))
+        self.assertIsNone(cluster.assign(at_cos(0.87), "Vaughn Taylor makes birdie on No. 13 at Constellation FURYK & FRIENDS",
+                                         [furyk]).story_id)
+
+    def test_the_best_member_counts_not_the_first(self) -> None:
+        s = story(7, ("old angle", unit(5)), ("Verstappen takes pole in Singapore", unit(0)))
+        d = cluster.assign(at_cos(0.96), "Verstappen on pole", [s])
+        self.assertEqual(d.story_id, 7)
+        self.assertAlmostEqual(d.best.cosine, 0.96, places=6)
+
+    def test_no_drift_an_item_like_the_centroid_but_no_member_does_not_join(self) -> None:
+        # Members along two axes; their centroid sits between them. An item on
+        # that centroid scores cosine 1.0 against it, but only ~0.71 against
+        # either member: under the member rule it founds its own story.
+        a, b = unit(0), unit(1)
+        s = story(7, ("Story about A", a), ("Story about B", b))
+        centroid = [(x + y) / (2 ** 0.5) for x, y in zip(a, b)]  # unit length
+        self.assertAlmostEqual(cosine_of(centroid, cluster.running_mean(a, 1, b)), 1.0, places=6)
+        d = cluster.assign(centroid, "A generic headline", [s])
+        self.assertIsNone(d.story_id)
+
+    def test_chaining_within_the_window_goes_through_a_member(self) -> None:
+        # A ~ B (0.96), B ~ C (0.96), A unlike C (~0.84): C joins only because
+        # B is a member. The 48-hour window that ends such chains is SQL
+        # (FEED_CANDIDATES_SQL, on first_seen_at): tests_live pins it.
+        a = unit(0)
+        b = at_cos(0.96, 0, 1)
+        c = [0.0] * 384
+        # c: cos(b, c) = 0.96, built in the a-b plane plus a third axis.
+        import math
+        theta_ab = math.acos(0.96)
+        c[0], c[1] = math.cos(2 * theta_ab), math.sin(2 * theta_ab)
+        self.assertLess(cosine_of(a, c), cluster.JOIN_COSINE)
+        self.assertAlmostEqual(cosine_of(b, c), 0.96, places=6)
+        only_a = story(7, ("A headline", a))
+        self.assertIsNone(cluster.assign(c, "C headline", [only_a]).story_id)
+        with_b = story(7, ("A headline", a), ("B headline", b))
+        self.assertEqual(cluster.assign(c, "C headline", [with_b]).story_id, 7)
+
+    def test_a_full_story_overflows_into_a_new_one(self) -> None:
+        full = story(7, ("Singapore GP result", unit(0)), count=cluster.MAX_ITEMS)
+        d = cluster.assign(at_cos(0.99), "Singapore GP result again", [full])
+        self.assertIsNone(d.story_id)
+        self.assertEqual(d.overflow.story_id, 7)
+        # With room in another eligible story, it joins that one instead.
+        roomy = story(8, ("Singapore GP result, other outlet", unit(0)))
+        d = cluster.assign(at_cos(0.97), "Singapore GP result again", [full, roomy])
+        self.assertEqual((d.story_id, d.overflow), (8, None))
+
+    def test_near_misses_are_088_to_094_not_joined(self) -> None:
+        near = story(3, ("Something else", unit(0)))
+        far = story(4, ("Unrelated", unit(9)))
+        d = cluster.assign(at_cos(0.90), "A new headline", [near, far])
         self.assertIsNone(d.story_id)
         self.assertEqual([s.story_id for s in d.near_misses], [3])
-        self.assertTrue(cluster.NEAR_MISS_FROM <= d.near_misses[0].cosine < cluster.JOIN_COSINE)
+        self.assertIsNone(cluster.assign(at_cos(0.87), "A new headline", [near]).near_misses or None)
 
-    def test_the_best_cosine_wins(self) -> None:
-        a = cluster.Candidate(1, "a", tuple(mix(unit(0), unit(1), 0.3)), 1)
-        b = cluster.Candidate(2, "b", tuple(unit(0)), 1)
+    def test_the_best_eligible_story_wins(self) -> None:
+        a = story(1, ("a", at_cos(0.95)))
+        b = story(2, ("b", unit(0)))
         self.assertEqual(cluster.assign(unit(0), "x", [a, b]).story_id, 2)
-
-    def test_thresholds_are_the_owners(self) -> None:
-        self.assertEqual((cluster.JOIN_COSINE, cluster.JOIN_FUZZ, cluster.NEAR_MISS_FROM, cluster.CANDIDATE_HOURS),
-                         (0.86, 90.0, 0.78, 48))
 
     def test_lead_is_lowest_priority_then_earliest_then_id(self) -> None:
         t0 = NOW
@@ -236,6 +301,42 @@ class FilterRules(unittest.TestCase):
         seeds = [SeedPhrase(4, "celebrity gossip", tuple(unit(0)))]
         self.assertEqual(best_seed(unit(0), seeds), (1.0, 4))
         self.assertIsNone(best_seed(mix(unit(0), unit(1), 0.6), seeds))  # cosine ~0.55
+
+    def test_db034_rules_drop_promos_listings_and_clips_never_regulation(self) -> None:
+        import re
+        from core.paths import REPO_ROOT
+        sql = (REPO_ROOT / "db" / "034_feed_reset.sql").read_text(encoding="utf-8")
+        rows = re.findall(r"\('title_regex',\s+NULL,\s+'((?:[^']|'')*)'", sql)
+        self.assertEqual(len(rows), 8)
+        rx = [re.compile(p.replace("''", "'"), re.I) for p in rows]
+        drop = ["Ravens vs. Falcons Betting Promos: Odds, Prediction, How to Watch Sunday Night Football",
+                "NFL Betting Promos for Week 5: Claim Thousands in Bonus Value Today",
+                "bet365 Bonus Code: Get $200 Bonus Bets for NFL Week 5 Sunday",
+                "Ravens vs. Falcons Prediction Market Promos: Best Welcome Offers for SNF Week 5",
+                "Kalshi Promo Code ACTION55: Claim $55 Bonus for Bears vs. Packers",
+                "Kalshi referral code: get $25",
+                "Sunshot yacht (Sunreef Yachts, 23.95m, 2025)",
+                "Ad Astra yacht (Fountaine Pajot Yachts, 23.99m, 2024)",
+                "Rod Pampling makes birdie on No. 10 at Constellation FURYK & FRIENDS"]
+        keep = ["Ohio bans sportsbook promos aimed at college students",
+                "Kalshi wins appeal over sports event contracts in Nevada",
+                "CFTC weighs new rules for prediction markets",
+                "DraftKings Sued By Seminole Tribe Over Sports Predictions In Florida",
+                "Boat International: the superyacht market's record quarter",
+                "Michael Brennan makes history with third PGA Tour win",
+                # Yacht news survives: only the listing format
+                # "Name yacht (Builder, NN.NNm, YYYY)" is a listing (owner, 2026-10-11).
+                "Sunreef sells 40m catamaran to American owner",
+                "Feadship delivers 87m superyacht Project 821",
+                "Feadship delivers 87m yacht (Project 821) to its owner",
+                "Lürssen launches 125m yacht Project Jag in Bremen",
+                "First look inside first unit of ISA Yachts 40m Viper 130 Fast Naan",
+                "Benetti sells 50m yacht (B.Now) ahead of Monaco show",
+                "Why the 23.95m Sunreef 80 is selling out"]
+        for t in drop:
+            self.assertTrue(any(r.search(t) for r in rx), t)
+        for t in keep:
+            self.assertFalse(any(r.search(t) for r in rx), t)
 
     def test_every_seeded_db032_pattern_compiles_in_python(self) -> None:
         import re
@@ -356,10 +457,11 @@ class SummaryJobRun(unittest.TestCase):
         self.assertEqual([u for _, u in self.saved], [555, 555])
 
     def test_caps(self) -> None:
-        with mock.patch.object(ledger, "feed_summarized_today", lambda **kw: 245), \
+        self.assertEqual((summarize.RUN_CAP, summarize.DAILY_CAP), (60, 600))
+        with mock.patch.object(ledger, "feed_summarized_today", lambda **kw: 595), \
                 mock.patch.object(ai, "complete", self._complete):
             self.assertEqual(summarize.summarize_job(), (5, 0))
-        with mock.patch.object(ledger, "feed_summarized_today", lambda **kw: 250), \
+        with mock.patch.object(ledger, "feed_summarized_today", lambda **kw: 600), \
                 mock.patch.object(ai, "complete", side_effect=AssertionError("no call past the cap")):
             self.assertEqual(summarize.summarize_job(), (0, 0))
 
@@ -497,7 +599,7 @@ class FakeFeedLedger:
         return [(r.id, r.kind, r.pillar, r.pattern) for r in RULES]
 
     def feed_candidates(self, hours, **kw):
-        return [(sid, s["title"], tuple(s["centroid"]), s["count"]) for sid, s in self.stories.items()]
+        return [ledger.CandidateStory(sid, s["count"], tuple(s["members"])) for sid, s in self.stories.items()]
 
     def feed_known(self, source_id, external_ids, urls, **kw):
         return ({e for e in external_ids if (source_id, e) in self.items}, {u for u in urls if u in self.urls})
@@ -514,14 +616,16 @@ class FakeFeedLedger:
             self.urls.add(it.url)
         return next(self.ids)
 
-    def feed_new_story(self, src, it, vec, *, filtered_reason, seed, near_misses=(), **kw):
+    def feed_new_story(self, src, it, vec, title_vec, *, filtered_reason, seed, near_misses=(), **kw):
         sid = next(self.ids)
-        self.stories[sid] = {"title": it.title, "centroid": list(vec), "count": 1,
-                             "filtered": filtered_reason, "seed": seed, "near": list(near_misses)}
+        self.stories[sid] = {"title": it.title, "members": [(it.title, tuple(title_vec))], "count": 1,
+                             "filtered": filtered_reason, "seed": seed, "near": list(near_misses),
+                             "text_vec": list(vec)}
         return sid, self._add(src, it, sid)
 
-    def feed_join_story(self, src, it, vec, story_id, *, seed, logged, **kw):
+    def feed_join_story(self, src, it, vec, title_vec, story_id, *, seed, logged, **kw):
         self.stories[story_id]["count"] += 1
+        self.stories[story_id]["members"].append((it.title, tuple(title_vec)))
         self.joins.append((story_id, it.title, logged))
         return self._add(src, it, story_id)
 

@@ -1919,30 +1919,44 @@ def feed_insert_seeded(source: FeedSource, items: Sequence[FeedItemIn], *,
     return written
 
 
-#: The story candidates an item is compared with: stories of the same world
-#: (real or test) seen in the last `hours`, with a centroid.
-#: tests_live/test_feed_sql.py runs this exact text.
+#: The story candidates an item is compared with, one row per MEMBER: stories
+#: of the same world (real or test) FIRST seen within `hours` (feed/cluster.py:
+#: a story stops absorbing items 48 h after it began, however recently its
+#: last item came), each member's title and title-only embedding.
+#: tests_live/test_feed_ledger.py runs this exact text.
 FEED_CANDIDATES_SQL: Final = """
-    SELECT id, title, centroid::text, item_count
-      FROM stories
-     WHERE is_test = %(is_test)s
-       AND centroid IS NOT NULL
-       AND last_seen_at > now() - make_interval(hours => %(hours)s)
-     ORDER BY last_seen_at DESC
+    SELECT st.id, st.item_count, i.title, i.title_embedding::text
+      FROM stories st
+      JOIN content_items i ON i.story_id = st.id
+     WHERE st.is_test = %(is_test)s
+       AND st.first_seen_at > now() - make_interval(hours => %(hours)s)
+       AND i.title_embedding IS NOT NULL
+     ORDER BY st.id, i.id
 """
 
 
+@dataclass(frozen=True)
+class CandidateStory:
+    story_id: int
+    item_count: int
+    #: (title, title-only embedding) per member.
+    members: tuple[tuple[str, tuple[float, ...]], ...]
+
+
 def feed_candidates(hours: int, *, is_test: bool = False,
-                    conn: psycopg.Connection | None = None) -> list[tuple[int, str, tuple[float, ...], int]]:
+                    conn: psycopg.Connection | None = None) -> list[CandidateStory]:
     with _brief_conn(conn) as c:
         rows = c.execute(FEED_CANDIDATES_SQL, {"is_test": is_test, "hours": hours}).fetchall()
-    return [(r[0], r[1], _vec_parse(r[2]), r[3]) for r in rows]
+    stories: dict[int, tuple[int, list[tuple[str, tuple[float, ...]]]]] = {}
+    for sid, count, title, vec in rows:
+        stories.setdefault(sid, (count, []))[1].append((title, _vec_parse(vec)))
+    return [CandidateStory(sid, count, tuple(members)) for sid, (count, members) in stories.items()]
 
 
 @dataclass(frozen=True)
 class SimilarityRow:
     story_id: int
-    kind: Literal["join", "near_miss"]
+    kind: Literal["join", "near_miss", "cap_overflow"]
     cosine: float
     fuzz: float
     joined_by: str | None = None
@@ -1960,22 +1974,25 @@ def _log_similarity(c: psycopg.Connection, item_id: int, rows: Sequence[Similari
 
 
 def _insert_item(c: psycopg.Connection, source: FeedSource, it: FeedItemIn, story_id: int,
-                 vector: Sequence[float]) -> int | None:
+                 vector: Sequence[float], title_vector: Sequence[float]) -> int | None:
     row = c.execute(
         """
         INSERT INTO content_items (source_id, external_id, url, google_url, title, teaser,
-                                   published_at, fetched_at, story_id, embedding, decode_failed, is_test)
-        VALUES (%s, %s, %s, %s, %s, %s, LEAST(%s, now()), now(), %s, %s::extensions.halfvec, %s, %s)
+                                   published_at, fetched_at, story_id, embedding, title_embedding,
+                                   decode_failed, is_test)
+        VALUES (%s, %s, %s, %s, %s, %s, LEAST(%s, now()), now(), %s, %s::extensions.halfvec,
+                %s::extensions.halfvec, %s, %s)
         ON CONFLICT DO NOTHING
         RETURNING id
         """,
         (source.id, it.external_id, it.url, it.google_url, it.title, it.teaser, it.published_at,
-         story_id, _vec_text(vector), it.decode_failed, source.is_test),
+         story_id, _vec_text(vector), _vec_text(title_vector), it.decode_failed, source.is_test),
     ).fetchone()
     return int(row[0]) if row else None
 
 
-def feed_new_story(source: FeedSource, it: FeedItemIn, vector: Sequence[float], *,
+def feed_new_story(source: FeedSource, it: FeedItemIn, vector: Sequence[float],
+                   title_vector: Sequence[float], *,
                    filtered_reason: str | None, seed: tuple[float, int] | None,
                    near_misses: Sequence[SimilarityRow] = (),
                    conn: psycopg.Connection | None = None) -> tuple[int, int] | None:
@@ -1983,7 +2000,7 @@ def feed_new_story(source: FeedSource, it: FeedItemIn, vector: Sequence[float], 
     a url). One transaction. Returns (story id, item id), or None when the
     item turned out to exist already (a race on the exact-dedupe keys)."""
     try:
-        return _new_story(source, it, vector, filtered_reason=filtered_reason, seed=seed,
+        return _new_story(source, it, vector, title_vector, filtered_reason=filtered_reason, seed=seed,
                           near_misses=near_misses, conn=conn)
     except _ItemExists:
         return None
@@ -1993,7 +2010,8 @@ class _ItemExists(Exception):
     """Raised inside the transaction to roll back a story whose item already existed."""
 
 
-def _new_story(source: FeedSource, it: FeedItemIn, vector: Sequence[float], *,
+def _new_story(source: FeedSource, it: FeedItemIn, vector: Sequence[float],
+               title_vector: Sequence[float], *,
                filtered_reason: str | None, seed: tuple[float, int] | None,
                near_misses: Sequence[SimilarityRow], conn: psycopg.Connection | None) -> tuple[int, int]:
     with _brief_conn(conn) as c, c.transaction():
@@ -2007,7 +2025,7 @@ def _new_story(source: FeedSource, it: FeedItemIn, vector: Sequence[float], *,
             (list(source.pillars), source.sport, it.title, _vec_text(vector), filtered_reason,
              seed[0] if seed else None, seed[1] if seed else None, source.is_test),
         ).fetchone()[0]
-        item_id = _insert_item(c, source, it, story_id, vector)
+        item_id = _insert_item(c, source, it, story_id, vector, title_vector)
         if item_id is None:
             # Nothing to found: undo the story (same transaction, so nothing leaks).
             raise _ItemExists()
@@ -2017,7 +2035,8 @@ def _new_story(source: FeedSource, it: FeedItemIn, vector: Sequence[float], *,
     return story_id, item_id
 
 
-def feed_join_story(source: FeedSource, it: FeedItemIn, vector: Sequence[float], story_id: int, *,
+def feed_join_story(source: FeedSource, it: FeedItemIn, vector: Sequence[float],
+                    title_vector: Sequence[float], story_id: int, *,
                     seed: tuple[float, int] | None, logged: Sequence[SimilarityRow],
                     conn: psycopg.Connection | None = None) -> int | None:
     """Add this item to `story_id`: running-mean centroid, count, last seen,
@@ -2032,7 +2051,7 @@ def feed_join_story(source: FeedSource, it: FeedItemIn, vector: Sequence[float],
         if row is None:
             raise LedgerError(f"story {story_id} vanished before the join")
         centroid, count = _vec_parse(row[0]) or tuple(vector), int(row[1])
-        item_id = _insert_item(c, source, it, story_id, vector)
+        item_id = _insert_item(c, source, it, story_id, vector, title_vector)
         if item_id is None:
             return None
         mean = [(a * count + b) / (count + 1) for a, b in zip(centroid, vector)]
@@ -2164,8 +2183,9 @@ def feed_save_summaries(results: Sequence[SummaryOut], ai_usage_id: int | None, 
 #: adds the 90-day prune for unreacted ones); tests_live runs these texts.
 FEED_PRUNE_SQL: Final = {
     "embeddings_cleared": """
-        UPDATE content_items SET embedding = NULL
-         WHERE embedding IS NOT NULL AND fetched_at < now() - interval '72 hours'
+        UPDATE content_items SET embedding = NULL, title_embedding = NULL
+         WHERE (embedding IS NOT NULL OR title_embedding IS NOT NULL)
+           AND fetched_at < now() - interval '72 hours'
     """,
     "filtered_stories_deleted": """
         DELETE FROM stories

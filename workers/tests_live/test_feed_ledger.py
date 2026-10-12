@@ -75,9 +75,10 @@ class FeedLedgerCase(unittest.TestCase):
         try:
             with _rolled_back() as conn:
                 ok = conn.execute(
-                    "SELECT to_regclass('public.feed_similarity_log') IS NOT NULL").fetchone()[0]
+                    "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'content_items' "
+                    "AND column_name = 'title_embedding')").fetchone()[0]
                 if not ok:
-                    raise unittest.SkipTest("db/033 not pasted")
+                    raise unittest.SkipTest("db/034 not pasted")
                 cls.owner = conn.execute("SELECT owner_id FROM app_settings").fetchone()[0]
         except unittest.SkipTest:
             raise
@@ -98,28 +99,43 @@ class Candidates(FeedLedgerCase):
     def test_the_48_hour_window_and_the_two_worlds(self) -> None:
         with _rolled_back() as conn:
             src = self.make_source(conn)
-            fresh = ledger.feed_new_story(src, _item(), unit(0), filtered_reason=None, seed=None, conn=conn)[0]
-            old = ledger.feed_new_story(src, _item(), unit(1), filtered_reason=None, seed=None, conn=conn)[0]
-            edge = ledger.feed_new_story(src, _item(), unit(2), filtered_reason=None, seed=None, conn=conn)[0]
+            fresh = ledger.feed_new_story(src, _item(), unit(0), unit(0), filtered_reason=None, seed=None, conn=conn)[0]
+            old = ledger.feed_new_story(src, _item(), unit(1), unit(1), filtered_reason=None, seed=None, conn=conn)[0]
+            edge = ledger.feed_new_story(src, _item(), unit(2), unit(2), filtered_reason=None, seed=None, conn=conn)[0]
+            # `old` began 49 h ago but was seen a minute ago (a recent join):
+            # the window is on FIRST seen, so it is still out. No chain can
+            # keep a story absorbing items past 48 h.
             conn.execute("UPDATE stories SET first_seen_at = now() - interval '49 hours', "
-                         "last_seen_at = now() - interval '49 hours' WHERE id = %s", (old,))
+                         "last_seen_at = now() - interval '1 minute' WHERE id = %s", (old,))
             conn.execute("UPDATE stories SET first_seen_at = now() - interval '47 hours', "
                          "last_seen_at = now() - interval '47 hours' WHERE id = %s", (edge,))
-            test_ids = {c[0] for c in ledger.feed_candidates(48, is_test=True, conn=conn)}
+            test_ids = {c.story_id for c in ledger.feed_candidates(48, is_test=True, conn=conn)}
             self.assertIn(fresh, test_ids)
             self.assertIn(edge, test_ids)
             self.assertNotIn(old, test_ids)
             # The real world never sees test stories.
-            real_ids = {c[0] for c in ledger.feed_candidates(48, is_test=False, conn=conn)}
+            real_ids = {c.story_id for c in ledger.feed_candidates(48, is_test=False, conn=conn)}
             self.assertFalse(real_ids & {fresh, edge, old})
-            # The centroid comes back as 384 floats.
-            vec = next(c[2] for c in ledger.feed_candidates(48, is_test=True, conn=conn) if c[0] == fresh)
-            self.assertEqual(len(vec), 384)
-            self.assertAlmostEqual(vec[0], 1.0, places=3)
+
+    def test_members_come_back_with_their_title_embeddings(self) -> None:
+        with _rolled_back() as conn:
+            src = self.make_source(conn)
+            sid, _ = ledger.feed_new_story(src, _item(title="First"), unit(0), unit(5), filtered_reason=None,
+                                           seed=None, conn=conn)
+            ledger.feed_join_story(src, _item(title="Second"), unit(1), unit(6), sid, seed=None, logged=[], conn=conn)
+            cand = next(c for c in ledger.feed_candidates(48, is_test=True, conn=conn) if c.story_id == sid)
+            self.assertEqual(cand.item_count, 2)
+            self.assertEqual([t for t, _ in cand.members], ["First", "Second"])
+            # The TITLE embedding, not the title + teaser one.
+            self.assertAlmostEqual(cand.members[0][1][5], 1.0, places=3)
+            self.assertAlmostEqual(cand.members[1][1][6], 1.0, places=3)
+            self.assertEqual(len(cand.members[0][1]), 384)
 
     def test_the_query_text_is_the_one_ledger_runs(self) -> None:
-        self.assertIn("last_seen_at > now() - make_interval(hours => %(hours)s)", ledger.FEED_CANDIDATES_SQL)
-        self.assertIn("is_test = %(is_test)s", ledger.FEED_CANDIDATES_SQL)
+        self.assertIn("st.first_seen_at > now() - make_interval(hours => %(hours)s)", ledger.FEED_CANDIDATES_SQL)
+        self.assertNotIn("last_seen_at", ledger.FEED_CANDIDATES_SQL)
+        self.assertIn("i.title_embedding IS NOT NULL", ledger.FEED_CANDIDATES_SQL)
+        self.assertIn("st.is_test = %(is_test)s", ledger.FEED_CANDIDATES_SQL)
 
 
 class FoundAndJoin(FeedLedgerCase):
@@ -127,13 +143,13 @@ class FoundAndJoin(FeedLedgerCase):
         with _rolled_back() as conn:
             low, high = self.make_source(conn, priority=10), self.make_source(conn, priority=40)
             # Founded by the high-priority-number outlet; then a url-less item; then the low one.
-            sid, first = ledger.feed_new_story(high, _item(title="Founder headline"), unit(0),
+            sid, first = ledger.feed_new_story(high, _item(title="Founder headline"), unit(0), unit(0),
                                                filtered_reason=None, seed=(0.75, None), conn=conn)
             self.assertEqual(conn.execute("SELECT lead_item_id FROM stories WHERE id = %s", (sid,)).fetchone()[0], first)
-            nolink = ledger.feed_join_story(high, _item(url=None, title="Undecoded"), unit(1), sid, seed=None,
+            nolink = ledger.feed_join_story(high, _item(url=None, title="Undecoded"), unit(1), unit(1), sid, seed=None,
                                             logged=[ledger.SimilarityRow(sid, "join", 0.9, 50, "cosine")], conn=conn)
             self.assertIsNotNone(nolink)
-            lead = ledger.feed_join_story(low, _item(title="Better outlet headline"), unit(0), sid,
+            lead = ledger.feed_join_story(low, _item(title="Better outlet headline"), unit(0), unit(0), sid,
                                           seed=(0.81, None),
                                           logged=[ledger.SimilarityRow(sid, "join", 0.95, 92, "both")], conn=conn)
             row = conn.execute(
@@ -153,16 +169,16 @@ class FoundAndJoin(FeedLedgerCase):
     def test_a_story_whose_only_item_failed_to_decode_has_no_lead(self) -> None:
         with _rolled_back() as conn:
             src = self.make_source(conn)
-            sid, _ = ledger.feed_new_story(src, _item(url=None), unit(0), filtered_reason=None, seed=None, conn=conn)
+            sid, _ = ledger.feed_new_story(src, _item(url=None), unit(0), unit(0), filtered_reason=None, seed=None, conn=conn)
             self.assertIsNone(conn.execute("SELECT lead_item_id FROM stories WHERE id = %s", (sid,)).fetchone()[0])
 
     def test_an_existing_url_founds_nothing(self) -> None:
         with _rolled_back() as conn:
             src = self.make_source(conn)
             url = f"https://tests-live.invalid/{uuid.uuid4().hex}"
-            ledger.feed_new_story(src, _item(url), unit(0), filtered_reason=None, seed=None, conn=conn)
+            ledger.feed_new_story(src, _item(url), unit(0), unit(0), filtered_reason=None, seed=None, conn=conn)
             before = conn.execute("SELECT count(*) FROM stories WHERE is_test").fetchone()[0]
-            self.assertIsNone(ledger.feed_new_story(src, _item(url), unit(1), filtered_reason=None, seed=None, conn=conn))
+            self.assertIsNone(ledger.feed_new_story(src, _item(url), unit(1), unit(1), filtered_reason=None, seed=None, conn=conn))
             self.assertEqual(conn.execute("SELECT count(*) FROM stories WHERE is_test").fetchone()[0], before)
 
     def test_seeded_items_are_seen_and_never_stories(self) -> None:
@@ -182,10 +198,10 @@ class Summaries(FeedLedgerCase):
         with _rolled_back() as conn:
             real = self.make_source(conn, is_test=False)
             test = self.make_source(conn)
-            rsid, _ = ledger.feed_new_story(real, _item(title="Real story"), unit(0), filtered_reason=None, seed=None, conn=conn)
-            fsid, _ = ledger.feed_new_story(real, _item(title="Filtered"), unit(1), filtered_reason="title_regex:1",
+            rsid, _ = ledger.feed_new_story(real, _item(title="Real story"), unit(0), unit(0), filtered_reason=None, seed=None, conn=conn)
+            fsid, _ = ledger.feed_new_story(real, _item(title="Filtered"), unit(1), unit(1), filtered_reason="title_regex:1",
                                             seed=None, conn=conn)
-            tsid, _ = ledger.feed_new_story(test, _item(title="Test story"), unit(2), filtered_reason=None, seed=None, conn=conn)
+            tsid, _ = ledger.feed_new_story(test, _item(title="Test story"), unit(2), unit(2), filtered_reason=None, seed=None, conn=conn)
             queued = {j.story_id for j in ledger.feed_summary_queue(5000, 2, conn=conn)}
             self.assertIn(rsid, queued)
             self.assertNotIn(fsid, queued)
@@ -205,7 +221,7 @@ class Summaries(FeedLedgerCase):
     def test_an_invalid_result_counts_an_attempt_and_two_retire_it(self) -> None:
         with _rolled_back() as conn:
             real = self.make_source(conn, is_test=False)
-            sid, _ = ledger.feed_new_story(real, _item(), unit(0), filtered_reason=None, seed=None, conn=conn)
+            sid, _ = ledger.feed_new_story(real, _item(), unit(0), unit(0), filtered_reason=None, seed=None, conn=conn)
             ledger.feed_save_summaries([ledger.SummaryOut(sid, None)], None, conn=conn)
             self.assertIn(sid, {j.story_id for j in ledger.feed_summary_queue(5000, 2, conn=conn)})
             ledger.feed_save_summaries([ledger.SummaryOut(sid, None)], None, conn=conn)
@@ -216,7 +232,7 @@ class Summaries(FeedLedgerCase):
     def test_live_drop_files_the_story(self) -> None:
         with _rolled_back() as conn:
             real = self.make_source(conn, is_test=False)
-            sid, _ = ledger.feed_new_story(real, _item(), unit(0), filtered_reason=None, seed=None, conn=conn)
+            sid, _ = ledger.feed_new_story(real, _item(), unit(0), unit(0), filtered_reason=None, seed=None, conn=conn)
             usage = conn.execute("""INSERT INTO ai_usage (purpose, model, tokens_in, tokens_out, cost_usd)
                                     VALUES ('feed_summarize', 'claude-haiku-5-5', 1, 1, 0) RETURNING id""").fetchone()[0]
             ledger.feed_save_summaries([ledger.SummaryOut(sid, "S.", drop="gossip", filtered_reason="drop:gossip")],
@@ -230,10 +246,10 @@ class Prune(FeedLedgerCase):
     def test_the_prune_never_touches_a_kept_story(self) -> None:
         with _rolled_back() as conn:
             src = self.make_source(conn)
-            kept, kept_item = ledger.feed_new_story(src, _item(), unit(0), filtered_reason=None, seed=None, conn=conn)
-            gone, gone_item = ledger.feed_new_story(src, _item(), unit(1), filtered_reason="title_regex:1",
+            kept, kept_item = ledger.feed_new_story(src, _item(), unit(0), unit(0), filtered_reason=None, seed=None, conn=conn)
+            gone, gone_item = ledger.feed_new_story(src, _item(), unit(1), unit(1), filtered_reason="title_regex:1",
                                                     seed=None, conn=conn)
-            young, _ = ledger.feed_new_story(src, _item(), unit(2), filtered_reason="title_regex:1", seed=None, conn=conn)
+            young, _ = ledger.feed_new_story(src, _item(), unit(2), unit(2), filtered_reason="title_regex:1", seed=None, conn=conn)
             # Age the kept and the first filtered story to 40 days.
             for sid in (kept, gone):
                 conn.execute("UPDATE stories SET first_seen_at = now() - interval '40 days', "
@@ -248,17 +264,17 @@ class Prune(FeedLedgerCase):
     def test_embeddings_older_than_72_hours_are_cleared_and_old_seeded_items_go(self) -> None:
         with _rolled_back() as conn:
             src = self.make_source(conn)
-            _, fresh = ledger.feed_new_story(src, _item(), unit(0), filtered_reason=None, seed=None, conn=conn)
+            _, fresh = ledger.feed_new_story(src, _item(), unit(0), unit(0), filtered_reason=None, seed=None, conn=conn)
             # An old item: inserted directly with an old fetch time.
             sid = conn.execute("INSERT INTO stories (pillars, title, is_test) VALUES ('{home}', 'old', true) "
                                "RETURNING id").fetchone()[0]
             old = conn.execute(
                 """INSERT INTO content_items (source_id, external_id, url, title, published_at, fetched_at,
-                                             story_id, embedding, is_test)
+                                             story_id, embedding, title_embedding, is_test)
                    VALUES (%s, %s, %s, 'old', now() - interval '4 days', now() - interval '4 days', %s,
-                           %s::extensions.halfvec, true) RETURNING id""",
+                           %s::extensions.halfvec, %s::extensions.halfvec, true) RETURNING id""",
                 (src.id, f"tl:{uuid.uuid4().hex}", f"https://tests-live.invalid/{uuid.uuid4().hex}", sid,
-                 "[" + ",".join(["0.05"] * 384) + "]")).fetchone()[0]
+                 "[" + ",".join(["0.05"] * 384) + "]", "[" + ",".join(["0.04"] * 384) + "]")).fetchone()[0]
             seeded = conn.execute(
                 """INSERT INTO content_items (source_id, external_id, url, title, published_at, fetched_at,
                                              seeded, is_test)
@@ -266,9 +282,10 @@ class Prune(FeedLedgerCase):
                    RETURNING id""",
                 (src.id, f"tl:{uuid.uuid4().hex}", f"https://tests-live.invalid/{uuid.uuid4().hex}")).fetchone()[0]
             ledger.feed_prune(conn=conn)
-            emb = dict(conn.execute("SELECT id, embedding IS NOT NULL FROM content_items WHERE id = ANY(%s)",
-                                    ([fresh, old],)).fetchall())
-            self.assertEqual(emb, {fresh: True, old: False})
+            emb = {r[0]: (r[1], r[2]) for r in conn.execute(
+                "SELECT id, embedding IS NOT NULL, title_embedding IS NOT NULL FROM content_items WHERE id = ANY(%s)",
+                ([fresh, old],)).fetchall()}
+            self.assertEqual(emb, {fresh: (True, True), old: (False, False)})
             self.assertEqual(conn.execute("SELECT count(*) FROM content_items WHERE id = %s", (seeded,)).fetchone()[0], 0)
 
 
@@ -290,6 +307,21 @@ class Sync(FeedLedgerCase):
             self.assertEqual(conn.execute(
                 "SELECT include_categories, gnews_window_days FROM sources WHERE slug = 'semafor-business'").fetchone(),
                 (["Business", "Media"], 2))
+
+
+class FrozenTitleEmbedding(FeedLedgerCase):
+    def test_the_title_embedding_can_be_cleared_never_changed(self) -> None:
+        with _rolled_back() as conn:
+            src = self.make_source(conn)
+            _, item = ledger.feed_new_story(src, _item(), unit(0), unit(1), filtered_reason=None, seed=None, conn=conn)
+            conn.execute("SAVEPOINT p")
+            with self.assertRaisesRegex(psycopg.Error, "frozen"):
+                conn.execute("UPDATE content_items SET title_embedding = %s::extensions.halfvec WHERE id = %s",
+                             ("[" + ",".join(["0.03"] * 384) + "]", item))
+            conn.execute("ROLLBACK TO SAVEPOINT p")
+            conn.execute("UPDATE content_items SET title_embedding = NULL, embedding = NULL WHERE id = %s", (item,))
+            self.assertEqual(conn.execute("SELECT title_embedding IS NULL AND embedding IS NULL FROM content_items "
+                                          "WHERE id = %s", (item,)).fetchone()[0], True)
 
 
 class NothingSurvives(FeedLedgerCase):
@@ -316,7 +348,7 @@ class Access033(FeedLedgerCase):
                     "SELECT has_table_privilege(%s, 'public.feed_similarity_log', %s)", (role, priv)).fetchone()[0],
                     want, (role, priv))
             src = self.make_source(conn)
-            sid, item = ledger.feed_new_story(src, _item(), unit(0), filtered_reason=None, seed=None,
+            sid, item = ledger.feed_new_story(src, _item(), unit(0), unit(0), filtered_reason=None, seed=None,
                                               near_misses=[], conn=conn)
             conn.execute("INSERT INTO feed_similarity_log (item_id, story_id, kind, cosine, fuzz) "
                          "VALUES (%s, %s, 'near_miss', 0.8, 40)", (item, sid))

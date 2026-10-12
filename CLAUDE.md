@@ -237,6 +237,20 @@ policies arrive in db/019+ before apps/web reads any table. db/019 (push_subscri
   PostgreSQL 16+ an `ALTER ROLE` that so much as names `SUPERUSER` (even
   `NOSUPERUSER`) needs one, which is why db/018's first paste failed. Assert
   role attributes; don't re-set them.
+- **Every migration that creates or replaces a trigger or function ships a
+  rolled-back self-test DO block that exercises it** (the db/032 and db/035
+  pattern): do the work inside a nested `BEGIN … EXCEPTION` block, check
+  each behaviour, end with `RAISE EXCEPTION 'selftest-rollback'` caught
+  outside it, so no row survives and a wrong result fails the whole paste.
+  - Why (2026-10-11): db/034's widened `content_items` freeze trigger pasted
+    cleanly and broke **every** UPDATE on `content_items` (the nightly
+    prune's embedding clear among them). Only the live suite caught it;
+    db/035 fixed it.
+- **A function with an empty `search_path` must not rely on unqualified
+  extension operators or types.** pgvector lives in `extensions`: qualify
+  types (`extensions.halfvec`), and compare vectors by their text form
+  (`v::text`), not with `=` / `IS DISTINCT FROM`, which need pgvector's
+  operators. That was db/034's bug (2026-10-11).
 
 ---
 
@@ -941,7 +955,8 @@ absent row as "I never looked."
   - **`db/026_capital.sql` applied 2026-10-10 00:52:43 UTC; `db/027_capital_is_test.sql` 02:18:31; `db/028_readonly_views.sql` 09:56:58** (`migration_log`).
   - **`db/029_wags.sql` applied 2026-10-10 17:23:55 UTC** (`migration_log`). The context layer and Wags (below).
   - **`db/030_morning_brief.sql` applied 2026-10-10 22:17:09 UTC; `db/031_brief_shape_null.sql` 22:24:10** (`migration_log`). 031 fixes 030's morning-shape CHECK, which a missing field made NULL (a NULL CHECK passes).
-    - Next new file: `db/032`.
+  - **`db/032_feed.sql` applied 2026-10-11 23:10:36 UTC; `db/033_feed_calibration.sql` 23:58:01; `db/034_feed_reset.sql` 2026-10-12 00:54:44; `db/035_frozen_fix.sql` 01:19:10** (`migration_log`). Chat 3 Phase 1's feed: sources, items, stories, rules, the calibration log, title embeddings; 034 deleted the first ingest's mis-clustered rows (214 stories, 853 items, 10 seeded) and 035 fixed 034's freeze trigger.
+    - Next new file: `db/036`.
 - **Immutability audit (2026-10-01, empirical).** UPDATE and DELETE were attempted on a `_test` row of every table, rolled back.
   - **Refused by trigger:** `commitments`, `events`, `resolution_attempts`, `commitment_factors`, `closing_snapshots`, `selections`, `model_versions`, `kalshi_markets`, `kalshi_candles`. `legs` UPDATE was refused too, by `legs_frozen`.
   - **ACCEPTED:**

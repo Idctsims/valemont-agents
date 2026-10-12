@@ -16,11 +16,13 @@ For each active source, lowest priority number first, completely before the next
   5. Google News items: decoded to the publisher URL, at most 2 decodes a
      second. A failed decode keeps google_url, sets decode_failed, url NULL
      (the item can never lead; db/032).
-  6. Embed title + teaser (core/embed.py), then place each item: join a story
-     or found one (feed/cluster.py). A new story gets the live drop rules
-     (title_regex, url_regex). Every join and near miss is logged
-     (feed_similarity_log), and each story's best seed-phrase score is
-     recorded, never acted on (feed/rules.py).
+  6. Embed the title alone (clustering) and title + teaser (kept for Phase 2)
+     (core/embed.py), then place each item: join a story or found one
+     (feed/cluster.py: best member match, 48 h from first seen, 25 items at
+     most). A new story gets the live drop rules (title_regex, url_regex).
+     Every join, near miss and cap overflow is logged (feed_similarity_log),
+     and each story's best seed-phrase score is recorded, never acted on
+     (feed/rules.py).
   7. Only then is the fetch recorded as ok (with the new ETag), so a crash
      between fetch and store cannot hide items behind a 304.
 
@@ -119,6 +121,7 @@ class SourceStats:
     seeded: int = 0
     known: int = 0
     decode_failed: int = 0
+    overflow: int = 0
     error: str | None = None
 
 
@@ -133,16 +136,16 @@ class RunStats:
         failed = [s.slug for s in self.sources if s.status == "error"]
         return (f"{len(self.sources)} sources, {self.total('new_stories')} new stories, "
                 f"{self.total('joined')} joins, {self.total('filtered')} filtered, "
-                f"{self.total('seeded')} seeded, {self.total('decode_failed')} decode failures"
+                f"{self.total('seeded')} seeded, {self.total('decode_failed')} decode failures, "
+                f"{self.total('overflow')} cap overflows"
                 + (f"; failing: {', '.join(failed)}" if failed else ""))
 
 
 @dataclass
 class _Candidate:
     story_id: int
-    title: str
-    centroid: list[float]
     count: int
+    members: list[cluster.Member]
 
 
 class Ingest:
@@ -169,8 +172,8 @@ class Ingest:
                 seed_cache[(r.id, r.pattern)] = tuple(v)
         self.seeds = [SeedPhrase(r.id, r.pattern, seed_cache[(r.id, r.pattern)])
                       for r in self.rules.seed_rules]
-        self.candidates = [_Candidate(sid, title, list(vec), n)
-                           for sid, title, vec, n in ledger.feed_candidates(cluster.CANDIDATE_HOURS)]
+        self.candidates = [_Candidate(c.story_id, c.item_count, [cluster.Member(t, v) for t, v in c.members])
+                           for c in ledger.feed_candidates(cluster.CANDIDATE_HOURS)]
 
     # -- one source ----------------------------------------------------------
 
@@ -263,10 +266,17 @@ class Ingest:
             unique.append(it)
         if not unique:
             return
-        vectors = self.embed([f"{it.title}. {it.teaser}" if it.teaser else it.title for it in unique])
-        for it, vec in zip(unique, vectors):
+        # Title-only vectors decide clustering; title + teaser vectors are kept
+        # for Phase 2. With no teaser the two texts are the same: one call.
+        title_vecs = self.embed([it.title for it in unique])
+        with_teaser = [i for i, it in enumerate(unique) if it.teaser]
+        text_vecs = list(title_vecs)
+        if with_teaser:
+            for i, v in zip(with_teaser, self.embed([f"{unique[i].title}. {unique[i].teaser}" for i in with_teaser])):
+                text_vecs[i] = v
+        for it, vec, tvec in zip(unique, text_vecs, title_vecs):
             stats.decode_failed += int(it.decode_failed)
-            self._place(src, it, vec, stats)
+            self._place(src, it, vec, tvec, stats)
 
     def _item(self, src: ledger.FeedSource, raw: RawItem, fetched_at: datetime) -> ledger.FeedItemIn:
         published = min(raw.published_at, fetched_at) if raw.published_at else fetched_at
@@ -284,17 +294,18 @@ class Ingest:
         return ledger.FeedItemIn(raw.external_id, url, None, raw.title, raw.teaser, published, False)
 
     def _place(self, src: ledger.FeedSource, it: ledger.FeedItemIn, vec: Sequence[float],
-               stats: SourceStats) -> None:
-        cands = [cluster.Candidate(c.story_id, c.title, tuple(c.centroid), c.count) for c in self.candidates]
-        decision = cluster.assign(vec, it.title, cands)
+               title_vec: Sequence[float], stats: SourceStats) -> None:
+        cands = [cluster.Candidate(c.story_id, c.count, tuple(c.members)) for c in self.candidates]
+        decision = cluster.assign(title_vec, it.title, cands)
         seed = best_seed(vec, self.seeds)
-        near = [ledger.SimilarityRow(s.story_id, "near_miss", s.cosine, s.fuzz) for s in decision.near_misses]
+        logged = [ledger.SimilarityRow(s.story_id, "near_miss", s.cosine, s.fuzz) for s in decision.near_misses]
         for s in decision.near_misses:
             log.info("feed near miss %.3f (fuzz %.0f): %r vs story %d", s.cosine, s.fuzz, it.title, s.story_id)
+        member = cluster.Member(it.title, tuple(title_vec))
         if decision.story_id is not None:
             best = decision.best
-            logged = [ledger.SimilarityRow(best.story_id, "join", best.cosine, best.fuzz, decision.joined_by)] + near
-            item_id = ledger.feed_join_story(src, it, vec, decision.story_id, seed=seed, logged=logged)
+            logged = [ledger.SimilarityRow(best.story_id, "join", best.cosine, best.fuzz, decision.joined_by)] + logged
+            item_id = ledger.feed_join_story(src, it, vec, title_vec, decision.story_id, seed=seed, logged=logged)
             if item_id is None:
                 stats.known += 1
                 return
@@ -303,18 +314,25 @@ class Ingest:
             stats.joined += 1
             for c in self.candidates:
                 if c.story_id == decision.story_id:
-                    c.centroid = cluster.running_mean(c.centroid, c.count, vec)
+                    c.members.append(member)
                     c.count += 1
             return
+        if decision.overflow is not None:
+            o = decision.overflow
+            logged.append(ledger.SimilarityRow(o.story_id, "cap_overflow", o.cosine, o.fuzz))
+            log.warning("feed: story %d is full (%d items); %r starts a new story", o.story_id,
+                        cluster.MAX_ITEMS, it.title)
+            stats.overflow += 1
         assert self.rules is not None
         reason = self.rules.filter_reason(title=it.title, url=it.url, pillars=src.pillars)
-        made = ledger.feed_new_story(src, it, vec, filtered_reason=reason, seed=seed, near_misses=near)
+        made = ledger.feed_new_story(src, it, vec, title_vec, filtered_reason=reason, seed=seed,
+                                     near_misses=logged)
         if made is None:
             stats.known += 1
             return
         stats.new_stories += 1
         stats.filtered += int(reason is not None)
-        self.candidates.insert(0, _Candidate(made[0], it.title, list(vec), 1))
+        self.candidates.insert(0, _Candidate(made[0], 1, [member]))
 
 
 class FetchFailed(RuntimeError):
