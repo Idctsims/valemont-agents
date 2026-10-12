@@ -1,4 +1,4 @@
-import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Locator, type Page } from "@playwright/test";
 
 import { addTestStory, hasOwner, runPrefix, signIn, useE2eMarker } from "./support/owner";
 
@@ -27,9 +27,34 @@ test.beforeAll(async ({ browser }, testInfo) => {
   await addTestStory({ pillar: "home", title: WITH_SUMMARY, summary: SUMMARY, url: URL_A });
   context = await browser.newContext(testInfo.project.use);
   await useE2eMarker(context, testInfo.project.use.baseURL!);
+  // A .invalid host cannot resolve: the new tab would land on
+  // chrome-error://chromewebdata/ and lose its URL. Serve a stub instead, so
+  // the tab keeps the publisher URL and nothing leaves the machine.
+  await context.route("https://publisher.e2e.invalid/**", (route) =>
+    route.fulfill({ status: 200, contentType: "text/html", body: "<title>publisher</title>" }),
+  );
   page = await context.newPage();
   await signIn(page, "/");
 });
+
+/**
+ * Tap the centre of `target` the way a finger does, by coordinates, and
+ * return the URL of the tab it opens. Not locator.click(): Playwright refuses
+ * to click an element that another element covers, and the headline link's
+ * overlay covers the whole row on purpose ("... intercepts pointer events").
+ */
+async function tapOpens(target: Locator): Promise<string> {
+  const box = await target.boundingBox();
+  if (!box) throw new Error("target not on screen");
+  const [popup] = await Promise.all([
+    context.waitForEvent("page"),
+    page.mouse.click(box.x + box.width / 2, box.y + box.height / 2),
+  ]);
+  await popup.waitForLoadState("domcontentloaded");
+  const url = popup.url();
+  await popup.close();
+  return url;
+}
 
 test.afterAll(async ({}, testInfo) => {
   if (testInfo.project.name !== "phone") return;
@@ -53,10 +78,41 @@ test("Home's Latest renders cards that open the publisher in a new tab", async (
   await expect(link).toHaveAttribute("href", URL_A);
   await expect(link).toHaveAttribute("target", "_blank");
   await expect(link).toHaveAttribute("rel", "noopener noreferrer");
-  // A tap on the card opens a new tab on the publisher, never Google News.
-  const [popup] = await Promise.all([context.waitForEvent("page"), card.getByTestId("feed-summary").click()]);
-  expect(popup.url()).toContain("publisher.e2e.invalid");
-  await popup.close();
+});
+
+test("the whole row opens the publisher: the summary and the source/time line too", async () => {
+  await page.goto("/");
+  const card = page.getByTestId("feed-card").filter({ hasText: WITH_SUMMARY });
+  await card.scrollIntoViewIfNeeded();
+  for (const part of ["feed-summary", "feed-meta"] as const) {
+    // What is under the centre of that part is the headline link's overlay.
+    const box = (await card.getByTestId(part).boundingBox())!;
+    const under = await page.evaluate(
+      ([x, y]) => document.elementFromPoint(x, y)?.closest("a")?.getAttribute("href") ?? null,
+      [box.x + box.width / 2, box.y + box.height / 2],
+    );
+    expect(under, part).toBe(URL_A);
+    expect(await tapOpens(card.getByTestId(part)), part).toBe(URL_A);
+  }
+  expect(await tapOpens(card.getByTestId("feed-link"))).toBe(URL_A);
+});
+
+test("the +N outlets toggle opens its fold, never the publisher", async () => {
+  await page.goto("/");
+  // Test stories have one outlet each; a real multi-outlet story is used.
+  const toggle = page.getByTestId("feed-outlets-toggle").first();
+  test.skip((await toggle.count()) === 0, "no multi-outlet story on the first page right now");
+  await toggle.scrollIntoViewIfNeeded();
+  const opened: string[] = [];
+  const onPage = (p: Page) => opened.push(p.url());
+  context.on("page", onPage);
+  const box = (await toggle.boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByTestId("feed-outlets").first()).toBeVisible();
+  await page.waitForTimeout(1500);
+  context.off("page", onPage);
+  expect(opened).toEqual([]);
 });
 
 test("a story with no summary shows its headline alone", async () => {
