@@ -28,7 +28,10 @@ export function FeedCard({ story, when }: { story: FeedStory; when: string }) {
           </span>
         )}
       </p>
-      <h3 className="mt-2 font-display text-xl text-text text-balance lg:text-2xl">
+      {/* text-lg at 390 px (17 px): 19 of 30 real page-one headlines fit in
+          two lines and none runs past three; text-xl fit 15, with 5 at four
+          lines (measured 2026-10-12, built CSS and Instrument Serif). */}
+      <h3 className="mt-2 font-display text-lg text-text text-balance lg:text-xl">
         <a
           data-testid="feed-link"
           href={story.url}

@@ -338,6 +338,30 @@ class FilterRules(unittest.TestCase):
         for t in keep:
             self.assertFalse(any(r.search(t) for r in rx), t)
 
+    def test_db036_rules_drop_reviews_never_business_reviews(self) -> None:
+        import re
+        from core.paths import REPO_ROOT
+        sql = (REPO_ROOT / "db" / "036_feed_review_rules.sql").read_text(encoding="utf-8")
+        rows = re.findall(r"\('title_regex',\s+NULL,\s+'((?:[^']|'')*)'", sql)
+        self.assertEqual(len(rows), 3)
+        rx = [re.compile(p.replace("''", "'"), re.I) for p in rows]
+        drop = ["Review: 'Hamnet' is a quiet triumph",
+                "‘The Sea Speaks His Name’ Review: Absorbing Portrait of a Fisherman",
+                "'Frankenstein' Review: Guillermo del Toro's Monster Is Tender",
+                "Taylor Swift’s ‘The Life of a Showgirl’ Review",
+                "Bad Bunny 'Debí Tirar Más Fotos' Review"]
+        keep = ["Paramount Board Launches Strategic Review",
+                "Deal Under Regulatory Review",
+                "Warner Bros. Discovery Faces Antitrust Review",
+                "Warner Bros.' Merger Faces FTC Review",
+                "Variety's Year in Review: Box Office Up 12%",
+                "Trump's tariff review: what it means for retailers",
+                "Netflix Q3 earnings review"]
+        for t in drop:
+            self.assertTrue(any(r.search(t) for r in rx), t)
+        for t in keep:
+            self.assertFalse(any(r.search(t) for r in rx), t)
+
     def test_every_seeded_db032_pattern_compiles_in_python(self) -> None:
         import re
         from core.paths import REPO_ROOT

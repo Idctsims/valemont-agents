@@ -97,22 +97,26 @@ test("the whole row opens the publisher: the summary and the source/time line to
   expect(await tapOpens(card.getByTestId("feed-link"))).toBe(URL_A);
 });
 
-test("the +N outlets toggle opens its fold, never the publisher", async () => {
-  await page.goto("/");
-  // Test stories have one outlet each; a real multi-outlet story is used.
-  const toggle = page.getByTestId("feed-outlets-toggle").first();
-  test.skip((await toggle.count()) === 0, "no multi-outlet story on the first page right now");
+test("the +N outlets toggle opens its fold, never the publisher", async ({ browser }, testInfo) => {
+  // Test stories have one outlet each, so a REAL multi-outlet story is used,
+  // on the REAL feed: no marker. (With the marker, page one is ordered by
+  // first-seen time with test stories first, which is why this skipped on
+  // 2026-10-11 although the real page one had "+1 outlet".)
+  const plain = await browser.newContext(testInfo.project.use);
+  const p = await plain.newPage();
+  await signIn(p, "/");
+  const toggle = p.getByTestId("feed-outlets-toggle").first();
+  test.skip((await toggle.count()) === 0, "no multi-outlet story on the real first page right now");
   await toggle.scrollIntoViewIfNeeded();
   const opened: string[] = [];
-  const onPage = (p: Page) => opened.push(p.url());
-  context.on("page", onPage);
+  plain.on("page", (np) => opened.push(np.url()));
   const box = (await toggle.boundingBox())!;
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await p.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
-  await expect(page.getByTestId("feed-outlets").first()).toBeVisible();
-  await page.waitForTimeout(1500);
-  context.off("page", onPage);
+  await expect(p.getByTestId("feed-outlets").first()).toBeVisible();
+  await p.waitForTimeout(1500);
   expect(opened).toEqual([]);
+  await plain.close();
 });
 
 test("a story with no summary shows its headline alone", async () => {
