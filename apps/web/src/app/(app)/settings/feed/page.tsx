@@ -66,7 +66,8 @@ function PillarProfile({ p, now }: { p: ProfileSummary; now: number }) {
         {(
           [
             ["Loved", p.loveCount],
-            ["Not interested", p.niCount],
+            // "Not interested" wraps in a quarter of 390 px.
+            ["Skipped", p.niCount],
             ["Opened", p.openCount],
             ["Neutral", p.neutralCount],
           ] as const

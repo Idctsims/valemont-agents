@@ -11,9 +11,11 @@ import { addTestStory, hasOwner, runPrefix, signIn, storyReactions, useE2eMarker
 //   * the buttons never open the publisher; Love marks and toggles;
 //   * Not interested and Neutral remove the card with an Undo toast; Undo
 //     writes 'undo' and brings it back; a reload keeps a dismissed card gone;
-//   * swipe right = Love, swipe left = Not interested, neither opens it;
+//   * swipe right = Love, swipe left = Not interested, neither opens it; the
+//     reveal's icon never clips;
 //   * opening the publisher writes one 'open' row (the beacon);
-//   * the tabs; /settings/feed for the owner.
+//   * the tabs, aligned with the cards; /settings/feed for the owner, whose
+//     pending count never includes a reaction on a test story.
 
 test.skip(!hasOwner, "set E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD to run");
 test.describe.configure({ mode: "serial" });
@@ -155,6 +157,35 @@ test("swipe right is Love and swipe left is Not interested; neither opens the pu
   await swipe(c.card, 30);
   await page.waitForTimeout(500);
   await expect(c.card.getByTestId("react-love")).toHaveAttribute("aria-pressed", "false");
+  // Mid-swipe, at every distance, the reveal is exactly the uncovered strip,
+  // carries no text, and its icon is either absent or wholly inside it
+  // (2026-10-12: the labels clipped to "LO" and "ED"). Released at zero, so
+  // nothing is written.
+  await centre(c.card.getByTestId("feed-summary"));
+  const sb = (await c.card.getByTestId("feed-summary").boundingBox())!;
+  const [x0, y0] = [sb.x + sb.width / 2, sb.y + sb.height / 2];
+  await page.mouse.move(x0, y0);
+  await page.mouse.down();
+  for (const dx of [12, 24, 31, 32, 48, 64, 72, 100, -12, -24, -31, -32, -48, -64, -72, -100]) {
+    await page.mouse.move(x0 + dx, y0, { steps: 4 });
+    const reveal = c.card.getByTestId("feed-swipe-reveal");
+    await expect(reveal).toHaveText("");
+    const rb = (await reveal.boundingBox())!;
+    const cb = (await c.card.boundingBox())!;
+    expect(Math.abs(rb.width - Math.abs(dx))).toBeLessThanOrEqual(1);
+    expect(dx > 0 ? rb.x - cb.x : cb.x + cb.width - (rb.x + rb.width)).toBeLessThanOrEqual(1);
+    const icon = reveal.locator("svg");
+    if (Math.abs(dx) < 32) {
+      await expect(icon).toHaveCount(0);
+    } else {
+      const ib = (await icon.boundingBox())!;
+      expect(ib.x).toBeGreaterThanOrEqual(rb.x);
+      expect(ib.x + ib.width).toBeLessThanOrEqual(rb.x + rb.width);
+    }
+  }
+  await page.mouse.move(x0, y0, { steps: 4 });
+  await page.mouse.up();
+  await page.waitForTimeout(500);
   expect(opened).toEqual([]);
   expect((await storyReactions(a.id)).map((r) => r.reaction)).toEqual(["love"]);
   expect((await storyReactions(b.id)).map((r) => r.reaction)).toEqual(["not_interested"]);
@@ -185,6 +216,11 @@ test("the tabs: For you is the default, Latest is one tap away", async () => {
   await expect(page).toHaveURL(/feed=latest/);
   await expect(page.getByTestId("feed-tab-latest")).toHaveAttribute("aria-current", "page");
   await expect(page.getByTestId("feed-latest")).toBeVisible();
+  // The tab row's first pill starts on the cards' left edge (2026-10-12: it
+  // started 12 px left of it).
+  const pill = (await page.getByTestId("feed-tab-for-you").boundingBox())!;
+  const card = (await page.getByTestId("feed-latest").getByTestId("feed-card").first().boundingBox())!;
+  expect(Math.abs(pill.x - card.x)).toBeLessThanOrEqual(1);
 });
 
 test("/settings/feed shows the profile, the follows and the rebuilds", async () => {
@@ -196,7 +232,26 @@ test("/settings/feed shows the profile, the follows and the rebuilds", async () 
   await expect(follows.getByTestId("follow").filter({ hasText: "LeBron James" })).toHaveCount(1);
   const home = page.getByTestId("profile-home");
   if (await home.count()) {
-    await expect(home.getByTestId("profile-counts")).toBeVisible();
+    const counts = home.getByTestId("profile-counts");
+    await expect(counts).toBeVisible();
+    // "Not interested" wrapped in a quarter of 390 px: every label is one line.
+    await expect(counts).toContainText("Skipped");
+    await expect(counts).not.toContainText("Not interested");
+    const heights = await counts.locator("dt").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
+    expect(new Set(heights).size).toBe(1); // "Loved" is one line, so all are
     await expect(home.getByTestId("profile-seed")).toContainText(/seeds still make up \d+%/);
   }
+});
+
+test("a reaction on a test story never counts on /settings/feed", async () => {
+  // 2026-10-12: "9 reactions since the last rebuild", all from these specs.
+  await page.goto("/settings/feed");
+  const pending = page.getByTestId("profile-pending");
+  const before = await pending.textContent();
+  const { card } = await seed("pending count");
+  await tap(card.getByTestId("react-love"));
+  await expect(card.getByTestId("react-love")).toHaveAttribute("aria-pressed", "true");
+  await settled();
+  await page.goto("/settings/feed");
+  await expect(pending).toHaveText(before!);
 });

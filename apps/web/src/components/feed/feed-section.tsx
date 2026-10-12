@@ -42,7 +42,8 @@ export function FeedSection({
         {label}
         {page > 1 ? ` · page ${page}` : ""}
       </h2>
-      <nav aria-label="Feed order" className="-ml-3 flex items-center gap-1">
+      {/* No negative margin: the active pill starts on the cards' left edge. */}
+      <nav aria-label="Feed order" data-testid="feed-tabs" className="flex items-center gap-1">
         {TABS.map((t) => (
           <Link
             key={t.tab}

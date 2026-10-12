@@ -23,6 +23,8 @@ export type CardReact = (reaction: "love" | "neutral" | "not_interested") => voi
 
 /** Movement before a drag picks an axis; below this it is still a tap. */
 const AXIS_PX = 8;
+/** The swipe's icon (22 px) shows once the uncovered strip holds it with 5 px each side. */
+const REVEAL_ICON_PX = 32;
 
 function sendOpen(storyId: number, pillar: Pillar) {
   try {
@@ -107,17 +109,22 @@ export function FeedCard({
       data-loved={story.loved || undefined}
       className="relative overflow-hidden border-b border-border"
     >
-      {/* Behind the row: Love (right swipe) and Not interested (left). */}
-      {live && (
-        <div aria-hidden className={`absolute inset-0 flex items-center justify-between px-4 ${dx === 0 ? "invisible" : ""}`}>
-          <span className={`flex items-center gap-2 text-accent transition-opacity ${dx > 0 ? "opacity-100" : "opacity-0"}`}>
-            <Heart size={22} weight="fill" />
-            <span className="label-mono">Love</span>
-          </span>
-          <span className={`flex items-center gap-2 text-text-muted transition-opacity ${dx < 0 ? "opacity-100" : "opacity-0"}`}>
-            <span className="label-mono">Not interested</span>
-            <EyeSlash size={22} />
-          </span>
+      {/* Behind the row: Love (right swipe) and Not interested (left), the
+          icon alone, centred in exactly the strip the swipe has uncovered. It
+          shows only once the strip holds it whole, and dims until a release
+          would commit. A text label clipped ("LO", "ED") at short distances. */}
+      {live && dx !== 0 && (
+        <div
+          aria-hidden
+          data-testid="feed-swipe-reveal"
+          style={{ width: Math.abs(dx) }}
+          className={`absolute inset-y-0 flex items-center justify-center overflow-hidden ${dx > 0 ? "left-0 text-accent" : "right-0 text-text-muted"}`}
+        >
+          {Math.abs(dx) >= REVEAL_ICON_PX && (
+            <span className={`transition-opacity ${swipeReaction(dx) ? "opacity-100" : "opacity-60"}`}>
+              {dx > 0 ? <Heart size={22} weight="fill" /> : <EyeSlash size={22} />}
+            </span>
+          )}
         </div>
       )}
 

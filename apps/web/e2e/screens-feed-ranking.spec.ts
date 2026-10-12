@@ -59,6 +59,7 @@ test("feed ranking screens", async ({ page }, testInfo) => {
     }
 
     if (phone) {
+      await midSwipe(page, 40, "card-swipe-love-short", phone, theme);
       await midSwipe(page, 64, "card-swipe-love", phone, theme);
       await midSwipe(page, -64, "card-swipe-not-interested", phone, theme);
     }

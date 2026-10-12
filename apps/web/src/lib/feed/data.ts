@@ -309,9 +309,12 @@ export async function feedProfile(supabase: SupabaseClient) {
   const since = Object.values(latest).map((p) => p!.builtAt).sort()[0];
   let pending = 0;
   if (since) {
+    // Reactions on real stories only: the rebuild never reads one on a test
+    // story (ledger FEED_SIGNALS_SQL), so the count must not either.
     const { count, error } = await supabase
       .from("feed_reactions")
-      .select("id", { count: "exact", head: true })
+      .select("id, stories!inner(is_test)", { count: "exact", head: true })
+      .eq("stories.is_test", false)
       .gt("created_at", since);
     if (error) throw new Error(`Couldn't count new reactions: ${error.message}`);
     pending = count ?? 0;
