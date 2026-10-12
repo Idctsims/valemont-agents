@@ -108,7 +108,9 @@ export function FeedList({ stories, pillar, now, testId }: { stories: FeedStory[
         >
           <div className="flex w-full max-w-measure min-w-0 items-center gap-3 rounded-pill border border-border bg-surface py-1 pr-1 pl-5 text-sm text-text">
             <span className="min-w-0 truncate">
-              {toast.reaction === "neutral" ? "Hidden" : "Not interested"} · {toast.story.title}
+              {/* "Hidden" is the Not interested count's name on /settings/feed
+                  (owner, 2026-10-12), so Neutral's toast never says it. */}
+              {toast.reaction === "neutral" ? "Removed" : "Not interested"} · {toast.story.title}
             </span>
             <button
               type="button"

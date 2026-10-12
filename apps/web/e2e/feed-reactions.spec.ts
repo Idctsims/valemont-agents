@@ -133,7 +133,9 @@ test("Neutral removes the card, and it stays gone after a reload", async () => {
   const { id, card } = await seed("neutral button");
   await tap(card.getByTestId("react-neutral"));
   await expect(card).toHaveCount(0);
-  await expect(page.getByTestId("feed-toast")).toContainText("Hidden");
+  // "Removed", never "Hidden": that word is the Not interested count's alone.
+  await expect(page.getByTestId("feed-toast")).toContainText("Removed ·");
+  await expect(page.getByTestId("feed-toast")).not.toContainText("Hidden");
   await settled();
   await page.reload();
   await expect(page.getByTestId("feed-latest")).toBeVisible();
