@@ -1761,11 +1761,14 @@ class FeedSource:
     consecutive_failures: int
     alerted: bool
     is_test: bool
+    #: A Google News query's `when:` window (db/032 default 2); the ingest
+    #: drops items older than this plus 2 days.
+    gnews_window_days: int = 2
 
 
 _FEED_SOURCE_COLS = """
     id, slug, name, pillars, sport, kind, url, priority, include_categories, etag, last_modified,
-    last_ok_at, consecutive_failures, alerted_at IS NOT NULL, is_test
+    last_ok_at, consecutive_failures, alerted_at IS NOT NULL, is_test, gnews_window_days
 """
 
 
