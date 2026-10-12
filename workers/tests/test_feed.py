@@ -657,18 +657,34 @@ class SummaryJobRun(unittest.TestCase):
 
 
 class Chain(unittest.TestCase):
-    def test_summarize_runs_after_ingest_even_when_ingest_fails(self) -> None:
+    def test_summarize_score_and_why_run_after_ingest_even_when_ingest_fails(self) -> None:
         order = []
         with mock.patch.object(ingest, "ingest_job", side_effect=lambda: order.append("ingest") or (_ for _ in ()).throw(RuntimeError("db down"))), \
                 mock.patch.object(system_jobs, "run_tracked", lambda j: order.append(j.name)):
             with self.assertRaises(RuntimeError):
                 system_jobs.feed_ingest_job()
-        self.assertEqual(order, ["ingest", "feed_summarize"])
+        self.assertEqual(order, ["ingest", "feed_summarize", "feed_score", "feed_why"])
 
-    def test_a_summarize_failure_does_not_fail_ingest(self) -> None:
+    def test_a_chained_failure_does_not_fail_ingest_or_stop_the_chain(self) -> None:
+        order = []
+
+        def failing(job):
+            order.append(job.name)
+            raise RuntimeError("recorded")
+
         with mock.patch.object(ingest, "ingest_job", lambda: None), \
-                mock.patch.object(system_jobs, "run_tracked", side_effect=RuntimeError("recorded")):
+                mock.patch.object(system_jobs, "run_tracked", failing):
             system_jobs.feed_ingest_job()
+        self.assertEqual(order, ["feed_summarize", "feed_score", "feed_why"])
+
+    def test_why_runs_after_the_profile_job_even_when_it_is_skipped(self) -> None:
+        order = []
+        with mock.patch.object(system_jobs.feed_profile_mod, "profile_job",
+                               side_effect=jobs.JobSkipped("built today")), \
+                mock.patch.object(system_jobs, "run_tracked", lambda j: order.append(j.name)):
+            with self.assertRaises(jobs.JobSkipped):
+                system_jobs.feed_profile_job()
+        self.assertEqual(order, ["feed_why"])
 
 
 # ======================================================================= embed

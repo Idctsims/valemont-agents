@@ -4,7 +4,8 @@ THE SECTION CONTRACT (read this before adding a pillar)
     The brief's sections ARE the context-provider registry (db/029):
     every row of context_providers with enabled AND brief_section, in sort
     order, is one section, titled by its label, fed by its provider's slice of
-    context_snapshot(). Today: goals, ventures, capital. A later chat that
+    context_snapshot(). Today: goals, ventures, capital, feed (db/039, the
+    top 3 of For you). A later chat that
     ships a pillar adds its provider function and registry row in its own
     migration and sets brief_section = true; its section appears in the next
     brief with NO change here. ctx_brief (the brief itself, for Wags) is
@@ -347,11 +348,24 @@ def _capital_lines(c: Mapping[str, Any]) -> list[str]:
     return lines
 
 
+def _feed_lines(f: Mapping[str, Any]) -> list[str]:
+    """The top of For you (db/039 ctx_feed): headline and outlet, plus the
+    why-it-matters line when the story has one."""
+    lines = []
+    for s in f.get("top_stories") or []:
+        line = f"{s.get('title')} ({s.get('source')})."
+        if s.get("why_it_matters"):
+            line += f" {s['why_it_matters']}"
+        lines.append(line)
+    return lines
+
+
 #: How the fallback words each section it knows. A later pillar adds one.
 FALLBACK_SECTIONS: dict[str, Callable[[Mapping[str, Any], str], list[str]]] = {
     "goals": lambda p, _today: _goals_lines(p.get("goals") or {}),
     "ventures": lambda p, today: _ventures_lines(p.get("ventures") or {}, today),
     "capital": lambda p, _today: _capital_lines(p.get("capital") or {}),
+    "feed": lambda p, _today: _feed_lines(p.get("feed") or {}),
 }
 
 

@@ -41,11 +41,25 @@
                              Never scheduled on its own (SystemJob.scheduled
                              False) but registered and watched: stale after an
                              hour means ingest has stopped calling it.
+    feed_score       chained after feed_summarize: scores stories that
+                             finished summarizing and have no score yet,
+                             against the latest interest profiles (feed/profile.py).
+    feed_why         chained after feed_score and after feed_profile: the
+                             "Why it matters" line for Home's top 8 in For
+                             you, asked once per story, at most 20 Haiku calls
+                             a day, NULL unless the link is concrete (feed/why.py).
+    feed_profile     daily   04:00 America/Chicago, and at boot unless a
+                             profile was already built today: rebuilds each
+                             pillar's mean vector, profile and learned weights,
+                             then rescores every kept story of the last 72 h.
+                             Then runs feed_why.
     feed_prune       daily   03:15 America/Chicago, never at boot: clears item
                              embeddings older than 72 h; deletes filtered
                              stories (with their items), seeded items and
-                             similarity-log rows older than 30 days. Kept
-                             stories are never deleted here.
+                             similarity-log rows older than 30 days, kept
+                             stories unreacted for 90 days, superseded scores
+                             after 7 days and old profiles after 90. A story
+                             with any reaction is never deleted (db/039).
 
 Alerts go through core/push.py with deep link /settings/health.
 """
@@ -64,7 +78,9 @@ from apscheduler.triggers.interval import IntervalTrigger
 from core import brief, ledger, push
 from core.jobs import SystemJob, describe, run_tracked
 from feed import ingest as feed_ingest
+from feed import profile as feed_profile_mod
 from feed import summarize as feed_summarize
+from feed import why as feed_why
 
 log = logging.getLogger("valemont.system")
 
@@ -353,20 +369,41 @@ FEED_INTERVAL_S = 30 * 60
 #: trigger is required by SystemJob and unused.
 FEED_SUMMARIZE = SystemJob("feed_summarize", FEED_INTERVAL_S, IntervalTrigger(seconds=FEED_INTERVAL_S),
                            feed_summarize.summarize_job, scheduled=False)
+#: Chained the same way: feed_score after feed_summarize, feed_why after it.
+FEED_SCORE = SystemJob("feed_score", FEED_INTERVAL_S, IntervalTrigger(seconds=FEED_INTERVAL_S),
+                       feed_profile_mod.score_new_job, scheduled=False)
+FEED_WHY = SystemJob("feed_why", FEED_INTERVAL_S, IntervalTrigger(seconds=FEED_INTERVAL_S),
+                     feed_why.why_job, scheduled=False)
+
+
+def _chain(*jobs: SystemJob) -> None:
+    """Run each chained job in turn; one failing never stops the next. Each
+    records its own outcome in job_health (run_tracked)."""
+    for job in jobs:
+        try:
+            run_tracked(job)
+        except Exception:
+            pass  # recorded in job_health and logged by run_tracked
 
 
 def feed_ingest_job() -> None:
-    """Ingest, then summarize whatever ingest produced, even if ingest failed
-    partway (its stories so far are worth summarizing). A summarize failure is
-    recorded in its own job_health row by run_tracked and does not mark
-    ingest failed; an ingest failure still propagates."""
+    """Ingest, then summarize, score and write why-lines for whatever ingest
+    produced, even if ingest failed partway (its stories so far are worth
+    it). A chained failure is recorded in its own job_health row and does not
+    mark ingest failed; an ingest failure still propagates."""
     try:
         feed_ingest.ingest_job()
     finally:
-        try:
-            run_tracked(FEED_SUMMARIZE)
-        except Exception:
-            pass  # recorded in job_health and logged by run_tracked
+        _chain(FEED_SUMMARIZE, FEED_SCORE, FEED_WHY)
+
+
+def feed_profile_job() -> None:
+    """Rebuild the profiles and rescore (skipped when built today), then the
+    why-lines for whatever entered Home's top 8."""
+    try:
+        feed_profile_mod.profile_job()
+    finally:
+        _chain(FEED_WHY)
 
 
 def feed_prune() -> dict[str, int]:
@@ -420,6 +457,10 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
         SystemJob("feed_ingest", FEED_INTERVAL_S, IntervalTrigger(seconds=FEED_INTERVAL_S),
                   feed_ingest_job, misfire_grace=600, start_delay_s=20),
         FEED_SUMMARIZE,
+        FEED_SCORE,
+        FEED_WHY,
+        SystemJob("feed_profile", 24 * 60 * 60, CronTrigger(hour=4, minute=0, timezone=OWNER_TZ),
+                  feed_profile_job, misfire_grace=3600, start_delay_s=60),
         SystemJob("feed_prune", 24 * 60 * 60, CronTrigger(hour=3, minute=15, timezone=OWNER_TZ),
                   feed_prune, misfire_grace=3600, run_at_boot=False),
     ]

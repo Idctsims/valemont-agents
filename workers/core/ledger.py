@@ -2188,8 +2188,10 @@ def feed_save_summaries(results: Sequence[SummaryOut], ai_usage_id: int | None, 
             )
 
 
-#: The nightly prune, in order. Kept stories are never deleted here (Phase 2
-#: adds the 90-day prune for unreacted ones); tests_live runs these texts.
+#: The nightly prune, in order; tests_live runs these texts. A story with ANY
+#: reaction is never deleted (db/039: feed_reactions.story_id is ON DELETE
+#: RESTRICT, so a delete that reached one would fail the whole prune; every
+#: story delete here excludes them first).
 FEED_PRUNE_SQL: Final = {
     "embeddings_cleared": """
         UPDATE content_items SET embedding = NULL, title_embedding = NULL
@@ -2197,8 +2199,30 @@ FEED_PRUNE_SQL: Final = {
            AND fetched_at < now() - interval '72 hours'
     """,
     "filtered_stories_deleted": """
-        DELETE FROM stories
-         WHERE filtered_reason IS NOT NULL AND last_seen_at < now() - interval '30 days'
+        DELETE FROM stories st
+         WHERE st.filtered_reason IS NOT NULL AND st.last_seen_at < now() - interval '30 days'
+           AND NOT EXISTS (SELECT 1 FROM feed_reactions r WHERE r.story_id = st.id)
+    """,
+    # Kept stories, 90 days after they were last seen, unless reacted to.
+    "unreacted_stories_deleted": """
+        DELETE FROM stories st
+         WHERE st.filtered_reason IS NULL AND st.last_seen_at < now() - interval '90 days'
+           AND NOT EXISTS (SELECT 1 FROM feed_reactions r WHERE r.story_id = st.id)
+    """,
+    # Superseded scores (a newer row exists for the story and pillar) after 7 days.
+    "story_scores_superseded_deleted": """
+        DELETE FROM story_scores s
+         WHERE s.scored_at < now() - interval '7 days'
+           AND EXISTS (SELECT 1 FROM story_scores n
+                        WHERE n.story_id = s.story_id AND n.pillar = s.pillar
+                          AND (n.scored_at, n.id) > (s.scored_at, s.id))
+    """,
+    # Old profiles after 90 days; the latest per pillar always stays.
+    "interest_profiles_deleted": """
+        DELETE FROM interest_profiles p
+         WHERE p.built_at < now() - interval '90 days'
+           AND EXISTS (SELECT 1 FROM interest_profiles n
+                        WHERE n.pillar = p.pillar AND (n.built_at, n.id) > (p.built_at, p.id))
     """,
     "seeded_items_deleted": """
         DELETE FROM content_items
@@ -2213,6 +2237,301 @@ FEED_PRUNE_SQL: Final = {
 def feed_prune(*, conn: psycopg.Connection | None = None) -> dict[str, int]:
     with _brief_conn(conn) as c, c.transaction():
         return {name: c.execute(sql).rowcount for name, sql in FEED_PRUNE_SQL.items()}
+
+
+# ---------------------------------------------------------------------------
+# Feed ranking (db/039; feed/rank.py, feed/profile.py, feed/why.py). The
+# worker writes profiles and scores; the owner's reactions come from the web.
+# Test stories never enter a profile or a score (every read filters is_test).
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class FollowRow:
+    name: str
+    tier: int
+    pillar: str | None
+    floor: bool
+    aliases: tuple[str, ...]
+    sport: str | None
+    sport_wide: bool
+
+
+def feed_follows(*, conn: psycopg.Connection | None = None) -> list[FollowRow]:
+    with _brief_conn(conn) as c:
+        rows = c.execute("""
+            SELECT e.name, f.tier, f.pillar, f.floor, e.aliases, e.sport, e.sport_wide
+              FROM follows f JOIN entities e ON e.id = f.entity_id
+             ORDER BY f.tier, e.name, f.pillar NULLS FIRST
+        """).fetchall()
+    return [FollowRow(r[0], int(r[1]), r[2], r[3], tuple(r[4]), r[5], r[6]) for r in rows]
+
+
+def feed_seed_phrases(*, conn: psycopg.Connection | None = None) -> dict[str, dict[str, list[str]]]:
+    """app_settings.seed_interests -> 'feed' (db/039): {pillar: {'love': [...],
+    'not_interested': [...]}}. Empty when unset."""
+    with _brief_conn(conn) as c:
+        row = c.execute("SELECT seed_interests -> 'feed' FROM app_settings LIMIT 1").fetchone()
+    feed = (row[0] if row else None) or {}
+    return {p: {k: [str(x) for x in (v or {}).get(k, []) if str(x).strip()]
+                for k in ("love", "not_interested")}
+            for p, v in feed.items() if isinstance(v, dict)}
+
+
+#: The mean story vector for a pillar: kept real stories first seen in the
+#: window. Averaged in the database (pgvector's avg over vector), so seven
+#: days of vectors never travel to the worker.
+FEED_MEAN_SQL: Final = """
+    SELECT extensions.avg(st.centroid::extensions.vector)::text, count(*)
+      FROM stories st
+     WHERE NOT st.is_test AND st.filtered_reason IS NULL AND st.centroid IS NOT NULL
+       AND %(pillar)s = ANY (st.pillars)
+       AND st.first_seen_at > now() - make_interval(days => %(days)s)
+"""
+
+
+def feed_mean_vector(pillar: str, days: int, *,
+                     conn: psycopg.Connection | None = None) -> tuple[tuple[float, ...] | None, int]:
+    with _brief_conn(conn) as c:
+        text, n = c.execute(FEED_MEAN_SQL, {"pillar": pillar, "days": days}).fetchone()
+    return _vec_parse(text), int(n)
+
+
+@dataclass(frozen=True)
+class RankStory:
+    id: int
+    pillars: tuple[str, ...]
+    sport: str | None
+    title: str
+    entities: tuple[str, ...]
+    topics: tuple[str, ...]
+    source_slug: str | None
+    vec: tuple[float, ...]
+
+
+def _rank_story(r: Sequence[Any]) -> RankStory:
+    return RankStory(int(r[0]), tuple(r[1]), r[2], r[3], tuple(r[4] or ()), tuple(r[5] or ()), r[6],
+                     _vec_parse(r[7]) or ())
+
+
+_RANK_STORY_COLS = "st.id, st.pillars, st.sport, st.title, st.entities, st.topics, s.slug, st.centroid::text"
+
+
+@dataclass(frozen=True)
+class ReactionSignal:
+    story: RankStory
+    reaction: str | None
+    opened: bool
+
+
+#: Every real story with a reaction in this pillar, with its latest reaction
+#: (v_feed_reaction_latest) and whether it was opened.
+FEED_SIGNALS_SQL: Final = f"""
+    SELECT {_RANK_STORY_COLS}, r.reaction, r.opened
+      FROM v_feed_reaction_latest r
+      JOIN stories st ON st.id = r.story_id
+      LEFT JOIN content_items i ON i.id = st.lead_item_id
+      LEFT JOIN sources s ON s.id = i.source_id
+     WHERE r.pillar = %(pillar)s AND NOT r.is_test AND st.centroid IS NOT NULL
+     ORDER BY st.id
+"""
+
+
+def feed_reaction_signals(pillar: str, *, conn: psycopg.Connection | None = None) -> list[ReactionSignal]:
+    with _brief_conn(conn) as c:
+        rows = c.execute(FEED_SIGNALS_SQL, {"pillar": pillar}).fetchall()
+    return [ReactionSignal(_rank_story(r[:8]), r[8], bool(r[9])) for r in rows]
+
+
+#: Stories to score: kept, real, linkable, first seen in the window, with a
+#: vector, and done with summarizing (summarized, or out of attempts), so
+#: their entities and topics are final. `unscored` keeps only stories with no
+#: score row at all (new stories between rebuilds).
+FEED_TO_SCORE_SQL: Final = f"""
+    SELECT {_RANK_STORY_COLS}
+      FROM stories st
+      JOIN content_items i ON i.id = st.lead_item_id
+      JOIN sources s ON s.id = i.source_id
+     WHERE NOT st.is_test AND st.filtered_reason IS NULL AND st.centroid IS NOT NULL
+       AND i.url IS NOT NULL
+       AND st.first_seen_at > now() - make_interval(hours => %(hours)s)
+       AND (st.summarized_at IS NOT NULL OR st.summary_attempts >= %(max_attempts)s)
+       AND (NOT %(unscored)s OR NOT EXISTS (SELECT 1 FROM story_scores x WHERE x.story_id = st.id))
+     ORDER BY st.id
+"""
+
+
+def feed_stories_to_score(hours: int, max_attempts: int, *, unscored: bool,
+                          conn: psycopg.Connection | None = None) -> list[RankStory]:
+    with _brief_conn(conn) as c:
+        rows = c.execute(FEED_TO_SCORE_SQL, {"hours": hours, "max_attempts": max_attempts,
+                                             "unscored": unscored}).fetchall()
+    return [_rank_story(r) for r in rows]
+
+
+@dataclass(frozen=True)
+class ProfileRow:
+    id: int
+    pillar: str
+    mean: tuple[float, ...]
+    mean_n: int
+    love: tuple[float, ...] | None
+    ni: tuple[float, ...] | None
+    topic_weights: dict[str, float]
+    source_weights: dict[str, float]
+    entity_weights: dict[str, float]
+    love_count: int
+    ni_count: int
+    open_count: int
+    neutral_count: int
+    seed_weight_love: float
+    seed_weight_ni: float
+    built_at: datetime
+
+
+def feed_insert_profile(p: Any, *, conn: psycopg.Connection | None = None) -> int:
+    """`p` is a feed.rank.Profile. Returns the new interest_profiles id."""
+    with _brief_conn(conn) as c:
+        return int(c.execute(
+            """
+            INSERT INTO interest_profiles
+                (pillar, mean_vec, love_vec, ni_vec, topic_weights, source_weights, entity_weights,
+                 reaction_count, love_count, ni_count, open_count, neutral_count,
+                 seed_weight_love, seed_weight_ni, mean_n)
+            VALUES (%s, %s::extensions.halfvec, %s::extensions.halfvec, %s::extensions.halfvec,
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (p.pillar, _vec_text(p.mean), _vec_text(p.love) if p.love is not None else None,
+             _vec_text(p.ni) if p.ni is not None else None, Jsonb(dict(p.topic_weights)),
+             Jsonb(dict(p.source_weights)), Jsonb(dict(p.entity_weights)), p.reaction_count,
+             p.love_count, p.ni_count, p.open_count, p.neutral_count, p.seed_weight_love,
+             p.seed_weight_ni, p.mean_n),
+        ).fetchone()[0])
+
+
+def feed_latest_profiles(*, conn: psycopg.Connection | None = None) -> dict[str, ProfileRow]:
+    with _brief_conn(conn) as c:
+        rows = c.execute("""
+            SELECT DISTINCT ON (pillar)
+                   id, pillar, mean_vec::text, mean_n, love_vec::text, ni_vec::text, topic_weights,
+                   source_weights, entity_weights, love_count, ni_count, open_count, neutral_count,
+                   seed_weight_love, seed_weight_ni, built_at
+              FROM interest_profiles
+             ORDER BY pillar, built_at DESC, id DESC
+        """).fetchall()
+    return {r[1]: ProfileRow(int(r[0]), r[1], _vec_parse(r[2]) or (), int(r[3]), _vec_parse(r[4]),
+                             _vec_parse(r[5]), dict(r[6]), dict(r[7]), dict(r[8]), r[9], r[10], r[11],
+                             r[12], float(r[13]), float(r[14]), r[15])
+            for r in rows}
+
+
+def feed_profile_built_today(*, conn: psycopg.Connection | None = None) -> bool:
+    """Any profile built since the owner's local midnight (database clock)."""
+    with _brief_conn(conn) as c:
+        return bool(c.execute(
+            f"SELECT EXISTS (SELECT 1 FROM interest_profiles WHERE built_at >= {_LOCAL_DAY_START})"
+        ).fetchone()[0])
+
+
+def feed_insert_scores(scores: Sequence[Any], profile_ids: Mapping[str, int], *,
+                       conn: psycopg.Connection | None = None) -> int:
+    """`scores` are feed.rank.Score; each row names the profile of its pillar.
+    One transaction: a rescore lands whole or not at all."""
+    if not scores:
+        return 0
+    with _brief_conn(conn) as c, c.transaction(), c.cursor() as cur:
+        cur.executemany(
+            """
+            INSERT INTO story_scores (story_id, pillar, score, components, follow_tier, floor,
+                                      cross_pillar, profile_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            [(s.story_id, s.pillar, s.score, Jsonb(dict(s.components)), s.follow_tier, s.floor,
+              s.cross_pillar, profile_ids.get(s.pillar)) for s in scores],
+        )
+    return len(scores)
+
+
+@dataclass(frozen=True)
+class ForYouRow:
+    id: int
+    pos: int
+    rank: float
+    floored: bool
+    cross_pillar: bool
+    title: str
+    source_name: str
+    summary: str | None
+    why_it_matters: str | None
+
+
+def feed_for_you(pillar: str, limit: int, offset: int = 0, *,
+                 conn: psycopg.Connection | None = None) -> list[ForYouRow]:
+    """db/039 feed_for_you(): the For you order, as the owner sees it."""
+    with _brief_conn(conn) as c:
+        rows = c.execute(
+            """
+            SELECT id, pos, rank, coalesce(floored, false), cross_pillar, title, source_name,
+                   summary, why_it_matters
+              FROM feed_for_you(%s, %s, %s)
+            """, (pillar, limit, offset)).fetchall()
+    return [ForYouRow(int(r[0]), int(r[1]), float(r[2]), r[3], r[4], r[5], r[6], r[7], r[8]) for r in rows]
+
+
+@dataclass(frozen=True)
+class WhyJob:
+    story_id: int
+    title: str
+    summary: str | None
+    source_name: str
+
+
+#: Home's top `top` stories in For you that were never asked "why it matters".
+FEED_WHY_QUEUE_SQL: Final = """
+    SELECT f.id, f.title, f.summary, f.source_name
+      FROM feed_for_you('home', %(top)s, 0) f
+      JOIN stories st ON st.id = f.id
+     WHERE st.why_generated_at IS NULL
+     ORDER BY f.pos
+"""
+
+
+def feed_why_queue(top: int, *, conn: psycopg.Connection | None = None) -> list[WhyJob]:
+    with _brief_conn(conn) as c:
+        rows = c.execute(FEED_WHY_QUEUE_SQL, {"top": top}).fetchall()
+    return [WhyJob(int(r[0]), r[1], r[2], r[3]) for r in rows]
+
+
+def ai_calls_today(purpose: str, *, conn: psycopg.Connection | None = None) -> int:
+    """ai_usage rows for `purpose` since the owner's local midnight."""
+    with _brief_conn(conn) as c:
+        return int(c.execute(
+            f"SELECT count(*) FROM ai_usage WHERE purpose = %s AND created_at >= {_LOCAL_DAY_START}",
+            (purpose,)).fetchone()[0])
+
+
+def ctx_ventures(*, conn: psycopg.Connection | None = None) -> dict[str, Any]:
+    """db/029 ctx_ventures(): the same venture context Wags and the brief read."""
+    with _brief_conn(conn) as c:
+        return c.execute("SELECT ctx_ventures()").fetchone()[0] or {}
+
+
+def feed_save_why(answers: Mapping[int, str | None], ai_usage_id: int | None, *,
+                  conn: psycopg.Connection | None = None) -> int:
+    """Record that each story was asked (why_generated_at), with its line or
+    NULL. A story already asked is left as it is. Returns rows written."""
+    if not answers:
+        return 0
+    with _brief_conn(conn) as c, c.transaction(), c.cursor() as cur:
+        written = 0
+        for story_id, line in answers.items():
+            cur.execute(
+                """
+                UPDATE stories SET why_it_matters = %s, why_generated_at = now(), why_ai_usage_id = %s
+                 WHERE id = %s AND why_generated_at IS NULL
+                """, (line, ai_usage_id, story_id))
+            written += cur.rowcount
+    return written
 
 
 # ---------------------------------------------------------------------------

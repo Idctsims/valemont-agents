@@ -369,9 +369,15 @@ class Registry(unittest.TestCase):
         self.assertEqual(set(built), {"heartbeat", "health_monitor", "db_size", "job_queue",
                                      "goals_rollover", "goals_monday_push", "capital_snapshot",
                           "morning_brief", "morning_brief_push",
-                          "feed_ingest", "feed_summarize", "feed_prune"})
+                          "feed_ingest", "feed_summarize", "feed_score", "feed_why",
+                          "feed_profile", "feed_prune"})
         self.assertEqual(built["feed_ingest"].expected_interval_s, 1800)
         self.assertFalse(built["feed_summarize"].scheduled)
+        self.assertFalse(built["feed_score"].scheduled)
+        self.assertFalse(built["feed_why"].scheduled)
+        self.assertTrue(built["feed_profile"].run_at_boot)
+        self.assertEqual((built["feed_profile"].trigger.fields[5].expressions[0].first,
+                          str(built["feed_profile"].trigger.timezone)), (4, "America/Chicago"))
         self.assertFalse(built["feed_prune"].run_at_boot)
         self.assertEqual(str(built["feed_prune"].trigger.timezone), "America/Chicago")
         self.assertEqual(built["heartbeat"].expected_interval_s, 60)
@@ -406,11 +412,12 @@ class SystemOnlyBoot(SystemTestCase):
                                "system:goals_rollover", "system:goals_monday_push",
                                "system:capital_snapshot", "system:morning_brief",
                                "system:morning_brief_push", "system:feed_ingest",
-                               "system:feed_prune"})
-        # feed_summarize is registered (job_health row, watched) but never
-        # scheduled: feed_ingest runs it.
-        self.assertEqual(self.ledger.names().count("job_register"), 12)
-        self.assertNotIn("system:feed_summarize", ids)
+                               "system:feed_profile", "system:feed_prune"})
+        # feed_summarize, feed_score and feed_why are registered (job_health
+        # rows, watched) but never scheduled: feed_ingest runs them.
+        self.assertEqual(self.ledger.names().count("job_register"), 15)
+        for chained in ("feed_summarize", "feed_score", "feed_why"):
+            self.assertNotIn(f"system:{chained}", ids)
 
     def test_disabled_agents_plus_system_jobs_start_rather_than_refuse(self) -> None:
         from tests.support import ScriptedAgent
@@ -457,7 +464,8 @@ class SystemOnlyBoot(SystemTestCase):
                          {"heartbeat", "health_monitor", "db_size", "job_queue",
                           "goals_rollover", "goals_monday_push", "capital_snapshot",
                           "morning_brief", "morning_brief_push",
-                          "feed_ingest", "feed_summarize", "feed_prune"})
+                          "feed_ingest", "feed_summarize", "feed_score", "feed_why",
+                          "feed_profile", "feed_prune"})
 
 
 if __name__ == "__main__":
