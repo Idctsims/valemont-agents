@@ -14,6 +14,8 @@
 --                          add_test_move_proposal() (verified e2e marker) or
 --                          the worker. Never followed, never in a window,
 --                          never linked to or proposed with a real entity.
+--   add_test_sports_story  db/032's add_test_story plus a sport, for the
+--                          chips' e2e spec (owner only, verified marker).
 --   entity_links           now APPEND-ONLY (UPDATE, DELETE and TRUNCATE
 --                          refused), with proposal_id and at most one current
 --                          link per (person, kind).
@@ -428,6 +430,28 @@ BEGIN
     INSERT INTO public.entity_link_proposals (person_entity_id, kind, link_kind, from_entity_id, to_entity_id, is_test)
     VALUES (v_person, 'trade', 'plays_for', v_a, v_b, true)
     RETURNING id INTO v_id;
+    RETURN v_id;
+END;
+$$;
+
+-- The e2e writer of a test SPORTS story with a sport (the chips' spec):
+-- db/032's add_test_story (owner only, verified marker, a .invalid URL),
+-- then the story's sport. Still is_test: no real view or reader sees it.
+CREATE OR REPLACE FUNCTION public.add_test_sports_story(p_marker text, p_sport text, p_title text,
+                                                        p_summary text, p_url text)
+RETURNS bigint
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_id bigint;
+BEGIN
+    IF p_sport IS NULL OR p_sport NOT IN ('cfb', 'nfl', 'nba', 'f1', 'golf') THEN
+        RAISE EXCEPTION 'add_test_sports_story: unknown sport %', p_sport;
+    END IF;
+    v_id := public.add_test_story(p_marker, 'sports', p_title, p_summary, p_url);
+    UPDATE public.stories SET sport = p_sport WHERE id = v_id AND is_test;
     RETURN v_id;
 END;
 $$;
@@ -883,11 +907,13 @@ REVOKE ALL ON FUNCTION public.entity_link_proposals_guard() FROM PUBLIC, anon, a
 REVOKE ALL ON FUNCTION public.owner_today() FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.decide_entity_link_proposal(bigint, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.add_test_move_proposal(text, text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.add_test_sports_story(text, text, text, text, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.feed_for_you(text, integer, integer, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.ctx_sports_feed() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.owner_today() TO authenticated, valemont_readonly;
 GRANT EXECUTE ON FUNCTION public.decide_entity_link_proposal(bigint, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.add_test_move_proposal(text, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.add_test_sports_story(text, text, text, text, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.feed_for_you(text, integer, integer, text) TO authenticated, valemont_readonly;
 GRANT EXECUTE ON FUNCTION public.ctx_sports_feed() TO authenticated, valemont_readonly;
 
@@ -1244,12 +1270,16 @@ BEGIN
             VALUES (v_person, 'signing', 'plays_for', v_team_a);
         EXCEPTION WHEN check_violation THEN v_refused := v_refused + 1;
         END;
-        BEGIN  -- the e2e writer is the owner's only (no session here)
+        BEGIN  -- the e2e writers are the owner's only (no session here)
             PERFORM public.add_test_move_proposal('x', 'selftest');
         EXCEPTION WHEN raise_exception THEN v_refused := v_refused + 1;
         END;
-        IF v_refused <> 7 THEN
-            RAISE EXCEPTION 'SELFTEST FAILED: % of 7 test-isolation checks refused', v_refused;
+        BEGIN
+            PERFORM public.add_test_sports_story('x', 'golf', 'selftest', NULL, 'https://selftest.invalid/042/t');
+        EXCEPTION WHEN raise_exception THEN v_refused := v_refused + 1;
+        END;
+        IF v_refused <> 8 THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: % of 8 test-isolation checks refused', v_refused;
         END IF;
         INSERT INTO public.entity_links (from_entity_id, to_entity_id, kind, valid_from, confirmed_by_owner)
         VALUES (v_tperson, v_ta, 'plays_for', '2026-01-01', true);
