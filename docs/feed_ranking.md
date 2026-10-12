@@ -95,8 +95,15 @@ differ, the decisions win. Step 1 is `db/039_feed_ranking.sql`.
 
        The owner reported "Love on #4 only; skipped the other 9". In the
        ledger, 8 of those 9 carry a Not interested or Neutral reaction.
+       **Owner's terminology (2026-10-12): "skip" means no tap.** The
+       reactions above stand as recorded (`feed_reactions` is
+       append-only), and the result is scored on them.
        Neutral and Not interested both remove a card from For you, and four
        of the targets dismissed that way were page-one topic stories.
+     - **The live Not Interested movement (−82 against the control) was
+       NOT pre-registered.** The owner closed the learning item on it, on
+       `TenLoves` passing, and on a one-week owner watch due 2026-10-19
+       (MASTER_PLAN, Chat 3 Phase 2).
      - **So this run did not measure the ten-Love property:** it had one
        Love, and four Not interested on the topic. The unit property is
        `TenLoves`. What the run does show: four Not interested taps on the

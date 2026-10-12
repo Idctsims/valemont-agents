@@ -306,7 +306,11 @@ Thirteen build chats after this one, each split into phases with a test you run 
 1. Source registry, RSS ingest, dedupe, Haiku batch summaries, embeddings.
    - [ ] All 13 seed sources ingest; every item shows a summary and the original link
 2. Love / Neutral / Not Interested, interest profile, daily re-rank, seeded interests.
-   - [ ] Ten Love taps on one topic lift a held-out story of that topic from off page one of For you onto it after the rebuild **(owner, Oct 12: the live check flipped to Love. Not Interested is shown by the seeds, with gossip's best at #48 on zero taps, and by the unit test `TenNotInterested`. Design: `docs/feed_ranking.md`, owner decision 7)**
+   - [x] Reactions visibly move the ranking. **Closed Oct 12 by the owner** on three grounds (design and record: `docs/feed_ranking.md`, owner decision 7):
+     1. **The live Not Interested movement:** after 4 Not Interested taps on the topic, the held-out story went 64 → 159 against the control's 86 → 99, a net −82. **Not pre-registered:** the frozen check was the Love direction, which FAILED both its conditions because the run had 1 Love, not 10.
+     2. **The Love unit test passes:** `tests/test_feed_rank.py` `TenLoves`, under the owner's amended rule (held-out 50 → 35 against control 51 → 62; the topic on page one 6 → 12). `TenNotInterested` holds the other direction.
+     3. **⏰ Owner watch, due Sun Oct 19:** one week of Love effects on /settings/feed. Open until then.
+   - Also Oct 12: db/041 split the film/TV love seed. Hollywood and US dealmaking and the major festivals are loves; international and regional TV/film markets are not interested.
 3. Sports News for CFB, NFL, NBA, F1 and Golf on the same engine.
    - [ ] Filter chips by sport; reactions train the sports profile separately
 

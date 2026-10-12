@@ -952,6 +952,7 @@ absent row as "I never looked."
   - Calendar (Google Calendar highlights) is **deferred**.
 - **⏰ Reminders:**
   - **Tue 2026-10-13:** NFL props archive, week 5; also weeks 1–4, once (see RECURRING below).
+  - **Sun 2026-10-19:** the owner's one-week watch of Love effects on /settings/feed closes (Chat 3 Phase 2 learning item; MASTER_PLAN checklist, `docs/feed_ranking.md` decision 7).
   - **~2026-10-18:** the Railway trial ends. The worker stops, the watchdog pushes "Worker down", and it needs a **manual redeploy**.
 
 - **Migrations:** **`db/001`–`db/012` and `db/014`–`db/018` applied.** 007–012 verified live by `workers/scripts/verify_migrations_007_012.sql` (20/20). 014–018 were pasted 2026-10-08 and verified by read-only SELECTs. `migration_log` (UTC): 015 04:41:03, 016 04:41:16, 017 04:41:30, 018 04:50:35. 014 predates the log; its tables and triggers are present.
