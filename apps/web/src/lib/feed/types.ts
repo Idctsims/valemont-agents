@@ -42,6 +42,38 @@ export function tabFromParam(raw: string | string[] | undefined): FeedTab {
   return (Array.isArray(raw) ? raw[0] : raw) === "latest" ? "latest" : "for-you";
 }
 
+/** Sports News chips (stories.sport). A story with no sport shows under All only. */
+export type Sport = "cfb" | "nfl" | "nba" | "f1" | "golf";
+export const SPORT_CHIPS: readonly { sport: Sport | null; label: string }[] = [
+  { sport: null, label: "All" },
+  { sport: "cfb", label: "CFB" },
+  { sport: "nfl", label: "NFL" },
+  { sport: "nba", label: "NBA" },
+  { sport: "f1", label: "F1" },
+  { sport: "golf", label: "Golf" },
+];
+
+/** `?sport=` as a chip; anything else is All (null). */
+export function sportFromParam(raw: string | string[] | undefined): Sport | null {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  return SPORT_CHIPS.some((c) => c.sport === v) ? (v as Sport) : null;
+}
+
+/**
+ * A feed URL that keeps the chip, the tab and the page, anchored to the
+ * stories. Home: "/#stories", "/?feed=latest&latest=2#stories" (Phase 2's
+ * URLs, unchanged). Sports: "/sports?sport=golf&feed=latest#stories".
+ */
+export function feedHref(base: "/" | "/sports", o: { tab: FeedTab; page?: number; sport?: Sport | null; anchor?: boolean }): string {
+  const q = new URLSearchParams();
+  if (o.sport) q.set("sport", o.sport);
+  if (o.tab === "latest") q.set("feed", "latest");
+  const page = o.page ?? 1;
+  if (page > 1) q.set(o.tab === "latest" ? "latest" : "foryou", String(page));
+  const s = q.toString();
+  return `${base}${s ? `?${s}` : ""}${o.anchor === false ? "" : "#stories"}`;
+}
+
 /** The latest reaction hides a card when it is neutral or not interested. */
 export function hides(reaction: string | null | undefined): boolean {
   return reaction === "neutral" || reaction === "not_interested";

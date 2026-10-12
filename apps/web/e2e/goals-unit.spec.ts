@@ -173,7 +173,7 @@ test.describe("navigation registry", () => {
     );
   });
 
-  test("only built pages render: today, Home, Goals, Morning brief, Wags, Ventures HQ and Capital Tracker", () => {
+  test("only built pages render: today, Home, Goals, Morning brief, Wags, Ventures HQ, Capital Tracker and Sports News", () => {
     expect(builtGroups()).toEqual([
       {
         key: "command",
@@ -187,6 +187,8 @@ test.describe("navigation registry", () => {
           { label: "Capital Tracker", href: "/capital" },
         ],
       },
+      // Chat 3 Phase 3.
+      { key: "sports", name: "Sports", pages: [{ label: "Sports News", href: "/sports" }] },
     ]);
     const unbuilt = NAV.flatMap((g) => g.pillars.filter((p) => !p.built).map((p) => p.href));
     const shown = builtGroups().flatMap((g) => g.pages.map((p) => p.href));

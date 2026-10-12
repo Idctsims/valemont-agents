@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { PAGE_SIZE, hides, otherOutlets, type FeedStory, type Pillar } from "./types";
+import { PAGE_SIZE, hides, otherOutlets, type FeedStory, type Pillar, type Sport } from "./types";
 
 // Reads only: the worker writes the feed (db/032) and its scores (db/039);
 // the owner reads through RLS, and writes only reactions (feed/actions.ts,
@@ -110,7 +110,7 @@ async function finish(
  * dismissed (neutral, not interested). `hasMore` when another page exists. */
 export async function latestStories(
   supabase: SupabaseClient,
-  opts: { pillar: Pillar; page: number; withTests?: boolean },
+  opts: { pillar: Pillar; page: number; withTests?: boolean; sport?: Sport | null },
 ): Promise<{ stories: FeedStory[]; hasMore: boolean }> {
   const from = (opts.page - 1) * PAGE_SIZE;
   // One extra row tells whether a next page exists.
@@ -122,13 +122,15 @@ export async function latestStories(
   let meta: Meta[];
 
   if (opts.withTests) {
-    const { data, error } = await supabase
+    let q = supabase
       .from("stories")
       .select("id, title, summary, why_it_matters, item_count, is_test, lead_item_id, lead:content_items!stories_lead_item_fk(url, published_at, source:sources(name))")
       .contains("pillars", [opts.pillar])
       .is("filtered_reason", null)
       .not("lead_item_id", "is", null)
-      .not("id", "in", notHidden)
+      .not("id", "in", notHidden);
+    if (opts.sport) q = q.eq("sport", opts.sport);
+    const { data, error } = await q
       .order("first_seen_at", { ascending: false })
       .order("id", { ascending: false })
       .range(from, to);
@@ -141,11 +143,13 @@ export async function latestStories(
     }));
     meta = rows.map((r) => ({ id: r.id, leadItemId: r.lead_item_id, sourceName: r.lead!.source?.name ?? "Unknown", itemCount: r.item_count }));
   } else {
-    const { data, error } = await supabase
+    let q = supabase
       .from("v_feed_stories")
       .select("id, title, summary, why_it_matters, item_count, lead_item_id, lead_url, lead_published_at, source_name")
       .contains("pillars", [opts.pillar])
-      .not("id", "in", notHidden)
+      .not("id", "in", notHidden);
+    if (opts.sport) q = q.eq("sport", opts.sport);
+    const { data, error } = await q
       .order("lead_published_at", { ascending: false })
       .order("id", { ascending: false })
       .range(from, to);
@@ -168,17 +172,21 @@ function viewMeta(r: ViewRow): Meta {
   return { id: r.id, leadItemId: r.lead_item_id, sourceName: r.source_name, itemCount: r.item_count };
 }
 
-/** One page of For you: db/039 feed_for_you() (the learned score minus
- * recency, the capped Alabama floor, at most 5 tier-1 sports stories on page
- * one; dismissed stories already left out). Never shows a test story. */
+/** One page of For you: db/042 feed_for_you() (the learned score minus
+ * recency plus any event boost, the capped Alabama floor, at most 5 tier-1
+ * sports stories on Home's page one, 6 per tier-1 follow on Sports'; a chip
+ * filters before ranking; dismissed stories already left out). Never shows a
+ * test story. Without a sport the call is exactly Home's Phase 2 call:
+ * p_sport is sent only when a chip is chosen (it defaults to NULL). */
 export async function forYouStories(
   supabase: SupabaseClient,
-  opts: { pillar: Pillar; page: number },
+  opts: { pillar: Pillar; page: number; sport?: Sport | null },
 ): Promise<{ stories: FeedStory[]; hasMore: boolean }> {
   const { data, error } = await supabase.rpc("feed_for_you", {
     p_pillar: opts.pillar,
     p_limit: PAGE_SIZE + 1,
     p_offset: (opts.page - 1) * PAGE_SIZE,
+    ...(opts.sport ? { p_sport: opts.sport } : {}),
   });
   if (error) throw new Error(`Couldn't read For you: ${error.message}`);
   const rows = (data ?? []) as ForYouRow[];
@@ -251,6 +259,85 @@ export async function sourcesHealth(supabase: SupabaseClient, sinceIso: string) 
   return { rows, filtered: (filtered.data ?? []) as FilteredRow[], patterns };
 }
 
+// ------------------------------------------- /settings/feed: moves and boosts
+
+export type MoveKind = "trade" | "signing" | "release" | "retirement";
+
+export type MoveProposal = {
+  id: number;
+  person: string;
+  kind: MoveKind;
+  from: string | null;
+  to: string | null;
+  storyTitle: string | null;
+  isTest: boolean;
+  createdAt: string;
+  decision: "confirmed" | "dismissed" | null;
+  decidedAt: string | null;
+  /** Who the person is with now (v_entity_links_current); null: no one. */
+  currentWith: string | null;
+};
+
+type ProposalRowDb = {
+  id: number; kind: MoveKind; is_test: boolean; created_at: string; decision: "confirmed" | "dismissed" | null;
+  decided_at: string | null; person_entity_id: number;
+  person: { name: string } | null; from: { name: string } | null; to: { name: string } | null;
+  story: { title: string } | null;
+};
+
+/** How many decided proposals the page keeps showing under the open ones. */
+const DECIDED_SHOWN = 8;
+
+/** The summarizer's move proposals (db/042): open ones first, then the latest
+ * decided. Test proposals (the phone check, e2e) are shown, tagged. */
+export async function moveProposals(supabase: SupabaseClient): Promise<MoveProposal[]> {
+  const cols = "id, kind, is_test, created_at, decision, decided_at, person_entity_id, " +
+    "person:entities!entity_link_proposals_person_entity_id_fkey(name), " +
+    "from:entities!entity_link_proposals_from_entity_id_fkey(name), " +
+    "to:entities!entity_link_proposals_to_entity_id_fkey(name), story:stories(title)";
+  const [open, decided] = await Promise.all([
+    supabase.from("entity_link_proposals").select(cols).is("decision", null).order("created_at", { ascending: false }),
+    supabase.from("entity_link_proposals").select(cols).not("decision", "is", null)
+      .order("decided_at", { ascending: false }).limit(DECIDED_SHOWN),
+  ]);
+  for (const r of [open, decided]) {
+    if (r.error) throw new Error(`Couldn't read the proposed changes: ${r.error.message}`);
+  }
+  const rows = [...((open.data ?? []) as unknown as ProposalRowDb[]), ...((decided.data ?? []) as unknown as ProposalRowDb[])];
+  const persons = [...new Set(rows.map((r) => r.person_entity_id))];
+  const current = new Map<number, string>();
+  if (persons.length) {
+    const { data, error } = await supabase.from("v_entity_links_current").select("from_entity_id, to_entity_id").in("from_entity_id", persons);
+    if (error) throw new Error(`Couldn't read the current links: ${error.message}`);
+    const links = (data ?? []) as { from_entity_id: number; to_entity_id: number }[];
+    if (links.length) {
+      const names = await supabase.from("entities").select("id, name").in("id", links.map((l) => l.to_entity_id));
+      if (names.error) throw new Error(`Couldn't read the current links: ${names.error.message}`);
+      const byId = new Map(((names.data ?? []) as { id: number; name: string }[]).map((e) => [e.id, e.name]));
+      for (const l of links) current.set(l.from_entity_id, byId.get(l.to_entity_id) ?? "Unknown");
+    }
+  }
+  return rows.map((r) => ({
+    id: r.id, person: r.person?.name ?? "Unknown", kind: r.kind, from: r.from?.name ?? null, to: r.to?.name ?? null,
+    storyTitle: r.story?.title ?? null, isTest: r.is_test, createdAt: r.created_at, decision: r.decision,
+    decidedAt: r.decided_at, currentWith: current.get(r.person_entity_id) ?? null,
+  }));
+}
+
+export type BoostNow = { label: string; sport: string; endsAt: string };
+
+/** Event windows active at `nowIso` (db/042 boost_windows). */
+export async function boostsNow(supabase: SupabaseClient, nowIso: string): Promise<BoostNow[]> {
+  const { data, error } = await supabase
+    .from("boost_windows")
+    .select("label, sport, ends_at")
+    .lte("starts_at", nowIso)
+    .gt("ends_at", nowIso)
+    .order("ends_at");
+  if (error) throw new Error(`Couldn't read the boosts: ${error.message}`);
+  return ((data ?? []) as { label: string; sport: string; ends_at: string }[]).map((b) => ({ label: b.label, sport: b.sport, endsAt: b.ends_at }));
+}
+
 // --------------------------------------------------------------- /settings/feed
 
 export type ProfileSummary = {
@@ -269,7 +356,11 @@ export type ProfileSummary = {
   entities: Record<string, number>;
 };
 
-export type FollowSummary = { name: string; kind: string; tier: 1 | 2 | 3; pillar: Pillar | null; floor: boolean; sport: string | null };
+export type FollowSummary = {
+  name: string; kind: string; tier: 1 | 2 | 3; pillar: Pillar | null; floor: boolean; sport: string | null;
+  /** A derived follow (owner D3, db/042): the current team of this tier-1 person. */
+  via?: string;
+};
 
 type ProfileRowDb = {
   id: number; pillar: Pillar; built_at: string; love_count: number; ni_count: number; open_count: number;
@@ -298,7 +389,7 @@ export async function feedProfile(supabase: SupabaseClient) {
       .order("built_at", { ascending: false })
       .order("id", { ascending: false })
       .limit(PROFILE_HISTORY * 2),
-    supabase.from("follows").select("tier, pillar, floor, entity:entities(name, kind, sport)").order("tier"),
+    supabase.from("follows").select("tier, pillar, floor, entity:entities(id, name, kind, sport, is_test)").order("tier"),
   ]);
   for (const r of [profiles, follows]) {
     if (r.error) throw new Error(`Couldn't read the feed profile: ${r.error.message}`);
@@ -319,9 +410,36 @@ export async function feedProfile(supabase: SupabaseClient) {
     if (error) throw new Error(`Couldn't count new reactions: ${error.message}`);
     pending = count ?? 0;
   }
-  const followRows = ((follows.data ?? []) as unknown as { tier: 1 | 2 | 3; pillar: Pillar | null; floor: boolean; entity: { name: string; kind: string; sport: string | null } | null }[])
-    .filter((f) => f.entity)
-    .map((f) => ({ name: f.entity!.name, kind: f.entity!.kind, sport: f.entity!.sport, tier: f.tier, pillar: f.pillar, floor: f.floor }))
-    .sort((a, b) => a.tier - b.tier || a.name.localeCompare(b.name));
-  return { latest, history, follows: followRows as FollowSummary[], pendingReactions: pending };
+  type FollowDb = { tier: 1 | 2 | 3; pillar: Pillar | null; floor: boolean; entity: { id: number; name: string; kind: string; sport: string | null; is_test: boolean } | null };
+  const raw = ((follows.data ?? []) as unknown as FollowDb[]).filter((f) => f.entity && !f.entity.is_test);
+  const followRows: FollowSummary[] = raw.map((f) => ({
+    name: f.entity!.name, kind: f.entity!.kind, sport: f.entity!.sport, tier: f.tier, pillar: f.pillar, floor: f.floor,
+  }));
+  // Owner D3 (db/042): each tier-1 person's current team, tier 2 on Sports,
+  // as the worker derives it (ledger.FEED_FOLLOWS_SQL).
+  const people = raw.filter((f) => f.tier === 1 && f.entity!.kind === "person");
+  if (people.length) {
+    const links = await supabase.from("v_entity_links_current").select("from_entity_id, to_entity_id")
+      .in("from_entity_id", people.map((f) => f.entity!.id));
+    if (links.error) throw new Error(`Couldn't read the feed profile: ${links.error.message}`);
+    const rows = (links.data ?? []) as { from_entity_id: number; to_entity_id: number }[];
+    if (rows.length) {
+      const teams = await supabase.from("entities").select("id, name, kind, sport").in("id", rows.map((l) => l.to_entity_id));
+      if (teams.error) throw new Error(`Couldn't read the feed profile: ${teams.error.message}`);
+      const byId = new Map(((teams.data ?? []) as { id: number; name: string; kind: string; sport: string | null }[]).map((t) => [t.id, t]));
+      const personName = new Map(people.map((f) => [f.entity!.id, f.entity!.name]));
+      const seen = new Map<string, FollowSummary>();
+      for (const l of rows) {
+        const t = byId.get(l.to_entity_id);
+        if (!t) continue;
+        const prev = seen.get(t.name);
+        const via = personName.get(l.from_entity_id)!;
+        if (prev) prev.via = `${prev.via} and ${via}`;
+        else seen.set(t.name, { name: t.name, kind: t.kind, sport: t.sport, tier: 2, pillar: "sports", floor: false, via });
+      }
+      followRows.push(...seen.values());
+    }
+  }
+  followRows.sort((a, b) => a.tier - b.tier || a.name.localeCompare(b.name));
+  return { latest, history, follows: followRows, pendingReactions: pending };
 }

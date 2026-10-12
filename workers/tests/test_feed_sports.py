@@ -301,6 +301,37 @@ class QueuePriority(unittest.TestCase):
         self.assertIn("NOT e.is_test", ledger.FEED_FOLLOWS_SQL)
 
 
+class PillarSeparation(unittest.TestCase):
+    """A Love on Sports changes the sports profile and never Home's: each
+    pillar's profile is built from that pillar's reactions alone."""
+
+    def test_a_sports_love_trains_only_the_sports_profile(self) -> None:
+        from feed import profile as feed_profile
+
+        vec = (1.0, 0.0, 0.0)
+        loved = ledger.RankStory(7, ("home", "sports"), "nba", "LeBron on the Sixers", (), (), "espn-nba", vec)
+        asked: list[str] = []
+        built: dict[str, rank.Profile] = {}
+
+        def signals(pillar: str, **kw):
+            asked.append(pillar)
+            return [ledger.ReactionSignal(loved, "love", False)] if pillar == "sports" else []
+
+        def insert(p, **kw):
+            built[p.pillar] = p
+            return len(built)
+
+        with mock.patch.object(ledger, "feed_seed_phrases", lambda **kw: {}), \
+                mock.patch.object(ledger, "feed_mean_vector", lambda pillar, days, **kw: ((0.0, 0.0, 0.0), 5)), \
+                mock.patch.object(ledger, "feed_reaction_signals", signals), \
+                mock.patch.object(ledger, "feed_insert_profile", insert):
+            feed_profile.build_profiles(embed=lambda texts: [])
+        self.assertEqual(asked, ["home", "sports"])
+        self.assertEqual((built["sports"].love_count, built["home"].love_count), (1, 0))
+        self.assertIsNone(built["home"].love)
+        self.assertIsNotNone(built["sports"].love)
+
+
 class SportsSeeds(unittest.TestCase):
     """db/042's sports seeds are the design note's §2 phrases, verbatim."""
 
