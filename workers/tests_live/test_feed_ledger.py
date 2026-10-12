@@ -38,7 +38,17 @@ def unit(i: int) -> list[float]:
 
 @contextmanager
 def _rolled_back() -> Iterator[psycopg.Connection]:
+    """One outer transaction, always rolled back.
+
+    The SELECT 1 matters: in psycopg 3, conn.transaction() on an IDLE
+    connection starts a real transaction and COMMITS it on exit; only inside
+    an open transaction is it a savepoint. Ledger functions use
+    conn.transaction(), so a test whose first statement was one of them
+    committed for real. On 2026-10-11 the Sync test did exactly that: its
+    first feed_sync_sources() committed the 50 sources.toml rows (the same
+    rows the worker's boot sync writes; nothing else leaked)."""
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        conn.execute("SELECT 1")
         try:
             yield conn
         finally:
@@ -280,6 +290,21 @@ class Sync(FeedLedgerCase):
             self.assertEqual(conn.execute(
                 "SELECT include_categories, gnews_window_days FROM sources WHERE slug = 'semafor-business'").fetchone(),
                 (["Business", "Media"], 2))
+
+
+class NothingSurvives(FeedLedgerCase):
+    def test_a_ledger_transaction_as_the_first_statement_is_still_rolled_back(self) -> None:
+        """The 2026-10-11 leak, pinned: a ledger function that opens
+        conn.transaction() as the FIRST statement must not commit. Canary: one
+        seeded item from the `_e2e` test source (harmless if it ever leaks)."""
+        ext = f"tl:canary:{uuid.uuid4().hex}"
+        with _rolled_back() as conn:
+            e2e = ledger.feed_source("_e2e", conn=conn)
+        with _rolled_back() as conn:
+            ledger.feed_insert_seeded(e2e, [_item(ext=ext)], conn=conn)
+        with psycopg.connect(os.environ["DATABASE_URL"]) as fresh:
+            self.assertEqual(fresh.execute("SELECT count(*) FROM content_items WHERE external_id = %s",
+                                           (ext,)).fetchone()[0], 0)
 
 
 class Access033(FeedLedgerCase):
