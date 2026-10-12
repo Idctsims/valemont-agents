@@ -102,6 +102,36 @@ def venture_context(ctx: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
+#: One trailing corporate word a line may leave off a venture's name (owner,
+#: 2026-10-12): "Sims & Vale" names Sims & Vale Capital.
+CORPORATE_WORDS = ("capital", "management", "group", "holdings", "inc", "llc")
+
+
+def name_forms(name: str) -> list[str]:
+    """A venture's exact name, plus the name with ONE trailing corporate word
+    removed when it ends in one. Nothing shorter: "Vale" is not a form."""
+    forms = [name]
+    words = name.split()
+    if len(words) > 1 and words[-1].lower().rstrip(".,") in CORPORATE_WORDS:
+        forms.append(" ".join(words[:-1]))
+    return forms
+
+
+def _names_in(text: str, form: str) -> bool:
+    return re.search(r"(?<![\w&])" + re.escape(form) + r"(?![\w&])", text, re.IGNORECASE) is not None
+
+
+def resolve_venture(venture: Any, names: Sequence[str]) -> str | None:
+    """The venture the model named, exactly or by a short form; else None."""
+    if not venture:
+        return None
+    v = str(venture).strip().lower()
+    for name in names:
+        if v in (f.lower() for f in name_forms(name)):
+            return name
+    return None
+
+
 def check(item: dict[str, Any], names: Sequence[str]) -> tuple[str | None, str | None]:
     """(line, None) when kept; (None, None) for the model's own null; (None,
     reason) when the model wrote a line the rules refuse. A refused line is
@@ -111,10 +141,11 @@ def check(item: dict[str, Any], names: Sequence[str]) -> tuple[str | None, str |
     venture = item.get("venture")
     if not why:
         return None, None
-    if not venture or venture not in names:
+    name = resolve_venture(venture, names)
+    if name is None:
         return None, f"names no known venture ({venture!r})"
-    if venture.lower() not in why.lower():
-        return None, f"does not name {venture!r} in the line"
+    if not any(_names_in(why, form) for form in name_forms(name)):
+        return None, f"does not name {name!r} in the line"
     hedge = HEDGE.search(why)
     if hedge:
         return None, f"hedges ({hedge.group(0)!r}): a real link is stated, not guessed"

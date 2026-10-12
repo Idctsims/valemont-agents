@@ -219,6 +219,26 @@ class WhyValidator(unittest.TestCase):
         self.assertFalse(hasattr(why, "VENTURE_ABOUT"))
         self.assertIn("Artist and influencer management.", why.user_message(ctx, [ledger.WhyJob(1, "h", None, "o")]))
 
+    def test_one_trailing_corporate_word_may_be_left_off(self) -> None:
+        names = ["Sims & Vale Capital", "Perfect Timing Management", "Clipd"]
+        ok = {
+            "Sims & Vale": "A family office buying consumer brands mirrors Sims & Vale deal flow.",
+            "Perfect Timing": "A creator signing is the work Perfect Timing does.",
+        }
+        for short, line in ok.items():
+            with self.subTest(short=short):
+                for venture in (short, names[0] if short.startswith("Sims") else names[1]):
+                    self.assertEqual(why.check({"venture": venture, "why": line}, names), (line, None))
+        for short in ("Vale", "Timing"):
+            with self.subTest(short=short):
+                line = f"A family office deal that matters to {short}."
+                self.assertEqual(why.check({"venture": short, "why": line}, names)[0], None)
+                full = "Sims & Vale Capital" if short == "Vale" else "Perfect Timing Management"
+                self.assertEqual(why.check({"venture": full, "why": line}, names)[0], None)
+        self.assertEqual(why.name_forms("Clipd"), ["Clipd"])
+        self.assertEqual(why.name_forms("Acme Holdings Inc"), ["Acme Holdings Inc", "Acme Holdings"])
+        self.assertEqual(why.name_forms("Sims & Vale Capital"), ["Sims & Vale Capital", "Sims & Vale"])
+
     def test_a_hedged_line_is_refused(self) -> None:
         for line in ("A coalition that could matter to Clipd.", "Clipd might gain a rival.", "Possibly a Clipd rival."):
             with self.subTest(line=line):
