@@ -193,7 +193,11 @@ slug = "boat-international"
 name = "Boat International"
 pillars = ["home"]
 kind = "gnews"
-query = "site:boatinternational.com"
+# Article paths only (owner, 2026-10-11): the bare site query was ~98%
+# superyacht-directory and profile pages (db/038). OR works in Google News:
+# 22 items at 7 days (17 news, 3 reports, 2 editorial features) vs 3 at 2.
+query = "site:boatinternational.com/yachts/news OR site:boatinternational.com/yachts/reports OR site:boatinternational.com/yachts/editorial-features"
+window_days = 7
 priority = 40
 
 [[source]]

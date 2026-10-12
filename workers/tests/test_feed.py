@@ -152,6 +152,11 @@ class SourcesFile(unittest.TestCase):
         by = {s.slug: s for s in specs}
         self.assertEqual(by["semafor-business"].include_categories, ("Business", "Media"))
         self.assertIn("when%3A7d", by["the-real-deal-miami"].url)
+        boat = by["boat-international"]
+        self.assertEqual(boat.window_days, 7)
+        for path in ("yachts%2Fnews", "yachts%2Freports", "yachts%2Feditorial-features"):
+            self.assertIn(f"site%3Aboatinternational.com%2F{path}", boat.url)
+        self.assertEqual(boat.url.count("+OR+"), 2)
         self.assertGreater(by["the-real-deal-miami"].priority, by["bisnow-south-florida"].priority)
         for slug in ("strictlyvc", "the-next-miami", "axios-pro-rata", "no-laying-up"):
             self.assertFalse(by[slug].active, slug)
