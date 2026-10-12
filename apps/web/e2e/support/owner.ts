@@ -515,6 +515,23 @@ export async function addTestBrief(day: string, body: { headline: string; sectio
   });
 }
 
+/** A TEST feed story (db/032 add_test_story): is_test, one item from the
+ * `_e2e` source, linking `url` (a .invalid host). Invisible to the real feed;
+ * a marked request shows it. `summary` null makes a headline-only card. */
+export async function addTestStory(opts: { pillar: "home" | "sports"; title: string; summary: string | null; url: string }): Promise<number> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.rpc("add_test_story", {
+      p_marker: e2eMarker(),
+      p_pillar: opts.pillar,
+      p_title: opts.title,
+      p_summary: opts.summary,
+      p_url: opts.url,
+    });
+    if (error) throw new Error(`test story failed: ${error.message}`);
+    return data as number;
+  });
+}
+
 /** The owner's local date (America/Chicago), as the app computes it. */
 export function chicagoDay(offsetDays = 0): string {
   const d = new Date(Date.now() + offsetDays * 86_400_000);

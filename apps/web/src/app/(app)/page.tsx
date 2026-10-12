@@ -3,11 +3,14 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 
 import { BriefCard } from "@/components/brief/brief-card";
+import { Latest } from "@/components/feed/latest";
 import { GoalLedger } from "@/components/goals/goal-ledger";
 import { TodayModule } from "@/components/ventures/today";
 import { requireOwner } from "@/lib/auth";
 import { briefFor } from "@/lib/brief/data";
 import { MARKER_HEADER, decideMarker } from "@/lib/capital/marker";
+import { latestStories } from "@/lib/feed/data";
+import { pageFromParam } from "@/lib/feed/types";
 import { ensureRollover, weekGoals } from "@/lib/goals/data";
 import { localToday, longDate, weekRange, weekStamp, weekStart } from "@/lib/goals/period";
 import { createClient } from "@/lib/supabase/server";
@@ -15,23 +18,23 @@ import { ventureLinks, ventureToday } from "@/lib/ventures/data";
 
 export const metadata: Metadata = { title: "Home" };
 
-/** Personalized feed (Chat 3). Renders nothing until the feed exists. */
-function FeedSlot() {
-  return null;
-}
-
-export default async function Home() {
+export default async function Home({ searchParams }: { searchParams: Promise<{ latest?: string | string[] }> }) {
   await requireOwner();
   const supabase = await createClient();
   const today = localToday();
+  const page = pageFromParam((await searchParams).latest);
   await ensureRollover(supabase);
   const withTests = decideMarker((await headers()).get(MARKER_HEADER), process.env).kind === "test";
-  const [goals, todayRows, links, brief] = await Promise.all([
+  const [goals, todayRows, links, brief, feed] = await Promise.all([
     weekGoals(supabase, today),
     ventureToday(supabase),
     ventureLinks(supabase),
     briefFor(supabase, today, { withTests }),
+    latestStories(supabase, { pillar: "home", page, withTests }),
   ]);
+  // Display only ("3h"): rendered per request.
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
 
   return (
     <>
@@ -55,7 +58,7 @@ export default async function Home() {
         />
       </div>
 
-      <FeedSlot />
+      <Latest stories={feed.stories} page={page} hasMore={feed.hasMore} now={now} />
     </>
   );
 }

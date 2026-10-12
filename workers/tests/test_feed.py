@@ -1,0 +1,738 @@
+"""The feed (Chat 3 Phase 1): parsing, URL canonicalization, story assignment,
+the drop rules, the summary validator, core/embed.py's retries and loud
+failure, one failing source never failing the run, the one-time push after 6
+failures, seed-and-skip, and the ingest -> summarize chain.
+
+A stubbed feed ledger and injected fetch/decode/embed/push: no database, no
+network, no Claude.
+"""
+
+from __future__ import annotations
+
+import itertools
+import json
+import os
+import unittest
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from typing import Any
+from unittest import mock
+
+from core import ai, embed, jobs, ledger, push, system_jobs
+from feed import cluster, ingest, summarize
+from feed.parse import ParseFailed, canonical_url, keeps_category, parse_feed, strip_html
+from feed.rules import Rule, Rules, SeedPhrase, best_seed
+from feed.sources import SourcesInvalid, _spec, gnews_url, load_sources
+
+NOW = datetime(2026, 10, 12, 12, 0, tzinfo=timezone.utc)
+
+
+def rfc822(dt: datetime) -> str:
+    return dt.strftime("%a, %d %b %Y %H:%M:%S +0000")
+
+
+def rss(*items: str, title: str = "Feed") -> bytes:
+    return (f'<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>{title}</title>'
+            + "".join(items) + "</channel></rss>").encode()
+
+
+def rss_item(title: str, link: str, *, guid: str | None = None, when: datetime | None = NOW,
+             desc: str = "", cats: tuple[str, ...] = ()) -> str:
+    return ("<item>" + f"<title>{title}</title><link>{link}</link>"
+            + (f"<guid>{guid}</guid>" if guid else "")
+            + (f"<pubDate>{rfc822(when)}</pubDate>" if when else "")
+            + (f"<description>{desc}</description>" if desc else "")
+            + "".join(f"<category>{c}</category>" for c in cats) + "</item>")
+
+
+def unit(i: int, n: int = 384) -> list[float]:
+    """A unit vector along axis i."""
+    v = [0.0] * n
+    v[i % n] = 1.0
+    return v
+
+
+def mix(a: list[float], b: list[float], w: float) -> list[float]:
+    return [x * (1 - w) + y * w for x, y in zip(a, b)]
+
+
+# ===================================================================== parsing
+
+class Parsing(unittest.TestCase):
+    def test_rss_2_0(self) -> None:
+        items = parse_feed(rss(rss_item("Texans trade for Harrison", "https://espn.com/a",
+                                        guid="g1", desc="<p>The <b>Texans</b> made a deal.</p>", cats=("NFL",))))
+        self.assertEqual(len(items), 1)
+        it = items[0]
+        self.assertEqual((it.external_id, it.link, it.title), ("g1", "https://espn.com/a", "Texans trade for Harrison"))
+        self.assertEqual(it.teaser, "The Texans made a deal.")
+        self.assertEqual(it.published_at, NOW)
+        self.assertEqual(it.categories, ("NFL",))
+
+    def test_atom(self) -> None:
+        atom = b"""<?xml version="1.0" encoding="utf-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom"><title>PFT</title>
+          <entry><title>Stroud on Harrison</title><id>tag:pft,1</id>
+            <link href="https://www.nbcsports.com/x?utm_source=rss"/>
+            <updated>2026-10-12T11:00:00Z</updated><summary>It is perfect for him.</summary></entry>
+        </feed>"""
+        it = parse_feed(atom)[0]
+        self.assertEqual(it.external_id, "tag:pft,1")
+        self.assertEqual(it.published_at, datetime(2026, 10, 12, 11, 0, tzinfo=timezone.utc))
+        self.assertEqual(canonical_url(it.link), "https://www.nbcsports.com/x")
+
+    def test_malformed_xml_with_recoverable_items_still_parses(self) -> None:
+        broken = rss(rss_item("Good item", "https://a.example/1", guid="1")).replace(b"</channel></rss>", b"<item><title>cut")
+        self.assertEqual([i.title for i in parse_feed(broken)][:1], ["Good item"])
+
+    def test_html_or_garbage_is_not_a_feed(self) -> None:
+        with self.assertRaises(ParseFailed):
+            parse_feed(b"<html><body>Access denied</body></html>")
+        with self.assertRaises(ParseFailed):
+            parse_feed(b"\x00\x01 not xml at all")
+
+    def test_an_empty_feed_is_empty_not_an_error(self) -> None:
+        self.assertEqual(parse_feed(rss()), [])
+
+    def test_non_utf8_feed_decodes(self) -> None:
+        body = ('<?xml version="1.0" encoding="ISO-8859-1"?><rss version="2.0"><channel><title>F</title>'
+                '<item><title>Pérez crashes in qualifying</title><link>https://a.example/p</link></item>'
+                '</channel></rss>').encode("iso-8859-1")
+        self.assertEqual(parse_feed(body)[0].title, "Pérez crashes in qualifying")
+
+    def test_at_most_50_items_and_items_without_title_or_id_skipped(self) -> None:
+        many = rss(*[rss_item(f"Item {i}", f"https://a.example/{i}") for i in range(70)],
+                   "<item><description>no title</description></item>")
+        self.assertEqual(len(parse_feed(many)), 50)
+
+    def test_google_news_titles_lose_the_outlet_and_the_teaser(self) -> None:
+        it = parse_feed(rss(rss_item("Kyrie sparks Dallas - NBA.com", "https://news.google.com/rss/articles/x",
+                                     desc='<a href="x">Kyrie sparks Dallas</a> NBA.com')), gnews=True)[0]
+        self.assertEqual(it.title, "Kyrie sparks Dallas")
+        self.assertIsNone(it.teaser)
+
+    def test_teaser_is_stripped_and_capped(self) -> None:
+        self.assertEqual(len(strip_html("<p>" + "word " * 300 + "</p>", 500)), 500)
+        self.assertIsNone(strip_html("<br/> ", 500))
+
+    def test_categories(self) -> None:
+        it = parse_feed(rss(rss_item("x", "https://a.example/x", cats=("Business",))))[0]
+        self.assertTrue(keeps_category(it, ("business", "Media")))
+        self.assertFalse(keeps_category(it, ("Politics",)))
+        self.assertTrue(keeps_category(it, None))
+
+
+class Canonicalization(unittest.TestCase):
+    def test_tracking_parameters_and_fragment_go(self) -> None:
+        self.assertEqual(
+            canonical_url("https://www.espn.com/nfl/story?id=1&utm_source=rss&utm_medium=x&fbclid=abc#comments"),
+            "https://www.espn.com/nfl/story?id=1")
+
+    def test_host_and_scheme_lowercased_default_port_dropped(self) -> None:
+        self.assertEqual(canonical_url("HTTPS://WWW.Variety.COM:443/2026/Film/X"), "https://www.variety.com/2026/Film/X")
+        self.assertEqual(canonical_url("http://a.example:8080/p"), "http://a.example:8080/p")
+
+    def test_kept_parameters_keep_their_order(self) -> None:
+        self.assertEqual(canonical_url("https://a.example/p?b=2&gclid=z&a=1"), "https://a.example/p?b=2&a=1")
+
+    def test_not_a_web_url(self) -> None:
+        for bad in (None, "", "mailto:x@y.z", "javascript:alert(1)", "not a url"):
+            self.assertIsNone(canonical_url(bad))
+
+
+class SourcesFile(unittest.TestCase):
+    def test_the_real_file_loads_with_46_active_of_50(self) -> None:
+        specs = load_sources()
+        self.assertEqual(len(specs), 50)
+        self.assertEqual(sum(s.active for s in specs), 46)
+        by = {s.slug: s for s in specs}
+        self.assertEqual(by["semafor-business"].include_categories, ("Business", "Media"))
+        self.assertIn("when%3A7d", by["the-real-deal-miami"].url)
+        self.assertGreater(by["the-real-deal-miami"].priority, by["bisnow-south-florida"].priority)
+        for slug in ("strictlyvc", "the-next-miami", "axios-pro-rata", "no-laying-up"):
+            self.assertFalse(by[slug].active, slug)
+            self.assertTrue(by[slug].notes, slug)
+
+    def test_rules(self) -> None:
+        with self.assertRaises(SourcesInvalid):
+            _spec({"slug": "x", "name": "X", "pillars": ["news"], "kind": "rss", "url": "https://x"})
+        with self.assertRaises(SourcesInvalid):
+            _spec({"slug": "x", "name": "X", "pillars": ["home"], "kind": "gnews", "url": "https://x"})
+        self.assertTrue(gnews_url("site:a.com", 2).startswith("https://news.google.com/rss/search?q=site%3Aa.com+when%3A2d"))
+
+
+# ================================================================== clustering
+
+class Assignment(unittest.TestCase):
+    def test_joins_on_cosine(self) -> None:
+        story = cluster.Candidate(7, "Ross and Soffer scrap Miami airport hotel", tuple(unit(0)), 1)
+        d = cluster.assign(mix(unit(0), unit(1), 0.1), "Totally different words here", [story])
+        self.assertEqual((d.story_id, d.joined_by), (7, "cosine"))
+
+    def test_joins_on_fuzz_when_cosine_is_short(self) -> None:
+        story = cluster.Candidate(7, "Texans trade for Cardinals' Harrison, reunite WR with QB Stroud", tuple(unit(0)), 1)
+        d = cluster.assign(unit(5), "Texans trade for Cardinals Harrison reunite WR with QB Stroud", [story])
+        self.assertEqual((d.story_id, d.joined_by), (7, "fuzz"))
+
+    def test_no_join_founds_a_story_and_reports_near_misses(self) -> None:
+        near = cluster.Candidate(3, "Something else", tuple(unit(0)), 1)
+        far = cluster.Candidate(4, "Unrelated", tuple(unit(9)), 1)
+        vec = mix(unit(0), unit(1), 0.42)  # cosine to unit(0) ~= 0.81
+        d = cluster.assign(vec, "A new headline", [near, far])
+        self.assertIsNone(d.story_id)
+        self.assertEqual([s.story_id for s in d.near_misses], [3])
+        self.assertTrue(cluster.NEAR_MISS_FROM <= d.near_misses[0].cosine < cluster.JOIN_COSINE)
+
+    def test_the_best_cosine_wins(self) -> None:
+        a = cluster.Candidate(1, "a", tuple(mix(unit(0), unit(1), 0.3)), 1)
+        b = cluster.Candidate(2, "b", tuple(unit(0)), 1)
+        self.assertEqual(cluster.assign(unit(0), "x", [a, b]).story_id, 2)
+
+    def test_thresholds_are_the_owners(self) -> None:
+        self.assertEqual((cluster.JOIN_COSINE, cluster.JOIN_FUZZ, cluster.NEAR_MISS_FROM, cluster.CANDIDATE_HOURS),
+                         (0.86, 90.0, 0.78, 48))
+
+    def test_lead_is_lowest_priority_then_earliest_then_id(self) -> None:
+        t0 = NOW
+        current = cluster.LeadKey(30, t0, 5)
+        self.assertTrue(cluster.better_lead(cluster.LeadKey(10, t0 + timedelta(hours=1), 9), current))
+        self.assertTrue(cluster.better_lead(cluster.LeadKey(30, t0 - timedelta(minutes=1), 9), current))
+        self.assertFalse(cluster.better_lead(cluster.LeadKey(30, t0, 6), current))
+        self.assertTrue(cluster.better_lead(cluster.LeadKey(99, t0, 1), None))
+
+    def test_running_mean(self) -> None:
+        self.assertEqual(cluster.running_mean([1.0, 0.0], 1, [0.0, 1.0]), [0.5, 0.5])
+        self.assertEqual(cluster.running_mean([0.5, 0.5], 2, [1.0, 1.0]), [2 / 3, 2 / 3])
+
+
+# ======================================================================= rules
+
+RULES = [Rule(1, "title_regex", None, "box score"), Rule(2, "title_regex", "sports", "odds, picks"),
+         Rule(3, "url_regex", None, r"^https?://(pro\.axios\.com|(www\.)?axios\.com/pro/)"),
+         Rule(4, "seed_phrase_drop", None, "celebrity gossip"),
+         Rule(5, "title_regex", None, "where to watch")]
+
+
+class FilterRules(unittest.TestCase):
+    def test_title_and_url_rules(self) -> None:
+        r = Rules(RULES)
+        self.assertEqual(r.filter_reason(title="Bears vs Packers BOX SCORE", url=None, pillars=["sports"]), "title_regex:1")
+        self.assertEqual(r.filter_reason(title="Where to Watch the 49ers", url=None, pillars=["home"]), "title_regex:5")
+        self.assertEqual(r.filter_reason(title="Deals", url="https://www.axios.com/pro/all-deals/x", pillars=["home"]),
+                         "url_regex:3")
+        self.assertIsNone(r.filter_reason(title="Axios Miami: a new tower", url="https://www.axios.com/local/miami/x",
+                                          pillars=["home"]))
+
+    def test_a_pillar_rule_applies_only_to_its_pillar(self) -> None:
+        r = Rules(RULES)
+        self.assertEqual(r.filter_reason(title="Ravens vs Falcons Predictions, Odds, Picks", url=None,
+                                         pillars=["sports"]), "title_regex:2")
+        self.assertIsNone(r.filter_reason(title="Ravens vs Falcons Predictions, Odds, Picks", url=None, pillars=["home"]))
+
+    def test_seed_phrases_never_filter_and_record_only_from_070(self) -> None:
+        r = Rules(RULES)
+        self.assertEqual([x.id for x in r.seed_rules], [4])
+        self.assertIsNone(r.filter_reason(title="celebrity gossip", url=None, pillars=["home"]))
+        seeds = [SeedPhrase(4, "celebrity gossip", tuple(unit(0)))]
+        self.assertEqual(best_seed(unit(0), seeds), (1.0, 4))
+        self.assertIsNone(best_seed(mix(unit(0), unit(1), 0.6), seeds))  # cosine ~0.55
+
+    def test_every_seeded_db032_pattern_compiles_in_python(self) -> None:
+        import re
+        from core.paths import REPO_ROOT
+        sql = (REPO_ROOT / "db" / "032_feed.sql").read_text(encoding="utf-8")
+        rows = re.findall(r"\('(title_regex|url_regex)',\s+NULL,\s+'((?:[^']|'')*)'", sql)
+        self.assertEqual(len(rows), 24)
+        for _kind, pattern in rows:
+            re.compile(pattern.replace("''", "'"), re.I)
+
+
+# =================================================================== summaries
+
+def job(sid: int, title: str = "Texans trade for Cardinals' Harrison", teaser: str | None = None) -> ledger.SummaryJob:
+    return ledger.SummaryJob(sid, title, teaser, "ESPN NFL", "nfl", 0)
+
+
+GOOD = {"summary": "Houston acquired the receiver from Arizona, pairing him again with his college quarterback.",
+        "entities": ["Houston Texans", "Marvin Harrison Jr."], "topics": ["Trade", "nfl trade"], "sport": "nfl",
+        "drop": "none"}
+
+
+class SummaryValidator(unittest.TestCase):
+    TEASER = "The Houston Texans traded for Arizona Cardinals receiver Marvin Harrison Jr. on Sunday, reuniting him with C.J. Stroud."
+
+    def test_a_good_summary(self) -> None:
+        v = summarize.validate(dict(GOOD, id=1), job(1, teaser=self.TEASER))
+        self.assertEqual(v.topics, ("trade", "nfl_trade"))
+        self.assertEqual(v.sport, "nfl")
+        self.assertEqual(v.drop, "none")
+
+    def test_too_long(self) -> None:
+        with self.assertRaisesRegex(summarize.SummaryInvalid, "words"):
+            summarize.validate(dict(GOOD, summary="word " * 46 + "."), job(1))
+        with self.assertRaisesRegex(summarize.SummaryInvalid, "sentences"):
+            summarize.validate(dict(GOOD, summary="One. Two. Three."), job(1))
+
+    def test_abbreviations_are_not_sentence_ends(self) -> None:
+        self.assertEqual(summarize.sentence_count("The U.S. team beat Mexico. C.J. Stroud starts Sunday."), 2)
+        self.assertEqual(summarize.sentence_count("Mr. Ross and Inc. filings show a loss"), 1)
+
+    def test_a_copied_run_of_8_words(self) -> None:
+        copied = "The Houston Texans traded for Arizona Cardinals receiver, a big move."
+        with self.assertRaisesRegex(summarize.SummaryInvalid, "copies 8 words from the teaser"):
+            summarize.validate(dict(GOOD, summary=copied), job(1, teaser=self.TEASER))
+        seven = "The Houston Texans traded for Arizona Cardinals, then rested."
+        summarize.validate(dict(GOOD, summary=seven), job(1, teaser=self.TEASER))
+
+    def test_copying_the_headline_is_caught_too(self) -> None:
+        title = "Rahm leaving LIV Golf in blow to future of bankrupt league"
+        with self.assertRaisesRegex(summarize.SummaryInvalid, "headline"):
+            summarize.validate(dict(GOOD, summary="Rahm leaving LIV Golf in blow to future of the tour."),
+                               job(1, title=title))
+
+    def test_unknown_duplicate_and_missing_ids(self) -> None:
+        group = [job(1, teaser=self.TEASER), job(2)]
+        payload = {"stories": [dict(GOOD, id=1), dict(GOOD, id=1), dict(GOOD, id=99)]}
+        results, problems = summarize.results_for(group, payload)
+        self.assertEqual([(r.story_id, r.summary is not None) for r in results], [(1, True), (2, False)])
+        self.assertTrue(any("unknown story id 99" in p for p in problems))
+        self.assertTrue(any("returned twice" in p for p in problems))
+
+    def test_garbage_counts_an_attempt_for_every_story(self) -> None:
+        results, _ = summarize.results_for([job(1), job(2)], None)
+        self.assertTrue(all(r.summary is None for r in results))
+
+    def test_drop_is_shadow_by_default_and_filters_only_when_live(self) -> None:
+        self.assertFalse(summarize.DROP_LIVE)
+        gossip = dict(GOOD, id=1, drop="gossip")
+        (r,), _ = summarize.results_for([job(1)], {"stories": [gossip]})
+        self.assertEqual((r.drop, r.filtered_reason), ("gossip", None))
+        with mock.patch.object(summarize, "DROP_LIVE", True):
+            (r,), _ = summarize.results_for([job(1)], {"stories": [gossip]})
+            self.assertEqual(r.filtered_reason, "drop:gossip")
+            (r,), _ = summarize.results_for([job(1)], {"stories": [dict(GOOD, id=1)]})
+            self.assertIsNone(r.filtered_reason)
+
+    def test_the_prompt_carries_the_owners_rules(self) -> None:
+        for phrase in ("Kalshi", "moves money", "Never copy 8", "restates the headline", "ALWAYS none"):
+            self.assertIn(phrase, summarize.SYSTEM)
+        self.assertEqual(summarize.schema()["properties"]["stories"]["items"]["properties"]["drop"]["enum"],
+                         list(summarize.DROPS))
+
+
+class FakeResponse(SimpleNamespace):
+    pass
+
+
+class SummaryJobRun(unittest.TestCase):
+    def setUp(self) -> None:
+        self.saved: list[tuple[list, Any]] = []
+        self.queue = [job(i, teaser="A short teaser.") for i in range(1, 13)]
+        for name, fn in {
+            "feed_summarized_today": lambda **kw: 0,
+            "feed_summary_queue": lambda limit, max_attempts, **kw: self.queue[:limit],
+            "feed_save_summaries": lambda results, usage, **kw: self.saved.append((list(results), usage)),
+            "_pool": lambda *a, **k: (_ for _ in ()).throw(AssertionError("database reached")),
+        }.items():
+            p = mock.patch.object(ledger, name, fn)
+            p.start()
+            self.addCleanup(p.stop)
+
+    def _complete(self, **kw: Any) -> Any:
+        stories = json.loads(kw["messages"][0]["content"].split("\n", 1)[1])
+        kw["on_recorded"](555, kw["model"], 0)
+        body = {"stories": [dict(GOOD, id=s["id"]) for s in stories]}
+        return FakeResponse(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=json.dumps(body))])
+
+    def test_groups_of_10_with_haiku_non_critical_thinking_off(self) -> None:
+        calls = []
+        with mock.patch.object(ai, "complete", lambda **kw: calls.append(kw) or self._complete(**kw)):
+            self.assertEqual(summarize.summarize_job(), (12, 0))
+        self.assertEqual([len(json.loads(c["messages"][0]["content"].split("\n", 1)[1])) for c in calls], [10, 2])
+        for c in calls:
+            self.assertEqual((c["model"], c["critical"], c["thinking"]), ("claude-haiku-5-5", False, {"type": "disabled"}))
+            self.assertEqual(c["system"][0]["cache_control"], {"type": "ephemeral"})
+            self.assertEqual(c["purpose"], "feed_summarize")
+        self.assertEqual([u for _, u in self.saved], [555, 555])
+
+    def test_caps(self) -> None:
+        with mock.patch.object(ledger, "feed_summarized_today", lambda **kw: 245), \
+                mock.patch.object(ai, "complete", self._complete):
+            self.assertEqual(summarize.summarize_job(), (5, 0))
+        with mock.patch.object(ledger, "feed_summarized_today", lambda **kw: 250), \
+                mock.patch.object(ai, "complete", side_effect=AssertionError("no call past the cap")):
+            self.assertEqual(summarize.summarize_job(), (0, 0))
+
+    def test_a_spent_budget_is_a_skip_recorded_as_a_note_not_a_failure(self) -> None:
+        with mock.patch.object(ai, "complete", side_effect=ai.BudgetExceeded("spent")):
+            with self.assertRaises(jobs.JobSkipped):
+                summarize.summarize_job()
+        recorded = []
+        with mock.patch.object(ledger, "job_started", lambda n: None), \
+                mock.patch.object(ledger, "job_succeeded", lambda n, note=None: recorded.append(("ok", note))), \
+                mock.patch.object(ledger, "job_failed", lambda n, e: recorded.append(("failed", e))), \
+                mock.patch.object(ai, "complete", side_effect=ai.BudgetExceeded("spent")):
+            jobs.run_tracked(system_jobs.FEED_SUMMARIZE)
+        self.assertEqual(len(recorded), 1)
+        self.assertEqual(recorded[0][0], "ok")
+        self.assertTrue(recorded[0][1].startswith("skipped: AI budget spent"))
+
+
+class Chain(unittest.TestCase):
+    def test_summarize_runs_after_ingest_even_when_ingest_fails(self) -> None:
+        order = []
+        with mock.patch.object(ingest, "ingest_job", side_effect=lambda: order.append("ingest") or (_ for _ in ()).throw(RuntimeError("db down"))), \
+                mock.patch.object(system_jobs, "run_tracked", lambda j: order.append(j.name)):
+            with self.assertRaises(RuntimeError):
+                system_jobs.feed_ingest_job()
+        self.assertEqual(order, ["ingest", "feed_summarize"])
+
+    def test_a_summarize_failure_does_not_fail_ingest(self) -> None:
+        with mock.patch.object(ingest, "ingest_job", lambda: None), \
+                mock.patch.object(system_jobs, "run_tracked", side_effect=RuntimeError("recorded")):
+            system_jobs.feed_ingest_job()
+
+
+# ======================================================================= embed
+
+class EmbedClient(unittest.TestCase):
+    def setUp(self) -> None:
+        p = mock.patch.dict(os.environ, {"EMBED_URL": "https://e.invalid/embed", "EMBED_TOKEN": "t" * 43})
+        p.start()
+        self.addCleanup(p.stop)
+        self.sleeps: list[float] = []
+
+    def post(self, script: list) -> Any:
+        """Each call pops one entry: an int status (546/503/...), an exception,
+        or 'ok'. Records batch sizes."""
+        self.sizes: list[int] = []
+
+        def _post(url, payload, headers, timeout):
+            self.assertTrue(headers["Authorization"].startswith("Bearer "))
+            n = len(payload["texts"])
+            self.sizes.append(n)
+            step = script.pop(0) if script else "ok"
+            if isinstance(step, Exception):
+                raise step
+            if step == "ok":
+                return 200, {"embeddings": [unit(i) for i in range(n)]}
+            return step, {"error": "x"}
+        return _post
+
+    def test_batches_of_8(self) -> None:
+        out = embed.embed([f"t{i}" for i in range(20)], post=self.post([]), sleep=self.sleeps.append)
+        self.assertEqual(len(out), 20)
+        self.assertEqual(self.sizes, [8, 8, 4])
+        self.assertEqual(embed.BATCH, 8)
+
+    def test_546_halves_the_batch_and_retries(self) -> None:
+        out = embed.embed([f"t{i}" for i in range(8)], post=self.post([546]), sleep=self.sleeps.append)
+        self.assertEqual(len(out), 8)
+        self.assertEqual(self.sizes, [8, 4, 4])
+        self.assertTrue(self.sleeps)
+
+    def test_503_on_a_single_text_retries_then_fails_loudly(self) -> None:
+        with self.assertRaisesRegex(embed.EmbedError, "after 4 tries"):
+            embed.embed(["one"], post=self.post([503] * 10), sleep=self.sleeps.append)
+        self.assertEqual(self.sizes, [1, 1, 1, 1])
+        self.assertEqual(self.sleeps, [1.0, 2.0, 4.0])
+
+    def test_network_errors_retry(self) -> None:
+        out = embed.embed(["a", "b"], post=self.post([TimeoutError(), "ok"]), sleep=self.sleeps.append)
+        self.assertEqual(len(out), 2)
+
+    def test_401_fails_at_once_and_never_shows_the_token(self) -> None:
+        with self.assertRaises(embed.EmbedError) as ctx:
+            embed.embed(["a"], post=self.post([401]), sleep=self.sleeps.append)
+        self.assertIn("EMBED_TOKEN", str(ctx.exception))
+        self.assertNotIn("t" * 43, str(ctx.exception))
+        self.assertEqual(self.sizes, [1])
+
+    def test_wrong_shape_fails(self) -> None:
+        with self.assertRaisesRegex(embed.EmbedError, "dimensions"):
+            embed.embed(["a"], post=lambda *a: (200, {"embeddings": [[0.1] * 10]}), sleep=self.sleeps.append)
+        with self.assertRaisesRegex(embed.EmbedError, "vectors for 2"):
+            embed.embed(["a", "b"], post=lambda *a: (200, {"embeddings": [unit(0)]}), sleep=self.sleeps.append)
+
+    def test_missing_config_fails_loudly(self) -> None:
+        with mock.patch.dict(os.environ, {"EMBED_URL": ""}):
+            with self.assertRaisesRegex(embed.EmbedError, "EMBED_URL"):
+                embed.embed(["a"], post=self.post([]))
+
+
+# ====================================================================== ingest
+
+def source(sid: int, slug: str, *, kind: str = "rss", first: bool = False, priority: int = 20,
+           failures: int = 0, alerted: bool = False, pillars: tuple[str, ...] = ("home",),
+           cats: tuple[str, ...] | None = None) -> ledger.FeedSource:
+    return ledger.FeedSource(sid, slug, slug.title(), pillars, None, kind, f"https://{slug}.invalid/feed",
+                             priority, cats, None, None, None if first else NOW - timedelta(hours=1),
+                             failures, alerted, False)
+
+
+class FakeFeedLedger:
+    def __init__(self) -> None:
+        self.ids = itertools.count(100)
+        self.items: dict[tuple[int, str], dict] = {}
+        self.urls: set[str] = set()
+        self.stories: dict[int, dict] = {}
+        self.ok: list[tuple[int, str]] = []
+        self.failed: list[tuple[int, str]] = []
+        self.failures: dict[int, int] = {}
+        self.alerted: list[int] = []
+        self.seeded: list = []
+        self.joins: list = []
+
+    def install(self, case: unittest.TestCase) -> None:
+        for name in ("feed_rules", "feed_candidates", "feed_known", "feed_insert_seeded", "feed_new_story",
+                     "feed_join_story", "feed_source_ok", "feed_source_failed", "feed_source_alerted"):
+            p = mock.patch.object(ledger, name, getattr(self, name))
+            p.start()
+            case.addCleanup(p.stop)
+        p = mock.patch.object(ledger, "_pool", side_effect=AssertionError("database reached"))
+        p.start()
+        case.addCleanup(p.stop)
+
+    def feed_rules(self, **kw):
+        return [(r.id, r.kind, r.pillar, r.pattern) for r in RULES]
+
+    def feed_candidates(self, hours, **kw):
+        return [(sid, s["title"], tuple(s["centroid"]), s["count"]) for sid, s in self.stories.items()]
+
+    def feed_known(self, source_id, external_ids, urls, **kw):
+        return ({e for e in external_ids if (source_id, e) in self.items}, {u for u in urls if u in self.urls})
+
+    def feed_insert_seeded(self, src, items, **kw):
+        for it in items:
+            self.items[(src.id, it.external_id)] = {"seeded": True}
+        self.seeded.extend(items)
+        return len(items)
+
+    def _add(self, src, it, story):
+        self.items[(src.id, it.external_id)] = {"story": story, "item": it}
+        if it.url:
+            self.urls.add(it.url)
+        return next(self.ids)
+
+    def feed_new_story(self, src, it, vec, *, filtered_reason, seed, near_misses=(), **kw):
+        sid = next(self.ids)
+        self.stories[sid] = {"title": it.title, "centroid": list(vec), "count": 1,
+                             "filtered": filtered_reason, "seed": seed, "near": list(near_misses)}
+        return sid, self._add(src, it, sid)
+
+    def feed_join_story(self, src, it, vec, story_id, *, seed, logged, **kw):
+        self.stories[story_id]["count"] += 1
+        self.joins.append((story_id, it.title, logged))
+        return self._add(src, it, story_id)
+
+    def feed_source_ok(self, source_id, *, status, etag, last_modified, **kw):
+        self.ok.append((source_id, status))
+
+    def feed_source_failed(self, source_id, error, **kw):
+        self.failures[source_id] = self.failures.get(source_id, 0) + 1
+        self.failed.append((source_id, error))
+        return self.failures[source_id], source_id in self.alerted
+
+    def feed_source_alerted(self, source_id, **kw):
+        self.alerted.append(source_id)
+
+
+class IngestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.db = FakeFeedLedger()
+        self.db.install(self)
+        self.sent: list[push.Message] = []
+        self.feeds: dict[str, Any] = {}
+        self.decoded: dict[str, str | None] = {}
+        self.sleeps: list[float] = []
+
+    def get(self, url: str, headers: dict) -> ingest.Response:
+        body = self.feeds[url]
+        if isinstance(body, Exception):
+            raise body
+        if isinstance(body, int):
+            return ingest.Response(body, b"", None, None)
+        return ingest.Response(200, body, '"etag-1"', None)
+
+    def embedder(self, texts):
+        # Stories are told apart by a keyword in the title.
+        axis = {"hotel": 0, "harrison": 1, "golf": 2, "verstappen": 3}
+        out = []
+        for t in texts:
+            hit = next((i for k, i in axis.items() if k in t.lower()), 10 + len(t) % 300)
+            out.append(unit(hit))
+        return out
+
+    def run_ingest(self) -> ingest.Ingest:
+        run = ingest.Ingest(get=self.get, decode=lambda u: self.decoded.get(u), embed=self.embedder,
+                            send=lambda m: self.sent.append(m) or [],
+                            throttle=ingest.Throttle(2, sleep=self.sleeps.append, clock=lambda: 0.0),
+                            now=lambda: NOW)
+        run.prepare({})
+        return run
+
+
+class OneSourceNeverFailsTheRun(IngestCase):
+    def test_a_failing_source_is_recorded_and_the_others_still_ingest(self) -> None:
+        bad, good = source(1, "bad"), source(2, "good")
+        self.feeds[bad.url] = ConnectionError("refused")
+        self.feeds[good.url] = rss(rss_item("Ross and Soffer scrap Miami airport hotel", "https://a.invalid/1", guid="1"))
+        run = self.run_ingest()
+        stats = [run.run_source(s) for s in (bad, good)]
+        self.assertEqual([s.status for s in stats], ["error", "ok"])
+        self.assertEqual(self.db.failed[0][0], 1)
+        self.assertIn("ConnectionError", self.db.failed[0][1])
+        self.assertEqual(self.db.ok, [(2, "ok")])
+        self.assertEqual(stats[1].new_stories, 1)
+
+    def test_non_200_and_not_a_feed_are_source_failures(self) -> None:
+        a, b = source(1, "a"), source(2, "b")
+        self.feeds[a.url] = 404
+        self.feeds[b.url] = b"<html>blocked</html>"
+        run = self.run_ingest()
+        self.assertEqual([run.run_source(s).status for s in (a, b)], ["error", "error"])
+        self.assertIn("HTTP 404", self.db.failed[0][1])
+
+    def test_an_embed_outage_fails_the_run_and_records_no_fetch(self) -> None:
+        good = source(2, "good")
+        self.feeds[good.url] = rss(rss_item("x", "https://a.invalid/1", guid="1"))
+        run = self.run_ingest()
+        run.embed = lambda texts: (_ for _ in ()).throw(embed.EmbedError("down"))
+        with self.assertRaises(embed.EmbedError):
+            run.run_source(good)
+        self.assertEqual(self.db.ok, [])  # the ETag is not saved, so the items come back next run
+
+    def test_304_is_a_good_fetch(self) -> None:
+        s = source(1, "s")
+        self.feeds[s.url] = 304
+        self.assertEqual(self.run_ingest().run_source(s).status, "not_modified")
+        self.assertEqual(self.db.ok, [(1, "not_modified")])
+
+
+class FailurePushOnce(IngestCase):
+    def test_the_sixth_failure_pushes_once_and_later_ones_do_not(self) -> None:
+        s = source(1, "flaky")
+        self.feeds[s.url] = 500
+        run = self.run_ingest()
+        for _ in range(9):
+            run.run_source(s)
+        self.assertEqual(len(self.sent), 1)
+        msg = self.sent[0]
+        self.assertEqual((msg.deep_link, msg.kind), ("/settings/sources", "feed_source_failing"))
+        self.assertIn("6 fetches in a row", msg.body)
+        self.assertEqual(self.db.alerted, [1])
+
+    def test_no_device_leaves_it_unalerted_to_try_again(self) -> None:
+        s = source(1, "flaky")
+        self.feeds[s.url] = 500
+        run = self.run_ingest()
+        run.send = lambda m: (_ for _ in ()).throw(push.PushError("no devices"))
+        for _ in range(6):
+            run.run_source(s)
+        self.assertEqual(self.db.alerted, [])
+
+
+class StoryPlacement(IngestCase):
+    def test_two_outlets_one_story_and_the_join_is_logged(self) -> None:
+        a, b = source(1, "bisnow", priority=30), source(2, "trd", priority=35)
+        self.feeds[a.url] = rss(rss_item("Stephen Ross, Jeffrey Soffer scrap Miami airport hotel", "https://a.invalid/1", guid="1"))
+        self.feeds[b.url] = rss(rss_item("Ross and Soffer's airport hotel grounded by FAA", "https://b.invalid/1", guid="1"))
+        run = self.run_ingest()
+        run.run_source(a)
+        run.run_source(b)
+        self.assertEqual(len(self.db.stories), 1)
+        story_id, _title, logged = self.db.joins[0]
+        self.assertEqual(logged[0].kind, "join")
+        self.assertEqual(logged[0].joined_by, "both" if logged[0].fuzz >= 90 else "cosine")
+
+    def test_filter_rules_file_the_story_as_filtered(self) -> None:
+        s = source(1, "s", pillars=("sports",))
+        self.feeds[s.url] = rss(rss_item("Bears 24, Packers 17: box score", "https://a.invalid/1", guid="1"))
+        stats = self.run_ingest().run_source(s)
+        self.assertEqual(stats.filtered, 1)
+        self.assertEqual(next(iter(self.db.stories.values()))["filtered"], "title_regex:1")
+
+    def test_known_items_and_urls_are_skipped(self) -> None:
+        s = source(1, "s")
+        self.feeds[s.url] = rss(rss_item("Golf one", "https://a.invalid/1?utm_source=x", guid="1"),
+                                rss_item("Golf one again", "https://a.invalid/1", guid="2"))
+        run = self.run_ingest()
+        self.assertEqual(run.run_source(s).new_stories, 1)
+        again = run.run_source(s)
+        self.assertEqual((again.new_stories, again.known), (0, 2))
+
+    def test_categories_filter_semafor(self) -> None:
+        s = source(1, "semafor", cats=("Business", "Media"))
+        self.feeds[s.url] = rss(rss_item("Politics thing", "https://a.invalid/1", guid="1", cats=("Politics",)),
+                                rss_item("Hotel deal", "https://a.invalid/2", guid="2", cats=("Business",)))
+        self.assertEqual(self.run_ingest().run_source(s).fetched, 1)
+
+
+class FirstFetch(IngestCase):
+    def test_dated_items_older_than_72h_are_ignored_on_the_first_fetch_only(self) -> None:
+        s = source(1, "s", first=True)
+        self.feeds[s.url] = rss(rss_item("Golf fresh", "https://a.invalid/1", guid="1", when=NOW - timedelta(hours=5)),
+                                rss_item("An old item", "https://a.invalid/2", guid="2", when=NOW - timedelta(hours=80)))
+        self.assertEqual(self.run_ingest().run_source(s).new_stories, 1)
+        later = source(2, "t")
+        self.feeds[later.url] = rss(rss_item("An old item", "https://b.invalid/2", guid="2", when=NOW - timedelta(hours=80)))
+        self.assertEqual(self.run_ingest().run_source(later).new_stories, 1)
+
+    def test_an_undated_feed_is_seeded_and_skipped_on_its_first_fetch(self) -> None:
+        s = source(1, "formula1", first=True)
+        self.feeds[s.url] = rss(*[rss_item(f"Verstappen {i}", f"https://f1.invalid/{i}", guid=str(i), when=None)
+                                  for i in range(10)])
+        stats = self.run_ingest().run_source(s)
+        self.assertEqual((stats.seeded, stats.new_stories), (10, 0))
+        self.assertEqual(self.db.stories, {})
+        self.assertEqual(self.db.ok, [(1, "ok")])
+        # The next fetch: the ten are known; one new undated item is ingested,
+        # dated by when it was first seen.
+        later = source(1, "formula1")
+        self.feeds[later.url] = rss(rss_item("Verstappen new", "https://f1.invalid/new", guid="new", when=None),
+                                    *[rss_item(f"Verstappen {i}", f"https://f1.invalid/{i}", guid=str(i), when=None)
+                                      for i in range(10)])
+        stats = self.run_ingest().run_source(later)
+        self.assertEqual((stats.new_stories + stats.joined, stats.known), (1, 10))
+        item = self.db.items[(1, "new")]["item"]
+        self.assertEqual(item.published_at, NOW)
+
+    def test_future_dates_are_capped_at_the_fetch(self) -> None:
+        s = source(1, "espn")
+        self.feeds[s.url] = rss(rss_item("Golf ahead", "https://a.invalid/1", guid="1", when=NOW + timedelta(hours=1)))
+        self.run_ingest().run_source(s)
+        self.assertEqual(self.db.items[(1, "1")]["item"].published_at, NOW)
+
+
+class GoogleNews(IngestCase):
+    def test_decoded_links_are_canonical_and_failures_keep_the_google_link(self) -> None:
+        s = source(1, "nba-com", kind="gnews")
+        g1, g2 = "https://news.google.com/rss/articles/one", "https://news.google.com/rss/articles/two"
+        self.feeds[s.url] = rss(rss_item("Kyrie sparks Dallas - NBA.com", g1, guid="a"),
+                                rss_item("Warriors extend Podziemski - NBA.com", g2, guid="b"))
+        self.decoded = {g1: "https://www.nba.com/news/kyrie?utm_source=gn"}
+        stats = self.run_ingest().run_source(s)
+        self.assertEqual(stats.decode_failed, 1)
+        ok, failed = self.db.items[(1, "a")]["item"], self.db.items[(1, "b")]["item"]
+        self.assertEqual((ok.url, ok.decode_failed, ok.title), ("https://www.nba.com/news/kyrie", False, "Kyrie sparks Dallas"))
+        self.assertEqual((failed.url, failed.google_url, failed.decode_failed), (None, g2, True))
+
+    def test_decodes_are_throttled_to_two_a_second(self) -> None:
+        s = source(1, "g", kind="gnews")
+        self.feeds[s.url] = rss(*[rss_item(f"T{i}", f"https://news.google.com/rss/articles/{i}", guid=str(i)) for i in range(3)])
+        self.run_ingest().run_source(s)
+        self.assertEqual(self.sleeps, [0.5, 0.5])
+
+    def test_a_known_item_is_never_decoded_again(self) -> None:
+        s = source(1, "g", kind="gnews")
+        self.feeds[s.url] = rss(rss_item("T", "https://news.google.com/rss/articles/1", guid="1"))
+        run = self.run_ingest()
+        run.run_source(s)
+        decodes = []
+        run.decode = lambda u: decodes.append(u)
+        run.run_source(s)
+        self.assertEqual(decodes, [])
+
+
+if __name__ == "__main__":
+    unittest.main()

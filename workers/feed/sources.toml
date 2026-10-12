@@ -1,0 +1,456 @@
+# The feed's source list. The worker syncs it into `sources` at boot:
+# upsert by slug, never delete; a slug removed from this file goes
+# active = false. Surveyed 2026-10-11 (docs/feed_sources.md).
+#
+#   kind = "rss"    url is the feed.
+#   kind = "gnews"  query is a Google News search; the URL is built as
+#                   news.google.com/rss/search?q=<query> when:<window>d, and
+#                   each item's link is decoded to the publisher URL.
+#   priority        lower wins the story lead when several outlets carry it.
+#   pillars         "home", "sports", or both.
+#   sport           cfb | nfl | nba | f1 | golf (sports sources), else omitted.
+#   include_categories
+#                   keep only items carrying one of these feed categories.
+#   window_days     Google News window (default 2).
+
+# ------------------------------------------------------------------ HOME
+
+[[source]]
+slug = "bloomberg"
+name = "Bloomberg"
+pillars = ["home"]
+kind = "rss"
+url = "https://feeds.bloomberg.com/business/news.rss"
+priority = 10
+
+[[source]]
+slug = "semafor-business"
+name = "Semafor Business"
+pillars = ["home"]
+kind = "rss"
+url = "https://www.semafor.com/rss.xml"
+priority = 15
+include_categories = ["Business", "Media"]
+notes = "One feed for every section; Business and Media only (owner, 2026-10-11)."
+
+[[source]]
+slug = "variety"
+name = "Variety"
+pillars = ["home"]
+kind = "rss"
+url = "https://variety.com/feed/"
+priority = 20
+
+[[source]]
+slug = "thr"
+name = "The Hollywood Reporter"
+pillars = ["home"]
+kind = "rss"
+url = "https://www.hollywoodreporter.com/feed/"
+priority = 20
+
+[[source]]
+slug = "deadline"
+name = "Deadline"
+pillars = ["home"]
+kind = "rss"
+url = "https://deadline.com/feed/"
+priority = 25
+
+[[source]]
+slug = "sportico"
+name = "Sportico"
+pillars = ["home", "sports"]
+kind = "rss"
+url = "https://www.sportico.com/feed/"
+priority = 20
+
+[[source]]
+slug = "front-office-sports"
+name = "Front Office Sports"
+pillars = ["home", "sports"]
+kind = "rss"
+url = "https://frontofficesports.com/feed/"
+priority = 25
+
+[[source]]
+slug = "boardroom"
+name = "Boardroom"
+pillars = ["home", "sports"]
+kind = "rss"
+url = "https://boardroom.tv/feed/"
+priority = 30
+
+[[source]]
+slug = "techcrunch"
+name = "TechCrunch"
+pillars = ["home"]
+kind = "rss"
+url = "https://techcrunch.com/feed/"
+priority = 20
+
+[[source]]
+slug = "crunchbase-news"
+name = "Crunchbase News"
+pillars = ["home"]
+kind = "rss"
+url = "https://news.crunchbase.com/feed/"
+priority = 30
+
+[[source]]
+slug = "mbw"
+name = "Music Business Worldwide"
+pillars = ["home"]
+kind = "rss"
+url = "https://www.musicbusinessworldwide.com/feed/"
+priority = 25
+
+[[source]]
+slug = "billboard-business"
+name = "Billboard Business"
+pillars = ["home"]
+kind = "rss"
+url = "https://www.billboard.com/c/business/feed/"
+priority = 30
+
+[[source]]
+slug = "skift"
+name = "Skift"
+pillars = ["home"]
+kind = "rss"
+url = "https://skift.com/feed/"
+priority = 25
+
+[[source]]
+slug = "hotel-dive"
+name = "Hotel Dive"
+pillars = ["home"]
+kind = "rss"
+url = "https://www.hoteldive.com/feeds/news/"
+priority = 30
+
+[[source]]
+slug = "bisnow-south-florida"
+name = "Bisnow South Florida"
+pillars = ["home"]
+kind = "rss"
+url = "https://www.bisnow.com/rss-feed/south-florida"
+priority = 30
+
+[[source]]
+slug = "the-real-deal-miami"
+name = "The Real Deal Miami"
+pillars = ["home"]
+kind = "gnews"
+query = "site:therealdeal.com/miami"
+window_days = 7
+priority = 35
+notes = "Replaces The Next Miami. Its own feeds answer 403 to our User-Agent."
+
+[[source]]
+slug = "axios-miami"
+name = "Axios Miami"
+pillars = ["home"]
+kind = "gnews"
+query = "site:axios.com/local/miami"
+window_days = 7
+priority = 30
+
+[[source]]
+slug = "legal-sports-report"
+name = "Legal Sports Report"
+pillars = ["home"]
+kind = "rss"
+url = "https://www.legalsportsreport.com/feed/"
+priority = 30
+
+[[source]]
+slug = "the-ringer"
+name = "The Ringer"
+pillars = ["home"]
+kind = "gnews"
+query = "site:theringer.com"
+priority = 40
+
+[[source]]
+slug = "tubefilter"
+name = "Tubefilter"
+pillars = ["home"]
+kind = "rss"
+url = "https://www.tubefilter.com/feed/"
+priority = 40
+
+[[source]]
+slug = "robb-report"
+name = "Robb Report"
+pillars = ["home"]
+kind = "rss"
+url = "https://robbreport.com/feed/"
+priority = 40
+
+[[source]]
+slug = "boat-international"
+name = "Boat International"
+pillars = ["home"]
+kind = "gnews"
+query = "site:boatinternational.com"
+priority = 40
+
+[[source]]
+slug = "complex"
+name = "Complex"
+pillars = ["home"]
+kind = "gnews"
+query = "site:complex.com"
+priority = 45
+
+[[source]]
+slug = "axios-pro-rata"
+name = "Axios Pro Rata"
+pillars = ["home"]
+kind = "gnews"
+query = "site:axios.com pro rata"
+window_days = 7
+priority = 20
+active = false
+notes = "Dead: every result is a paid Axios Pro page (axios.com/pro/), dropped by url_regex."
+
+[[source]]
+slug = "strictlyvc"
+name = "StrictlyVC"
+pillars = ["home"]
+kind = "rss"
+url = "https://strictlyvc.com/feed/"
+priority = 30
+active = false
+notes = "Dead: the feed's newest item is ~6.5 years old; the newsletter has no feed."
+
+[[source]]
+slug = "the-next-miami"
+name = "The Next Miami"
+pillars = ["home"]
+kind = "rss"
+url = "https://www.thenextmiami.com/feed/"
+priority = 50
+active = false
+notes = "Dead: feed 404, 0 Google News items in 7 days. Replaced by The Real Deal Miami."
+
+# ---------------------------------------------------------------- SPORTS
+
+[[source]]
+slug = "espn-cfb"
+name = "ESPN College Football"
+pillars = ["sports"]
+sport = "cfb"
+kind = "rss"
+url = "https://www.espn.com/espn/rss/ncf/news"
+priority = 10
+
+[[source]]
+slug = "espn-nfl"
+name = "ESPN NFL"
+pillars = ["sports"]
+sport = "nfl"
+kind = "rss"
+url = "https://www.espn.com/espn/rss/nfl/news"
+priority = 10
+
+[[source]]
+slug = "espn-nba"
+name = "ESPN NBA"
+pillars = ["sports"]
+sport = "nba"
+kind = "rss"
+url = "https://www.espn.com/espn/rss/nba/news"
+priority = 10
+
+[[source]]
+slug = "espn-f1"
+name = "ESPN F1"
+pillars = ["sports"]
+sport = "f1"
+kind = "rss"
+url = "https://www.espn.com/espn/rss/f1/news"
+priority = 10
+
+[[source]]
+slug = "espn-golf"
+name = "ESPN Golf"
+pillars = ["sports"]
+sport = "golf"
+kind = "rss"
+url = "https://www.espn.com/espn/rss/golf/news"
+priority = 10
+
+[[source]]
+slug = "nfl-com"
+name = "NFL.com"
+pillars = ["sports"]
+sport = "nfl"
+kind = "gnews"
+query = "site:nfl.com/news"
+priority = 15
+
+[[source]]
+slug = "nba-com"
+name = "NBA.com"
+pillars = ["sports"]
+sport = "nba"
+kind = "gnews"
+query = "site:nba.com/news"
+priority = 15
+
+[[source]]
+slug = "formula1"
+name = "Formula1.com"
+pillars = ["sports"]
+sport = "f1"
+kind = "rss"
+url = "https://www.formula1.com/en/latest/all.xml"
+priority = 15
+notes = "Undated feed: seed-and-skip on the first fetch, then first-seen time."
+
+[[source]]
+slug = "pga-tour"
+name = "PGA Tour"
+pillars = ["sports"]
+sport = "golf"
+kind = "gnews"
+query = "site:pgatour.com"
+priority = 15
+
+[[source]]
+slug = "al-com-alabama"
+name = "AL.com Alabama Sports"
+pillars = ["sports"]
+sport = "cfb"
+kind = "rss"
+url = "https://www.al.com/arc/outboundfeeds/rss/category/alabamafootball/?outputType=xml"
+priority = 20
+
+[[source]]
+slug = "pft"
+name = "ProFootballTalk"
+pillars = ["sports"]
+sport = "nfl"
+kind = "rss"
+url = "https://www.nbcsports.com/profootballtalk.atom"
+priority = 20
+
+[[source]]
+slug = "the-race"
+name = "The Race"
+pillars = ["sports"]
+sport = "f1"
+kind = "rss"
+url = "https://www.the-race.com/rss/"
+priority = 20
+
+[[source]]
+slug = "golf-digest"
+name = "Golf Digest"
+pillars = ["sports"]
+sport = "golf"
+kind = "gnews"
+query = "site:golfdigest.com"
+priority = 25
+
+[[source]]
+slug = "golf-channel"
+name = "Golf Channel"
+pillars = ["sports"]
+sport = "golf"
+kind = "rss"
+url = "https://www.nbcsports.com/golf.atom"
+priority = 25
+
+[[source]]
+slug = "racefans"
+name = "RaceFans"
+pillars = ["sports"]
+sport = "f1"
+kind = "rss"
+url = "https://www.racefans.net/feed/"
+priority = 25
+
+[[source]]
+slug = "yahoo-nfl"
+name = "Yahoo Sports NFL"
+pillars = ["sports"]
+sport = "nfl"
+kind = "rss"
+url = "https://sports.yahoo.com/nfl/rss/"
+priority = 35
+
+[[source]]
+slug = "yahoo-cfb"
+name = "Yahoo Sports College Football"
+pillars = ["sports"]
+sport = "cfb"
+kind = "rss"
+url = "https://sports.yahoo.com/college-football/rss/"
+priority = 35
+
+[[source]]
+slug = "yahoo-nba"
+name = "Yahoo Sports NBA"
+pillars = ["sports"]
+sport = "nba"
+kind = "rss"
+url = "https://sports.yahoo.com/nba/rss/"
+priority = 35
+
+[[source]]
+slug = "yahoo-golf"
+name = "Yahoo Sports Golf"
+pillars = ["sports"]
+sport = "golf"
+kind = "rss"
+url = "https://sports.yahoo.com/golf/rss/"
+priority = 35
+
+[[source]]
+slug = "yahoo-f1"
+name = "Yahoo Sports F1"
+pillars = ["sports"]
+sport = "f1"
+kind = "gnews"
+query = "site:sports.yahoo.com \"Formula 1\""
+priority = 35
+
+[[source]]
+slug = "roll-bama-roll"
+name = "Roll Bama Roll"
+pillars = ["sports"]
+sport = "cfb"
+kind = "rss"
+url = "https://www.rollbamaroll.com/rss/index.xml"
+priority = 40
+
+[[source]]
+slug = "liberty-ballers"
+name = "Liberty Ballers"
+pillars = ["sports"]
+sport = "nba"
+kind = "rss"
+url = "https://www.libertyballers.com/rss/index.xml"
+priority = 40
+
+[[source]]
+slug = "action-network"
+name = "Action Network"
+pillars = ["sports"]
+kind = "rss"
+url = "https://www.actionnetwork.com/feed"
+priority = 50
+
+[[source]]
+slug = "no-laying-up"
+name = "No Laying Up"
+pillars = ["sports"]
+sport = "golf"
+kind = "rss"
+url = "https://feeds.megaphone.fm/nolayingup"
+priority = 45
+active = false
+notes = "Podcast feed only (episodes, not articles); inactive by owner decision 2026-10-11."
