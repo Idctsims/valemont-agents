@@ -306,7 +306,7 @@ Thirteen build chats after this one, each split into phases with a test you run 
 1. Source registry, RSS ingest, dedupe, Haiku batch summaries, embeddings.
    - [ ] All 13 seed sources ingest; every item shows a summary and the original link
 2. Love / Neutral / Not Interested, interest profile, daily re-rank, seeded interests.
-   - [ ] Ten Not Interested taps on one topic visibly push it down the next day
+   - [ ] Ten Love taps on one topic lift a held-out story of that topic from off page one of For you onto it after the rebuild **(owner, Oct 12: the live check flipped to Love. Not Interested is shown by the seeds, with gossip's best at #48 on zero taps, and by the unit test `TenNotInterested`. Design: `docs/feed_ranking.md`, owner decision 7)**
 3. Sports News for CFB, NFL, NBA, F1 and Golf on the same engine.
    - [ ] Filter chips by sport; reactions train the sports profile separately
 

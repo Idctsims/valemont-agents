@@ -24,6 +24,18 @@ differ, the decisions win. Step 1 is `db/039_feed_ranking.sql`.
 7. **The "10 Not Interested" check:** the held-out story must be **on page
    one of For you before the taps** and **off page one after `--rebuild`**.
    Before and after positions are reported. The same rule in the test.
+   - **Amended by the owner, 2026-10-12: the live check is the Love
+     direction.** The Not Interested direction is shown two ways instead:
+     by the seeds, since with zero taps the best-placed gossip story in For you
+     is #48 (`feed_for_you('home')`, 2026-10-12 after `--rebuild`), so no
+     don't-care topic had a held-out story on page one to push off; and by
+     the unit-test property (`tests/test_feed_rank.py` `TenNotInterested`).
+   - **The live Love check:** a held-out story of one loved topic, **off page
+     one of For you (position 31–80) before the taps**, and ten Love taps on
+     other stories of that topic that touch no follow (`follow_tier` NULL).
+     **Pass = the held-out story is on page one after `--rebuild`.** The
+     Bordeaux wine story (id 1090) is the control. Before and after
+     positions of both are reported.
 8. **Stale Google News items** are dropped at ingest when published more than
    `gnews_window_days + 2` days before the fetch: a code rule
    (`feed/ingest.py` `STALE_GRACE`, tests `GoogleNews.test_stale_*`), no
