@@ -218,6 +218,20 @@ class Summaries(FeedLedgerCase):
             self.assertEqual(ledger.feed_summarized_today(conn=conn), before + 1)
             self.assertNotIn(rsid, {j.story_id for j in ledger.feed_summary_queue(5000, 2, conn=conn)})
 
+    def test_the_queue_is_newest_published_first(self) -> None:
+        with _rolled_back() as conn:
+            real = self.make_source(conn, is_test=False)
+            # The newer story is founded FIRST (lower id), in one transaction
+            # (equal first_seen_at): the old order (first_seen, then id)
+            # would put the older story first. Publish time must win.
+            newer, _ = ledger.feed_new_story(real, _item(hours_ago=1), unit(1), unit(1), filtered_reason=None,
+                                             seed=None, conn=conn)
+            older, _ = ledger.feed_new_story(real, _item(hours_ago=30), unit(0), unit(0), filtered_reason=None,
+                                             seed=None, conn=conn)
+            order = [j.story_id for j in ledger.feed_summary_queue(5000, 2, conn=conn) if j.story_id in (older, newer)]
+            self.assertEqual(order, [newer, older])
+            self.assertIn("ORDER BY i.published_at DESC", ledger.FEED_SUMMARY_QUEUE_SQL)
+
     def test_an_invalid_result_counts_an_attempt_and_two_retire_it(self) -> None:
         with _rolled_back() as conn:
             real = self.make_source(conn, is_test=False)

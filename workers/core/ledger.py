@@ -2103,7 +2103,11 @@ class SummaryJob:
 
 
 #: The summarizer's queue: kept, real, linkable stories not yet summarized and
-#: with a try left, newest first.
+#: with a try left, newest PUBLISHED first: the order Home shows them in
+#: (v_feed_stories by lead_published_at). Ordering by first_seen_at instead
+#: summarized an arbitrary slice of a big ingest, where every story shares one
+#: first-seen time: after the 2026-10-12 re-ingest only 1 of Home's first 30
+#: cards had a summary.
 FEED_SUMMARY_QUEUE_SQL: Final = """
     SELECT st.id, st.title, i.teaser, s.name, st.sport, st.summary_attempts
       FROM stories st
@@ -2111,7 +2115,7 @@ FEED_SUMMARY_QUEUE_SQL: Final = """
       JOIN sources s ON s.id = i.source_id
      WHERE st.summary IS NULL AND st.filtered_reason IS NULL AND NOT st.is_test
        AND st.summary_attempts < %(max_attempts)s
-     ORDER BY st.first_seen_at DESC, st.id DESC
+     ORDER BY i.published_at DESC, st.id DESC
      LIMIT %(limit)s
 """
 
