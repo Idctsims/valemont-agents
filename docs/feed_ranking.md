@@ -73,6 +73,34 @@ differ, the decisions win. Step 1 is `db/039_feed_ranking.sql`.
      - **After:** run `--rebuild` once, read `feed_for_you` the same way, and
        report both conditions with the numbers. No second rebuild, no
        re-measure.
+   - **RESULT, 2026-10-12: FAIL on both (a) and (b).** Recorded as-is: no
+     re-run, no re-pick (owner).
+     - One `--rebuild` at about 21:36 UTC (home: love 1, not interested 4,
+       opened 1, neutral 4; seed weight love 0.92, NI 0.75). One read,
+       `docs/feed_checks/love-2026-10-12/after-2136Z.tsv`, 483 rows,
+       written 21:36:09 UTC. Scored by `score.py` beside it, which applies
+       the frozen classifier to both files.
+     - **(a):** held-out 2308 went **64 → 159**, control 1090 went
+       **86 → 99**. `(64 − 159) − (86 − 99) = −82`, against ≥ 15 needed.
+     - **(b):** the topic on page one went **9 → 3**, against > 9 needed. After:
+       2349 (#18), 2351 (#25), 2372 (#28).
+     - **The taps, as `feed_reactions` records them** (read via `db_inspect`
+       before the rebuild, ids 104–124, 21:25–21:33 UTC):
+       - **Love:** 1 target, 2349.
+       - **Not interested:** 4 targets, 2173, 2278, 2375 and 2309.
+       - **Neutral:** 4 targets, 2313, 2321, 2374 and 2312.
+       - **Untouched:** 1 target, 2307.
+       - **Off-target:** Love then Undo on 1556, 2382, 763 and 839, which
+         nets to no signal; and opens on 1400, 2321, 2349 and 2374.
+
+       The owner reported "Love on #4 only; skipped the other 9". In the
+       ledger, 8 of those 9 carry a Not interested or Neutral reaction.
+       Neutral and Not interested both remove a card from For you, and four
+       of the targets dismissed that way were page-one topic stories.
+     - **So this run did not measure the ten-Love property:** it had one
+       Love, and four Not interested on the topic. The unit property is
+       `TenLoves`. What the run does show: four Not interested taps on the
+       topic moved the held-out story down 95 places, against the control's 13.
 8. **Stale Google News items** are dropped at ingest when published more than
    `gnews_window_days + 2` days before the fetch: a code rule
    (`feed/ingest.py` `STALE_GRACE`, tests `GoogleNews.test_stale_*`), no
