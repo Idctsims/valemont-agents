@@ -66,8 +66,9 @@ function PillarProfile({ p, now }: { p: ProfileSummary; now: number }) {
         {(
           [
             ["Loved", p.loveCount],
-            // "Not interested" wraps in a quarter of 390 px.
-            ["Skipped", p.niCount],
+            // The Not interested count. "Not interested" wraps in a quarter
+            // of 390 px, and to the owner "skip" means no tap (2026-10-12).
+            ["Hidden", p.niCount],
             ["Opened", p.openCount],
             ["Neutral", p.neutralCount],
           ] as const
@@ -171,8 +172,8 @@ export default async function FeedProfilePage() {
           <Fold label="Rebuilds" count={history.length} testId="profile-history">
             {history.map((h) => (
               <li key={h.id} data-testid="profile-history-row" className="border-b border-border py-3 font-mono text-xs text-text-muted">
-                <span className="text-text">{PILLAR_LABEL[h.pillar]}</span> · {ago(h.builtAt, now)} · loved {h.loveCount} · not
-                interested {h.niCount} · opened {h.openCount} · seeds {pct(h.seedWeightLove)}
+                <span className="text-text">{PILLAR_LABEL[h.pillar]}</span> · {ago(h.builtAt, now)} · loved {h.loveCount} · hidden{" "}
+                {h.niCount} · opened {h.openCount} · seeds {pct(h.seedWeightLove)}
               </li>
             ))}
           </Fold>

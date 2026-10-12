@@ -234,9 +234,16 @@ test("/settings/feed shows the profile, the follows and the rebuilds", async () 
   if (await home.count()) {
     const counts = home.getByTestId("profile-counts");
     await expect(counts).toBeVisible();
-    // "Not interested" wrapped in a quarter of 390 px: every label is one line.
-    await expect(counts).toContainText("Skipped");
-    await expect(counts).not.toContainText("Not interested");
+    // The Not interested count is "Hidden": "Not interested" wrapped in a
+    // quarter of 390 px, and "Skipped" read as no tap (owner, 2026-10-12).
+    // Every label is one line.
+    await expect(counts.locator("dt")).toHaveText(["Loved", "Hidden", "Opened", "Neutral"]);
+    await expect(counts).not.toContainText(/Skipped|Not interested/);
+    const history = page.getByTestId("profile-history-row");
+    if (await history.count()) {
+      await expect(history.first()).toContainText(/hidden \d+/);
+      await expect(history.first()).not.toContainText(/not interested|skipped/i);
+    }
     const heights = await counts.locator("dt").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
     expect(new Set(heights).size).toBe(1); // "Loved" is one line, so all are
     await expect(home.getByTestId("profile-seed")).toContainText(/seeds still make up \d+%/);
