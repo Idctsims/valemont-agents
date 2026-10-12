@@ -547,7 +547,8 @@ class SummaryJobRun(unittest.TestCase):
         self.queue = [job(i, teaser="A short teaser.") for i in range(1, 13)]
         for name, fn in {
             "feed_summarized_today": lambda **kw: 0,
-            "feed_summary_queue": lambda limit, max_attempts, **kw: self.queue[:limit],
+            "feed_summary_queue": lambda limit, max_attempts, priority=None, **kw: self.queue[:limit],
+            "feed_follows": lambda **kw: [],
             "feed_save_summaries": lambda results, usage, **kw: self.saved.append((list(results), usage)),
             "_pool": lambda *a, **k: (_ for _ in ()).throw(AssertionError("database reached")),
         }.items():

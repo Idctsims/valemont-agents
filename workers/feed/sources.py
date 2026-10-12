@@ -33,6 +33,14 @@ class SourceSpec:
     include_categories: tuple[str, ...] | None
     window_days: int
     notes: str | None
+    #: "source": the source's sport is the story's (the summarizer's only when
+    #: the source has none). "model": a multi-sport source; the summarizer's
+    #: sport wins and the source's is the fallback when it says none (owner
+    #: D8, 2026-10-12).
+    sport_from: str = "source"
+
+
+SPORT_FROM = frozenset({"source", "model"})
 
 
 def gnews_url(query: str, window_days: int) -> str:
@@ -65,11 +73,14 @@ def _spec(raw: dict) -> SourceSpec:
     else:
         raise SourcesInvalid(f"{where}: kind must be rss or gnews")
     cats = raw.get("include_categories")
+    sport_from = raw.get("sport_from", "source")
+    if sport_from not in SPORT_FROM:
+        raise SourcesInvalid(f"{where}: sport_from must be source or model")
     return SourceSpec(
         slug=slug, name=str(raw.get("name") or ""), pillars=pillars, sport=sport, kind=kind,
         url=url, priority=int(raw.get("priority", 100)), active=bool(raw.get("active", True)),
         include_categories=tuple(cats) if cats else None, window_days=window,
-        notes=raw.get("notes"),
+        notes=raw.get("notes"), sport_from=sport_from,
     )
 
 
@@ -85,3 +96,8 @@ def load_sources(path: Path = SOURCES_FILE) -> list[SourceSpec]:
         if not s.name:
             raise SourcesInvalid(f"source {s.slug}: name is required")
     return specs
+
+
+def model_sport_slugs(path: Path = SOURCES_FILE) -> frozenset[str]:
+    """The multi-sport sources, whose stories take the summarizer's sport."""
+    return frozenset(s.slug for s in load_sources(path) if s.sport_from == "model")
