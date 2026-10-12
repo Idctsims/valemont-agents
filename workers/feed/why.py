@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, Sequence
 
 from core import ai, ledger
@@ -39,13 +40,21 @@ GROUP_SIZE = 8
 DAILY_CALLS = 20
 MAX_WORDS = 20
 MAX_CHARS = 200
+#: The prompt forbids hedging; a line that hedges is guessing at a link, so it
+#: is refused (owner's bar, 2026-10-12: "could matter to Excursion" was one).
+HEDGE = re.compile(r"\b(could|might|may|potentially|possibly|perhaps)\b", re.IGNORECASE)
 
 SYSTEM = f"""You decide whether a news story matters to one reader's own ventures, and say why in one line when it truly does.
 
 You get the reader's ventures (name, what it does, and for some the stage, next action and workstreams) and a few stories (id, headline, outlet, summary).
 
 For each story, the answer is null UNLESS the story has a concrete, specific connection to one venture: it changes what that venture should do next, or it is about the venture's market, a direct competitor, a likely partner, customer or investor, a deal, a regulation or a permit that bears on it.
-Sharing a broad topic is NOT a connection. "This is about hotels and the venture is hospitality" is not enough. If you have to stretch, answer null. Most stories get null; that is expected and correct.
+THE BAR. A connection must be one of these three, and nothing else:
+1. Same industry: the story is about the venture's own industry (a creator-business deal for a venture on the business side of cultural figures; a members' club or beach club opening for a beach-club venture).
+2. Same market segment: the story is about the specific segment the venture sells into or competes in.
+3. A named counterparty or person: the story names a company, investor, partner, competitor or person the venture deals with or could deal with directly.
+Geography alone NEVER qualifies. Two things being in the same city is not a connection. Counter-example, answer null: "Record Miami retail construction and rents signal a hot local development market relevant to Sail Beach Club's Biscayne Bay site." Retail construction is not hospitality; sharing Miami is not enough.
+Sharing a broad topic is not a connection either. If you have to stretch, answer null. Most stories get null; that is expected and correct.
 
 When there is a real connection, write ONE sentence of at most {MAX_WORDS} words (count them; a longer line is thrown away) that names the venture exactly as written in the list and says why it matters to it. Plain words, no hype, no "could", no "might".
 
@@ -63,22 +72,6 @@ def schema() -> dict[str, Any]:
     }
 
 
-#: What each venture does, in the owner's words (2026-10-12), keyed by venture
-#: name, lowercased. ctx_ventures carries stage, role and next action, but
-#: only a NAME for a venture that is not set up, so without these lines Haiku
-#: could not tell that Perfect Timing Management manages creators. Kept here,
-#: not in ventures.tagline: a tagline marks a venture "set up" in Ventures HQ.
-VENTURE_ABOUT: dict[str, str] = {
-    "sail beach club": "Experiential hospitality: a beach/members' club on Biscayne Bay, Miami.",
-    "perfect timing management": "Artist and influencer management.",
-    "excursion": "A media collective on the business side of cultural figures.",
-    "clipd": "SaaS.",
-    "valemont grow": "AI marketing automation.",
-    "sims & vale capital": "Family office.",
-    "freelance web dev": "Next.js/Supabase sites (senior care vertical).",
-}
-
-
 def venture_names(ctx: dict[str, Any]) -> list[str]:
     """Live ventures (set up first, then the rest); never archived ones."""
     names = [str(v["name"]) for v in ctx.get("active") or [] if v.get("name")]
@@ -87,17 +80,18 @@ def venture_names(ctx: dict[str, Any]) -> list[str]:
 
 
 def venture_context(ctx: dict[str, Any]) -> list[dict[str, Any]]:
-    """One entry per live venture: its exact name, what it does (VENTURE_ABOUT;
-    omitted when unknown) and, for a set-up venture, its stage, role, next
-    action and active workstreams from ctx_ventures."""
+    """One entry per live venture: its exact name, what it does (its Ventures
+    HQ tagline, db/040; omitted when it has none) and, for a set-up venture,
+    its stage, role, next action and active workstreams, all from
+    ctx_ventures. The owner writes the taglines in Ventures HQ; nothing about
+    a venture is kept in code."""
     active = {str(v.get("name")): v for v in ctx.get("active") or [] if v.get("name")}
     out = []
     for name in venture_names(ctx):
         entry: dict[str, Any] = {"name": name}
-        about = VENTURE_ABOUT.get(name.lower())
-        if about:
-            entry["what_it_does"] = about
         v = active.get(name)
+        if v and v.get("tagline"):
+            entry["what_it_does"] = v["tagline"]
         if v:
             for key in ("stage", "role", "next_action"):
                 if v.get(key):
@@ -121,6 +115,9 @@ def check(item: dict[str, Any], names: Sequence[str]) -> tuple[str | None, str |
         return None, f"names no known venture ({venture!r})"
     if venture.lower() not in why.lower():
         return None, f"does not name {venture!r} in the line"
+    hedge = HEDGE.search(why)
+    if hedge:
+        return None, f"hedges ({hedge.group(0)!r}): a real link is stated, not guessed"
     n = len(why.split())
     if n > MAX_WORDS:
         return None, f"{n} words; the cap is {MAX_WORDS}"

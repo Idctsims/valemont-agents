@@ -312,6 +312,23 @@ class WhyQueue(RankSqlCase):
             self.assertEqual(ledger.feed_reset_why([fake], conn=conn), 0)  # never a test story
 
 
+class VentureTaglines(RankSqlCase):
+    """db/040: ctx_ventures() carries each set-up venture's tagline, which
+    feed_why sends Haiku as what the venture does."""
+
+    def test_the_tagline_reaches_the_why_context(self) -> None:
+        with _rolled_back() as conn:
+            if not conn.execute("SELECT EXISTS (SELECT 1 FROM migration_log WHERE name = '040_venture_taglines')").fetchone()[0]:
+                self.skipTest("db/040 not pasted")
+            conn.execute("""INSERT INTO ventures (owner_id, name, slug, tagline, sort_order)
+                            VALUES (%s, 'TL tagline venture', %s, 'Makes test widgets.', 999)""",
+                         (self.owner, f"tl-{uuid.uuid4().hex[:8]}"))
+            ctx = ledger.ctx_ventures(conn=conn)
+            from feed import why
+            got = {v["name"]: v for v in why.venture_context(ctx)}
+            self.assertEqual(got["TL tagline venture"]["what_it_does"], "Makes test widgets.")
+
+
 class Prune(RankSqlCase):
     def test_a_reacted_story_is_never_pruned(self) -> None:
         with _rolled_back() as conn:

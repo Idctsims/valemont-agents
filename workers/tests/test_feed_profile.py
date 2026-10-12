@@ -202,27 +202,36 @@ class WhyValidator(unittest.TestCase):
         self.assertEqual([(sid, reason) for sid, _, reason in why.REFUSED], [(5, "23 words; the cap is 20")])
         why.REFUSED.clear()
 
-    def test_the_context_says_what_every_venture_does(self) -> None:
+    def test_the_context_says_what_each_venture_does_from_its_tagline(self) -> None:
         ctx = {"active": [{"name": "Sail Beach Club", "slug": "sail-beach-club", "stage": "pre_launch",
-                           "next_action": "Pick a renderer", "workstreams": [{"name": "Permitting"}]}],
-               "not_set_up": ["Perfect Timing Management", "Freelance web dev", "Brand new venture"]}
+                           "tagline": "Experiential hospitality: a beach/members' club on Biscayne Bay, Miami.",
+                           "next_action": "Pick a renderer", "workstreams": [{"name": "Permitting"}]},
+                          {"name": "Perfect Timing Management", "tagline": "Artist and influencer management."}],
+               "not_set_up": ["Brand new venture"]}
         got = {v["name"]: v for v in why.venture_context(ctx)}
         self.assertEqual(got["Sail Beach Club"]["what_it_does"],
                          "Experiential hospitality: a beach/members' club on Biscayne Bay, Miami.")
         self.assertEqual((got["Sail Beach Club"]["stage"], got["Sail Beach Club"]["workstreams"]), ("pre_launch", ["Permitting"]))
         self.assertEqual(got["Perfect Timing Management"], {"name": "Perfect Timing Management",
                                                             "what_it_does": "Artist and influencer management."})
-        # Matched ignoring case; an unknown venture is still listed, by name.
-        self.assertEqual(got["Freelance web dev"]["what_it_does"], "Next.js/Supabase sites (senior care vertical).")
+        # No tagline, no line: a venture is never described from code.
         self.assertEqual(got["Brand new venture"], {"name": "Brand new venture"})
-        msg = why.user_message(ctx, [ledger.WhyJob(1, "h", None, "o")])
-        self.assertIn("Artist and influencer management.", msg)
+        self.assertFalse(hasattr(why, "VENTURE_ABOUT"))
+        self.assertIn("Artist and influencer management.", why.user_message(ctx, [ledger.WhyJob(1, "h", None, "o")]))
 
-    def test_every_owner_venture_has_a_line(self) -> None:
-        for name in ("Sail Beach Club", "Perfect Timing Management", "Excursion", "Clipd", "Valemont Grow",
-                     "Sims & Vale Capital", "Freelance web dev"):
-            self.assertIn(name.lower(), why.VENTURE_ABOUT)
+    def test_a_hedged_line_is_refused(self) -> None:
+        for line in ("A coalition that could matter to Clipd.", "Clipd might gain a rival.", "Possibly a Clipd rival."):
+            with self.subTest(line=line):
+                self.assertEqual(why.check({"venture": "Clipd", "why": line}, NAMES)[0], None)
+        self.assertIn("hedges", why.check({"venture": "Clipd", "why": "Clipd may face it."}, NAMES)[1])
+        self.assertEqual(why.validate({"venture": "Clipd", "why": "A direct Clipd rival raised $20M."}, NAMES),
+                         "A direct Clipd rival raised $20M.")
 
+    def test_the_bar_is_in_the_prompt_with_the_miami_counter_example(self) -> None:
+        self.assertIn("Geography alone NEVER qualifies", why.SYSTEM)
+        self.assertIn("Record Miami retail construction", why.SYSTEM)
+        for kind in ("Same industry", "Same market segment", "A named counterparty or person"):
+            self.assertIn(kind, why.SYSTEM)
     def test_venture_names_skip_archived(self) -> None:
         ctx = {"active": [{"name": "Sail Beach Club"}], "not_set_up": ["Clipd"], "archived": ["Test"]}
         self.assertEqual(why.venture_names(ctx), ["Sail Beach Club", "Clipd"])
