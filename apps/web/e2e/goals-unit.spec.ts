@@ -191,7 +191,7 @@ test.describe("navigation registry", () => {
     const unbuilt = NAV.flatMap((g) => g.pillars.filter((p) => !p.built).map((p) => p.href));
     const shown = builtGroups().flatMap((g) => g.pages.map((p) => p.href));
     expect(unbuilt.filter((h) => shown.includes(h))).toEqual([]);
-    expect(SYSTEM_PAGES.map((p) => p.href)).toEqual(["/settings/health", "/settings/sources", "/onboarding", "/design"]);
+    expect(SYSTEM_PAGES.map((p) => p.href)).toEqual(["/settings/health", "/settings/sources", "/settings/feed", "/onboarding", "/design"]);
   });
 
   test("/ is active only on itself", () => {

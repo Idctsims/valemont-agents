@@ -532,6 +532,21 @@ export async function addTestStory(opts: { pillar: "home" | "sports"; title: str
   });
 }
 
+/** A story's feed_reactions rows (db/039), oldest first: what the buttons,
+ * swipes, Undo and the open beacon wrote. Append-only, so they stay; they
+ * hang off a test story, which no real profile ever reads. */
+export async function storyReactions(storyId: number): Promise<{ pillar: string; reaction: string }[]> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase
+      .from("feed_reactions")
+      .select("pillar, reaction")
+      .eq("story_id", storyId)
+      .order("id");
+    if (error) throw new Error(`reaction read failed: ${error.message}`);
+    return data as { pillar: string; reaction: string }[];
+  });
+}
+
 /** The owner's local date (America/Chicago), as the app computes it. */
 export function chicagoDay(offsetDays = 0): string {
   const d = new Date(Date.now() + offsetDays * 86_400_000);

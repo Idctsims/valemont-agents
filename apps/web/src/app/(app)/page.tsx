@@ -3,14 +3,14 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 
 import { BriefCard } from "@/components/brief/brief-card";
-import { Latest } from "@/components/feed/latest";
+import { FeedSection } from "@/components/feed/feed-section";
 import { GoalLedger } from "@/components/goals/goal-ledger";
 import { TodayModule } from "@/components/ventures/today";
 import { requireOwner } from "@/lib/auth";
 import { briefFor } from "@/lib/brief/data";
 import { MARKER_HEADER, decideMarker } from "@/lib/capital/marker";
-import { latestStories } from "@/lib/feed/data";
-import { pageFromParam } from "@/lib/feed/types";
+import { forYouStories, latestStories } from "@/lib/feed/data";
+import { pageFromParam, tabFromParam } from "@/lib/feed/types";
 import { ensureRollover, weekGoals } from "@/lib/goals/data";
 import { localToday, longDate, weekRange, weekStamp, weekStart } from "@/lib/goals/period";
 import { createClient } from "@/lib/supabase/server";
@@ -18,11 +18,15 @@ import { ventureLinks, ventureToday } from "@/lib/ventures/data";
 
 export const metadata: Metadata = { title: "Home" };
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ latest?: string | string[] }> }) {
+type HomeParams = { feed?: string | string[]; latest?: string | string[]; foryou?: string | string[] };
+
+export default async function Home({ searchParams }: { searchParams: Promise<HomeParams> }) {
   await requireOwner();
   const supabase = await createClient();
   const today = localToday();
-  const page = pageFromParam((await searchParams).latest);
+  const params = await searchParams;
+  const tab = tabFromParam(params.feed);
+  const page = pageFromParam(tab === "latest" ? params.latest : params.foryou);
   await ensureRollover(supabase);
   const withTests = decideMarker((await headers()).get(MARKER_HEADER), process.env).kind === "test";
   const [goals, todayRows, links, brief, feed] = await Promise.all([
@@ -30,7 +34,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ l
     ventureToday(supabase),
     ventureLinks(supabase),
     briefFor(supabase, today, { withTests }),
-    latestStories(supabase, { pillar: "home", page, withTests }),
+    tab === "latest"
+      ? latestStories(supabase, { pillar: "home", page, withTests })
+      : forYouStories(supabase, { pillar: "home", page }),
   ]);
   // Display only ("3h"): rendered per request.
   // eslint-disable-next-line react-hooks/purity
@@ -58,7 +64,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ l
         />
       </div>
 
-      <Latest stories={feed.stories} page={page} hasMore={feed.hasMore} now={now} />
+      <FeedSection tab={tab} stories={feed.stories} page={page} hasMore={feed.hasMore} now={now} />
     </>
   );
 }
