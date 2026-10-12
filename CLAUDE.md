@@ -394,7 +394,7 @@ each in phases with a "done when" checklist). It supersedes the former steps
 - **Chat 1, Phase 3** (PWA shell and push) ✓ (phone-verified 2026-10-08)
 - **Chat 1, Phase 4** (db/020 shared tables, scheduler, `job_health`, push alerts) ✓ (Drills 1 and 2 passed; canary retired 2026-10-09)
 - **Chat 1 complete.**
-- **Chat 2, Phase 1** (Goals, plus the app shell navigation registry) ✓ (PR #8, merge `464c6ea`). **Owner's phone checklist DONE, 2026-10-09: all items green**, except the two that need the real clock: the Monday 00:01 rollover and the 07:00 "Set your week" push, first due **Mon 2026-10-12** (America/Chicago).
+- **Chat 2, Phase 1** (Goals, plus the app shell navigation registry) ✓ (PR #8, merge `464c6ea`). **Owner's phone checklist DONE, 2026-10-09: all items green**, except the two that need the real clock: the Monday 00:01 rollover and the 07:00 "Set your week" push. **Both seen on Mon 2026-10-12** (Current State, "Carried out of Chat 2").
 - **Sweep starvation fix** (PR #10, §8) ✓
 - **Chat 2, Phase 2** (Ventures HQ) ✓ (merged 2026-10-09; see Current State). **Owner's phone checklist: ALL GREEN, 2026-10-09.**
 - **Follow-up, own branch and PR:** the "never abandon an untried commitment" database invariant (db/024, db/025) ✓
@@ -1239,8 +1239,9 @@ absent row as "I never looked."
   - **Zero-attempt database invariant** (db/024, db/025, both applied): merged from branch `db-zero-attempt-invariant`. `tests/` 479 OK; `tests_live/` 181 OK, 0 skipped (2026-10-09).
   - **Chat 2 COMPLETE (2026-10-11).** Phase 5 closed on the first scheduled brief and push (above).
   - **Chat 3:** Learning engine, Home feed, Sports News (MASTER_PLAN §6). Not started.
-  - **Carried out of Chat 2, pending until seen:**
-    - Goals' first real Monday, **Mon 2026-10-12** (Chicago): the 00:01 rollover and the 07:00 "Set your week" push.
+  - **Carried out of Chat 2: DONE, Mon 2026-10-12** (the last item; read via `db_inspect`, owner-confirmed):
+    - `goals_rollover` started 05:01:00 UTC (00:01 Chicago), ok 05:01:01, 0 failures. It carried the 3 weekly goals still open in week 2026-10-05 into week 2026-10-12 (`goals` 319639a7…, 8d8fd0c3…, c50a7981…, carry_count 1, created 05:01:00.562 UTC).
+    - `goals_monday_push` started 12:00:00 UTC (07:00 Chicago), ok 12:00:02. Notification 206 "Set your week" `sent` 12:00:01 UTC, no error. The owner confirmed it arrived.
   - **Silent proposals, verified after the fix (2026-10-11, phone app, read via `db_inspect`):**
 
     | | Before: message 188 (2026-10-10) | After: message 260 (2026-10-11 22:12:53 UTC) |

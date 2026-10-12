@@ -295,7 +295,7 @@ Thirteen build chats after this one, each split into phases with a test you run 
    - Also: silent Wags proposals fixed (a generated "Proposing: …" line when a turn ends with no text); one shared Wags voice file; server actions return readable refusals instead of throwing; a zero-attempt void/missed invariant added in the database (db/024–025).
 
 **Carried out of Chat 2:**
-- Goals' first real Monday: the 00:01 rollover and the 07:00 "Set your week" push are first due Mon Oct 12 (Chicago). Pending until seen.
+- ~~Goals' first real Monday~~ **Done Mon Oct 12** (the last carried item; read via `db_inspect`): `goals_rollover` ran 00:01:00 Chicago (05:01:00 UTC, ok 05:01:01, 0 failures) and carried the 3 weekly goals still open in week Oct 5 into week Oct 12 (carry_count 1); `goals_monday_push` ran 07:00 Chicago and notification 206 "Set your week" was sent 12:00:01 UTC, no error. The owner confirmed it arrived.
 - Railway trial ends about Oct 18; redeploy the worker by hand on Free.
 - ~~The silent-proposals before/after token comparison~~ **Done Oct 11:** message 260 has a model-written sentence before its proposal and no reasoning part, 254 output tokens against message 188's 544 with no text.
 
