@@ -1438,7 +1438,7 @@ ON CONFLICT (name) DO NOTHING;
 --       (read, confirm). authenticated: INSERT on entity_links and
 --       entity_link_ends only; UPDATE only on entity_link_proposals.decision
 --   (b) valemont_readonly reads the three tables and the view, executes
---       feed_for_you(4 args) and ctx_sports_feed; anon executes nothing
+--       feed_for_you(5 args) and ctx_sports_feed; anon executes nothing
 --   (c) boost_windows: 12 (cfb 6 with entity Alabama Crimson Tide, f1 6);
 --       the Tennessee window active now
 --   (d) follows: tier 1: 7, tier 2: 0, tier 3: 23; entities by kind; 3 links,
