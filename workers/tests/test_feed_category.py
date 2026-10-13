@@ -67,7 +67,9 @@ class SummaryCall(unittest.TestCase):
         self.assertIn("AND category IS NULL", inspect.getsource(ledger.feed_set_categories))
 
 
-class Pass(unittest.TestCase):
+class _PassBase(unittest.TestCase):
+    """Stubs and the fake Haiku shared by the pass tests; no tests here."""
+
     def setUp(self) -> None:
         self.written: list[list[tuple[int, str]]] = []
         p = mock.patch.object(ledger, "feed_set_categories",
@@ -87,6 +89,8 @@ class Pass(unittest.TestCase):
             return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=json.dumps(body))])
         return complete
 
+
+class Pass(_PassBase):
     def test_haiku_non_critical_in_groups_of_25_and_the_cost_recorded(self) -> None:
         calls: list = []
         with mock.patch.object(ai, "complete", self.fake(lambda s: "deals", calls)):
@@ -119,6 +123,49 @@ class Pass(unittest.TestCase):
             res = categorize.run([job(i) for i in range(1, 51)])
         self.assertEqual((res.calls, res.written), (1, 25))
         self.assertTrue(res.stopped.startswith("AI budget"))
+
+
+class Definitions(unittest.TestCase):
+    """Owner, 2026-10-13 16:19: sports_business and betting, tighter."""
+
+    def test_sports_business_is_the_business_not_the_games(self) -> None:
+        for phrase in ("ownership", "stakes", "valuations", "media rights", "athlete businesses",
+                       "league economics", "NOT games, coaching or player performance"):
+            self.assertIn(phrase, category.PROMPT)
+
+    def test_betting_is_the_betting_business_not_fantasy_or_stocks(self) -> None:
+        for phrase in ("sportsbooks", "prediction markets", "Kalshi", "betting regulation",
+                       "NOT fantasy sports", "NOT the stock market"):
+            self.assertIn(phrase, category.PROMPT)
+
+
+class Recategorize(_PassBase):
+    """The re-run for an explicit id set (owner, 2026-10-13): overwrites,
+    but only through the compare-and-set writer, and records every move."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.recat: list[list[tuple[int, str, str]]] = []
+        p = mock.patch.object(ledger, "feed_recategorize",
+                              lambda triples, **kw: self.recat.append(list(triples)) or len(triples))
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_it_overwrites_through_compare_and_set_and_records_moves(self) -> None:
+        calls: list = []
+        current = {1: "betting", 2: "betting", 3: "sports_business"}
+        answer = {1: "other", 2: "betting", 3: "other"}
+        with mock.patch.object(ai, "complete", self.fake(lambda s: answer[s["id"]], calls)):
+            res = categorize.run([job(i) for i in (1, 2, 3)], current=current)
+        self.assertEqual(self.written, [])  # never the NULL-only writer
+        self.assertEqual(self.recat, [[(1, "betting", "other"), (3, "sports_business", "other")]])
+        self.assertEqual(res.moves, [(1, "betting", "other"), (3, "sports_business", "other")])
+        self.assertEqual((res.asked, res.written, res.unchanged), (3, 2, 1))
+        self.assertEqual(calls[0]["purpose"], "feed_recategorize")
+
+    def test_a_job_outside_the_id_set_is_refused(self) -> None:
+        with self.assertRaises(ValueError):
+            categorize.run([job(1), job(2)], current={1: "betting"})
 
 
 if __name__ == "__main__":

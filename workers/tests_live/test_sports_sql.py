@@ -292,6 +292,24 @@ class Categories(SportsSqlCase):
             got = dict(conn.execute("SELECT id, category FROM stories WHERE id IN (%s, %s)", (a, b)).fetchall())
             self.assertEqual(got, {a: "deals", b: "other"})
 
+    def test_the_recategorize_set_and_its_compare_and_set(self) -> None:
+        """Owner, 2026-10-13: a re-run over an explicit id set may overwrite,
+        but only where the category is still the one it read."""
+        with _rolled_back() as conn:
+            src = self.source(conn)
+            bet, sb, deal = (self.story(conn, src, title=f"TL recat {n}") for n in ("bet", "sb", "deal"))
+            for sid, cat in ((bet, "betting"), (sb, "sports_business"), (deal, "deals")):
+                conn.execute("UPDATE stories SET category = %s WHERE id = %s", (cat, sid))
+            got = {j.story_id: cur for j, cur in ledger.feed_category_jobs(["betting", "sports_business"], conn=conn)}
+            self.assertEqual({k: v for k, v in got.items() if k in (bet, sb, deal)},
+                             {bet: "betting", sb: "sports_business"})
+            # sb's "old" is stale (it is sports_business, not deals): refused.
+            self.assertEqual(ledger.feed_recategorize([(bet, "betting", "other"), (sb, "deals", "other")],
+                                                      conn=conn), 1)
+            now = dict(conn.execute("SELECT id, category FROM stories WHERE id IN (%s, %s, %s)",
+                                    (bet, sb, deal)).fetchall())
+            self.assertEqual(now, {bet: "other", sb: "sports_business", deal: "deals"})
+
     def test_a_summary_sets_a_category_once(self) -> None:
         with _rolled_back() as conn:
             sid = self.story(conn, self.source(conn), done=False)

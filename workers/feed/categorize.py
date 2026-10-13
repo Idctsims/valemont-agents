@@ -26,7 +26,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from core import ai, ledger
 from feed import category
@@ -35,6 +35,8 @@ log = logging.getLogger("valemont.feed.categorize")
 
 MODEL = "claude-haiku-5-5"
 PURPOSE = "feed_categorize"
+#: The re-run over an explicit id set (owner, 2026-10-13), costed apart.
+RECAT_PURPOSE = "feed_recategorize"
 GROUP_SIZE = 25
 
 SYSTEM = f"""You sort news stories for one reader's private dashboard into categories. For each story you get its id, headline, outlet and, when there is one, a short summary. Return one result per story.
@@ -96,10 +98,23 @@ class PassResult:
     stopped: str | None = None
     #: category -> (story id, headline) of every story written.
     by_category: dict[str, list[tuple[int, str]]] = field(default_factory=dict)
+    #: A re-run only: (story id, old, new) for every story whose category
+    #: changed, and how many kept theirs.
+    moves: list[tuple[int, str, str]] = field(default_factory=list)
+    unchanged: int = 0
 
 
-def run(jobs: Sequence[ledger.CategorizeJob] | None = None, *, client: Any = None) -> PassResult:
+def run(jobs: Sequence[ledger.CategorizeJob] | None = None, *, client: Any = None,
+        current: Mapping[int, str] | None = None) -> PassResult:
+    """The pass. With `current` (story id -> its category now), a RE-RUN over
+    exactly those stories (owner, 2026-10-13: the tightened definitions): it
+    overwrites, but only through ledger.feed_recategorize's compare-and-set
+    (a category changed meanwhile is left alone), records every move, and is
+    costed under its own purpose. Without it, NULL categories only."""
     jobs = list(jobs if jobs is not None else ledger.feed_uncategorized_home_stories())
+    if current is not None and any(j.story_id not in current for j in jobs):
+        raise ValueError("a re-run categorizes only the stories in its id set")
+    purpose = RECAT_PURPOSE if current is not None else PURPOSE
     res = PassResult()
     titles = {j.story_id: j.title for j in jobs}
     for i in range(0, len(jobs), GROUP_SIZE):
@@ -107,7 +122,7 @@ def run(jobs: Sequence[ledger.CategorizeJob] | None = None, *, client: Any = Non
         costs: list[Decimal] = []
         try:
             response = ai.complete(
-                purpose=PURPOSE, model=MODEL, critical=False, max_tokens=2000, client=client,
+                purpose=purpose, model=MODEL, critical=False, max_tokens=2000, client=client,
                 system=[{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}],
                 messages=[{"role": "user", "content": user_message(group)}],
                 thinking={"type": "disabled"},
@@ -128,7 +143,16 @@ def run(jobs: Sequence[ledger.CategorizeJob] | None = None, *, client: Any = Non
             log.warning("feed categorize: a group's answer was not JSON; its stories stay uncategorized")
             continue
         answers = answers_for(group, payload)
-        res.written += ledger.feed_set_categories(sorted(answers.items()))
+        if current is None:
+            res.written += ledger.feed_set_categories(sorted(answers.items()))
+        else:
+            moves = [(sid, current[sid], cat) for sid, cat in sorted(answers.items()) if cat != current[sid]]
+            res.unchanged += len(answers) - len(moves)
+            if moves:
+                res.written += ledger.feed_recategorize(moves)
+            for sid, old, new in moves:
+                log.info("feed recategorize: story %d %s -> %s", sid, old, new)
+            res.moves.extend(moves)
         for sid, cat in answers.items():
             res.by_category.setdefault(cat, []).append((sid, titles[sid]))
     return res

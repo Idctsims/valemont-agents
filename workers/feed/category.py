@@ -32,12 +32,17 @@ LABELS: dict[str, str] = {
     "other": "Other",
 }
 
-#: The one definition both calls send.
+#: The one definition both calls send. sports_business and betting tightened
+#: by the owner, 2026-10-13 16:19, after the first pass put game coverage in
+#: sports_business and fantasy and stock-market pieces in betting.
 PROMPT = ("category: the one that fits best: deals (funding, M&A, VC, private equity, family offices, IPOs, "
           "earnings), hospitality (hotels, clubs, restaurants, real estate, development, travel), "
-          "sports_business (team ownership, valuations, media rights, stadiums, sponsorship, NIL), film_music "
-          "(film, TV, streaming, music, creators, talent), luxury_marine (yachts, boats, luxury and lifestyle "
-          "brands), betting (sports betting, prediction markets, Kalshi), other.")
+          "sports_business (the business of sport: ownership, stakes, valuations, media rights, athlete "
+          "businesses, league economics, stadiums, sponsorship, NIL; NOT games, coaching or player "
+          "performance, which are other), film_music (film, TV, streaming, music, creators, talent), "
+          "luxury_marine (yachts, boats, luxury and lifestyle brands), betting (the betting business: "
+          "sportsbooks, prediction markets, Kalshi, betting regulation; NOT fantasy sports, NOT the stock "
+          "market), other.")
 
 
 def valid(value: object) -> str | None:

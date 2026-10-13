@@ -2275,6 +2275,40 @@ def feed_set_categories(pairs: Sequence[tuple[int, str]], *, conn: psycopg.Conne
     return written
 
 
+#: The re-run's id set (owner, 2026-10-13: sports_business and betting under
+#: the tightened definitions): kept, real Home stories now in the named
+#: categories, with their current category, read once before any call.
+FEED_CATEGORIZED_SQL: Final = """
+    SELECT st.id, st.title, st.summary, s.name, st.category
+      FROM stories st
+      JOIN content_items i ON i.id = st.lead_item_id
+      JOIN sources s ON s.id = i.source_id
+     WHERE NOT st.is_test AND st.filtered_reason IS NULL AND st.category = ANY (%s)
+       AND 'home' = ANY (st.pillars)
+     ORDER BY st.id
+"""
+
+
+def feed_category_jobs(categories: Sequence[str], *, conn: psycopg.Connection | None = None
+                       ) -> list[tuple[CategorizeJob, str]]:
+    """(job, its category now) for every story in `categories`."""
+    with _brief_conn(conn) as c:
+        return [(CategorizeJob(int(r[0]), r[1], r[2], r[3]), r[4])
+                for r in c.execute(FEED_CATEGORIZED_SQL, (list(categories),)).fetchall()]
+
+
+def feed_recategorize(moves: Sequence[tuple[int, str, str]], *, conn: psycopg.Connection | None = None) -> int:
+    """(story id, old, new): set `new` only where the category is still `old`
+    (compare-and-set: one changed meanwhile, by a summary or by hand, is left
+    alone). One transaction. Returns rows written."""
+    written = 0
+    with _brief_conn(conn) as c, c.transaction():
+        for sid, old, new in moves:
+            written += c.execute("UPDATE stories SET category = %s WHERE id = %s AND category = %s",
+                                 (new, sid, old)).rowcount
+    return written
+
+
 #: The nightly prune, in order; tests_live runs these texts. A story with ANY
 #: reaction, or named by a move proposal, is never deleted (db/039, db/042:
 #: feed_reactions.story_id and entity_link_proposals.story_id are ON DELETE

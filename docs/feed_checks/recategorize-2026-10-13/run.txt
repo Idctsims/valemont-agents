@@ -1,0 +1,85 @@
+asked 161 of 161 in 7 call(s); wrote 82; cost $0.003232 (ai_usage, purpose feed_recategorize)
+
+82 moved, 79 unchanged
+  776	sports_business -> other	John Harbaugh’s Giants Are Contenders, Even With a Tie in Washington
+  777	sports_business -> other	It’s Time for NFL Networks to Hire ‘Clock Management’ Specialists
+  778	sports_business -> other	U.K. Prime Minister Vows Transparency Over His Manchester City Meetings
+  779	sports_business -> other	Bears, Saints, Packers Pay Tribute to Mike Ditka
+  780	sports_business -> other	Deshaun Watson’s Revived Play Raises Questions About What’s Next
+  781	sports_business -> other	USWNT Gets a Measuring Stick Ahead of the World Cup
+  782	sports_business -> other	Belichick, UNC Score Biggest Win Yet After Rocky Offseason
+  783	sports_business -> other	Sophie Cunningham to Athletic Column Calling for Fever Exit: ‘Suck It’
+  784	sports_business -> other	ASU Hockey Home Opener Marred by Ongoing Fallout From Player’s Collapse
+  790	sports_business -> other	Trump Still Plans to Attend Georgia-Alabama Despite Tropical Storm
+  792	sports_business -> other	LSU Finally Reveals 10-Player Roster in Will Wade’s Exhibition Return
+  794	sports_business -> other	How Oregon Beat College Football’s ‘Impossible’ Backup QB Market
+  838	sports_business -> film_music	Inside the Halftime Music Strategy For the NFL’s International Games: ‘The Biggest Challenge Is Expe
+  1110	sports_business -> other	Drake Puts On a Show, and the Pats Win, With James White
+  1111	sports_business -> other	Dak, Purdy, Skubal, and the Plan to Fix Baseball
+  1112	sports_business -> other	Week 6 Reactions: Georgia Tops Alabama, Texas Trust Issues, Indiana’s Playoff Case, UCLA’s Rise, and
+  1113	sports_business -> other	CFB Week 6 Live Reactions: Georgia-Alabama—Are These the Best Teams in the SEC?
+  1114	sports_business -> other	Black Out: The Bledisloe Cup, a New Tackle Law, and Jason Kelce Playing Rugby
+  1134	sports_business -> other	Coco Gauff Gets Support From Tennis Legends After Racist Attacks: ‘It’s Really Disturbing’
+  1149	sports_business -> other	Caitlin Clark Blasts Attacks on Kelsey Mitchell: 'That's Not Something I Stand For'
+  1312	sports_business -> other	Stephen A. Smith Ditches the ‘Nopology’ in Lane Johnson Mea Culpa
+  1313	sports_business -> film_music	Aaron Cohen on the Saban Docuseries
+  1316	sports_business -> other	No. 1 Women’s Amateur Golfer Discusses Life As an ‘Infant Pro’
+  1318	sports_business -> other	ICE Has Detained Another College Basketball Player
+  1319	sports_business -> other	Caitlin Clark Wants Mitchell Back With Fever Despite Fan Comments
+  1322	sports_business -> other	Yankees Exit Leaves Boone, Cashman Questions Heading Into Likely Lockout
+  1325	sports_business -> other	Why Are NFL Penalty Flags Flying? It’s Complicated
+  1329	sports_business -> hospitality	Arrowhead Stays, Kauffman Goes in County’s Post-Chiefs, Royals Plan
+  1330	sports_business -> other	Jimmy Rollins: MLB Analytics Gurus Undervalue Clubhouse Chemistry
+  1332	sports_business -> other	LSU Still Lists Just Four Players on Eve of First Exhibition Game
+  1337	sports_business -> other	Who Is Alabama Football in Year 3 Under Kalen DeBoer?
+  1338	sports_business -> other	Coco Gauff Says Racist Abuse Has Been ‘Draining’ at China Open
+  1340	sports_business -> other	Daylight Saving Time Remains Complicated for Golf Industry
+  1417	sports_business -> hospitality	Stephen Ross Expands Palm Beach Empire With Massive Boca Raton Campus
+  1575	betting -> other	Fantasy football week 5 recap - we have it figured out!
+  2410	sports_business -> other	NHL’s New Wave of GMs Are Built Different: ‘I Am In the Prediction Business’
+  2524	sports_business -> film_music	Could Pat McAfee’s Super Bowl Alt-Cast Be a Monday Night Football Tryout?
+  2540	sports_business -> film_music	Nikola Jokić, Anthony Edwards Lead Sprite's New 'Never Stop Refreshing the Game' Campaign
+  2572	sports_business -> other	Did Sirianni Blow It? Eagles-Jaguars Takeaways With Rich Hofmann!
+  2573	sports_business -> other	Preseason Power Rankings, Part 4
+  2574	sports_business -> other	The Unflappable 49ers
+  2713	sports_business -> other	What Has the NBA Lost?
+  2794	sports_business -> other	Tyrese Haliburton Gets Real About the Olympics, NBA Finals, His Achilles, & Proving People Wrong
+  2799	sports_business -> other	Justin Jefferson Knows Who He Is
+  2800	sports_business -> other	Peter Schrager: Myles Garrett, Joe Burrow, the Cowboys, & More NFL Storylines to Watch in 2026
+  2801	sports_business -> other	Ben Shelton on the US Open, Playing in NYC, & the Future of American Tennis
+  2802	sports_business -> other	Lindsey Vonn On Why Winning Must Come Before Money
+  2803	sports_business -> other	10 College Football Towns Every Fan Should Visit
+  2805	sports_business -> other	Kevin Durant On LeBron’s 76ers Move, the Knicks Ring, Westbrook Retiring, & His NBA Future
+  2808	sports_business -> other	Nneka Ogwumike Is Retiring From the WNBA On Her Own Terms
+  2809	sports_business -> other	Jaylen Brown Opens Up on How NBA Wealth Changed His Life & Relationships
+  2900	sports_business -> other	Advantage England, Spain’s Dominance, and Molly Bartrip’s Mental Health Journey
+  2901	sports_business -> other	Winners, Losers, and Manifestors of a Wild WNBA Weekend
+  2976	sports_business -> other	Jaylen Brown Jokes Adidas Should Give Anthony Edwards Condoms After Ad Roasting
+  2989	sports_business -> other	Dan Quinn’s Job Security in Doubt After Commanders Clock Fiasco
+  3061	sports_business -> other	What’s Really Going Wrong at Man United?
+  3114	sports_business -> other	The Tomlin Effect? NFL Analysts More Blunt Than Ever
+  3137	sports_business -> other	NFL Week 5 Recap! Plus, UGA Takes the Top Spot and a Bills-Rams Preview.
+  3157	sports_business -> other	What are your boldest takes for Bills-Rams ‘MNF’ showdown in Week 5?
+  3162	sports_business -> other	The Most Confusing Teams in the NBA!
+  3260	sports_business -> other	Man City’s Weird Return, Liverpool’s Wirtz Problem, and Carrick’s Future
+  3328	sports_business -> other	Hot Dogs Are on the Ice, and Teams Are Falling Apart
+  3934	sports_business -> other	‘Friday the 13th’ With Bill Simmons, Chris Ryan, and Van Lathan
+  3971	sports_business -> other	Dwight Howard Eyes NBA Comeback With 76ers: 'Philly What We Doing'
+  4867	sports_business -> film_music	Netflix Takes World Cup Rights in Spain
+  4910	sports_business -> other	Don’t Love Your Sports Apps? With AI, Fans Are Building Their Own
+  4955	sports_business -> other	Week 5 Coaching Blunders, Who Are the 2026 Seahawks, and LeSean McCoy’s Top Running Backs
+  4981	sports_business -> other	Week 6 Waiver Wire: Must-Add Players, Season-Long Stashes, and Yellowstone Bear Attacks
+  4982	sports_business -> other	Are Cricket Scores Good for Rugby? Leinster Return Home and NFL Star Joins Rugby Club
+  4984	sports_business -> other	The Man Behind the NBA’s Most Audacious Superteam
+  4992	betting -> deals	Stock Movers: DPZ, JNJ, BMBL (Podcast)
+  5043	sports_business -> other	The Ball Knower’s Notebook: Josh Allen’s Legs Are Inevitable
+  5064	sports_business -> film_music	Nielsen: Post–World Cup Soccer Audiences Surge Among Young Viewers
+  5206	sports_business -> film_music	Prime Video Adds Golf’s Revived Skins Game To 15-Hour Live Sports Blitz On Black Friday
+  5214	sports_business -> film_music	Tirico Defends NBC’s Michael Jordan Interview: ‘Completely Worth It’
+  5387	sports_business -> film_music	How a Lunch in Atlanta Led to Josh Pate’s ESPN College Football Show
+  5440	sports_business -> other	Celts Season Preview With Bobby Manning
+  5623	sports_business -> other	Taylor Rooks Defends Friendships With Athletes She Covers
+  5687	sports_business -> other	Court Skeptical of College Athletes’ Eligibility in Wisne-NCAA Case
+  5696	sports_business -> other	PTPA Boss Accused of Harassment, Sexist Conduct in New Lawsuit
+  5734	sports_business -> other	Chris Berman: Damar Hamlin’s Cardiac Arrest Slowed NFL’s 18-Game Push
+  5752	sports_business -> other	Week 6 Tape Truths: Arch Manning, BYU–Notre Dame, Indiana WRs, and More
