@@ -39,9 +39,10 @@ PURPOSE = "feed_categorize"
 RECAT_PURPOSE = "feed_recategorize"
 GROUP_SIZE = 25
 
-SYSTEM = f"""You sort news stories for one reader's private dashboard into categories. For each story you get its id, headline, outlet and, when there is one, a short summary. Return one result per story.
+SYSTEM = f"""You sort news stories for one reader's private dashboard into categories. For each story you get its id, headline, outlet, sport (when it has one) and, when there is one, a short summary. Return one result per story.
 
 {category.PROMPT}
+{category.MONEY_PROMPT}
 
 Judge by what the story is about, read through the business lens. Output only the JSON object."""
 
@@ -57,10 +58,11 @@ def schema() -> dict[str, Any]:
                 "items": {
                     "type": "object",
                     "additionalProperties": False,
-                    "required": ["id", "category"],
+                    "required": ["id", "category", "money"],
                     "properties": {
                         "id": {"type": "integer"},
                         "category": {"type": "string", "enum": list(category.CATEGORIES)},
+                        "money": {"type": "boolean"},
                     },
                 },
             }
@@ -70,21 +72,29 @@ def schema() -> dict[str, Any]:
 
 def user_message(group: Sequence[ledger.CategorizeJob]) -> str:
     return "STORIES:\n" + json.dumps([
-        {"id": j.story_id, "headline": j.title, "outlet": j.source_name, "summary": j.summary or ""}
+        {"id": j.story_id, "headline": j.title, "outlet": j.source_name, "sport": j.sport or "none",
+         "summary": j.summary or ""}
         for j in group], ensure_ascii=False)
 
 
 def answers_for(group: Sequence[ledger.CategorizeJob], payload: Any) -> dict[int, str]:
     """story id -> category, for valid answers about stories in the group,
-    first answer per story wins."""
-    ids = {j.story_id for j in group}
+    first answer per story wins. The money answer decides a story with a
+    sport, or one answered sports_business (category.decide); without a
+    boolean answer such a story is dropped, never guessed."""
+    sports = {j.story_id: j.sport for j in group}
     out: dict[int, str] = {}
+    seen: set[int] = set()
     items = payload.get("stories") if isinstance(payload, dict) else None
     for item in items if isinstance(items, list) else []:
         if not isinstance(item, dict):
             continue
-        sid, cat = item.get("id"), category.valid(item.get("category"))
-        if sid in ids and cat is not None and sid not in out:
+        sid = item.get("id")
+        if sid not in sports or sid in seen:
+            continue
+        cat = category.decide(category.valid(item.get("category")), item.get("money"), sports[sid])
+        if cat is not None:
+            seen.add(sid)
             out[sid] = cat
     return out
 

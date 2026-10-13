@@ -21,8 +21,44 @@ from core.paths import REPO_ROOT
 from feed import categorize, category, summarize
 
 
-def job(sid: int, title: str = "A headline") -> ledger.CategorizeJob:
-    return ledger.CategorizeJob(sid, title, "A summary.", "Axios")
+def job(sid: int, title: str = "A headline", sport: str | None = None) -> ledger.CategorizeJob:
+    return ledger.CategorizeJob(sid, title, "A summary.", "Axios", sport)
+
+
+class Money(unittest.TestCase):
+    """Owner, 2026-10-13: stop tuning the enum. For a story with a sport, one
+    yes/no question decides sports_business (yes) or other (no)."""
+
+    def test_the_question_is_the_owners_in_both_calls(self) -> None:
+        self.assertEqual(category.MONEY_QUESTION, "Is this primarily about money: ownership, deals, rights, "
+                                                  "valuations, league or industry economics?")
+        self.assertIn(category.MONEY_QUESTION, summarize.SYSTEM)
+        self.assertIn(category.MONEY_QUESTION, categorize.SYSTEM)
+        for item in (summarize.schema()["properties"]["stories"]["items"],
+                     categorize.schema()["properties"]["stories"]["items"]):
+            self.assertIn("money", item["required"])
+            self.assertEqual(item["properties"]["money"], {"type": "boolean"})
+
+    def test_decide(self) -> None:
+        d = category.decide
+        # A story with a sport: the money answer decides, whatever the enum said.
+        self.assertEqual(d("sports_business", False, "nfl"), "other")
+        self.assertEqual(d("other", True, "golf"), "sports_business")
+        self.assertEqual(d("film_music", True, "nba"), "sports_business")
+        self.assertEqual(d("hospitality", False, "nba"), "other")
+        # No sport tag, but answered sports_business: the question still decides.
+        self.assertEqual(d("sports_business", False, None), "other")
+        self.assertEqual(d("sports_business", True, None), "sports_business")
+        # Betting keeps its own chip (sportsbooks, prediction markets, Kalshi).
+        self.assertEqual(d("betting", True, "nfl"), "betting")
+        self.assertEqual(d("betting", False, "nfl"), "betting")
+        # Anything else without a sport: the enum answer stands.
+        self.assertEqual(d("deals", True, None), "deals")
+        self.assertEqual(d("other", True, None), "other")
+        # Never a guess: a decided story with no valid answer, or no category.
+        self.assertIsNone(d("sports_business", None, "nfl"))
+        self.assertIsNone(d("other", "yes", "nfl"))
+        self.assertIsNone(d(None, True, "nfl"))
 
 
 class Enum(unittest.TestCase):
@@ -57,10 +93,22 @@ class SummaryCall(unittest.TestCase):
 
     def test_the_category_reaches_the_save(self) -> None:
         j = ledger.SummaryJob(1, "Headline here", "A teaser.", "Axios", None, 0, "axios-pro-rata")
-        (r,), _, _ = summarize.results_for([j], {"stories": [dict(self.GOOD, category="deals")]})
+        (r,), _, _ = summarize.results_for([j], {"stories": [dict(self.GOOD, category="deals", money=True)]})
         self.assertEqual(r.category, "deals")
-        (r,), _, _ = summarize.results_for([j], {"stories": [dict(self.GOOD, category="gossip")]})
+        (r,), _, _ = summarize.results_for([j], {"stories": [dict(self.GOOD, category="gossip", money=False)]})
         self.assertIsNone(r.category)  # not ours: none, never a guess
+
+    def test_the_money_answer_decides_for_a_story_with_a_sport(self) -> None:
+        j = ledger.SummaryJob(1, "Headline here", "A teaser.", "Sportico", "nfl", 0, "sportico")
+        item = dict(self.GOOD, sport="nfl", category="sports_business")
+        (r,), _, _ = summarize.results_for([j], {"stories": [dict(item, money=False)]})
+        self.assertEqual(r.category, "other")
+        (r,), _, _ = summarize.results_for([j], {"stories": [dict(item, category="other", money=True)]})
+        self.assertEqual(r.category, "sports_business")
+        # The model's sport counts too (a story with no sport yet).
+        j0 = ledger.SummaryJob(1, "Headline here", "A teaser.", "Axios", None, 0, "axios-pro-rata")
+        (r,), _, _ = summarize.results_for([j0], {"stories": [dict(item, category="film_music", money=False)]})
+        self.assertEqual(r.category, "other")
 
     def test_the_save_keeps_a_category_already_set(self) -> None:
         self.assertIn("category = coalesce(category, %s)", inspect.getsource(ledger.feed_save_summaries))
@@ -85,7 +133,7 @@ class _PassBase(unittest.TestCase):
             calls.append(kw)
             stories = json.loads(kw["messages"][0]["content"].split("\n", 1)[1])
             kw["on_recorded"](1, kw["model"], 0.0003)
-            body = {"stories": [{"id": s["id"], "category": answer(s)} for s in stories]}
+            body = {"stories": [{"id": s["id"], "category": answer(s), "money": False} for s in stories]}
             return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=json.dumps(body))])
         return complete
 
@@ -105,10 +153,19 @@ class Pass(_PassBase):
     def test_an_unknown_answer_or_story_is_dropped_never_guessed(self) -> None:
         group = [job(1), job(2), job(3)]
         got = categorize.answers_for(group, {"stories": [
-            {"id": 1, "category": "betting"}, {"id": 2, "category": "gossip"}, {"id": 99, "category": "deals"},
-            {"id": 1, "category": "deals"}, "junk"]})
+            {"id": 1, "category": "betting", "money": True}, {"id": 2, "category": "gossip", "money": False},
+            {"id": 99, "category": "deals", "money": True}, {"id": 1, "category": "deals", "money": True}, "junk"]})
         self.assertEqual(got, {1: "betting"})
         self.assertEqual(categorize.answers_for(group, None), {})
+
+    def test_the_money_answer_decides_by_the_jobs_sport(self) -> None:
+        group = [job(1, sport="nfl"), job(2, sport="golf"), job(3), job(4, sport="nba")]
+        got = categorize.answers_for(group, {"stories": [
+            {"id": 1, "category": "sports_business", "money": False},
+            {"id": 2, "category": "other", "money": True},
+            {"id": 3, "category": "sports_business", "money": False},
+            {"id": 4, "category": "sports_business"}]})  # no money answer: dropped
+        self.assertEqual(got, {1: "other", 2: "sports_business", 3: "other"})
 
     def test_a_spent_budget_stops_the_pass_with_what_was_written(self) -> None:
         calls: list = []

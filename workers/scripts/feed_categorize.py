@@ -17,6 +17,9 @@ r"""The one-off categorize pass, by hand (feed/categorize.py; after db/042).
            (compare-and-set), every move is logged and printed
            (id, old -> new, headline), and the cost is its own ai_usage
            purpose (feed_recategorize).
+--money    the same re-run over the stories the money question decides
+           (owner, 2026-10-13): Home stories with a sport, and those now in
+           sports_business; betting is left out (ledger.feed_money_jobs).
 
 Writes real rows, as the worker would.
 """
@@ -38,10 +41,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="count only: no Claude call, nothing written")
     parser.add_argument("--recategorize", metavar="C1,C2",
                         help="re-run the stories now in these categories (comma-separated)")
+    parser.add_argument("--money", action="store_true",
+                        help="re-run the stories the money question decides (with a sport, or sports_business)")
     args = parser.parse_args(argv)
+    if args.money and args.recategorize:
+        parser.error("--money and --recategorize are separate re-runs")
     load_env()
     current: dict[int, str] | None = None
-    if args.recategorize:
+    if args.money:
+        pairs = ledger.feed_money_jobs()
+        jobs = [j for j, _ in pairs]
+        current = {j.story_id: cur for j, cur in pairs}
+        what = "Home stories the money question decides (with a sport, or in sports_business; not betting)"
+    elif args.recategorize:
         cats = [c.strip() for c in args.recategorize.split(",") if c.strip()]
         unknown = [c for c in cats if category.valid(c) is None]
         if not cats or unknown:

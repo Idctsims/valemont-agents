@@ -110,6 +110,7 @@ topics: 1 to {MAX_TOPICS} short lowercase snake_case topics, e.g. media_rights, 
 sport: cfb, nfl, nba, f1 or golf when the story is about that sport, otherwise none.
 
 {categories.PROMPT}
+{categories.MONEY_PROMPT}
 
 drop: classify against the reader's don't-care list. Pick the first that fits, else none.
 - gossip: celebrity gossip, dating, relationships, breakups, feuds between personalities, red-carpet looks. Business news about a celebrity's company, deal or earnings is NOT gossip.
@@ -139,7 +140,8 @@ def schema() -> dict[str, Any]:
                 "items": {
                     "type": "object",
                     "additionalProperties": False,
-                    "required": ["id", "summary", "entities", "topics", "sport", "drop", "moves", "category"],
+                    "required": ["id", "summary", "entities", "topics", "sport", "drop", "moves", "category",
+                                 "money"],
                     "properties": {
                         "id": {"type": "integer"},
                         "summary": {"type": "string"},
@@ -148,6 +150,7 @@ def schema() -> dict[str, Any]:
                         "sport": {"type": "string", "enum": list(SPORTS)},
                         "drop": {"type": "string", "enum": list(DROPS)},
                         "category": {"type": "string", "enum": list(categories.CATEGORIES)},
+                        "money": {"type": "boolean"},
                         "moves": {
                             "type": "array",
                             "items": {
@@ -253,6 +256,8 @@ class Valid:
     moves: tuple[move_rules.RawMove, ...] = ()
     #: feed/category.py; None when the model gave none we know.
     category: str | None = None
+    #: The answer to category.MONEY_QUESTION (a bool), as given.
+    money: object = None
 
 
 def validate(item: dict[str, Any], job: ledger.SummaryJob) -> Valid:
@@ -279,7 +284,7 @@ def validate(item: dict[str, Any], job: ledger.SummaryJob) -> Valid:
     return Valid(summary, entities[:MAX_ENTITIES], topics[:MAX_TOPICS],
                  sport if sport in SPORTS and sport != "none" else None, drop,
                  move_rules.parse(item.get("moves")),
-                 categories.valid(item.get("category")))
+                 categories.valid(item.get("category")), item.get("money"))
 
 
 def story_sport(job: ledger.SummaryJob, model_sport: str | None, from_model: bool) -> str | None:
@@ -337,13 +342,15 @@ def results_for(group: Sequence[ledger.SummaryJob], payload: Any, *,
             problems.append(f"story {sid}: {exc}")
             continue
         from_model = by_id[sid].source_slug in model_sport
+        final_sport = story_sport(by_id[sid], v.sport, from_model)
         accepted[sid] = ledger.SummaryOut(
             story_id=sid, summary=v.summary, entities=v.entities, topics=v.topics, sport=v.sport,
             drop=v.drop, filtered_reason=f"drop:{v.drop}" if DROP_LIVE and v.drop != "none" else None,
-            category=v.category,
+            # The money question decides sports stories (owner, 2026-10-13).
+            category=categories.decide(v.category, v.money, final_sport),
             attempts=attempts, sport_from_model=from_model)
         if v.moves and found is not None:
-            found.append((sid, story_sport(by_id[sid], v.sport, from_model), v.moves))
+            found.append((sid, final_sport, v.moves))
     missing = [sid for sid in by_id if sid not in accepted]
     return ([accepted.get(sid) or ledger.SummaryOut(sid, None, attempts=attempts) for sid in by_id],
             problems + ([f"no valid result for {len(missing)} of {len(by_id)}"] if missing else []),

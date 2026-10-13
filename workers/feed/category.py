@@ -52,3 +52,28 @@ PROMPT = ("category: the one that fits best: deals (funding, M&A, VC, private eq
 def valid(value: object) -> str | None:
     """The category if it is one of ours; None otherwise (never a guess)."""
     return value if isinstance(value, str) and value in CATEGORIES else None
+
+
+#: The owner's one yes/no question (2026-10-13): no more enum tuning for
+#: sports. Both calls ask it of every story and return `money`.
+MONEY_QUESTION = ("Is this primarily about money: ownership, deals, rights, valuations, league or industry "
+                  "economics?")
+
+MONEY_PROMPT = (f"money: true or false: {MONEY_QUESTION} For a story about a sport, this answer decides "
+                "between sports_business (true) and other (false).")
+
+
+def decide(category: str | None, money: object, sport: str | None) -> str | None:
+    """The category a story gets. For a story with a sport, or one answered
+    sports_business, the money answer decides: true -> sports_business,
+    false -> other (the owner's rule). Betting keeps its own chip
+    (sportsbooks, prediction markets, Kalshi are money, but they are
+    betting). Anything else keeps the enum answer. None, never a guess, when
+    the category is not ours or a decided story has no boolean answer."""
+    if category is None:
+        return None
+    if category == "betting" or not (sport or category == "sports_business"):
+        return category
+    if not isinstance(money, bool):
+        return None
+    return "sports_business" if money else "other"

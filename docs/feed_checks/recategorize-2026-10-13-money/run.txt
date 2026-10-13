@@ -1,0 +1,66 @@
+asked 136 of 136 in 6 call(s); wrote 63; cost $0.003066 (ai_usage, purpose feed_recategorize)
+
+63 moved, 73 unchanged
+  711	sports_business -> betting	Club Sportico: You’re Seeing That Ad Because Your Team Is Losing
+  776	sports_business -> other	John Harbaugh’s Giants Are Contenders, Even With a Tie in Washington
+  777	sports_business -> other	It’s Time for NFL Networks to Hire ‘Clock Management’ Specialists
+  785	sports_business -> other	Rose Zhang Hopes Nelly Korda Joins WTGL In Season 2
+  786	sports_business -> deals	Mike Repole Invests in Kentucky Derby Owner Amid Push for Change
+  787	sports_business -> other	Rose Zhang on Investing in Golf’s Future
+  1114	sports_business -> other	Black Out: The Bledisloe Cup, a New Tackle Law, and Jason Kelce Playing Rugby
+  1149	sports_business -> other	Caitlin Clark Blasts Attacks on Kelsey Mitchell: 'That's Not Something I Stand For'
+  1155	sports_business -> other	Gilbert Arenas Pushes Back on Colorism Accusation: ‘Everybody Got Color’
+  1309	sports_business -> film_music	Pat McAfee Joins ESPN’s In-Game Super Bowl LXI Coverage & Expands MNF Role
+  1312	sports_business -> other	Stephen A. Smith Ditches the ‘Nopology’ in Lane Johnson Mea Culpa
+  1313	sports_business -> other	Aaron Cohen on the Saban Docuseries
+  1324	sports_business -> other	Kenny Albert’s Last-Minute NLDS Fill-In Came Mid-Colonoscopy Prep
+  1336	sports_business -> other	Kyle Juszczyk Wins Chugging Celebration Appeal, League Adjusts Policy
+  1339	sports_business -> film_music	Sports Is Key to Skydance Becoming ‘Leading Content Engine’
+  2410	sports_business -> other	NHL’s New Wave of GMs Are Built Different: ‘I Am In the Prediction Business’
+  2524	sports_business -> film_music	Could Pat McAfee’s Super Bowl Alt-Cast Be a Monday Night Football Tryout?
+  2598	sports_business -> other	World Team Tennis Returns With New Model—and Some Star Players
+  2713	sports_business -> other	What Has the NBA Lost?
+  2733	sports_business -> other	Dodgers Spend More on Players Than Rest of MLB’s Final Four Combined
+  2786	sports_business -> other	The Blueprint: Jessica Holtz Meets the Moment
+  2795	sports_business -> other	Laremy Tunsil on Jayden Daniels, Myles Garrett, & Building Beyond Football
+  2809	other -> sports_business	Jaylen Brown Opens Up on How NBA Wealth Changed His Life & Relationships
+  2816	sports_business -> other	From Cursed to Contenders: LeBron James Picks the Sixers for Final Run
+  2818	sports_business -> other	LeBron James Is on a Mission to Change Golf
+  2819	sports_business -> hospitality	LeBron James Says Nike Needs to ‘Get Back Into the Roots’
+  2820	film_music -> other	LeBron James Calls Jay-Z His ‘Big Brother’ and a Major Influence on His Career
+  2821	sports_business -> other	LeBron James Opens Up on Free Agency, Jay-Z, Bronny & His NBA Legacy
+  2822	sports_business -> other	Gotham FC Is Hosting the Largest Women’s Sports Event in NYC History
+  2823	sports_business -> other	Jazz Chisholm Jr. Talks Yankees, Knicks, & Michael Jordan
+  2828	sports_business -> other	The Case for LeBron Going Home One Final Time
+  2829	hospitality -> sports_business	The New Playbook: Inside Pat Connaughton’s $600 Million Real Estate Business
+  2832	sports_business -> film_music	Inside The Afties: Cannes’ Ultimate Gathering of Culture, Sports, and Influence Returns for Year 3
+  2873	sports_business -> other	Atlanta Dream Likely to Host WNBA Finals at Tiny Home Arena
+  2900	sports_business -> other	Advantage England, Spain’s Dominance, and Molly Bartrip’s Mental Health Journey
+  2920	sports_business -> film_music	Disney Stacks Super Bowl LXI Lineup With Even More Alt-Casts
+  2976	sports_business -> other	Jaylen Brown Jokes Adidas Should Give Anthony Edwards Condoms After Ad Roasting
+  3114	sports_business -> other	The Tomlin Effect? NFL Analysts More Blunt Than Ever
+  3137	sports_business -> other	NFL Week 5 Recap! Plus, UGA Takes the Top Spot and a Bills-Rams Preview.
+  3157	sports_business -> other	What are your boldest takes for Bills-Rams ‘MNF’ showdown in Week 5?
+  3162	sports_business -> other	The Most Confusing Teams in the NBA!
+  3260	sports_business -> other	Man City’s Weird Return, Liverpool’s Wirtz Problem, and Carrick’s Future
+  3328	sports_business -> other	Hot Dogs Are on the Ice, and Teams Are Falling Apart
+  3506	sports_business -> other	Harris eligible to sign with NFL teams despite bid to play for LSU
+  4910	sports_business -> other	Don’t Love Your Sports Apps? With AI, Fans Are Building Their Own
+  4955	sports_business -> other	Week 5 Coaching Blunders, Who Are the 2026 Seahawks, and LeSean McCoy’s Top Running Backs
+  4981	sports_business -> other	Week 6 Waiver Wire: Must-Add Players, Season-Long Stashes, and Yellowstone Bear Attacks
+  4982	sports_business -> other	Are Cricket Scores Good for Rugby? Leinster Return Home and NFL Star Joins Rugby Club
+  4984	sports_business -> other	The Man Behind the NBA’s Most Audacious Superteam
+  5043	sports_business -> other	The Ball Knower’s Notebook: Josh Allen’s Legs Are Inevitable
+  5064	sports_business -> other	Nielsen: Post–World Cup Soccer Audiences Surge Among Young Viewers
+  5094	sports_business -> other	NYAC Turns Pandemic Signup Boom Into First Winter Sport Athlete
+  5108	sports_business -> other	Fired Women’s Baseball Board Member Fights For Job Back
+  5109	sports_business -> other	MLS Commissioner Don Garber Deflects on Messi Confrontation
+  5212	sports_business -> other	Controversial Search Firm Memo on Brian Flores Unsealed by Court
+  5214	sports_business -> film_music	Tirico Defends NBC’s Michael Jordan Interview: ‘Completely Worth It’
+  5380	sports_business -> film_music	‘Michael Jackson at the Super Bowl’ Documentary Coming to Hulu and ESPN
+  5384	sports_business -> film_music	Michael Jackson 1993 Halftime Show Documentary Set From Hulu & ESPN
+  5386	sports_business -> other	Jessica Berman Says It’s ‘My Job’ to Solve NWSL Louisville Problem
+  5623	sports_business -> other	Taylor Rooks Defends Friendships With Athletes She Covers
+  5687	sports_business -> other	Court Skeptical of College Athletes’ Eligibility in Wisne-NCAA Case
+  5696	sports_business -> other	PTPA Boss Accused of Harassment, Sexist Conduct in New Lawsuit
+  5734	sports_business -> other	Chris Berman: Damar Hamlin’s Cardiac Arrest Slowed NFL’s 18-Game Push

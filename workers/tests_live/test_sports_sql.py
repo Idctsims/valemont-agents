@@ -310,6 +310,22 @@ class Categories(SportsSqlCase):
                                     (bet, sb, deal)).fetchall())
             self.assertEqual(now, {bet: "other", sb: "sports_business", deal: "deals"})
 
+    def test_the_money_set(self) -> None:
+        """Owner, 2026-10-13: the money question decides stories with a sport
+        and stories in sports_business; betting and uncategorized are out."""
+        with _rolled_back() as conn:
+            src = self.source(conn)
+            rows = {name: self.story(conn, src, title=f"TL money {name}")
+                    for name in ("sport_other", "nosport_sb", "nosport_deals", "sport_betting", "sport_null")}
+            for name, sport, cat in (("sport_other", "nfl", "other"), ("nosport_sb", None, "sports_business"),
+                                     ("nosport_deals", None, "deals"), ("sport_betting", "nfl", "betting"),
+                                     ("sport_null", "golf", None)):
+                conn.execute("UPDATE stories SET sport = %s, category = %s WHERE id = %s", (sport, cat, rows[name]))
+            got = {j.story_id: (j.sport, cur) for j, cur in ledger.feed_money_jobs(conn=conn)}
+            mine = {k: v for k, v in got.items() if k in rows.values()}
+            self.assertEqual(mine, {rows["sport_other"]: ("nfl", "other"),
+                                    rows["nosport_sb"]: (None, "sports_business")})
+
     def test_a_summary_sets_a_category_once(self) -> None:
         with _rolled_back() as conn:
             sid = self.story(conn, self.source(conn), done=False)
