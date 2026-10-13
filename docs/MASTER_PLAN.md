@@ -328,11 +328,20 @@ Thirteen build chats after this one, each split into phases with a test you run 
   - the shadow `drop` review: the Oct 12 report found ~17% of non-none labels wrong, 3 of them a love (yachts); likely retire the shadow classifier rather than turn it on;
   - a watch on duplicate merges of the Skins Game kind (one event, several stories).
 - **Mon Oct 20:** the NFL props archive moves to Supabase Storage: design it (Step 0) before week 6 is archived. Week 5's candles and prints took ~34 MB; weeks 5–18 at that rate are ~470 MB, the whole 500 MB tier (CLAUDE.md, RECURRING).
-- **Owner decision, open:** a free Supabase staging project for migration dry runs. If yes, CLAUDE.md §5 gains the rule (every migration pasted on staging first); db/042's first paste, which failed in its self-test, is the case for it.
+- **Owner decision, made Oct 13:** a free Supabase staging project for migration dry runs. The rule is CLAUDE.md §5, "Staging first" (every migration pasted on staging first); the project is set up in Chat 4, Step 0. db/042's first paste, which failed in its self-test on production, is the case for it.
 
 ### Chat 4 — Tech Hub and Screening Room
 
-**Set up in this chat:** Reddit script app, GitHub fine-grained token (public read only), TMDB API key.
+**Set up in this chat:** the Supabase staging project (Step 0, below), Reddit script app, GitHub fine-grained token (public read only), TMDB API key.
+
+0. **Step 0: the Supabase staging project** (owner decision Oct 13; the rule is CLAUDE.md §5, "Staging first"). Before any Chat 4 migration:
+   1. The owner creates a second free project in the same Supabase account, `valemont-staging`, in the production project's region (us-east-1). It is not connected to any MCP.
+   2. The owner pastes every applied migration on it, in order: `db/001`–`db/012`, then `db/014` onward to the latest applied (`db/013`, the production roster, stays unpasted there too). Two need care:
+      - `db/018` creates `valemont_readonly`: set its own password on staging, never production's.
+      - `db/020` keeps the `__OWNER_USER_ID__` placeholder in the committed file: on staging, use a throwaway UUID (no real user exists there).
+   3. Each paste's self-test NOTICE and verify output are checked as on production. Any difference from production is recorded in CLAUDE.md, Current State, before the next step.
+   4. The connection string goes into the root `.env` as `DATABASE_URL_STAGING` (Session pooler, port 5432); `.env.example` documents the name. It is printed nowhere and set nowhere else.
+   5. Done when: staging's `migration_log` lists the same files as production's (minus `db/013`, and minus any row older than `db/015`, which created the log), and the first Chat 4 migration has been pasted on staging before production.
 
 1. Tech Hub: official changelogs, Hacker News, the three subreddits, GitHub trending with a "why this matters to you" line.
    - [ ] A new Claude or OpenAI release shows up within one ingest cycle
