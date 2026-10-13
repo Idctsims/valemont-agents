@@ -299,7 +299,7 @@ Thirteen build chats after this one, each split into phases with a test you run 
 - Railway trial ends about Oct 18; redeploy the worker by hand on Free.
 - ~~The silent-proposals before/after token comparison~~ **Done Oct 11:** message 260 has a model-written sentence before its proposal and no reasoning part, 254 output tokens against message 188's 544 with no text.
 
-### Chat 3 — Learning engine, Home feed, Sports News ← next
+### Chat 3 — Learning engine, Home feed, Sports News ✓ (closed Oct 13; carried items below)
 
 **Set up in this chat:** nothing new; RSS needs no keys.
 
@@ -314,7 +314,21 @@ Thirteen build chats after this one, each split into phases with a test you run 
      3. **⏰ Owner watch, due Sun Oct 19:** one week of Love effects on /settings/feed. Open until then.
    - Also Oct 12: db/041 split the film/TV love seed. Hollywood and US dealmaking and the major festivals are loves; international and regional TV/film markets are not interested.
 3. Sports News for CFB, NFL, NBA, F1 and Golf on the same engine.
-   - [ ] Filter chips by sport; reactions train the sports profile separately
+   - [x] Filter chips by sport; reactions train the sports profile separately. **GREEN Oct 13 (owner, 17:08 Chicago):**
+     - `e2e/sports.spec.ts` (owner, phone): the chips keep their choice in the URL through the tabs; a chip shows only its sport; **a Love on /sports writes pillar `sports` only, never `home`** (`storyReactions` reads back `[{pillar: sports, reaction: love}]`); a confirmed move updates the player's current team; a test move is invisible without the e2e marker. Owner: GREEN.
+     - Owner screenshot review of /sports (All, golf), /settings/feed (a proposed move), /news (All, deals) and Home's short feed, both themes, phone and desktop: approved (after the 16:39 fixes).
+     - The read path: db/042 (sport chips filter before ranking, event boosts, the per-follow entity cap on Sports page one, move proposals; applied Oct 13 20:26:05 UTC) and db/043 (the cross-in cap: /news is Home's pillar only, Home's top 10 at most 2 tier-1 sports stories; applied 21:53:59 UTC). `tests_live -v` on the merge: 318 OK, 0 skipped.
+     - **Scope addition, /news with category chips** (owner, Oct 12): `e2e/news.spec.ts` 4/4 (owner, before the cross-in cap); categories shipped as recorded in `docs/feed_checks/recategorize-2026-10-13-final/README.md` (93 Haiku calls, $0.046755 for the day).
+     - **Merged:** PR #27, merge `922e22d`. Live Oct 13: Railway deployment of `922e22d` (worker boot 22:22:05 UTC; `feed_ingest`, `feed_summarize`, `feed_score`, `feed_why` ok, 0 failures); Vercel production `valemont-agents-6uvmhe1s9` Ready 22:20:56 UTC on `valemont-command.vercel.app`. Logged out, /, /news, /sports and /settings/feed redirect to sign-in; the pages' reads on production data (db_inspect): Home 31 rows with 2 cross-ins in its top 10, /news 0 cross-ins at any position, /sports and its golf chip a full page.
+
+**Chat 3 close-out (Oct 13).** Every checklist item above is GREEN with its evidence. Migrations this chat: `db/032`–`db/043`, all applied and recorded (CLAUDE.md, Current State); `db/044` (broadcaster and league entities) is the close-out follow-up. Carried items, with dates:
+
+- **Sun Oct 19:**
+  - the owner's one-week watch of Love effects on /settings/feed (Phase 2, owner decision 7);
+  - the shadow `drop` review: the Oct 12 report found ~17% of non-none labels wrong, 3 of them a love (yachts); likely retire the shadow classifier rather than turn it on;
+  - a watch on duplicate merges of the Skins Game kind (one event, several stories).
+- **Mon Oct 20:** the NFL props archive moves to Supabase Storage: design it (Step 0) before week 6 is archived. Week 5's candles and prints took ~34 MB; weeks 5–18 at that rate are ~470 MB, the whole 500 MB tier (CLAUDE.md, RECURRING).
+- **Owner decision, open:** a free Supabase staging project for migration dry runs. If yes, CLAUDE.md §5 gains the rule (every migration pasted on staging first); db/042's first paste, which failed in its self-test, is the case for it.
 
 ### Chat 4 — Tech Hub and Screening Room
 

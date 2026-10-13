@@ -407,7 +407,7 @@ each in phases with a "done when" checklist). It supersedes the former steps
 - **Chat 2, Phase 4** (context layer and Wags, with the TypeScript twin of the AI budget guard) ✓ (PR #16, merge `7709d22`, live 2026-10-10; owner's real call and phone checklist green). Owner runs on the mock model: `wags.spec` 10/10, `screens-wags` 2/2.
 - **Chat 2, Phase 5** (Morning Brief generator on Railway, sections switching on as pillars register) ✓ (PRs #20, #21). **First scheduled brief pushed Sun 2026-10-11 09:45 Chicago; owner confirmed arrival.**
 - **Chat 2 complete (2026-10-11).**
-- **Chat 3** (Learning engine, Home feed, Sports News; MASTER_PLAN §6) ← **you are here**
+- **Chat 3** (Learning engine, Home feed, Sports News; MASTER_PLAN §6) ✓ **(closed 2026-10-13: Phases 1–3 GREEN, PR #27 merge `922e22d` live; the close-out with evidence and carried items is in MASTER_PLAN §6, Chat 3).** The db/044 entities follow-up is the last open piece ← **you are here**
   - **Phase 3 news categories: SHIPPED STATE recorded 2026-10-13** (owner: final round, no more tuning). The enum plus one business-of-sports yes/no question (`feed/category.py` `MONEY_QUESTION`, `decide`), the last re-run, the day's cost ($0.046755 over 93 Haiku calls) and the misfits left for later (no broadcasters or MLB/NWSL/WNBA/NCAA in the entities table; LeBron features answered yes): `docs/feed_checks/recategorize-2026-10-13-final/README.md`.
   - **Phase 1** (sources, ingest, dedupe, summaries, embeddings) **GREEN 2026-10-13** (owner): For you page one summarized (Home 30/30, Sports 29/30, the one a designed headline-only retirement), and worker RAM flat at ~130 MB at rest, ~155 MB ingest peak, returned after each ingest (readings in Current State, "Railway").
   - **AI SDK stays on the maintained v6 line** (`ai` 6.0.303, `@ai-sdk/anthropic` 3.0.129, `@ai-sdk/react` 3.0.306, pinned). v7 was latest on 2026-10-10; **upgrade in Chat 13 hardening**, never a major bump mid-phase (owner, 2026-10-10).
@@ -959,7 +959,9 @@ absent row as "I never looked."
   - Calendar (Google Calendar highlights) is **deferred**.
 - **⏰ Reminders:**
   - ~~**Tue 2026-10-13:** NFL props archive, week 5; also weeks 1–4, once~~ **Done 2026-10-13** (see RECURRING below). Next: week 6 on Tue 2026-10-20.
-  - **Sun 2026-10-19:** the owner's one-week watch of Love effects on /settings/feed closes (Chat 3 Phase 2 learning item; MASTER_PLAN checklist, `docs/feed_ranking.md` decision 7).
+  - **Sun 2026-10-19:** the owner's one-week watch of Love effects on /settings/feed closes (Chat 3 Phase 2 learning item; MASTER_PLAN checklist, `docs/feed_ranking.md` decision 7). Same day: the shadow `drop` review (likely retire it) and the watch on Skins Game–style duplicate merges (MASTER_PLAN, Chat 3 close-out).
+  - **Mon 2026-10-20:** design the NFL props archive's move to Supabase Storage (Step 0) **before** week 6 is archived: at week 5's ~34 MB, weeks 5–18 fill the 500 MB tier (RECURRING, Archive).
+  - **Open owner decision:** a free Supabase staging project for migration dry runs; if yes, §5 gains "paste on staging first".
   - ~~**~2026-10-18:** the Railway trial ends~~ **Closed 2026-10-13: Railway is on Hobby** (Current State, "Railway"); no lapse, no hand redeploy.
 
 - **Migrations:** **`db/001`–`db/012` and `db/014`–`db/018` applied.** 007–012 verified live by `workers/scripts/verify_migrations_007_012.sql` (20/20). 014–018 were pasted 2026-10-08 and verified by read-only SELECTs. `migration_log` (UTC): 015 04:41:03, 016 04:41:16, 017 04:41:30, 018 04:50:35. 014 predates the log; its tables and triggers are present.
