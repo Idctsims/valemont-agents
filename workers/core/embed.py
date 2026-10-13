@@ -63,10 +63,31 @@ class EmbedError(RuntimeError):
 Post = Callable[[str, dict, dict, float], tuple[int, Any]]
 
 
-def _httpx_post(url: str, payload: dict, headers: dict, timeout: float) -> tuple[int, Any]:
-    import httpx  # deferred: tests inject `post` and never import it
+#: One httpx client for the process, made on first use and kept: a module
+#: level httpx.post() builds and drops a client (and loads the CA store into a
+#: new TLS context) on every call, which on the worker was a steady churn of
+#: native memory (Chat 3 Phase 1 hotfix). close_http() closes it.
+_HTTP: Any = None
 
-    r = httpx.post(url, json=payload, headers=headers, timeout=timeout)
+
+def _http() -> Any:
+    global _HTTP
+    if _HTTP is None:
+        import httpx  # deferred: tests inject `post` and never import it
+
+        _HTTP = httpx.Client(timeout=TIMEOUT_S)
+    return _HTTP
+
+
+def close_http() -> None:
+    global _HTTP
+    if _HTTP is not None:
+        _HTTP.close()
+        _HTTP = None
+
+
+def _httpx_post(url: str, payload: dict, headers: dict, timeout: float) -> tuple[int, Any]:
+    r = _http().post(url, json=payload, headers=headers, timeout=timeout)
     try:
         body = r.json()
     except ValueError:

@@ -37,6 +37,9 @@ function status(r: Row, now: number): { status: LegStatus; label: string } {
   const ref = Date.parse(r.last_ok_at ?? r.updated_at);
   if (now - ref > 2 * r.expected_interval_s * 1000) return { status: "danger", label: "Stale" };
   if (r.consecutive_failures === 1) return { status: "on-pace", label: "1 failure" };
+  // A good run that stopped at its cap (feed_summarize's daily cap, owner
+  // 2026-10-12): not plain OK, or a stalled feed looks healthy.
+  if (r.last_error?.startsWith("capped")) return { status: "on-pace", label: "Capped" };
   return { status: "hit", label: "OK" };
 }
 

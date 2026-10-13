@@ -203,6 +203,47 @@ def check_health(scheduled: Iterable[str]) -> None:
                 log.info("recovered: %s", row.job)
 
 
+# ------------------------------------------------------- summary backlog alert
+
+#: None = not yet known in this process (after a restart).
+_backlog_alerted: bool | None = None
+BACKLOG_KIND = "feed_summary_backlog"
+BACKLOG_REALERT_HOURS = 24
+
+
+def check_summary_backlog() -> int:
+    """The summarizer's backlog (owner, 2026-10-12): ONE push when more than
+    BACKLOG_ALERT kept stories older than BACKLOG_MIN_AGE_H are unsummarized,
+    re-armed once it falls back to BACKLOG_ALERT or fewer. After a restart a
+    push sent within BACKLOG_REALERT_HOURS is adopted, not repeated. Returns
+    the count."""
+    global _backlog_alerted
+    n = ledger.feed_summary_backlog(feed_summarize.BACKLOG_MIN_AGE_H, feed_summarize.MAX_ATTEMPTS)
+    over = n > feed_summarize.BACKLOG_ALERT
+    if _backlog_alerted is None:
+        _backlog_alerted = over and ledger.notification_sent_since(BACKLOG_KIND, BACKLOG_REALERT_HOURS)
+    if over and not _backlog_alerted:
+        if _alert(push.Message(
+            kind=BACKLOG_KIND,
+            title="Feed summaries are behind",
+            body=(f"{n} stories older than {feed_summarize.BACKLOG_MIN_AGE_H} h have no summary yet. "
+                  "Check feed_summarize on the health page (capped, or the AI budget)."),
+            deep_link=HEALTH_LINK, tag="feed-backlog",
+        )):
+            _backlog_alerted = True
+            log.warning("alerted: summary backlog %d", n)
+    elif not over and _backlog_alerted:
+        _backlog_alerted = False
+        log.info("summary backlog back to %d: alert re-armed", n)
+    return n
+
+
+def monitor_pass(scheduled: Iterable[str]) -> None:
+    """The health monitor's minute: every job's health, then the backlog."""
+    check_health(scheduled)
+    check_summary_backlog()
+
+
 # -------------------------------------------------------------------- db size
 
 def check_db_size() -> None:
@@ -429,5 +470,5 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
     # The monitor watches every job above, including itself.
     names = [j.name for j in jobs] + [MONITOR]
     jobs.append(SystemJob(MONITOR, 60, IntervalTrigger(seconds=60),
-                          lambda: check_health(names), start_delay_s=90))
+                          lambda: monitor_pass(names), start_delay_s=90))
     return jobs

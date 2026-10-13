@@ -230,15 +230,24 @@ def record_usage(*, purpose: str, model: str, usage: Usage, critical: bool,
     return cost
 
 
+#: The SDK client, made once and reused: a new anthropic.Anthropic() per call
+#: built a new httpx pool and TLS context every time and never closed them
+#: (Chat 3 Phase 1 hotfix). The SDK client is safe to share across threads.
+_SDK: Any = None
+
+
 def _client() -> Any:
+    global _SDK
     if not os.getenv("ANTHROPIC_API_KEY", "").strip():
         raise AiUnavailable(
             "ANTHROPIC_API_KEY is not set, so no Claude call can be made. Add it to the root "
             ".env locally, or to the Railway service variables. Refusing this call; the worker "
             "keeps running.")
-    import anthropic  # deferred: importing the SDK is not free, and tests inject a client
+    if _SDK is None:
+        import anthropic  # deferred: importing the SDK is not free, and tests inject a client
 
-    return anthropic.Anthropic()
+        _SDK = anthropic.Anthropic()
+    return _SDK
 
 
 def complete(*, purpose: str, messages: list[Any], model: str = DEFAULT_MODEL,
