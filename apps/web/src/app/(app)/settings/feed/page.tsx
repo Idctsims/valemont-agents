@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 
+import { headers } from "next/headers";
+
 import { MoveProposals } from "@/components/feed/move-proposals";
 import { Fold } from "@/components/ui/fold";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireOwner } from "@/lib/auth";
+import { MARKER_HEADER, decideMarker } from "@/lib/capital/marker";
 import { boostsNow, feedProfile, moveProposals, type BoostNow, type FollowSummary, type ProfileSummary } from "@/lib/feed/data";
 import { ago, type Pillar } from "@/lib/feed/types";
 import { createClient } from "@/lib/supabase/server";
@@ -168,9 +171,11 @@ export default async function FeedProfilePage() {
   // Display only: the worker builds on the database clock.
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
+  // Test proposals only for a verified e2e request (the rule for test stories).
+  const withTests = decideMarker((await headers()).get(MARKER_HEADER), process.env).kind === "test";
   const [{ latest, history, follows, pendingReactions }, proposals, boosts] = await Promise.all([
     feedProfile(supabase),
-    moveProposals(supabase),
+    moveProposals(supabase, { withTests }),
     boostsNow(supabase, new Date(now).toISOString()),
   ]);
   const pillars = (["home", "sports"] as const).filter((p) => latest[p]);

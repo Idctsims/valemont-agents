@@ -3,6 +3,7 @@ import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import {
   addTestMoveProposal,
   addTestSportsStory,
+  decideTestMove,
   hasOwner,
   runPrefix,
   signIn,
@@ -20,7 +21,8 @@ import {
 //   * pillar separation: a Love on /sports writes pillar 'sports' only, never
 //     'home', so it can train only the sports profile;
 //   * a proposed move: Confirm on /settings/feed moves the test player to the
-//     new team, and the decision is final.
+//     new team, and the decision is final;
+//   * a test move is shown only with the marker, pending and decided.
 // Test stories and test entities never reach a real profile, For you, Wags'
 // context or the brief; the rows written here stay (append-only).
 
@@ -126,5 +128,30 @@ test.describe("owner", () => {
     const decided = page.getByTestId("proposal-decided").filter({ hasText: `Test Player ${suffix}` });
     await expect(decided).toContainText("confirmed");
     await expect(decided).toContainText(`with Test Team B ${suffix} now`);
+  });
+
+  test("a test move is invisible without the marker, pending and decided", async ({}, testInfo) => {
+    // Owner, 2026-10-13: the same rule as test stories. Same signed-in
+    // context, marker off (a second sign-in trips Supabase Auth's limit).
+    const baseURL = testInfo.project.use.baseURL!;
+    const suffix = `e2e-hide-${Date.now().toString(36)}`;
+    const pid = await addTestMoveProposal(suffix);
+    const mine = () => page.getByText(`Test Player ${suffix}`);
+    try {
+      await context.unroute(`${baseURL}/**`);
+      await page.goto("/settings/feed");
+      await expect(page.locator(`[data-proposal-id="${pid}"]`)).toHaveCount(0);
+      await expect(mine()).toHaveCount(0);
+
+      await decideTestMove(pid, "dismissed");
+      await page.goto("/settings/feed");
+      await expect(mine()).toHaveCount(0);
+    } finally {
+      await decideTestMove(pid, "dismissed");
+      await useE2eMarker(context, baseURL);
+    }
+    // With the marker, the decided test move is listed again, tagged.
+    await page.goto("/settings/feed");
+    await expect(page.getByTestId("proposal-decided").filter({ hasText: `Test Player ${suffix}` })).toContainText("dismissed");
   });
 });

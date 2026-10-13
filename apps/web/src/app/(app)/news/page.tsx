@@ -16,7 +16,9 @@ export const metadata: Metadata = { title: "News" };
 
 // News (Chat 3 Phase 3 scope addition, owner 2026-10-12): Home's whole feed,
 // pillar home, with For you / Latest and the category chips
-// (stories.category, db/042), all kept in the URL. Reactions here are Home
+// (stories.category, db/042), all kept in the URL. Home's pillar ONLY: For
+// you passes p_cross_cap 0, so no tier-1 sports story crosses in (db/043);
+// Latest reads pillar home. Reactions here are Home
 // reactions (pillar home) and train Home's profile. Sports has its own page.
 
 type NewsParams = {
@@ -37,7 +39,8 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
   const feed =
     tab === "latest"
       ? await latestStories(supabase, { pillar: "home", page, withTests, category })
-      : await forYouStories(supabase, { pillar: "home", page, category });
+      : // Home's pillar only: no tier-1 sports cross-ins on /news (owner, 2026-10-13).
+        await forYouStories(supabase, { pillar: "home", page, category, crossCap: 0 });
   // Display only ("3h"): rendered per request.
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();

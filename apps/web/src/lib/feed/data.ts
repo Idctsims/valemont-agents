@@ -174,16 +174,17 @@ function viewMeta(r: ViewRow): Meta {
   return { id: r.id, leadItemId: r.lead_item_id, sourceName: r.source_name, itemCount: r.item_count };
 }
 
-/** One page of For you: db/042 feed_for_you() (the learned score minus
+/** One page of For you: db/043 feed_for_you() (the learned score minus
  * recency plus any event boost, the capped Alabama floor, at most 5 tier-1
  * sports stories on Home's page one, 6 per tier-1 follow on Sports'; a chip
  * filters before ranking; dismissed stories already left out). Never shows a
- * test story. Without a chip the call is exactly Home's Phase 2 call:
- * p_sport / p_category are sent only when a chip is chosen (both default
- * to NULL). */
+ * test story. p_sport / p_category are sent only when a chip is chosen (both
+ * default to NULL). `crossCap` (p_cross_cap): the tier-1 sports cross-ins
+ * allowed on page one, floored ones first; 0 leaves them all out (/news is
+ * Home's pillar only); omitted, the default 5. */
 export async function forYouStories(
   supabase: SupabaseClient,
-  opts: { pillar: Pillar; page: number; sport?: Sport | null; category?: NewsCategory | null },
+  opts: { pillar: Pillar; page: number; sport?: Sport | null; category?: NewsCategory | null; crossCap?: number },
 ): Promise<{ stories: FeedStory[]; hasMore: boolean }> {
   const { data, error } = await supabase.rpc("feed_for_you", {
     p_pillar: opts.pillar,
@@ -191,6 +192,7 @@ export async function forYouStories(
     p_offset: (opts.page - 1) * PAGE_SIZE,
     ...(opts.sport ? { p_sport: opts.sport } : {}),
     ...(opts.category ? { p_category: opts.category } : {}),
+    ...(opts.crossCap !== undefined ? { p_cross_cap: opts.crossCap } : {}),
   });
   if (error) throw new Error(`Couldn't read For you: ${error.message}`);
   const rows = (data ?? []) as ForYouRow[];
@@ -293,16 +295,26 @@ type ProposalRowDb = {
 const DECIDED_SHOWN = 8;
 
 /** The summarizer's move proposals (db/042): open ones first, then the latest
- * decided. Test proposals (the phone check, e2e) are shown, tagged. */
-export async function moveProposals(supabase: SupabaseClient): Promise<MoveProposal[]> {
+ * decided. Test proposals (e2e) are shown, tagged, only to a request whose
+ * e2e marker the server verified (`withTests`), pending and decided alike:
+ * the same rule as test stories (owner, 2026-10-13). */
+export async function moveProposals(
+  supabase: SupabaseClient,
+  opts: { withTests?: boolean } = {},
+): Promise<MoveProposal[]> {
   const cols = "id, kind, is_test, created_at, decision, decided_at, person_entity_id, " +
     "person:entities!entity_link_proposals_person_entity_id_fkey(name), " +
     "from:entities!entity_link_proposals_from_entity_id_fkey(name), " +
     "to:entities!entity_link_proposals_to_entity_id_fkey(name), story:stories(title)";
+  let openQ = supabase.from("entity_link_proposals").select(cols).is("decision", null);
+  let decidedQ = supabase.from("entity_link_proposals").select(cols).not("decision", "is", null);
+  if (!opts.withTests) {
+    openQ = openQ.eq("is_test", false);
+    decidedQ = decidedQ.eq("is_test", false);
+  }
   const [open, decided] = await Promise.all([
-    supabase.from("entity_link_proposals").select(cols).is("decision", null).order("created_at", { ascending: false }),
-    supabase.from("entity_link_proposals").select(cols).not("decision", "is", null)
-      .order("decided_at", { ascending: false }).limit(DECIDED_SHOWN),
+    openQ.order("created_at", { ascending: false }),
+    decidedQ.order("decided_at", { ascending: false }).limit(DECIDED_SHOWN),
   ]);
   for (const r of [open, decided]) {
     if (r.error) throw new Error(`Couldn't read the proposed changes: ${r.error.message}`);

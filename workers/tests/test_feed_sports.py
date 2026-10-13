@@ -25,6 +25,47 @@ from feed import moves, rank, sources, summarize
 from feed.rank import Candidate, Follow, StoryIn
 
 SQL_042 = (REPO_ROOT / "db" / "042_sports.sql").read_text(encoding="utf-8")
+SQL_043 = (REPO_ROOT / "db" / "043_feed_rules_cross_cap.sql").read_text(encoding="utf-8")
+
+
+class CrossCap(unittest.TestCase):
+    """Owner, 2026-10-13 16:39: /news is Home's pillar only (no tier-1 sports
+    cross-ins, any tab or chip); Home's short list allows at most 2."""
+
+    def pool(self) -> list[Candidate]:
+        cands = [Candidate(i, 1.0 - i * 0.01, 1.0) for i in range(1, 41)]
+        cands += [Candidate(200 + i, 5.0 - i * 0.01, 1.0, cross_pillar=True) for i in range(8)]
+        cands += [Candidate(300 + i, 0.1 - i * 0.01, 1.0, floor=True, cross_pillar=True) for i in range(3)]
+        return cands
+
+    def test_zero_leaves_out_every_cross_in_floored_or_not(self) -> None:
+        order = rank.order_for_you(self.pool(), "home", cross_cap=0)
+        self.assertEqual([p.id for p in order if p.id >= 200], [])
+        self.assertEqual(len(order), 40)
+
+    def test_two_counts_floored_cross_ins_toward_the_cap(self) -> None:
+        page1 = [p.id for p in rank.order_for_you(self.pool(), "home", cross_cap=2)[:rank.PAGE_SIZE]]
+        # Floored first: the two best floored cross-ins, and nothing else crosses in.
+        self.assertEqual(sorted(i for i in page1 if i >= 200), [300, 301])
+        self.assertEqual(rank.HOME_SHORT_CROSS, 2)
+        self.assertLessEqual(rank.HOME_SHORT_CROSS, rank.HOME_TOP)
+
+    def test_the_default_is_the_cross_cap(self) -> None:
+        self.assertEqual([(p.id, p.pos) for p in rank.order_for_you(self.pool())],
+                         [(p.id, p.pos) for p in rank.order_for_you(self.pool(), cross_cap=rank.CROSS_CAP)])
+
+    def test_the_sql_reads_the_cap_and_drops_cross_ins_at_zero(self) -> None:
+        body = SQL_043[SQL_043.index("FUNCTION public.feed_for_you"):SQL_043.index("-- feed_for_you self-test")]
+        self.assertIn("p_cross_cap integer DEFAULT NULL", body)
+        self.assertIn("AND (p_pillar = ANY (v.pillars) OR (sc.cross_pillar AND coalesce(p_cross_cap, k.cross_cap) > 0))",
+                      body)
+        self.assertIn("ORDER BY e.in_f DESC, e.e DESC, e.sid DESC", body)
+        self.assertIn("LIMIT (SELECT coalesce(p_cross_cap, cross_cap) FROM k)", body)
+
+    def test_the_web_constants_match(self) -> None:
+        ts = (REPO_ROOT / "apps" / "web" / "src" / "lib" / "feed" / "types.ts").read_text(encoding="utf-8")
+        self.assertIn(f"export const HOME_TOP = {rank.HOME_TOP};", ts)
+        self.assertIn(f"export const HOME_SHORT_CROSS = {rank.HOME_SHORT_CROSS};", ts)
 
 
 def story(sid: int, title: str, *, sport: str | None = "golf", entities=(), topics=()) -> StoryIn:
@@ -51,7 +92,8 @@ class BoostMath(unittest.TestCase):
         self.assertEqual([p.id for p in rank.order_for_you(cands)], [2, 1])
 
     def test_sql_constants_match(self) -> None:
-        body = SQL_042[SQL_042.index("FUNCTION public.feed_for_you"):SQL_042.index("FUNCTION public.ctx_sports_feed")]
+        # db/043 replaced db/042's feed_for_you (p_cross_cap); pin the live one.
+        body = SQL_043[SQL_043.index("FUNCTION public.feed_for_you"):SQL_043.index("-- feed_for_you self-test")]
 
         def lit(name: str) -> float:
             return float(re.search(r"([0-9.]+)(?:::float8)?\s+AS " + name + r"\b", body).group(1))

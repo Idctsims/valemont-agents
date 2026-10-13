@@ -443,7 +443,7 @@ class FilterRules(unittest.TestCase):
         those (db_inspect: 13 of 4,226 items match)."""
         import re
         from core.paths import REPO_ROOT
-        sql = (REPO_ROOT / "db" / "043_feed_author_rules.sql").read_text(encoding="utf-8")
+        sql = (REPO_ROOT / "db" / "043_feed_rules_cross_cap.sql").read_text(encoding="utf-8")
         author, _pga = (p.replace("''", "'") for p in re.findall(r"\('url_regex',\s+NULL,\s+'((?:[^']|'')*)'", sql))
         rules = Rules([Rule(9, "url_regex", None, author)])
         drop = [("Chelsea Brasted", "https://www.axios.com/local/miami/authors/cbrasted"),
@@ -479,7 +479,7 @@ class FilterRules(unittest.TestCase):
         the 158 pgatour.com items, db_inspect), never news or clips."""
         import re
         from core.paths import REPO_ROOT
-        sql = (REPO_ROOT / "db" / "043_feed_author_rules.sql").read_text(encoding="utf-8")
+        sql = (REPO_ROOT / "db" / "043_feed_rules_cross_cap.sql").read_text(encoding="utf-8")
         _author, pga = (p.replace("''", "'") for p in re.findall(r"\('url_regex',\s+NULL,\s+'((?:[^']|'')*)'", sql))
         rules = Rules([Rule(8, "url_regex", None, pga)])
         drop = ["https://www.pgatour.com/player/profiles/32781/results",

@@ -11,7 +11,7 @@ import { requireOwner } from "@/lib/auth";
 import { briefFor } from "@/lib/brief/data";
 import { MARKER_HEADER, decideMarker } from "@/lib/capital/marker";
 import { forYouStories } from "@/lib/feed/data";
-import { HOME_TOP, feedHref, pageFromParam, tabFromParam } from "@/lib/feed/types";
+import { HOME_SHORT_CROSS, HOME_TOP, feedHref, pageFromParam, tabFromParam } from "@/lib/feed/types";
 import { ensureRollover, weekGoals } from "@/lib/goals/data";
 import { localToday, longDate, weekRange, weekStamp, weekStart } from "@/lib/goals/period";
 import { createClient } from "@/lib/supabase/server";
@@ -39,7 +39,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<Hom
     ventureToday(supabase),
     ventureLinks(supabase),
     briefFor(supabase, today, { withTests }),
-    forYouStories(supabase, { pillar: "home", page: 1 }),
+    // The short list allows at most HOME_SHORT_CROSS tier-1 sports stories (db/043).
+    forYouStories(supabase, { pillar: "home", page: 1, crossCap: HOME_SHORT_CROSS }),
   ]);
   // Display only ("3h"): rendered per request.
   // eslint-disable-next-line react-hooks/purity

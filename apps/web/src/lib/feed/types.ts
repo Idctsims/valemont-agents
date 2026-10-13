@@ -81,6 +81,11 @@ export function categoryFromParam(raw: string | string[] | undefined): NewsCateg
 /** How many For you stories Home shows before "See all news". */
 export const HOME_TOP = 10;
 
+/** Tier-1 sports stories allowed into Home's short list (owner, 2026-10-13:
+ * at most 2). /news allows none (p_cross_cap 0). workers/feed/rank.py
+ * HOME_SHORT_CROSS; tests/test_feed_sports.py pins the two. */
+export const HOME_SHORT_CROSS = 2;
+
 /**
  * A feed URL that keeps the chip, the tab and the page, anchored to the
  * stories. Home's old URLs ("/#stories", "/?feed=latest&latest=2#stories")

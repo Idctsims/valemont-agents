@@ -59,6 +59,10 @@ FLOOR_POSITION = 6
 FLOOR_MAX_AGE_H = 48.0
 CROSS_CAP = 5
 PAGE_SIZE = 30
+#: Home's short list (the web's HOME_TOP) and the tier-1 sports cross-ins it
+#: allows (owner, 2026-10-13 16:39); /news allows none (p_cross_cap 0).
+HOME_TOP = 10
+HOME_SHORT_CROSS = 2
 #: Sports page one: at most this many stories per tier-1 follow (owner D1),
 #: ENTITY_CAP_BOOSTED while that follow has an active boost window.
 ENTITY_CAP = 6
@@ -428,11 +432,17 @@ def entity_cap(name: str, boosted: frozenset[str] | set[str]) -> int:
 
 
 def order_for_you(cands: Sequence[Candidate], pillar: Pillar = "home",
-                  boosted: frozenset[str] | set[str] = frozenset()) -> list[Placed]:
-    """db/042 feed_for_you's ordering, step for step, for candidates already
+                  boosted: frozenset[str] | set[str] = frozenset(),
+                  cross_cap: int | None = None) -> list[Placed]:
+    """db/043 feed_for_you's ordering, step for step, for candidates already
     filtered (window, pillar, reactions, chip) and carrying their boost.
     `boosted`: the tier-1 follows with an active window (cap 9 instead of 6);
-    the entity cap applies on Sports only. tests_live pins the two together."""
+    the entity cap applies on Sports only. `cross_cap` (p_cross_cap): the
+    cross-ins allowed on page one, floored ones first (None: CROSS_CAP); 0
+    leaves every cross-in out entirely (/news). tests_live pins the two."""
+    cap = CROSS_CAP if cross_cap is None else cross_cap
+    if cap == 0:
+        cands = [c for c in cands if not c.cross_pillar]
     r = {c.id: rank_of(c.score, c.age_h, c.boost_h) for c in cands}
 
     def key(cid: int, value: float) -> tuple[float, int]:
@@ -451,9 +461,10 @@ def order_for_you(cands: Sequence[Candidate], pillar: Pillar = "home",
             lifted.add(c.id)
         else:
             e[c.id] = r[c.id]
-    cross_f = [c.id for c in cands if c.cross_pillar and c.id in f]
-    cross_rest = sorted((c for c in cands if c.cross_pillar and c.id not in f), key=lambda c: key(c.id, e[c.id]))
-    allowed = set(cross_f) | {c.id for c in cross_rest[:max(CROSS_CAP - len(cross_f), 0)]}
+    # The cross-ins allowed on page one: floored ones first, then by rank.
+    # With CROSS_CAP (5) above FLOOR_MAX (3) every floored one fits, as before.
+    cross = sorted((c for c in cands if c.cross_pillar), key=lambda c: (c.id not in f, -e[c.id], -c.id))
+    allowed = {c.id for c in cross[:cap]}
     over_cap: set[int] = set()
     if pillar == "sports":
         names = {n for c in cands for n in c.tier1}

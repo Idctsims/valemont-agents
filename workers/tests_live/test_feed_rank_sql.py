@@ -263,6 +263,39 @@ class ForYou(RankSqlCase):
             self.assertEqual(sum(1 for r in rows[:rank.PAGE_SIZE] if r[5]), rank.CROSS_CAP)
             self.assertEqual(sum(1 for r in rows if r[6]), rank.FLOOR_MAX)
 
+    def test_the_cross_cap_at_zero_and_two_equals_the_twin(self) -> None:
+        """db/043 p_cross_cap (owner, 2026-10-13): /news passes 0 (no cross-in
+        anywhere), Home's short list 2 (floored cross-ins first)."""
+        with _rolled_back() as conn:
+            if conn.execute("SELECT to_regprocedure("
+                            "'public.feed_for_you(text, integer, integer, text, text, integer)')").fetchone()[0] is None:
+                self.skipTest("db/043 not pasted")
+            home, sports = self.source(conn), self.source(conn, ("sports",), sport="cfb")
+            for i in range(40):
+                self.score(conn, self.story(conn, home, hours_ago=i * 0.7), 45 - i * 0.05)
+            cross = [self.story(conn, sports, hours_ago=i) for i in range(8)]
+            for i, sid in enumerate(cross):
+                self.score(conn, sid, 46 - i * 0.1, cross=True)
+            floored = [self.story(conn, sports, hours_ago=i) for i in range(3)]
+            for i, sid in enumerate(floored):
+                self.score(conn, sid, 20 - i * 0.1, floor=True, cross=True)
+            for cap in (0, 2):
+                rows = conn.execute("""
+                    SELECT f.id, f.pos, sc.score::float8, extract(epoch FROM now() - f.lead_published_at) / 3600.0,
+                           sc.floor, sc.cross_pillar, coalesce(f.floored, false), f.boost_hours::float8, f.rank
+                      FROM feed_for_you('home', 100000, 0, NULL, NULL, %s) f
+                      JOIN v_story_scores_latest sc ON sc.story_id = f.id AND sc.pillar = 'home'
+                     ORDER BY f.pos""", (cap,)).fetchall()
+                cands = [rank.Candidate(r[0], float(r[2]), float(r[3]), r[4], r[5], boost_h=float(r[7]))
+                         for r in rows]
+                twin_check.assert_same_order(self, rank.order_for_you(cands, cross_cap=cap),
+                                             [(r[0], r[1], r[8], r[6]) for r in rows])
+                page1_cross = [r[0] for r in rows[:rank.PAGE_SIZE] if r[5]]
+                if cap == 0:
+                    self.assertFalse(any(r[5] for r in rows), "a cross-in reached /news")
+                else:
+                    self.assertEqual(sorted(page1_cross), floored[:2])
+
     def test_reactions_remove_and_mark(self) -> None:
         with _rolled_back() as conn:
             src = self.source(conn)
