@@ -67,10 +67,28 @@ class Money(unittest.TestCase):
         self.assertEqual(d("film_music", True, None, True), "sports_business")
         self.assertEqual(d("other", True, None, True), "sports_business")
         self.assertEqual(d("other", False, None, True), "other")
-        self.assertEqual(d("film_music", False, None, True), "other")
+        # Gated by the entity alone, "no" keeps the enum answer (owner,
+        # 2026-10-13: broadcasters are mostly entertainment companies, so a
+        # Netflix or NBC drama must stay film_music).
+        self.assertEqual(d("film_music", False, None, True), "film_music")
+        # With a sport, "no" is still other.
+        self.assertEqual(d("film_music", False, "nfl", True), "other")
         self.assertEqual(d("deals", True, None, True), "deals")  # only film_music and other widen
         self.assertEqual(d("betting", True, None, True), "betting")
         self.assertEqual(d("film_music", True, None, False), "film_music")
+
+    def test_db044_adds_broadcasters_and_leagues_without_follows(self) -> None:
+        sql = (REPO_ROOT / "db" / "044_sports_business_entities.sql").read_text(encoding="utf-8")
+        self.assertIn("'company', 'broadcaster'));", sql)
+        self.assertNotIn("INSERT INTO follows", sql)
+        rows = re.findall(r"\('(broadcaster|league)',\s+'([^']+)',\s+ARRAY\[([^\]]*)\]", sql)
+        names = {n for _, n in [(k, n) for k, n, _ in rows]}
+        self.assertEqual(names, {"ESPN", "NBC Sports", "CBS Sports", "FOX Sports", "Amazon Prime Video",
+                                 "Netflix", "TNT Sports", "MLB", "NWSL", "WNBA", "NCAA"})
+        for _, _, aliases in rows:
+            for a in re.findall(r"'((?:[^']|'')*)'", aliases):
+                self.assertEqual(a, a.lower(), a)  # db/039's CHECK; exact matching needs it
+        self.assertIn("'broadcaster'", inspect.getsource(ledger).split("FEED_SPORTS_ENTITY_NAMES_SQL")[1][:400])
 
     def test_a_sports_entity_is_an_exact_name_or_alias(self) -> None:
         names = {"nfl", "nba", "lakers", "los angeles lakers", "williams", "pga tour"}

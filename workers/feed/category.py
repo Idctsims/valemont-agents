@@ -70,7 +70,8 @@ MONEY_PROMPT = (f"money: true or false: {MONEY_QUESTION} For a story about sport
 
 def sports_entity(entities: Sequence[str], names: AbstractSet[str]) -> bool:
     """True when one of the story's entities (as the summary named them) IS a
-    sports league, team, program or tour from the entities table: the name
+    sports league, team, program, tour or broadcaster from the entities
+    table (ledger.feed_sports_entity_names): the name
     or an alias, whole string, case-insensitive. Exact, not a substring:
     F1 team aliases are common words ("williams", "mercedes", "audi")."""
     return any(" ".join(e.lower().split()) in names for e in entities)
@@ -79,17 +80,23 @@ def sports_entity(entities: Sequence[str], names: AbstractSet[str]) -> bool:
 def decide(category: str | None, money: object, sport: str | None, sports_ent: bool = False) -> str | None:
     """The category a story gets. The business-of-sports answer decides
     (true -> sports_business, false -> other, the owner's rule) for a story
-    with a sport, one answered sports_business, or one answered film_music
-    or other whose entities include a sports league, team, program or tour
-    (`sports_ent`). Betting keeps its own chip (sportsbooks, prediction
-    markets, Kalshi). Anything else keeps the enum answer. None, never a
-    guess, when the category is not ours or a decided story has no boolean
-    answer."""
+    with a sport or one answered sports_business. For one answered
+    film_music or other whose entities include a sports league, team,
+    program, tour or broadcaster (`sports_ent`), true -> sports_business and
+    false keeps the enum answer (a Netflix drama stays film_music). Betting
+    keeps its own chip (sportsbooks, prediction markets, Kalshi). Anything
+    else keeps the enum answer. None, never a guess, when the category is
+    not ours or a decided story has no boolean answer."""
     if category is None:
         return None
-    gated = bool(sport) or category == "sports_business" or (sports_ent and category in ("film_music", "other"))
-    if category == "betting" or not gated:
+    decided = bool(sport) or category == "sports_business"
+    by_entity = not decided and sports_ent and category in ("film_music", "other")
+    if category == "betting" or not (decided or by_entity):
         return category
     if not isinstance(money, bool):
         return None
-    return "sports_business" if money else "other"
+    if money:
+        return "sports_business"
+    # Gated by the entity alone, "no" keeps the enum answer (owner,
+    # 2026-10-13): broadcasters are mostly entertainment companies.
+    return category if by_entity else "other"
