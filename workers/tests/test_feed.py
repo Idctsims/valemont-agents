@@ -438,6 +438,43 @@ class FilterRules(unittest.TestCase):
             self.assertFalse(rx.search(url), url)
             self.assertIsNone(rules.filter_reason(title=title, url=url, pillars=["home"]), title)
 
+    def test_db043_drops_author_pages_never_articles(self) -> None:
+        """Owner, 2026-10-13: the author pages seen in the data, and only
+        those (db_inspect: 13 of 4,226 items match)."""
+        import re
+        from core.paths import REPO_ROOT
+        sql = (REPO_ROOT / "db" / "043_feed_author_rules.sql").read_text(encoding="utf-8")
+        (pattern,) = re.findall(r"\('url_regex',\s+NULL,\s+'((?:[^']|'')*)'", sql)
+        pattern = pattern.replace("''", "'")
+        rules = Rules([Rule(9, "url_regex", None, pattern)])
+        drop = [("Chelsea Brasted", "https://www.axios.com/local/miami/authors/cbrasted"),
+                ("Carly Mallenbaum", "https://www.axios.com/local/miami/authors/cmallenbaum"),
+                ("Avery Lotz", "https://www.axios.com/local/miami/authors/alotz"),
+                ("Sami Sparber", "https://www.axios.com/local/miami/authors/ssparber"),
+                ("Complex Staff: Find The Latest Complex Staff Articles",
+                 "https://www.complex.com/author/complexstaff3"),
+                ("Mike DeStefano: Find The Latest Mike DeStefano Articles",
+                 "https://www.complex.com/author/mike-destefano"),
+                ("Dimas Sanfiorenzo", "https://www.complex.com/author/dimassanfiorenzo/")]
+        keep = [("What's going up: Affordable housing and more",
+                 "https://www.axios.com/local/miami/2026/10/13/what-is-going-up-miami-development-real-estate"),
+                ("Here's where Miami-Dade officials stand on Amendment 3",
+                 "https://www.axios.com/local/miami/2026/10/07/where-miami-dade-officials-stand-amendment-3-florida-property-tax"),
+                # Complex puts the author slug inside an article's path.
+                ("ComplexCon Attendees Fish For Bitcoin With Cash App",
+                 "https://www.complex.com/pop-culture/a/complexstaff3/complexcon-bitcoin-cash-app-activation"),
+                ("Oakley Foothill Ranch HQ: An Inside Look",
+                 "https://www.complex.com/style/a/mike-destefano/oakley-hq-foothill-ranch-inside-look"),
+                # A real article under a /people/ path.
+                ("Sportico Transactions: Moves and Mergers Roundup for Oct. 9",
+                 "https://www.sportico.com/personalities/people/2026/sportico-transactions-moves-mergers-roundup-oct-9-1234947100/"),
+                ("An article whose slug mentions authors",
+                 "https://www.axios.com/local/miami/2026/10/13/authors-book-festival-miami")]
+        for title, url in drop:
+            self.assertEqual(rules.filter_reason(title=title, url=url, pillars=["home"]), "url_regex:9", url)
+        for title, url in keep:
+            self.assertIsNone(rules.filter_reason(title=title, url=url, pillars=["home"]), url)
+
     def test_every_seeded_db032_pattern_compiles_in_python(self) -> None:
         import re
         from core.paths import REPO_ROOT
