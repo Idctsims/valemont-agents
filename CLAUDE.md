@@ -403,6 +403,7 @@ each in phases with a "done when" checklist). It supersedes the former steps
 - **Chat 2, Phase 5** (Morning Brief generator on Railway, sections switching on as pillars register) ✓ (PRs #20, #21). **First scheduled brief pushed Sun 2026-10-11 09:45 Chicago; owner confirmed arrival.**
 - **Chat 2 complete (2026-10-11).**
 - **Chat 3** (Learning engine, Home feed, Sports News; MASTER_PLAN §6) ← **you are here**
+  - **Phase 1** (sources, ingest, dedupe, summaries, embeddings) **GREEN 2026-10-13** (owner): For you page one summarized (Home 30/30, Sports 29/30, the one a designed headline-only retirement), and worker RAM flat at ~130 MB at rest, ~155 MB ingest peak, returned after each ingest (readings in Current State, "Railway").
   - **AI SDK stays on the maintained v6 line** (`ai` 6.0.303, `@ai-sdk/anthropic` 3.0.129, `@ai-sdk/react` 3.0.306, pinned). v7 was latest on 2026-10-10; **upgrade in Chat 13 hardening**, never a major bump mid-phase (owner, 2026-10-10).
 
 Reason for deploying at step 4 and not at the end: "works locally, dies
@@ -951,9 +952,9 @@ absent row as "I never looked."
   - Morning Brief push: **09:45 America/Chicago**.
   - Calendar (Google Calendar highlights) is **deferred**.
 - **⏰ Reminders:**
-  - **Tue 2026-10-13:** NFL props archive, week 5; also weeks 1–4, once (see RECURRING below).
+  - ~~**Tue 2026-10-13:** NFL props archive, week 5; also weeks 1–4, once~~ **Done 2026-10-13** (see RECURRING below). Next: week 6 on Tue 2026-10-20.
   - **Sun 2026-10-19:** the owner's one-week watch of Love effects on /settings/feed closes (Chat 3 Phase 2 learning item; MASTER_PLAN checklist, `docs/feed_ranking.md` decision 7).
-  - **~2026-10-18:** the Railway trial ends. The worker stops, the watchdog pushes "Worker down", and it needs a **manual redeploy**.
+  - ~~**~2026-10-18:** the Railway trial ends~~ **Closed 2026-10-13: Railway is on Hobby** (Current State, "Railway"); no lapse, no hand redeploy.
 
 - **Migrations:** **`db/001`–`db/012` and `db/014`–`db/018` applied.** 007–012 verified live by `workers/scripts/verify_migrations_007_012.sql` (20/20). 014–018 were pasted 2026-10-08 and verified by read-only SELECTs. `migration_log` (UTC): 015 04:41:03, 016 04:41:16, 017 04:41:30, 018 04:50:35. 014 predates the log; its tables and triggers are present.
   - **`db/013` (enable the production roster) stays unpasted.** It is go-live and out of scope until the owner says so.
@@ -1038,6 +1039,8 @@ absent row as "I never looked."
 - **`_kalshi_probe`:** one real contract per NFL week (is_test) to exercise settlement and close capture, which have never run on real data.
 - **Railway (verified 2026-10-08):** service `valemont-agents`, project `accomplished-heart`, environment `production`. **Trial plan: $5 credit, ends ~2026-10-18; when it lapses the worker stops and needs a manual redeploy.** No payment method on file.
   - **Decision CLOSED 2026-10-09 (owner): stay on Railway's Free plan.** The worker runs at about 40 MB steady, with near-zero CPU, with the canary gone. Oracle Cloud is not needed.
+  - **Superseded 2026-10-13 (owner, 13:28 Chicago): Railway moves to Hobby** ($5/month including $5 of usage; owner-reported, switched by the owner). Why: the Chat 3 feed took the worker from ~40 MB to ~130 MB at rest, about $1.27/month of memory alone against Free's $1 credit. The trial-end lapse (~2026-10-18) no longer applies.
+  - **Worker RAM after the Phase 1 hotfix** (`job_health` RSS notes, read via `db_inspect` 2026-10-13 18:27 UTC; boot 02:54:57 UTC): 74 MB at boot; 129 MB at +2 h 10 m (`capital_snapshot`, nearest to +3 h); 133 MB at +5 h 05 m (`db_size`, nearest to +6 h); 130 MB at rest at +15.5 h (`heartbeat`); ingest peak 155 MB, back to 129 MB after. Slope +2 h → latest: ~+0.07 MB/h, flat within rounding. `job_health` keeps only the latest note, so readings at exact checkpoints did not exist; **from 2026-10-13 every job's INFO log line carries the same RSS note** (`core/jobs.py` `run_tracked`), and Railway's logs keep the history.
   - **`CANARY` was removed at an unknown time, and `ROSTER` was never set.** With neither set, `main.py` refuses ("No agents registered"), sleeps 60 s and exits 78, in a loop. The last canary run was 2026-09-29 23:35 UTC.
   - Restart policy is ON_FAILURE with 10 retries, so the dashboard showed "Online" while nothing ran.
   - **Restored 2026-10-08 05:36 UTC on the `workers/` path.** The service builds from Root Directory `/workers` with config file `/workers/railway.json` (merge `8ae8f14`, deployment `fba3fb6b`). `CANARY=true` was set and deployment `8adfc44d` booted. The first canary run was 1688 at 05:37:14 UTC, carrying a clock offset. `ROSTER` stays unset and `db/013` unpasted.
@@ -1056,6 +1059,8 @@ absent row as "I never looked."
   3. set `ROSTER=production` and delete `CANARY` in the same change.
 - **🔁 RECURRING, weekly, by hand:**
   - **Archive.** Every Tuesday after Monday night's game, run `..\venv\Scripts\python.exe -m jobs.archive_nfl_props --week N` from `workers/` for the week just played, weeks 5–18 (first: week 5 on Tuesday 2026-10-13). Run weeks 1–4 once, any time, for F2's settlement pool. Rerun a week later if it logged unsettled markets. Store-only; never query the archive before January (§8.1). Estimate for weeks 5–18: ~0.6–1.1M candle rows, ~0.1–0.4M prints, ~150–250 MB of the 500 MB tier.
+    - **First runs, 2026-10-13** (job summaries; only row counts and table sizes read since, nothing F1 or F2 evaluates). The job had never loaded `.env` (fixed, `tests/test_jobs_env.py`); the first attempt failed at its first write and stored nothing. Week 5: 2,751 markets, all settled, 110,963 candles, 64,306 prints, 0 games pending (13:33–14:05 Chicago). Weeks 1–4, settlements only: 2,527, 2,747, 2,718, 2,967 markets, all settled. **0 unsettled in every week, so no rerun is due.** Totals: 13,710 markets and settlements.
+    - **⚠ The size estimate above is too low.** The database went from 46.7 MB to 87.6 MB (MB = 2^20) over the run; the four archive tables hold ~40 MB, of which week 5's candles and prints are ~34 MB with indexes (candles 18.4 MB, prints 15.6 MB). At that rate weeks 5–18 are ~470 MB, about the whole 500 MB tier, before the feed's growth. **Open for the owner** before week 6 (2026-10-20).
   - **`nfl_ml` refit** (`jobs.fit_nfl_ml --lambda 10`). Preregistration §3.1 requires it and nothing schedules it.
 - **Forward-only F1 (vacated usage, as amended by F1a: Questionable + game-day `INA`) and F2 (longshots under P2)** are pre-registered in `docs/preregistration_nfl.md` §8 and evaluated on 2026 weeks 5–18. **No interim look.**
 - **⏰ JANUARY REMINDER — on or after 2027-01-20:** write the F1/F2 runner exactly to §8, commit it, then execute it **once**, reading the archive. It must refuse before 2027-01-20 and refuse if output exists. If data are missing from both the archive and Kalshi, record the hypothesis as unevaluable, which is a fail.
@@ -1242,7 +1247,7 @@ absent row as "I never looked."
 - **Next:**
   - **Zero-attempt database invariant** (db/024, db/025, both applied): merged from branch `db-zero-attempt-invariant`. `tests/` 479 OK; `tests_live/` 181 OK, 0 skipped (2026-10-09).
   - **Chat 2 COMPLETE (2026-10-11).** Phase 5 closed on the first scheduled brief and push (above).
-  - **Chat 3:** Learning engine, Home feed, Sports News (MASTER_PLAN §6). Not started.
+  - **Chat 3:** Learning engine, Home feed, Sports News (MASTER_PLAN §6). Phase 1 GREEN 2026-10-13; Phase 2 merging; Phase 3 on `chat3-phase3-sports`.
   - **Carried out of Chat 2: DONE, Mon 2026-10-12** (the last item; read via `db_inspect`, owner-confirmed):
     - `goals_rollover` started 05:01:00 UTC (00:01 Chicago), ok 05:01:01, 0 failures. It carried the 3 weekly goals still open in week 2026-10-05 into week 2026-10-12 (`goals` 319639a7…, 8d8fd0c3…, c50a7981…, carry_count 1, created 05:01:00.562 UTC).
     - `goals_monday_push` started 12:00:00 UTC (07:00 Chicago), ok 12:00:02. Notification 206 "Set your week" `sent` 12:00:01 UTC, no error. The owner confirmed it arrived.
@@ -1259,6 +1264,6 @@ absent row as "I never looked."
 
     - The turns aren't identical: different tool, different thread. The cost is higher only because a new thread writes the cache; output tokens are the like-for-like figure.
     - The generated "Proposing: …" fallback has not fired on a real turn yet.
-  - **~2026-10-18:** the Railway trial ends; redeploy the worker by hand on the Free plan.
+  - ~~**~2026-10-18:** the Railway trial ends~~ Closed: Railway on Hobby from 2026-10-13.
   - Still pending from before: owner review of the crypto track, owner go-live, and the weekly archive.
   - Any new idea needs a new pre-registration and forward-only validation.
