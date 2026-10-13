@@ -1262,12 +1262,35 @@ BEGIN
             DELETE FROM public.entity_link_proposals WHERE id = v_p1;
         EXCEPTION WHEN raise_exception THEN v_refused := v_refused + 1;
         END;
+        -- TRUNCATE checks foreign keys BEFORE it fires any TRUNCATE trigger:
+        -- truncating the proposals alone fails 0A000 ("referenced in a foreign
+        -- key constraint"), which would prove nothing about the guard (the
+        -- first paste of this file, 2026-10-13). So truncate the closed set:
+        -- entity_links and entity_link_ends both reference the proposals, and
+        -- the ends reference the links. Only the guard's own refusal counts.
         BEGIN
-            TRUNCATE public.entity_link_proposals;
-        EXCEPTION WHEN raise_exception THEN v_refused := v_refused + 1;
+            TRUNCATE public.entity_link_proposals, public.entity_links, public.entity_link_ends;
+        EXCEPTION WHEN OTHERS THEN
+            IF SQLSTATE = 'P0001'
+               AND SQLERRM ~ '^Table (entity_link_proposals|entity_links|entity_link_ends) is append-only\. TRUNCATE is refused\.$' THEN
+                v_refused := v_refused + 1;
+            ELSE
+                RAISE EXCEPTION 'SELFTEST FAILED: TRUNCATE of the proposal tables: % %', SQLSTATE, SQLERRM;
+            END IF;
         END;
         IF v_refused <> 5 THEN
             RAISE EXCEPTION 'SELFTEST FAILED: % of 5 proposal mutations refused', v_refused;
+        END IF;
+        -- One statement fires one table's trigger first, so each of the three
+        -- must carry its own enabled BEFORE TRUNCATE guard.
+        IF (SELECT count(DISTINCT t.tgrelid) FROM pg_catalog.pg_trigger t
+             WHERE t.tgrelid IN ('public.entity_link_proposals'::regclass, 'public.entity_links'::regclass,
+                                 'public.entity_link_ends'::regclass)
+               AND t.tgfoid = 'public.reject_truncate()'::regprocedure
+               AND t.tgenabled <> 'D'
+               AND (t.tgtype & 32) <> 0     -- TRUNCATE
+               AND (t.tgtype & 2) <> 0) <> 3 THEN  -- BEFORE
+            RAISE EXCEPTION 'SELFTEST FAILED: a proposal or link table has no TRUNCATE guard';
         END IF;
 
         -- Confirm: the old link ends, the new one is current, the decision is written.
@@ -1313,9 +1336,14 @@ BEGIN
             DELETE FROM public.entity_link_ends WHERE proposal_id = v_p1;
         EXCEPTION WHEN raise_exception THEN v_refused := v_refused + 1;
         END;
-        BEGIN
+        BEGIN  -- nothing references entity_link_ends, so its own guard answers
             TRUNCATE public.entity_link_ends;
-        EXCEPTION WHEN raise_exception THEN v_refused := v_refused + 1;
+        EXCEPTION WHEN OTHERS THEN
+            IF SQLSTATE = 'P0001' AND SQLERRM = 'Table entity_link_ends is append-only. TRUNCATE is refused.' THEN
+                v_refused := v_refused + 1;
+            ELSE
+                RAISE EXCEPTION 'SELFTEST FAILED: TRUNCATE entity_link_ends: % %', SQLSTATE, SQLERRM;
+            END IF;
         END;
         IF v_refused <> 6 THEN
             RAISE EXCEPTION 'SELFTEST FAILED: % of 6 decision and link mutations refused', v_refused;
