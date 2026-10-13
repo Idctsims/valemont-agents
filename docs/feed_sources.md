@@ -88,7 +88,7 @@ Rata) and 1 by decision (No Laying Up).
 | `nfl-com` | the old RSS URL redirects to the home page | 2 d, path `nfl.com/news` |
 | `nba-com` | `/news/rss.xml` 403 | 2 d, path `nba.com/news` |
 | `pga-tour` | no feed (404) | 2 d |
-| `yahoo-f1` | no F1 feed (404) | 2 d, `site:sports.yahoo.com "Formula 1"`. The plain `site:sports.yahoo.com f1` query returned NFL and cricket stories, so it was narrowed |
+| `yahoo-f1` | **No longer a fallback (hotfix, 2026-10-13):** `https://sports.yahoo.com/f1/rss/` exists (50 of 50 F1; the paths tried in Phase 1 were 404) | Was 2 d, `site:sports.yahoo.com "Formula 1"`, which still brought NASCAR, Formula E, Super Formula, Moto2 and tennis (6 of 50). Minus terms or `intitle:` made it worse |
 
 Exact dedupe on `external_id` makes re-seeing an item across a 7-day window
 harmless.
@@ -172,7 +172,7 @@ returned; ingest takes at most 50.
 | `yahoo-cfb` | Yahoo Sports College Football | sports | cfb | rss | https://sports.yahoo.com/college-football/rss/ | 50 | 6 min | Betting odds released for Michigan Football vs Penn State | ok |
 | `yahoo-nba` | Yahoo Sports NBA | sports | nba | rss | https://sports.yahoo.com/nba/rss/ | 50 | 3 h | JJ Redick feels the Lakers are in a good spot so far this preseason | ok |
 | `yahoo-golf` | Yahoo Sports Golf | sports | golf | rss | https://sports.yahoo.com/golf/rss/ | 50 | 36 min | Vaughn Taylor wins Furyk & Friends for first PGA Tour Champions victory | ok |
-| `yahoo-f1` | Yahoo Sports F1 | sports | f1 | gnews | https://news.google.com/rss/search?q=site:sports.yahoo.com+%22Formula+1%22+when:2d&hl=en-US&gl=US&ceid=US:en | 100 | 1 h | F1 Qualifying Results: Full Starting Grid for Singapore Grand Prix | fallback |
+| `yahoo-f1` | Yahoo Sports F1 | sports | f1 | rss | https://sports.yahoo.com/f1/rss/ | 50 | 2 h | F1 Singapore Grand Prix: Max Verstappen wins at Marina Bay Street Circuit for first time | ok (2026-10-13; was a Google News fallback) |
 
 ## Embed function (Step 2, 2026-10-11)
 

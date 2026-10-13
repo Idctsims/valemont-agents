@@ -421,8 +421,12 @@ slug = "yahoo-f1"
 name = "Yahoo Sports F1"
 pillars = ["sports"]
 sport = "f1"
-kind = "gnews"
-query = "site:sports.yahoo.com \"Formula 1\""
+# Yahoo's own F1 feed (hotfix, owner 2026-10-12). The Google News query
+# `site:sports.yahoo.com "Formula 1"` brought NASCAR, Formula E, Super Formula,
+# Moto2 and tennis (6 of 50 on 2026-10-13); any minus term or intitle: made it
+# worse (soccer pages, or lost Hamilton stories). This feed: 50 of 50 F1.
+kind = "rss"
+url = "https://sports.yahoo.com/f1/rss/"
 priority = 35
 
 [[source]]

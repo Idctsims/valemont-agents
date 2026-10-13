@@ -51,6 +51,14 @@ headline only.
 
 A spent AI budget is not a failure: the job raises JobSkipped, which
 job_health records as a note, and the feed still renders headlines.
+
+THE CAP (owner, 2026-10-12 hotfix): 2,000 a Chicago day, 60 a run. On
+2026-10-12 the old 600 a day filled by 05:08 Chicago and the feed went 16 h
+unsummarized while job_health said ok. Now a run that reaches the cap, or
+starts with no room, returns a SummaryRun whose job_note begins "capped:",
+and run_tracked writes it to job_health (/settings/health shows Capped). The
+health monitor pushes once when the backlog passes BACKLOG_ALERT kept
+stories older than BACKLOG_MIN_AGE_H (core/system_jobs.py).
 """
 
 from __future__ import annotations
@@ -61,7 +69,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Sequence
 
-from core import ai, ledger
+from core import ai, ledger, memory
 from core.jobs import JobSkipped
 from feed import moves as move_rules
 from feed import rank, sources
@@ -72,7 +80,10 @@ MODEL = "claude-haiku-5-5"
 PURPOSE = "feed_summarize"
 GROUP_SIZE = 10
 RUN_CAP = 60
-DAILY_CAP = 600  # owner, 2026-10-11 (was 250)
+DAILY_CAP = 2000  # owner, 2026-10-12 hotfix (was 600; 250 before that)
+#: The health monitor's backlog alert (owner, 2026-10-12).
+BACKLOG_ALERT = 200
+BACKLOG_MIN_AGE_H = 2
 MAX_ATTEMPTS = 2
 MAX_SENTENCES = 2
 MAX_WORDS = 35  # owner, 2026-10-11 (was 45)
@@ -390,6 +401,17 @@ class SummaryRun:
     retry_passed: int = 0
     #: Move proposals written (feed/moves.py).
     proposals: int = 0
+    #: The day's cap was reached (by this run, or before it began).
+    capped: bool = False
+    #: Stories sent today (Chicago) when the run began.
+    sent_today: int = 0
+
+    @property
+    def job_note(self) -> str | None:
+        """What run_tracked writes to job_health: 'capped: ...' or nothing."""
+        if not self.capped:
+            return None
+        return f"capped: the daily cap of {DAILY_CAP} is reached ({self.sent_today + self.accepted + self.rejected} sent today)"
 
     def add(self, other: "SummaryRun") -> None:
         self.accepted += other.accepted
@@ -440,20 +462,28 @@ def summarize_group(group: Sequence[ledger.SummaryJob], *, client: Any = None,
 
 def summarize_job(*, client: Any = None) -> SummaryRun:
     """The feed_summarize system job."""
-    total = SummaryRun()
-    room = min(RUN_CAP, DAILY_CAP - ledger.feed_summarized_today())
+    sent = ledger.feed_summarized_today()
+    total = SummaryRun(sent_today=sent)
+    day_left = DAILY_CAP - sent
+    room = min(RUN_CAP, day_left)
     if room <= 0:
+        total.capped = True
         log.info("feed summarize: daily cap of %d reached", DAILY_CAP)
         return total
     follows = [rank.Follow(r.name, r.tier, r.pillar, r.floor, r.aliases, r.sport, r.sport_wide, r.kind)  # type: ignore[arg-type]
                for r in ledger.feed_follows()]
     queue = ledger.feed_summary_queue(room, MAX_ATTEMPTS, rank.priority_pattern(follows))
     model_sport = sources.model_sport_slugs()
-    for i in range(0, len(queue), GROUP_SIZE):
-        try:
-            total.add(summarize_group(queue[i:i + GROUP_SIZE], client=client, model_sport=model_sport))
-        except ai.BudgetExceeded as exc:
-            raise JobSkipped(f"AI budget spent; headlines only ({total.accepted} summarized first)") from exc
+    try:
+        for i in range(0, len(queue), GROUP_SIZE):
+            try:
+                total.add(summarize_group(queue[i:i + GROUP_SIZE], client=client, model_sport=model_sport))
+            except ai.BudgetExceeded as exc:
+                raise JobSkipped(f"AI budget spent; headlines only ({total.accepted} summarized first)") from exc
+    finally:
+        memory.release()
+    # This run used up what was left of the day.
+    total.capped = day_left <= RUN_CAP and len(queue) >= day_left
     if queue:
         log.info("feed summarize: %d accepted, %d rejected of %d; %d retried for copying, %d passed the retry; "
                  "%d move proposals", total.accepted, total.rejected, len(queue), total.retried,
