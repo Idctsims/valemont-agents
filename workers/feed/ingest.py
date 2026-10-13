@@ -10,6 +10,10 @@ For each active source, lowest priority number first, completely before the next
      never shown, because "first seen" would date a back catalogue to now.
      Later fetches: an undated item's published_at is its first-seen time.
      Every published_at is capped at the fetch time (ESPN dates ahead).
+     Google News items published more than gnews_window_days + STALE_GRACE
+     before the fetch are dropped on every fetch, before decoding (owner,
+     2026-10-11): Google News can lead with old pages, e.g. an Axios Miami
+     author page dated 2024.
   4. Exact dedupe: an external id this source already has is skipped before
      anything else (so Google News links are decoded only once); then a
      canonical URL that exists anywhere is skipped.
@@ -55,6 +59,8 @@ log = logging.getLogger("valemont.feed")
 USER_AGENT = "ValemontCommand/1.0 (+https://valemont-command.vercel.app/privacy)"
 TIMEOUT_S = 15.0
 FIRST_FETCH_MAX_AGE = timedelta(hours=72)
+#: Days past a Google News source's query window before an item is stale.
+STALE_GRACE = timedelta(days=2)
 DECODES_PER_SECOND = 2
 FAILURES_TO_ALERT = 6
 SOURCES_LINK = "/settings/sources"
@@ -134,6 +140,8 @@ class SourceStats:
     known: int = 0
     decode_failed: int = 0
     overflow: int = 0
+    #: Google News items older than the source's window + STALE_GRACE.
+    stale: int = 0
     error: str | None = None
 
 
@@ -149,7 +157,7 @@ class RunStats:
         return (f"{len(self.sources)} sources, {self.total('new_stories')} new stories, "
                 f"{self.total('joined')} joins, {self.total('filtered')} filtered, "
                 f"{self.total('seeded')} seeded, {self.total('decode_failed')} decode failures, "
-                f"{self.total('overflow')} cap overflows"
+                f"{self.total('overflow')} cap overflows, {self.total('stale')} stale"
                 + (f"; failing: {', '.join(failed)}" if failed else ""))
 
 
@@ -255,9 +263,14 @@ class Ingest:
         fresh = [i for i in items if i.external_id not in known_ext]
         stats.known = len(items) - len(fresh)
 
+        stale_after = timedelta(days=src.gnews_window_days) + STALE_GRACE
         seeded: list[ledger.FeedItemIn] = []
         keep: list[ledger.FeedItemIn] = []
         for raw in fresh:
+            if (src.kind == "gnews" and raw.published_at is not None
+                    and fetched_at - raw.published_at > stale_after):
+                stats.stale += 1
+                continue
             if first and raw.published_at is not None and fetched_at - raw.published_at > FIRST_FETCH_MAX_AGE:
                 continue
             try:

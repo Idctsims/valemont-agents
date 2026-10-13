@@ -8,6 +8,13 @@ export const MAX_PAGE = 20;
 
 export type Outlet = { name: string; url: string };
 
+export type Pillar = "home" | "sports";
+
+/** What a card's buttons and swipes write (db/039 feed_reactions); 'open'
+ * comes only from the beacon (/api/feed/open). */
+export type CardReaction = "love" | "neutral" | "not_interested" | "undo";
+export const CARD_REACTIONS: readonly CardReaction[] = ["love", "neutral", "not_interested", "undo"];
+
 export type FeedStory = {
   id: number;
   title: string;
@@ -21,7 +28,39 @@ export type FeedStory = {
   /** The other outlets carrying the story, one link each. */
   outlets: Outlet[];
   isTest: boolean;
+  /** One line tied to a venture, only when the link is concrete (feed_why). */
+  whyItMatters: string | null;
+  /** Loved in this pillar (the latest reaction): the card stays marked. */
+  loved: boolean;
 };
+
+/** Home's two orders: the learned ranking (db/039 feed_for_you) and newest first. */
+export type FeedTab = "for-you" | "latest";
+
+/** `?feed=` as a tab; anything else is For you. */
+export function tabFromParam(raw: string | string[] | undefined): FeedTab {
+  return (Array.isArray(raw) ? raw[0] : raw) === "latest" ? "latest" : "for-you";
+}
+
+/** The latest reaction hides a card when it is neutral or not interested. */
+export function hides(reaction: string | null | undefined): boolean {
+  return reaction === "neutral" || reaction === "not_interested";
+}
+
+/** A card's next state after a tap: Love toggles (a second tap is an undo). */
+export function nextReaction(tapped: "love" | "neutral" | "not_interested", loved: boolean): CardReaction {
+  return tapped === "love" && loved ? "undo" : tapped;
+}
+
+/** Swipe distance (px) that commits Love (right) or Not interested (left).
+ * Must match --vm-swipe-commit (4.5rem) in tokens.css, as goal rows do. */
+export const SWIPE_COMMIT_PX = 72;
+
+export function swipeReaction(dx: number): "love" | "not_interested" | null {
+  if (dx >= SWIPE_COMMIT_PX) return "love";
+  if (dx <= -SWIPE_COMMIT_PX) return "not_interested";
+  return null;
+}
 
 /** "12m", "3h", "Yesterday", "Oct 9": how long ago, briefly. */
 export function relativeTime(iso: string, now: number): string {
@@ -58,7 +97,7 @@ export function otherOutlets(leadSource: string, items: { name: string; url: str
   return out;
 }
 
-/** `?latest=` as a page number, 1 to MAX_PAGE; anything else is page 1. */
+/** `?latest=` / `?foryou=` as a page number, 1 to MAX_PAGE; anything else is page 1. */
 export function pageFromParam(raw: string | string[] | undefined): number {
   const n = Number(Array.isArray(raw) ? raw[0] : raw);
   return Number.isInteger(n) && n >= 1 && n <= MAX_PAGE ? n : 1;

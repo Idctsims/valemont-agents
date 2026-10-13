@@ -81,7 +81,7 @@ flowchart TB
 
 One Supabase Postgres database, `public` schema, migrations continuing at `db/018`. The existing ledger tables stay the single source of truth for anything that wins or loses: generated parlays, played slips, bot trades and 15-minute BTC calls are all `commitments` with `legs` and `resolutions`. Everything else is ordinary app data.
 
-**(as built) Migration numbering.** Applied: `db/001`–`012` and `db/014`–`020`. `db/013` (production roster, go-live) is deliberately unpasted. Chat 1 used: `018` read-only inspection role, `019` push tables, `020` shared tables plus ledger read policies, the TRUNCATE guard and grant lockdown. **Next new file: `db/021`.**
+**(as built) Migration numbering.** Applied: `db/001`–`012` and `db/014`–`020`. `db/013` (production roster, go-live) is deliberately unpasted. Chat 1 used: `018` read-only inspection role, `019` push tables, `020` shared tables plus ledger read policies, the TRUNCATE guard and grant lockdown. **Since then (from `migration_log`, 2026-10-12):** `db/021`–`041` are all applied: `040` venture taglines at 05:36:53 UTC and `041` the film/TV seed split at 21:59:10 UTC, both on Oct 12. The per-file record is CLAUDE.md, Current State, "Migrations". **Next new file: `db/042`.**
 
 **Paper vs live, from day one.** Every money table carries `mode text not null check (mode in ('paper','live'))` with default `'paper'`, alongside the existing `is_test`. Capital Tracker, model stats and bot stats always group by `mode`, so live money never mixes with paper numbers and flipping a bot to live needs no schema change. **(as built)** `commitments` gained `mode` (default `'paper'`) and `origin` (default `'agent'`) in db/020; every existing row reads paper/agent.
 
@@ -164,7 +164,7 @@ Views the app reads: `v_model_performance` (hit rate, ROI net of fees and CLV by
 
 ## 4. API and services inventory
 
-**(as built) Expected spend is about $0–20/month until the worker grows:** the Railway free plan (about $0.45–0.51/month of usage against a $1 credit) and the Claude API (starting with $5 prepaid and a **$20 monthly cap**, owner decision Oct 9; it was $10). Everything else runs on free tiers. Original estimate, for when the full build is running: about **$40–60/month**, with Railway Hobby (about $7–10) and the Claude API (about $30–50). The Claude API has no free tier, and a Claude Pro subscription doesn't cover API usage.
+**(as built) Expected spend is about $5–25/month:** Railway Hobby from Oct 13 ($5 a month including $5 of usage; the feed took the worker from about 40 MB to about 130 MB at rest, past the Free plan's $1 credit) and the Claude API (starting with $5 prepaid and a **$20 monthly cap**, owner decision Oct 9; it was $10). Everything else runs on free tiers. Original estimate, for when the full build is running: about **$40–60/month**, with Railway Hobby (about $7–10) and the Claude API (about $30–50). The Claude API has no free tier, and a Claude Pro subscription doesn't cover API usage.
 
 **How the Claude estimate is built.** Assumes about 300 summaries a day on the Haiku tier through the Batch API (about $5), Wags at about 20 messages a day on Sonnet 5.5 with prompt caching (about $14), and the Morning Brief, Arsenal, slip parsing, Lookbook tagging and bot reasoning together at about $15. Every call is logged to `ai_usage`, and a budget guard downgrades non-critical calls to Haiku if the month runs hot. **(as built)** The guard lives in `workers/core/ai.py`, the only file allowed to call Claude: at 80% of `AI_MONTHLY_BUDGET_USD` (code default $10; the owner set **$20**, Oct 9) non-critical calls downgrade to the cheapest model; at 100% they're refused; one push per threshold per month. The web side gets a TypeScript twin in Chat 2, reading the same table.
 
@@ -174,7 +174,7 @@ Views the app reads: `v_model_performance` (hit rate, ROI net of fees and CLV by
 | --- | --- | --- | --- | --- | --- |
 | Vercel | Next.js app, API routes, watchdog route | Hobby, free (personal use). **Live at `valemont-command.vercel.app`**; builds only when `apps/web` changes | 0 | Vercel account linked to GitHub; env: Supabase URL, publishable key, `OWNER_USER_ID`, VAPID keys, `SUPABASE_SECRET_KEY` (watchdog only), `WATCHDOG_TOKEN`, `WATCHDOG_PING_URL` | Cloudflare Pages |
 | Supabase | Postgres, Auth, Storage, pgvector, Edge Functions | Free: 500 MB DB, 1 GB storage, pauses after 7 idle days (the heartbeat prevents it) | 0 | Existing project; publishable key (browser), a dedicated `vercel-watchdog` secret key (server, one route), Session pooler URL, read-only role URL | Pro at $25 if the cap is hit |
-| Railway | All Python workers and the scheduler | **Free plan for now (as built):** $1/month usage credit, 0.5 GB RAM per service. The system-jobs-only worker uses about 45–50 MB, about $0.45–0.51/month. Move to Hobby ($5 including $5 usage) when real agents or bots push past $1 | 0 now; 5+ later | Existing account; trial ends about Oct 18, after which the service must be redeployed by hand | Hobby; Fly.io or Render |
+| Railway | All Python workers and the scheduler | **Hobby from Oct 13 (owner):** $5/month including $5 of usage. Free ($1 credit, 0.5 GB per service) until then: the system-jobs-only worker used about 45–50 MB; with the Chat 3 feed it rests at about 130 MB with ingest peaks about 155 MB (Oct 13), about $1.27/month of memory alone at about $10 per GB-month, past the $1 credit | 5 | Existing account | Fly.io or Render |
 | Claude API | Summaries, vision, Brief, Wags, Arsenal, reasoning | Pay as you go | Start: $5 prepaid, $20 cap (Oct 9; was $10) | Console API key with a monthly spend limit set (Chat 2) | Haiku-only mode via budget guard |
 | Embeddings | Learning engine, Lookbook similarity | Supabase built-in gte-small (384-dim) in Edge Functions, free | 0 | None | sentence-transformers on Railway |
 | Web Push | All push alerts | Self-hosted VAPID: `web-push` on Vercel, `pywebpush` on the worker, free. **Proven on a locked iPhone from both senders** | 0 | VAPID key pair in Vercel and Railway | Email digest |
@@ -295,7 +295,7 @@ Thirteen build chats after this one, each split into phases with a test you run 
    - Also: silent Wags proposals fixed (a generated "Proposing: …" line when a turn ends with no text); one shared Wags voice file; server actions return readable refusals instead of throwing; a zero-attempt void/missed invariant added in the database (db/024–025).
 
 **Carried out of Chat 2:**
-- Goals' first real Monday: the 00:01 rollover and the 07:00 "Set your week" push are first due Mon Oct 12 (Chicago). Pending until seen.
+- ~~Goals' first real Monday~~ **Done Mon Oct 12** (the last carried item; read via `db_inspect`): `goals_rollover` ran 00:01:00 Chicago (05:01:00 UTC, ok 05:01:01, 0 failures) and carried the 3 weekly goals still open in week Oct 5 into week Oct 12 (carry_count 1); `goals_monday_push` ran 07:00 Chicago and notification 206 "Set your week" was sent 12:00:01 UTC, no error. The owner confirmed it arrived.
 - Railway trial ends about Oct 18; redeploy the worker by hand on Free.
 - ~~The silent-proposals before/after token comparison~~ **Done Oct 11:** message 260 has a model-written sentence before its proposal and no reasoning part, 254 output tokens against message 188's 544 with no text.
 
@@ -304,9 +304,15 @@ Thirteen build chats after this one, each split into phases with a test you run 
 **Set up in this chat:** nothing new; RSS needs no keys.
 
 1. Source registry, RSS ingest, dedupe, Haiku batch summaries, embeddings.
-   - [ ] All 13 seed sources ingest; every item shows a summary and the original link
+   - [x] All 13 seed sources ingest; every item shows a summary and the original link. **GREEN Oct 13 (owner, 13:28 Chicago)** on the owner's criterion: For you page one is summarized, not the whole backlog. Read via `db_inspect` at 18:27 UTC: `feed_for_you` page one (30) has 30 of 30 summaries on Home and 29 of 30 on Sports; the one without (story 527) was retired as headline-only after 2 failed tries, as designed.
+     - **Worker RAM after the Phase 1 hotfix** (`job_health` RSS notes; boot 02:54:57 UTC Oct 13): 74 MB at boot; 129 MB at +2 h 10 m (nearest to +3 h); 133 MB at +5 h 05 m (nearest to +6 h); 130 MB at rest at 18:27 UTC (+15.5 h), 155 MB peak during an ingest, returned after it. Slope from +2 h to the latest reading: about +0.07 MB an hour, flat within rounding. From Oct 13 every job's log line carries its RSS note, so Railway keeps the history `job_health` overwrites.
+     - The Oct 12 Step 7 report: `docs/feed_checks/report-2026-10-13/`.
 2. Love / Neutral / Not Interested, interest profile, daily re-rank, seeded interests.
-   - [ ] Ten Not Interested taps on one topic visibly push it down the next day
+   - [x] Reactions visibly move the ranking. **Closed Oct 12 by the owner** on three grounds (design and record: `docs/feed_ranking.md`, owner decision 7):
+     1. **The live Not Interested movement:** after 4 Not Interested taps on the topic, the held-out story went 64 → 159 against the control's 86 → 99, a net −82. **Not pre-registered:** the frozen check was the Love direction, which FAILED both its conditions because the run had 1 Love, not 10.
+     2. **The Love unit test passes:** `tests/test_feed_rank.py` `TenLoves`, under the owner's amended rule (held-out 50 → 35 against control 51 → 62; the topic on page one 6 → 12). `TenNotInterested` holds the other direction.
+     3. **⏰ Owner watch, due Sun Oct 19:** one week of Love effects on /settings/feed. Open until then.
+   - Also Oct 12: db/041 split the film/TV love seed. Hollywood and US dealmaking and the major festivals are loves; international and regional TV/film markets are not interested.
 3. Sports News for CFB, NFL, NBA, F1 and Golf on the same engine.
    - [ ] Filter chips by sport; reactions train the sports profile separately
 
@@ -381,7 +387,7 @@ Thirteen build chats after this one, each split into phases with a test you run 
 
 ### Chat 10 — Crypto Long-Term Home and Core Paper Bot
 
-**Set up in this chat:** Alpaca account and paper key pair (instant), CoinGecko Demo key. Likely the point to move Railway to Hobby.
+**Set up in this chat:** Alpaca account and paper key pair (instant), CoinGecko Demo key. (Railway moved to Hobby earlier, on Oct 13, when the Chat 3 feed outgrew Free.)
 
 1. Long-Term Home: live prices, accumulation signals with reasoning, news strip.
    - [ ] BTC, ETH, SOL and XRP each show accumulate, hold or wait with a reason
@@ -438,8 +444,8 @@ The three most likely ways this build fails are silent worker death, data source
 | Supabase 500 MB cap | Medium within 6 months | Retention jobs, 384-dim embeddings, candle archive windowed (design needed, see §3), size alerts at 400 and 450 MB **(built)** |
 | Supabase project pauses | Low | The heartbeat writes every minute **(built)** |
 | Worker dies silently at 3 a.m. | **Mitigated (built, drilled)** | Railway restart policy and the repo's SIGTERM drain (seen working in Drill 2: clean shutdown on removal); worker health monitor; external watchdog pushes "Worker down" within 10 minutes; healthchecks.io emails if the watchdog stops; both drills passed Oct 8 |
-| Railway usage creeps past the plan's credit | Medium | One consolidated worker; usage measured (about $0.45–0.51/month on Free); move to Hobby when agents or bots push past $1 |
-| Railway trial ends (about Oct 18) | Certain | Worker stops; watchdog alerts; redeploy by hand on the Free plan |
+| Railway usage creeps past the plan's credit | Medium | One consolidated worker; RSS on every job's log line and in `job_health`. **Happened Oct 13:** the feed took the worker to about 130 MB, past Free's $1; moved to Hobby ($5 of usage included) |
+| ~~Railway trial ends (about Oct 18)~~ | Closed Oct 13 | On Hobby; no lapse and no hand redeploy |
 | Supabase clock skew ("JWT issued at future") | Low, observed | Skew inside Supabase (API gateway vs PostgREST), not the caller, so no client clock fix applies. Watchdog read retried once; persistent failure returns 503 and reports `/fail` to healthchecks |
 | Vercel function time limits on Hobby | Medium | Nothing long-running on Vercel: AI generation, parsing and syncing happen on Railway, Vercel only reads and enqueues; watchdog has a hard time budget under 30 s |
 | Claude API cost spike | Low | Spend limit in the Anthropic console, `ai_usage` logging, budget guard **(built)**, Batch API for summaries |
@@ -512,7 +518,7 @@ Approved by Tsims on Oct 7, 2026: all six decisions below are locked. Chat 1 sta
 - [x] Betting runs on the market-consensus engine; the old NFL models stay research-only until a new model passes a pre-registered holdout (Read first, points 1–2)
 - [x] Amend CLAUDE.md: paper by default, live only by an explicit per-bot flip with separate keys and hard limits (point 5)
 - [x] Alpaca for the core bot; memecoin live mode as FOMO signals you execute by hand (point 6)
-- [x] Pay for Railway Hobby and the Claude API (about $40–60/month); everything else free (section 4). **Amended Oct 8:** Railway stays on the Free plan until the worker outgrows its $1 credit; the Claude API starts at $5 prepaid with a $10 cap. **Amended Oct 9:** the cap is $20/month.
+- [x] Pay for Railway Hobby and the Claude API (about $40–60/month); everything else free (section 4). **Amended Oct 8:** Railway stays on the Free plan until the worker outgrows its $1 credit; the Claude API starts at $5 prepaid with a $10 cap. **Amended Oct 9:** the cap is $20/month. **Amended Oct 13:** Railway on Hobby (the feed worker rests at about 130 MB).
 - [x] Thirteen-chat sequence with Wags and the Morning Brief framework built in Chat 2 (section 6)
 
 **Owner decisions still parked** (recorded in CLAUDE.md, not part of this build's critical path): go-live of the existing Kalshi roster (`db/013`), the `nfl_ml` commit-window question, the crypto research track review, and the weekly NFL props archive run every Tuesday (first: Oct 13, week 5).

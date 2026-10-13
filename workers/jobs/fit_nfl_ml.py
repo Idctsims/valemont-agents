@@ -28,6 +28,7 @@ import sys
 from datetime import datetime, timezone
 
 from core import ledger
+from core.paths import load_env
 from sports.nfl import injuries
 from sports.nfl.ml_dataset import as_fit_rows, build_rows
 from sports.nfl.ml_model import choose_lambda, fit_ridge, walk_forward_predictions
@@ -146,4 +147,5 @@ def dev_calibration(rows, lam: float) -> dict:
 
 
 if __name__ == "__main__":
+    load_env()  # the repo's one .env (core/paths.py); Railway injects variables instead
     sys.exit(main())

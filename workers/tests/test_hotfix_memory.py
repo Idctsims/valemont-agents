@@ -2,7 +2,8 @@
 summary cap starved the feed):
 
 * RSS: read on this platform, sampled per job, written to job_health notes
-  next to the job's own note ("capped: ... · rss 84 MB, job peak 131 MB");
+  next to the job's own note ("capped: ... · rss 84 MB, job peak 131 MB"),
+  and the same note on the job's log line (its history);
 * the candidate vectors are float32, parse exactly, and cluster as before;
 * clients are reused (embed, Claude) and the ingest fetcher is closed;
 * the summary backlog alert: one push past 200, re-armed below, adopted
@@ -13,6 +14,7 @@ Stubbed only: no database, no network, no Claude.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import unittest
@@ -80,6 +82,24 @@ class Notes(unittest.TestCase):
         self.run_job(skipped)
         self.assertEqual(self.recorded, [("ok", "skipped: AI budget spent · rss 84 MB, job peak 131 MB")])
 
+    def logging_on(self) -> None:
+        # tests/__init__ silences logging package-wide; these tests read it.
+        logging.disable(logging.NOTSET)
+        self.addCleanup(logging.disable, logging.CRITICAL)
+
+    def test_the_log_line_carries_the_rss(self) -> None:
+        # job_health keeps only the latest note; the log line is the history.
+        self.logging_on()
+        with self.assertLogs("valemont.jobs", "INFO") as logs:
+            self.run_job(lambda: None)
+        self.assertEqual(logs.output, ["INFO:valemont.jobs:probe_job rss 84 MB, job peak 131 MB"])
+
+    def test_the_log_line_matches_the_recorded_note(self) -> None:
+        self.logging_on()
+        with self.assertLogs("valemont.jobs", "INFO") as logs:
+            self.run_job(lambda: summarize.SummaryRun(capped=True, sent_today=2000))
+        self.assertEqual(logs.output, [f"INFO:valemont.jobs:probe_job {self.recorded[0][1]}"])
+
     def test_a_failure_records_only_the_error(self) -> None:
         def broken():
             raise RuntimeError("boom")
@@ -113,6 +133,29 @@ class Float32Candidates(unittest.TestCase):
         src = inspect.getsource(ledger.feed_candidates)
         self.assertNotIn(".fetchall(", src)
         self.assertIn("_vec_array", src)
+
+
+class Phase2Audit(unittest.TestCase):
+    """The memory audit of Phase 2's rebuild (2026-10-13): the window's
+    centroids are float32 and streamed; the rebuild hands memory back."""
+
+    def test_rank_stories_carry_float32_centroids(self) -> None:
+        s = ledger._rank_story((1, ["home"], None, "t", None, None, "src", "[0.5,-0.25]"))
+        self.assertEqual((s.vec.typecode, list(s.vec)), ("f", [0.5, -0.25]))
+        self.assertEqual(len(ledger._rank_story((1, ["home"], None, "t", None, None, "src", None)).vec), 0)
+
+    def test_the_window_and_the_signals_are_streamed(self) -> None:
+        import inspect
+        for fn in (ledger.feed_stories_to_score, ledger.feed_reaction_signals):
+            self.assertNotIn(".fetchall(", inspect.getsource(fn), fn.__name__)
+
+    def test_the_rebuild_releases_memory_even_when_it_fails(self) -> None:
+        from feed import profile
+        with mock.patch.object(ledger, "feed_follows", side_effect=RuntimeError("db down")), \
+                mock.patch.object(memory, "release") as release:
+            with self.assertRaises(RuntimeError):
+                profile.rebuild(embed=lambda t: [])
+        release.assert_called_once_with()
 
 
 class Clients(unittest.TestCase):

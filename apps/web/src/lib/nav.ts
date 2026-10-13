@@ -87,6 +87,7 @@ export const NAV: NavGroup[] = [
 export const SYSTEM_PAGES: NavPage[] = [
   { label: "System health", href: "/settings/health" },
   { label: "Sources", href: "/settings/sources" },
+  { label: "Feed profile", href: "/settings/feed" },
   { label: "Phone setup", href: "/onboarding" },
   { label: "Design tokens", href: "/design" },
 ];

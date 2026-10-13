@@ -1,7 +1,19 @@
 import { expect, test } from "@playwright/test";
 
 import { SYSTEM_PAGES } from "../src/lib/nav";
-import { MAX_PAGE, chicagoMidnight, otherOutlets, pageFromParam, reasonLabel, relativeTime } from "../src/lib/feed/types";
+import {
+  MAX_PAGE,
+  SWIPE_COMMIT_PX,
+  chicagoMidnight,
+  hides,
+  nextReaction,
+  otherOutlets,
+  pageFromParam,
+  reasonLabel,
+  relativeTime,
+  swipeReaction,
+  tabFromParam,
+} from "../src/lib/feed/types";
 
 // The feed's pure helpers (src/lib/feed/types.ts): no page, no server.
 
@@ -70,4 +82,39 @@ test.describe("Chicago midnight", () => {
 
 test("the sources page is in the system pages", () => {
   expect(SYSTEM_PAGES.map((p) => p.href)).toContain("/settings/sources");
+});
+
+test.describe("reactions and tabs (Phase 2)", () => {
+  test("For you is the default tab; only ?feed=latest is Latest", () => {
+    expect(tabFromParam(undefined)).toBe("for-you");
+    expect(tabFromParam("latest")).toBe("latest");
+    expect(tabFromParam(["latest", "x"])).toBe("latest");
+    expect(tabFromParam("LATEST")).toBe("for-you");
+    expect(tabFromParam("anything")).toBe("for-you");
+  });
+
+  test("neutral and not interested hide a card; love, open and undo never do", () => {
+    expect(hides("neutral")).toBe(true);
+    expect(hides("not_interested")).toBe(true);
+    for (const r of ["love", "open", "undo", null, undefined]) expect(hides(r)).toBe(false);
+  });
+
+  test("Love toggles: a loved card's Love tap is an undo", () => {
+    expect(nextReaction("love", false)).toBe("love");
+    expect(nextReaction("love", true)).toBe("undo");
+    expect(nextReaction("not_interested", true)).toBe("not_interested");
+    expect(nextReaction("neutral", false)).toBe("neutral");
+  });
+
+  test("a swipe commits only past the commit distance, in either direction", () => {
+    expect(swipeReaction(SWIPE_COMMIT_PX)).toBe("love");
+    expect(swipeReaction(SWIPE_COMMIT_PX - 1)).toBeNull();
+    expect(swipeReaction(-SWIPE_COMMIT_PX)).toBe("not_interested");
+    expect(swipeReaction(-SWIPE_COMMIT_PX + 1)).toBeNull();
+    expect(swipeReaction(0)).toBeNull();
+  });
+
+  test("the feed profile is a system page", () => {
+    expect(SYSTEM_PAGES.map((p) => p.href)).toContain("/settings/feed");
+  });
 });

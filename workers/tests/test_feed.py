@@ -13,6 +13,7 @@ import itertools
 import json
 import os
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any
@@ -676,18 +677,34 @@ class SummaryJobRun(unittest.TestCase):
 
 
 class Chain(unittest.TestCase):
-    def test_summarize_runs_after_ingest_even_when_ingest_fails(self) -> None:
+    def test_summarize_score_and_why_run_after_ingest_even_when_ingest_fails(self) -> None:
         order = []
         with mock.patch.object(ingest, "ingest_job", side_effect=lambda: order.append("ingest") or (_ for _ in ()).throw(RuntimeError("db down"))), \
                 mock.patch.object(system_jobs, "run_tracked", lambda j: order.append(j.name)):
             with self.assertRaises(RuntimeError):
                 system_jobs.feed_ingest_job()
-        self.assertEqual(order, ["ingest", "feed_summarize"])
+        self.assertEqual(order, ["ingest", "feed_summarize", "feed_score", "feed_why"])
 
-    def test_a_summarize_failure_does_not_fail_ingest(self) -> None:
+    def test_a_chained_failure_does_not_fail_ingest_or_stop_the_chain(self) -> None:
+        order = []
+
+        def failing(job):
+            order.append(job.name)
+            raise RuntimeError("recorded")
+
         with mock.patch.object(ingest, "ingest_job", lambda: None), \
-                mock.patch.object(system_jobs, "run_tracked", side_effect=RuntimeError("recorded")):
+                mock.patch.object(system_jobs, "run_tracked", failing):
             system_jobs.feed_ingest_job()
+        self.assertEqual(order, ["feed_summarize", "feed_score", "feed_why"])
+
+    def test_why_runs_after_the_profile_job_even_when_it_is_skipped(self) -> None:
+        order = []
+        with mock.patch.object(system_jobs.feed_profile_mod, "profile_job",
+                               side_effect=jobs.JobSkipped("built today")), \
+                mock.patch.object(system_jobs, "run_tracked", lambda j: order.append(j.name)):
+            with self.assertRaises(jobs.JobSkipped):
+                system_jobs.feed_profile_job()
+        self.assertEqual(order, ["feed_why"])
 
 
 # ======================================================================= embed
@@ -1031,6 +1048,38 @@ class GoogleNews(IngestCase):
         run.decode = lambda u: decodes.append(u)
         run.run_source(s)
         self.assertEqual(decodes, [])
+
+    def test_stale_items_are_dropped_before_decoding(self) -> None:
+        """Owner, 2026-10-11: a Google News item published more than
+        window_days + 2 days before the fetch is dropped at ingest, on every
+        fetch, before its link is decoded. The case: an Axios Miami author
+        page Google News dated 2024 (window 7 days)."""
+        s = replace(source(1, "axios-miami", kind="gnews"), gnews_window_days=7)
+        g = "https://news.google.com/rss/articles/"
+        self.feeds[s.url] = rss(
+            rss_item("Avery Lotz", g + "author", guid="old", when=datetime(2024, 6, 1, tzinfo=timezone.utc)),
+            rss_item("Just past", g + "past", guid="past", when=NOW - timedelta(days=9, minutes=1)),
+            rss_item("Just inside", g + "inside", guid="inside", when=NOW - timedelta(days=9)),
+            rss_item("Today", g + "today", guid="today"))
+        decodes: list[str] = []
+        run = self.run_ingest()
+        run.decode = lambda u: decodes.append(u) or f"https://www.axios.com/{u.rsplit('/', 1)[1]}"
+        stats = run.run_source(s)
+        self.assertEqual(stats.stale, 2)
+        self.assertEqual(sorted(k[1] for k in self.db.items), ["inside", "today"])
+        self.assertEqual(sorted(decodes), [g + "inside", g + "today"])
+        self.assertIn("2 stale", run_line([stats]))
+
+    def test_the_stale_rule_is_google_news_only(self) -> None:
+        s = source(1, "espn")
+        self.feeds[s.url] = rss(rss_item("Old feature", "https://espn.invalid/old", guid="old",
+                                         when=NOW - timedelta(days=20)))
+        stats = self.run_ingest().run_source(s)
+        self.assertEqual((stats.stale, len(self.db.items)), (0, 1))
+
+
+def run_line(sources: list[ingest.SourceStats]) -> str:
+    return ingest.RunStats(sources).line()
 
 
 if __name__ == "__main__":

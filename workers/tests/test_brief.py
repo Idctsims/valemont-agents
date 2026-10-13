@@ -362,6 +362,23 @@ class Fallback(unittest.TestCase):
         self.assertEqual(lines["ventures"][1], "Sail Beach Club: Lender call (due today).")
         self.assertEqual(lines["capital"], ["Paper: $1,000.00 (+$0.00 today)."], "paper is called paper")
 
+    def test_the_feed_section_needs_only_its_registry_row(self) -> None:
+        """db/039 registers 'feed' as a brief section: the fallback words it
+        from ctx_feed's top stories, and omits it when there are none."""
+        sections = list(SECTIONS) + [ledger.BriefSection("feed", "Feed", 40)]
+        feed = {"top_stories": [
+            {"title": "Miami marina sold", "source": "Bisnow South Florida",
+             "why_it_matters": "A new Sail Beach Club neighbor on the bay."},
+            {"title": "Studio merger", "source": "Variety"}]}
+        made = brief.fallback_brief(dict(PAYLOAD, feed=feed), sections)
+        brief.validate(made.body, [*KEYS, "feed"])
+        lines = {s["key"]: s["lines"] for s in made.body["sections"]}
+        self.assertEqual(lines["feed"], [
+            "Miami marina sold (Bisnow South Florida). A new Sail Beach Club neighbor on the bay.",
+            "Studio merger (Variety)."])
+        empty = brief.fallback_brief(dict(PAYLOAD, feed={"top_stories": [], "note": "No ranked stories yet."}), sections)
+        self.assertNotIn("feed", {s["key"] for s in empty.body["sections"]})
+
     def test_a_section_with_no_data_is_omitted_never_padded(self) -> None:
         payload = dict(PAYLOAD, goals={"week": {"held": 0, "done": 0, "goals": []}},
                        capital={"modes": {}}, ventures={"error": "provider down"})
