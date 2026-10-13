@@ -42,7 +42,9 @@
 --                          present, 11 F1 teams less Ferrari, 3 tours (no
 --                          follow); the 76ers and Ferrari tier-2 follows are
 --                          deleted (owner D3: the worker derives them from
---                          the current link); the sports seed phrases.
+--                          the current link); the sports seed phrases; a
+--                          url_regex for Golf Digest's course-directory
+--                          pages (Phase 1 hotfix, owner 2026-10-12).
 --
 -- Access: RLS on every new table; anon nothing. The owner reads everything,
 -- decides proposals (UPDATE of `decision` only, write-once by trigger) and
@@ -598,6 +600,16 @@ DELETE FROM follows f
  WHERE e.id = f.entity_id
    AND e.name IN ('Philadelphia 76ers', 'Ferrari')
    AND f.tier = 2 AND f.pillar = 'sports';
+
+-- Sports feed rule (owner, 2026-10-12, Phase 1 hotfix; sports rules belong
+-- here): Golf Digest's course-directory pages ("King's Deer Golf Club: King's
+-- Deer", golfdigest.com/courses/<state>/...), 61 kept stories since
+-- 2026-10-12 03:39 UTC, none of them news (news is /story/ and /post/). Like
+-- db/037-038 it applies to stories founded from now on; it rewrites none.
+INSERT INTO feed_rules (kind, pillar, pattern, note) VALUES
+    ('url_regex', NULL, '^https?://(www\.)?golfdigest\.com/courses/',
+                    'junk: Golf Digest course-directory pages (owner, 2026-10-12)')
+ON CONFLICT ON CONSTRAINT feed_rules_once DO NOTHING;
 
 -- ===================================================================== 6
 -- Sports seed phrases (docs/sports_news.md §2), set once: only while both
@@ -1375,5 +1387,6 @@ SELECT jsonb_array_length(seed_interests #> '{feed,sports,love}') AS sports_love
   FROM app_settings;                                                                      -- (e)
 
 SELECT key, sort, brief_section, enabled FROM context_providers ORDER BY sort;           -- (f)
+SELECT id, kind, pattern, active FROM feed_rules WHERE pattern LIKE '%golfdigest%';       -- (f2) one active url_regex
 
 SELECT name, applied_at FROM migration_log WHERE name = '042_sports';                     -- (g)
