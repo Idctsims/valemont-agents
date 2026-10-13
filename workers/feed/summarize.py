@@ -313,6 +313,7 @@ class Copied:
 def results_for(group: Sequence[ledger.SummaryJob], payload: Any, *,
                 attempts: int = 1, model_sport: frozenset[str] = frozenset(),
                 found: list[tuple[int, str | None, tuple[move_rules.RawMove, ...]]] | None = None,
+                sports_names: frozenset[str] = frozenset(),
                 ) -> tuple[list[ledger.SummaryOut], list[str], list[Copied]]:
     """Every story in the group gets a SummaryOut: accepted, or summary None
     (`attempts` counted). Returns (results, problems for the log, the stories
@@ -346,8 +347,10 @@ def results_for(group: Sequence[ledger.SummaryJob], payload: Any, *,
         accepted[sid] = ledger.SummaryOut(
             story_id=sid, summary=v.summary, entities=v.entities, topics=v.topics, sport=v.sport,
             drop=v.drop, filtered_reason=f"drop:{v.drop}" if DROP_LIVE and v.drop != "none" else None,
-            # The money question decides sports stories (owner, 2026-10-13).
-            category=categories.decide(v.category, v.money, final_sport),
+            # The business-of-sports question decides sports stories (owner,
+            # 2026-10-13): a sport, or a sports entity among the entities.
+            category=categories.decide(v.category, v.money, final_sport,
+                                       categories.sports_entity(v.entities, sports_names)),
             attempts=attempts, sport_from_model=from_model)
         if v.moves and found is not None:
             found.append((sid, final_sport, v.moves))
@@ -437,7 +440,8 @@ class SummaryRun:
 
 
 def summarize_group(group: Sequence[ledger.SummaryJob], *, client: Any = None,
-                    model_sport: frozenset[str] = frozenset()) -> SummaryRun:
+                    model_sport: frozenset[str] = frozenset(),
+                    sports_names: frozenset[str] = frozenset()) -> SummaryRun:
     """One call for up to GROUP_SIZE stories, then one targeted retry for the
     stories that failed only the copy check and have a try left: the retry
     names the copied phrase (retry_message). The first call and the retry are
@@ -446,7 +450,7 @@ def summarize_group(group: Sequence[ledger.SummaryJob], *, client: Any = None,
     first: list[int] = []
     found: list[tuple[int, str | None, tuple[move_rules.RawMove, ...]]] = []
     results, problems, copied = results_for(group, _ask(user_message(group, model_sport), client, first, "group"),
-                                            model_sport=model_sport, found=found)
+                                            model_sport=model_sport, found=found, sports_names=sports_names)
     run = SummaryRun()
     attempts_left = {j.story_id: MAX_ATTEMPTS - j.attempts - 1 for j in group}
     copied = [c for c in copied if attempts_left[c.story_id] > 0]
@@ -457,7 +461,7 @@ def summarize_group(group: Sequence[ledger.SummaryJob], *, client: Any = None,
         retried, retry_problems, _ = results_for(
             [j for j in group if j.story_id in retry_ids],
             _ask(retry_message(group, copied, model_sport), client, second, "retry"), attempts=2,
-            model_sport=model_sport, found=found)
+            model_sport=model_sport, found=found, sports_names=sports_names)
         problems += [f"retry: {p}" for p in retry_problems]
         results = [r for r in results if r.story_id not in retry_ids]
         run.retried = len(copied)
@@ -489,10 +493,12 @@ def summarize_job(*, client: Any = None) -> SummaryRun:
                for r in ledger.feed_follows()]
     queue = ledger.feed_summary_queue(room, MAX_ATTEMPTS, rank.priority_pattern(follows))
     model_sport = sources.model_sport_slugs()
+    sports_names = ledger.feed_sports_entity_names() if queue else frozenset()
     try:
         for i in range(0, len(queue), GROUP_SIZE):
             try:
-                total.add(summarize_group(queue[i:i + GROUP_SIZE], client=client, model_sport=model_sport))
+                total.add(summarize_group(queue[i:i + GROUP_SIZE], client=client, model_sport=model_sport,
+                                          sports_names=sports_names))
             except ai.BudgetExceeded as exc:
                 raise JobSkipped(f"AI budget spent; headlines only ({total.accepted} summarized first)") from exc
     finally:

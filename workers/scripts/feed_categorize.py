@@ -17,9 +17,11 @@ r"""The one-off categorize pass, by hand (feed/categorize.py; after db/042).
            (compare-and-set), every move is logged and printed
            (id, old -> new, headline), and the cost is its own ai_usage
            purpose (feed_recategorize).
---money    the same re-run over the stories the money question decides
-           (owner, 2026-10-13): Home stories with a sport, and those now in
-           sports_business; betting is left out (ledger.feed_money_jobs).
+--money    the same re-run over the stories the business-of-sports question
+           decides (owner, 2026-10-13): Home stories with a sport, those now
+           in sports_business, and those in film_music or other whose
+           entities include a sports league, team, program or tour; betting
+           is left out (categorize.money_set).
 
 Writes real rows, as the worker would.
 """
@@ -49,10 +51,11 @@ def main(argv: list[str] | None = None) -> int:
     load_env()
     current: dict[int, str] | None = None
     if args.money:
-        pairs = ledger.feed_money_jobs()
+        pairs = categorize.money_set(ledger.feed_money_jobs(), ledger.feed_sports_entity_names())
         jobs = [j for j, _ in pairs]
         current = {j.story_id: cur for j, cur in pairs}
-        what = "Home stories the money question decides (with a sport, or in sports_business; not betting)"
+        what = ("Home stories the business-of-sports question decides (a sport, sports_business, or "
+                "film_music / other with a sports entity; not betting)")
     elif args.recategorize:
         cats = [c.strip() for c in args.recategorize.split(",") if c.strip()]
         unknown = [c for c in cats if category.valid(c) is None]

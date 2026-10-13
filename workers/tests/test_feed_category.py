@@ -30,8 +30,11 @@ class Money(unittest.TestCase):
     yes/no question decides sports_business (yes) or other (no)."""
 
     def test_the_question_is_the_owners_in_both_calls(self) -> None:
-        self.assertEqual(category.MONEY_QUESTION, "Is this primarily about money: ownership, deals, rights, "
-                                                  "valuations, league or industry economics?")
+        self.assertEqual(category.MONEY_QUESTION,
+                         "Is this primarily about the BUSINESS of sports: money, ownership, deals, media rights "
+                         "and broadcasting, audiences and ratings, valuations, or how a league or sport is "
+                         "structured and governed (schedules, eligibility, NIL, expansion)? Games, coaching, "
+                         "player performance and fantasy are no.")
         self.assertIn(category.MONEY_QUESTION, summarize.SYSTEM)
         self.assertIn(category.MONEY_QUESTION, categorize.SYSTEM)
         for item in (summarize.schema()["properties"]["stories"]["items"],
@@ -59,6 +62,25 @@ class Money(unittest.TestCase):
         self.assertIsNone(d("sports_business", None, "nfl"))
         self.assertIsNone(d("other", "yes", "nfl"))
         self.assertIsNone(d(None, True, "nfl"))
+        # The widened gate (final round): film_music or other with a sports
+        # league, team, program or tour among its entities.
+        self.assertEqual(d("film_music", True, None, True), "sports_business")
+        self.assertEqual(d("other", True, None, True), "sports_business")
+        self.assertEqual(d("other", False, None, True), "other")
+        self.assertEqual(d("film_music", False, None, True), "other")
+        self.assertEqual(d("deals", True, None, True), "deals")  # only film_music and other widen
+        self.assertEqual(d("betting", True, None, True), "betting")
+        self.assertEqual(d("film_music", True, None, False), "film_music")
+
+    def test_a_sports_entity_is_an_exact_name_or_alias(self) -> None:
+        names = {"nfl", "nba", "lakers", "los angeles lakers", "williams", "pga tour"}
+        self.assertTrue(category.sports_entity(["ESPN", "NFL"], names))
+        self.assertTrue(category.sports_entity(["Los  Angeles Lakers"], names))
+        self.assertTrue(category.sports_entity(["PGA Tour"], names))
+        # Not a substring: an F1 team alias that is a common word.
+        self.assertFalse(category.sports_entity(["Robbie Williams"], names))
+        self.assertFalse(category.sports_entity(["NFL Network"], names))
+        self.assertFalse(category.sports_entity([], names))
 
 
 class Enum(unittest.TestCase):
@@ -109,6 +131,12 @@ class SummaryCall(unittest.TestCase):
         j0 = ledger.SummaryJob(1, "Headline here", "A teaser.", "Axios", None, 0, "axios-pro-rata")
         (r,), _, _ = summarize.results_for([j0], {"stories": [dict(item, category="film_music", money=False)]})
         self.assertEqual(r.category, "other")
+        # No sport, film_music, but a sports league among the entities: decided.
+        untagged = dict(self.GOOD, category="film_music", money=True, entities=["ESPN", "NFL"])
+        (r,), _, _ = summarize.results_for([j0], {"stories": [untagged]}, sports_names=frozenset({"nfl"}))
+        self.assertEqual(r.category, "sports_business")
+        (r,), _, _ = summarize.results_for([j0], {"stories": [untagged]})
+        self.assertEqual(r.category, "film_music")  # no names given: the enum answer stands
 
     def test_the_save_keeps_a_category_already_set(self) -> None:
         self.assertIn("category = coalesce(category, %s)", inspect.getsource(ledger.feed_save_summaries))
@@ -125,6 +153,9 @@ class _PassBase(unittest.TestCase):
         p.start()
         self.addCleanup(p.stop)
         p = mock.patch.object(ledger, "_pool", side_effect=AssertionError("database reached"))
+        p.start()
+        self.addCleanup(p.stop)
+        p = mock.patch.object(ledger, "feed_sports_entity_names", lambda **kw: frozenset({"nfl"}))
         p.start()
         self.addCleanup(p.stop)
 
@@ -166,6 +197,24 @@ class Pass(_PassBase):
             {"id": 3, "category": "sports_business", "money": False},
             {"id": 4, "category": "sports_business"}]})  # no money answer: dropped
         self.assertEqual(got, {1: "other", 2: "sports_business", 3: "other"})
+
+    def test_the_money_set_is_the_gate_on_the_current_category(self) -> None:
+        J = ledger.CategorizeJob
+        pairs = [(J(1, "h", "s", "o", "nfl"), "deals"),                   # a sport: in
+                 (J(2, "h", "s", "o", None), "sports_business"),          # sports_business: in
+                 (J(3, "h", "s", "o", None, ("NFL",)), "film_music"),     # sports entity: in
+                 (J(4, "h", "s", "o", None, ("Variety",)), "film_music"), # no sports entity: out
+                 (J(5, "h", "s", "o", None, ("NFL",)), "deals"),          # entity, but deals: out
+                 (J(6, "h", "s", "o", "nfl"), "betting")]                 # betting: never
+        self.assertEqual([j.story_id for j, _ in categorize.money_set(pairs, frozenset({"nfl"}))], [1, 2, 3])
+
+    def test_a_sports_entity_widens_the_gate(self) -> None:
+        group = [ledger.CategorizeJob(1, "h", "s", "Front Office Sports", None, ("ESPN", "NFL")),
+                 ledger.CategorizeJob(2, "h", "s", "Variety", None, ("Robbie Williams",))]
+        payload = {"stories": [{"id": 1, "category": "film_music", "money": True},
+                               {"id": 2, "category": "film_music", "money": True}]}
+        self.assertEqual(categorize.answers_for(group, payload, frozenset({"nfl", "williams"})),
+                         {1: "sports_business", 2: "film_music"})
 
     def test_a_spent_budget_stops_the_pass_with_what_was_written(self) -> None:
         calls: list = []

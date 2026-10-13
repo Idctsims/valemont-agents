@@ -621,6 +621,7 @@ class SummaryJobRun(unittest.TestCase):
             "feed_summarized_today": lambda **kw: 0,
             "feed_summary_queue": lambda limit, max_attempts, priority=None, **kw: self.queue[:limit],
             "feed_follows": lambda **kw: [],
+            "feed_sports_entity_names": lambda **kw: frozenset({"nfl"}),
             "feed_save_summaries": lambda results, usage, **kw: self.saved.append((list(results), usage)),
             "_pool": lambda *a, **k: (_ for _ in ()).throw(AssertionError("database reached")),
         }.items():

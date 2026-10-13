@@ -408,6 +408,7 @@ each in phases with a "done when" checklist). It supersedes the former steps
 - **Chat 2, Phase 5** (Morning Brief generator on Railway, sections switching on as pillars register) ✓ (PRs #20, #21). **First scheduled brief pushed Sun 2026-10-11 09:45 Chicago; owner confirmed arrival.**
 - **Chat 2 complete (2026-10-11).**
 - **Chat 3** (Learning engine, Home feed, Sports News; MASTER_PLAN §6) ← **you are here**
+  - **Phase 3 news categories: SHIPPED STATE recorded 2026-10-13** (owner: final round, no more tuning). The enum plus one business-of-sports yes/no question (`feed/category.py` `MONEY_QUESTION`, `decide`), the last re-run, the day's cost ($0.046755 over 93 Haiku calls) and the misfits left for later (no broadcasters or MLB/NWSL/WNBA/NCAA in the entities table; LeBron features answered yes): `docs/feed_checks/recategorize-2026-10-13-final/README.md`.
   - **Phase 1** (sources, ingest, dedupe, summaries, embeddings) **GREEN 2026-10-13** (owner): For you page one summarized (Home 30/30, Sports 29/30, the one a designed headline-only retirement), and worker RAM flat at ~130 MB at rest, ~155 MB ingest peak, returned after each ingest (readings in Current State, "Railway").
   - **AI SDK stays on the maintained v6 line** (`ai` 6.0.303, `@ai-sdk/anthropic` 3.0.129, `@ai-sdk/react` 3.0.306, pinned). v7 was latest on 2026-10-10; **upgrade in Chat 13 hardening**, never a major bump mid-phase (owner, 2026-10-10).
 

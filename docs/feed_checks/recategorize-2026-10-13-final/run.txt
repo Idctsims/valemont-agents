@@ -1,0 +1,12 @@
+asked 104 of 104 in 5 call(s); wrote 9; cost $0.002409 (ai_usage, purpose feed_recategorize)
+
+9 moved, 95 unchanged
+  1559	sports_business -> other	NCAA Won’t Commit to Future Concussion Research Funding
+  2786	other -> sports_business	The Blueprint: Jessica Holtz Meets the Moment
+  2816	other -> sports_business	From Cursed to Contenders: LeBron James Picks the Sixers for Final Run
+  2818	other -> sports_business	LeBron James Is on a Mission to Change Golf
+  2820	other -> sports_business	LeBron James Calls Jay-Z His ‘Big Brother’ and a Major Influence on His Career
+  2821	other -> sports_business	LeBron James Opens Up on Free Agency, Jay-Z, Bronny & His NBA Legacy
+  3506	other -> sports_business	Harris eligible to sign with NFL teams despite bid to play for LSU
+  5386	other -> sports_business	Jessica Berman Says It’s ‘My Job’ to Solve NWSL Louisville Problem
+  5734	other -> sports_business	Chris Berman: Damar Hamlin’s Cardiac Arrest Slowed NFL’s 18-Game Push

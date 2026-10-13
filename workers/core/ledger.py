@@ -2240,7 +2240,7 @@ def feed_save_summaries(results: Sequence[SummaryOut], ai_usage_id: int | None, 
 #: 2026-10-12 23:38): kept, real Home stories with no category yet, with
 #: what Haiku reads (headline, summary when there is one, outlet).
 FEED_UNCATEGORIZED_SQL: Final = """
-    SELECT st.id, st.title, st.summary, s.name, st.sport
+    SELECT st.id, st.title, st.summary, s.name, st.sport, st.entities
       FROM stories st
       JOIN content_items i ON i.id = st.lead_item_id
       JOIN sources s ON s.id = i.source_id
@@ -2256,13 +2256,34 @@ class CategorizeJob:
     title: str
     summary: str | None
     source_name: str
-    #: stories.sport: with one, the money question decides (category.decide).
+    #: stories.sport: with one, the business-of-sports question decides
+    #: (category.decide).
     sport: str | None = None
+    #: stories.entities as the summary named them (category.sports_entity).
+    entities: tuple[str, ...] = ()
 
 
 def feed_uncategorized_home_stories(*, conn: psycopg.Connection | None = None) -> list[CategorizeJob]:
     with _brief_conn(conn) as c:
-        return [CategorizeJob(int(r[0]), r[1], r[2], r[3], r[4]) for r in c.execute(FEED_UNCATEGORIZED_SQL).fetchall()]
+        return [CategorizeJob(int(r[0]), r[1], r[2], r[3], r[4], tuple(r[5] or ()))
+                for r in c.execute(FEED_UNCATEGORIZED_SQL).fetchall()]
+
+
+#: Every real sports league, team, program and tour, by name and alias,
+#: lowercased: what category.sports_entity matches a story's entities to
+#: (owner, 2026-10-13, final categories round). People and companies are out.
+FEED_SPORTS_ENTITY_NAMES_SQL: Final = """
+    SELECT lower(e.name) FROM entities e
+     WHERE NOT e.is_test AND e.kind IN ('league', 'team', 'program', 'tour')
+    UNION
+    SELECT a FROM entities e, unnest(e.aliases) AS a
+     WHERE NOT e.is_test AND e.kind IN ('league', 'team', 'program', 'tour')
+"""
+
+
+def feed_sports_entity_names(*, conn: psycopg.Connection | None = None) -> frozenset[str]:
+    with _brief_conn(conn) as c:
+        return frozenset(" ".join(str(r[0]).split()) for r in c.execute(FEED_SPORTS_ENTITY_NAMES_SQL).fetchall())
 
 
 def feed_set_categories(pairs: Sequence[tuple[int, str]], *, conn: psycopg.Connection | None = None) -> int:
@@ -2281,7 +2302,7 @@ def feed_set_categories(pairs: Sequence[tuple[int, str]], *, conn: psycopg.Conne
 #: the tightened definitions): kept, real Home stories now in the named
 #: categories, with their current category, read once before any call.
 FEED_CATEGORIZED_SQL: Final = """
-    SELECT st.id, st.title, st.summary, s.name, st.sport, st.category
+    SELECT st.id, st.title, st.summary, s.name, st.sport, st.entities, st.category
       FROM stories st
       JOIN content_items i ON i.id = st.lead_item_id
       JOIN sources s ON s.id = i.source_id
@@ -2295,31 +2316,32 @@ def feed_category_jobs(categories: Sequence[str], *, conn: psycopg.Connection | 
                        ) -> list[tuple[CategorizeJob, str]]:
     """(job, its category now) for every story in `categories`."""
     with _brief_conn(conn) as c:
-        return [(CategorizeJob(int(r[0]), r[1], r[2], r[3], r[4]), r[5])
+        return [(CategorizeJob(int(r[0]), r[1], r[2], r[3], r[4], tuple(r[5] or ())), r[6])
                 for r in c.execute(FEED_CATEGORIZED_SQL, (list(categories),)).fetchall()]
 
 
-#: The money re-run's id set (owner, 2026-10-13): kept, real, categorized
-#: Home stories the money question decides: those with a sport, and those
-#: now in sports_business (some carry no sport tag). Betting is left out:
-#: it keeps its own chip (category.decide). Read once before any call.
+#: The business-of-sports re-run's CANDIDATES (owner, 2026-10-13): kept,
+#: real, categorized Home stories with a sport, or now in sports_business,
+#: film_music or other. Betting is left out (its own chip). The id set is
+#: these filtered by category.decide's gate on the current category
+#: (categorize.money_set: film_music and other need a sports entity).
 FEED_MONEY_SET_SQL: Final = """
-    SELECT st.id, st.title, st.summary, s.name, st.sport, st.category
+    SELECT st.id, st.title, st.summary, s.name, st.sport, st.entities, st.category
       FROM stories st
       JOIN content_items i ON i.id = st.lead_item_id
       JOIN sources s ON s.id = i.source_id
      WHERE NOT st.is_test AND st.filtered_reason IS NULL AND st.category IS NOT NULL
        AND st.category <> 'betting'
-       AND (st.sport IS NOT NULL OR st.category = 'sports_business')
+       AND (st.sport IS NOT NULL OR st.category IN ('sports_business', 'film_music', 'other'))
        AND 'home' = ANY (st.pillars)
      ORDER BY st.id
 """
 
 
 def feed_money_jobs(*, conn: psycopg.Connection | None = None) -> list[tuple[CategorizeJob, str]]:
-    """(job, its category now) for the money re-run."""
+    """(job, its category now): the business-of-sports re-run's candidates."""
     with _brief_conn(conn) as c:
-        return [(CategorizeJob(int(r[0]), r[1], r[2], r[3], r[4]), r[5])
+        return [(CategorizeJob(int(r[0]), r[1], r[2], r[3], r[4], tuple(r[5] or ())), r[6])
                 for r in c.execute(FEED_MONEY_SET_SQL).fetchall()]
 
 

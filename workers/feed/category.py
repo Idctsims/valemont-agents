@@ -19,6 +19,8 @@ db/042 CHECKs.
 
 from __future__ import annotations
 
+from typing import AbstractSet, Sequence
+
 CATEGORIES: tuple[str, ...] = ("deals", "hospitality", "sports_business", "film_music", "luxury_marine",
                                "betting", "other")
 
@@ -54,25 +56,39 @@ def valid(value: object) -> str | None:
     return value if isinstance(value, str) and value in CATEGORIES else None
 
 
-#: The owner's one yes/no question (2026-10-13): no more enum tuning for
-#: sports. Both calls ask it of every story and return `money`.
-MONEY_QUESTION = ("Is this primarily about money: ownership, deals, rights, valuations, league or industry "
-                  "economics?")
+#: The owner's one yes/no question (2026-10-13, final round; it replaced a
+#: narrower money-only question). Both calls ask it of every story and
+#: return it as `money`.
+MONEY_QUESTION = ("Is this primarily about the BUSINESS of sports: money, ownership, deals, media rights and "
+                  "broadcasting, audiences and ratings, valuations, or how a league or sport is structured and "
+                  "governed (schedules, eligibility, NIL, expansion)? Games, coaching, player performance and "
+                  "fantasy are no.")
 
-MONEY_PROMPT = (f"money: true or false: {MONEY_QUESTION} For a story about a sport, this answer decides "
+MONEY_PROMPT = (f"money: true or false: {MONEY_QUESTION} For a story about sport, this answer decides "
                 "between sports_business (true) and other (false).")
 
 
-def decide(category: str | None, money: object, sport: str | None) -> str | None:
-    """The category a story gets. For a story with a sport, or one answered
-    sports_business, the money answer decides: true -> sports_business,
-    false -> other (the owner's rule). Betting keeps its own chip
-    (sportsbooks, prediction markets, Kalshi are money, but they are
-    betting). Anything else keeps the enum answer. None, never a guess, when
-    the category is not ours or a decided story has no boolean answer."""
+def sports_entity(entities: Sequence[str], names: AbstractSet[str]) -> bool:
+    """True when one of the story's entities (as the summary named them) IS a
+    sports league, team, program or tour from the entities table: the name
+    or an alias, whole string, case-insensitive. Exact, not a substring:
+    F1 team aliases are common words ("williams", "mercedes", "audi")."""
+    return any(" ".join(e.lower().split()) in names for e in entities)
+
+
+def decide(category: str | None, money: object, sport: str | None, sports_ent: bool = False) -> str | None:
+    """The category a story gets. The business-of-sports answer decides
+    (true -> sports_business, false -> other, the owner's rule) for a story
+    with a sport, one answered sports_business, or one answered film_music
+    or other whose entities include a sports league, team, program or tour
+    (`sports_ent`). Betting keeps its own chip (sportsbooks, prediction
+    markets, Kalshi). Anything else keeps the enum answer. None, never a
+    guess, when the category is not ours or a decided story has no boolean
+    answer."""
     if category is None:
         return None
-    if category == "betting" or not (sport or category == "sports_business"):
+    gated = bool(sport) or category == "sports_business" or (sports_ent and category in ("film_music", "other"))
+    if category == "betting" or not gated:
         return category
     if not isinstance(money, bool):
         return None

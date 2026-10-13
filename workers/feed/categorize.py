@@ -26,7 +26,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, Mapping, Sequence
+from typing import AbstractSet, Any, Mapping, Sequence
 
 from core import ai, ledger
 from feed import category
@@ -77,12 +77,15 @@ def user_message(group: Sequence[ledger.CategorizeJob]) -> str:
         for j in group], ensure_ascii=False)
 
 
-def answers_for(group: Sequence[ledger.CategorizeJob], payload: Any) -> dict[int, str]:
+def answers_for(group: Sequence[ledger.CategorizeJob], payload: Any,
+                names: AbstractSet[str] = frozenset()) -> dict[int, str]:
     """story id -> category, for valid answers about stories in the group,
-    first answer per story wins. The money answer decides a story with a
-    sport, or one answered sports_business (category.decide); without a
-    boolean answer such a story is dropped, never guessed."""
+    first answer per story wins. The business-of-sports answer decides a
+    story category.decide gates (a sport, a sports_business answer, or a
+    film_music / other answer with a sports entity among `names`); without
+    a boolean answer such a story is dropped, never guessed."""
     sports = {j.story_id: j.sport for j in group}
+    ents = {j.story_id: category.sports_entity(j.entities, names) for j in group}
     out: dict[int, str] = {}
     seen: set[int] = set()
     items = payload.get("stories") if isinstance(payload, dict) else None
@@ -92,11 +95,22 @@ def answers_for(group: Sequence[ledger.CategorizeJob], payload: Any) -> dict[int
         sid = item.get("id")
         if sid not in sports or sid in seen:
             continue
-        cat = category.decide(category.valid(item.get("category")), item.get("money"), sports[sid])
+        cat = category.decide(category.valid(item.get("category")), item.get("money"), sports[sid], ents[sid])
         if cat is not None:
             seen.add(sid)
             out[sid] = cat
     return out
+
+
+def money_set(pairs: Sequence[tuple[ledger.CategorizeJob, str]], names: AbstractSet[str]
+              ) -> list[tuple[ledger.CategorizeJob, str]]:
+    """The business-of-sports re-run's id set: the candidates
+    (ledger.feed_money_jobs) that category.decide's gate takes on their
+    CURRENT category: a sport, sports_business, or film_music / other with a
+    sports entity. Betting is never in it."""
+    return [(j, cur) for j, cur in pairs
+            if cur != "betting" and (j.sport or cur == "sports_business"
+                                     or (cur in ("film_music", "other") and category.sports_entity(j.entities, names)))]
 
 
 @dataclass
@@ -124,6 +138,7 @@ def run(jobs: Sequence[ledger.CategorizeJob] | None = None, *, client: Any = Non
     jobs = list(jobs if jobs is not None else ledger.feed_uncategorized_home_stories())
     if current is not None and any(j.story_id not in current for j in jobs):
         raise ValueError("a re-run categorizes only the stories in its id set")
+    names = ledger.feed_sports_entity_names()
     purpose = RECAT_PURPOSE if current is not None else PURPOSE
     res = PassResult()
     titles = {j.story_id: j.title for j in jobs}
@@ -152,7 +167,7 @@ def run(jobs: Sequence[ledger.CategorizeJob] | None = None, *, client: Any = Non
         except json.JSONDecodeError:
             log.warning("feed categorize: a group's answer was not JSON; its stories stay uncategorized")
             continue
-        answers = answers_for(group, payload)
+        answers = answers_for(group, payload, names)
         if current is None:
             res.written += ledger.feed_set_categories(sorted(answers.items()))
         else:

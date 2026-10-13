@@ -326,6 +326,20 @@ class Categories(SportsSqlCase):
             self.assertEqual(mine, {rows["sport_other"]: ("nfl", "other"),
                                     rows["nosport_sb"]: (None, "sports_business")})
 
+    def test_the_sports_entity_names(self) -> None:
+        """Leagues, teams, programs and tours, by name and alias, lowercased;
+        never a person or a test entity (final categories round)."""
+        with _rolled_back() as conn:
+            _, tname = self.entity(conn, "team", "nba", is_test=True)
+            _, pname = self.entity(conn, "person", "nba")
+            names = ledger.feed_sports_entity_names(conn=conn)
+            for real in ("nfl", "nba", "sec", "pga tour", "liv golf", "los angeles lakers", "lakers",
+                         "alabama crimson tide"):
+                self.assertIn(real, names)
+            self.assertNotIn(tname.lower(), names)
+            self.assertNotIn(pname.lower(), names)
+            self.assertNotIn("lebron james", names)
+
     def test_a_summary_sets_a_category_once(self) -> None:
         with _rolled_back() as conn:
             sid = self.story(conn, self.source(conn), done=False)
