@@ -176,8 +176,15 @@ class SystemJobsSql(unittest.TestCase):
             "INSERT INTO job_queue (kind, payload, status, attempts, locked_at) "
             "VALUES ('noop', '{\"tests_live\": true}', 'running', 5, now() - interval '11 minutes') "
             "RETURNING id")
-        self.assertGreaterEqual(ledger.queue_fail_exhausted(), 1)
-        self.assertEqual(_sql("SELECT status FROM job_queue WHERE id = %s", job_id), [("failed",)])
+        failed_now = ledger.queue_fail_exhausted()
+        status = _sql("SELECT status FROM job_queue WHERE id = %s", job_id)
+        if failed_now == 0 and status == [("failed",)]:
+            # The production worker's 10 s poller ran queue_fail_exhausted
+            # between the insert and this call (seen 2026-10-13): the job was
+            # failed, by the other poller. The same race the claim test skips.
+            raise unittest.SkipTest("another poller failed the test job first")
+        self.assertGreaterEqual(failed_now, 1)
+        self.assertEqual(status, [("failed",)])
 
 
 if __name__ == "__main__":

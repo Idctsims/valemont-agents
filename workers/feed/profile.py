@@ -33,7 +33,8 @@ Embed = Callable[[Sequence[str]], list[list[float]]]
 
 
 def follows_from(rows: Sequence[ledger.FollowRow]) -> list[rank.Follow]:
-    return [rank.Follow(r.name, r.tier, r.pillar, r.floor, r.aliases, r.sport, r.sport_wide) for r in rows]  # type: ignore[arg-type]
+    return [rank.Follow(r.name, r.tier, r.pillar, r.floor, r.aliases, r.sport, r.sport_wide, r.kind)  # type: ignore[arg-type]
+            for r in rows]
 
 
 def story_from(r: ledger.RankStory) -> rank.StoryIn:

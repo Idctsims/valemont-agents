@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
 
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 
 import { BriefCard } from "@/components/brief/brief-card";
-import { FeedSection } from "@/components/feed/feed-section";
+import { HomeFeed } from "@/components/feed/home-feed";
 import { GoalLedger } from "@/components/goals/goal-ledger";
 import { TodayModule } from "@/components/ventures/today";
 import { requireOwner } from "@/lib/auth";
 import { briefFor } from "@/lib/brief/data";
 import { MARKER_HEADER, decideMarker } from "@/lib/capital/marker";
-import { forYouStories, latestStories } from "@/lib/feed/data";
-import { pageFromParam, tabFromParam } from "@/lib/feed/types";
+import { forYouStories } from "@/lib/feed/data";
+import { HOME_SHORT_CROSS, HOME_TOP, feedHref, pageFromParam, tabFromParam } from "@/lib/feed/types";
 import { ensureRollover, weekGoals } from "@/lib/goals/data";
 import { localToday, longDate, weekRange, weekStamp, weekStart } from "@/lib/goals/period";
 import { createClient } from "@/lib/supabase/server";
@@ -22,11 +23,15 @@ type HomeParams = { feed?: string | string[]; latest?: string | string[]; foryou
 
 export default async function Home({ searchParams }: { searchParams: Promise<HomeParams> }) {
   await requireOwner();
+  const params = await searchParams;
+  // Home's feed tabs moved to /news (Chat 3 Phase 3): an old Home feed URL
+  // (?feed=latest, ?latest=N, ?foryou=N) lands on the same view there.
+  if (params.feed !== undefined || params.latest !== undefined || params.foryou !== undefined) {
+    const tab = tabFromParam(params.feed);
+    redirect(feedHref("/news", { tab, page: pageFromParam(tab === "latest" ? params.latest : params.foryou), anchor: false }));
+  }
   const supabase = await createClient();
   const today = localToday();
-  const params = await searchParams;
-  const tab = tabFromParam(params.feed);
-  const page = pageFromParam(tab === "latest" ? params.latest : params.foryou);
   await ensureRollover(supabase);
   const withTests = decideMarker((await headers()).get(MARKER_HEADER), process.env).kind === "test";
   const [goals, todayRows, links, brief, feed] = await Promise.all([
@@ -34,9 +39,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<Hom
     ventureToday(supabase),
     ventureLinks(supabase),
     briefFor(supabase, today, { withTests }),
-    tab === "latest"
-      ? latestStories(supabase, { pillar: "home", page, withTests })
-      : forYouStories(supabase, { pillar: "home", page }),
+    // The short list allows at most HOME_SHORT_CROSS tier-1 sports stories (db/043).
+    forYouStories(supabase, { pillar: "home", page: 1, crossCap: HOME_SHORT_CROSS }),
   ]);
   // Display only ("3h"): rendered per request.
   // eslint-disable-next-line react-hooks/purity
@@ -64,7 +68,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Hom
         />
       </div>
 
-      <FeedSection tab={tab} stories={feed.stories} page={page} hasMore={feed.hasMore} now={now} />
+      <HomeFeed stories={feed.stories.slice(0, HOME_TOP)} now={now} />
     </>
   );
 }

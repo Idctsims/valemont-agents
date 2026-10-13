@@ -35,6 +35,7 @@ import psycopg
 from core import ledger
 from core.paths import load_env
 from feed import rank
+from tests_live import twin_check
 
 load_env()
 
@@ -242,17 +243,58 @@ class ForYou(RankSqlCase):
                 self.score(conn, self.story(conn, home, hours_ago=i), 41 - i * 0.1, floor=True)
             for i in range(8):
                 self.score(conn, self.story(conn, sports, hours_ago=i), 46 - i * 0.1, cross=True)
-            rows = conn.execute("""
-                SELECT f.id, f.pos, sc.score, extract(epoch FROM now() - f.lead_published_at) / 3600.0,
-                       sc.floor, sc.cross_pillar, coalesce(f.floored, false)
+            # From db/042 the read path adds the window boost (boost_hours);
+            # before it, there is none. Probe the table, not a signature: the
+            # old probe named a 4-argument feed_for_you that db/042 never
+            # shipped (it has 5), so it passed no boost and the twin ranked
+            # boosted Alabama stories ~0.46 low (2026-10-13).
+            boosted = conn.execute("SELECT to_regclass('public.boost_windows') IS NOT NULL").fetchone()[0]
+            # REAL columns as float8: the exact value the SQL ranks with.
+            rows = conn.execute(f"""
+                SELECT f.id, f.pos, sc.score::float8, extract(epoch FROM now() - f.lead_published_at) / 3600.0,
+                       sc.floor, sc.cross_pillar, coalesce(f.floored, false),
+                       {"f.boost_hours::float8" if boosted else "0"}, f.rank
                   FROM feed_for_you('home', 100000, 0) f
                   JOIN v_story_scores_latest sc ON sc.story_id = f.id AND sc.pillar = 'home'
                  ORDER BY f.pos""").fetchall()
-            cands = [rank.Candidate(r[0], float(r[2]), float(r[3]), r[4], r[5]) for r in rows]
+            cands = [rank.Candidate(r[0], float(r[2]), float(r[3]), r[4], r[5], boost_h=float(r[7])) for r in rows]
             twin = rank.order_for_you(cands)
-            self.assertEqual([(p.id, p.pos, p.floored) for p in twin], [(r[0], r[1], r[6]) for r in rows])
+            twin_check.assert_same_order(self, twin, [(r[0], r[1], r[8], r[6]) for r in rows])
             self.assertEqual(sum(1 for r in rows[:rank.PAGE_SIZE] if r[5]), rank.CROSS_CAP)
             self.assertEqual(sum(1 for r in rows if r[6]), rank.FLOOR_MAX)
+
+    def test_the_cross_cap_at_zero_and_two_equals_the_twin(self) -> None:
+        """db/043 p_cross_cap (owner, 2026-10-13): /news passes 0 (no cross-in
+        anywhere), Home's short list 2 (floored cross-ins first)."""
+        with _rolled_back() as conn:
+            if conn.execute("SELECT to_regprocedure("
+                            "'public.feed_for_you(text, integer, integer, text, text, integer)')").fetchone()[0] is None:
+                self.skipTest("db/043 not pasted")
+            home, sports = self.source(conn), self.source(conn, ("sports",), sport="cfb")
+            for i in range(40):
+                self.score(conn, self.story(conn, home, hours_ago=i * 0.7), 45 - i * 0.05)
+            cross = [self.story(conn, sports, hours_ago=i) for i in range(8)]
+            for i, sid in enumerate(cross):
+                self.score(conn, sid, 46 - i * 0.1, cross=True)
+            floored = [self.story(conn, sports, hours_ago=i) for i in range(3)]
+            for i, sid in enumerate(floored):
+                self.score(conn, sid, 20 - i * 0.1, floor=True, cross=True)
+            for cap in (0, 2):
+                rows = conn.execute("""
+                    SELECT f.id, f.pos, sc.score::float8, extract(epoch FROM now() - f.lead_published_at) / 3600.0,
+                           sc.floor, sc.cross_pillar, coalesce(f.floored, false), f.boost_hours::float8, f.rank
+                      FROM feed_for_you('home', 100000, 0, NULL, NULL, %s) f
+                      JOIN v_story_scores_latest sc ON sc.story_id = f.id AND sc.pillar = 'home'
+                     ORDER BY f.pos""", (cap,)).fetchall()
+                cands = [rank.Candidate(r[0], float(r[2]), float(r[3]), r[4], r[5], boost_h=float(r[7]))
+                         for r in rows]
+                twin_check.assert_same_order(self, rank.order_for_you(cands, cross_cap=cap),
+                                             [(r[0], r[1], r[8], r[6]) for r in rows])
+                page1_cross = [r[0] for r in rows[:rank.PAGE_SIZE] if r[5]]
+                if cap == 0:
+                    self.assertFalse(any(r[5] for r in rows), "a cross-in reached /news")
+                else:
+                    self.assertEqual(sorted(page1_cross), floored[:2])
 
     def test_reactions_remove_and_mark(self) -> None:
         with _rolled_back() as conn:
@@ -330,6 +372,14 @@ class VentureTaglines(RankSqlCase):
 
 
 class Prune(RankSqlCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        with _rolled_back() as conn:
+            # From Chat 3 Phase 3 the prune also keeps a move proposal's story.
+            if conn.execute("SELECT to_regclass('public.entity_link_proposals')").fetchone()[0] is None:
+                raise unittest.SkipTest("the prune reads entity_link_proposals: db/042 not pasted")
+
     def test_a_reacted_story_is_never_pruned(self) -> None:
         with _rolled_back() as conn:
             src = self.source(conn)

@@ -438,6 +438,78 @@ class FilterRules(unittest.TestCase):
             self.assertFalse(rx.search(url), url)
             self.assertIsNone(rules.filter_reason(title=title, url=url, pillars=["home"]), title)
 
+    def test_db043_drops_author_pages_never_articles(self) -> None:
+        """Owner, 2026-10-13: the author pages seen in the data, and only
+        those (db_inspect: 13 of 4,226 items match)."""
+        import re
+        from core.paths import REPO_ROOT
+        sql = (REPO_ROOT / "db" / "043_feed_rules_cross_cap.sql").read_text(encoding="utf-8")
+        author, _pga = (p.replace("''", "'") for p in re.findall(r"\('url_regex',\s+NULL,\s+'((?:[^']|'')*)'", sql))
+        rules = Rules([Rule(9, "url_regex", None, author)])
+        drop = [("Chelsea Brasted", "https://www.axios.com/local/miami/authors/cbrasted"),
+                ("Carly Mallenbaum", "https://www.axios.com/local/miami/authors/cmallenbaum"),
+                ("Avery Lotz", "https://www.axios.com/local/miami/authors/alotz"),
+                ("Sami Sparber", "https://www.axios.com/local/miami/authors/ssparber"),
+                ("Complex Staff: Find The Latest Complex Staff Articles",
+                 "https://www.complex.com/author/complexstaff3"),
+                ("Mike DeStefano: Find The Latest Mike DeStefano Articles",
+                 "https://www.complex.com/author/mike-destefano"),
+                ("Dimas Sanfiorenzo", "https://www.complex.com/author/dimassanfiorenzo/")]
+        keep = [("What's going up: Affordable housing and more",
+                 "https://www.axios.com/local/miami/2026/10/13/what-is-going-up-miami-development-real-estate"),
+                ("Here's where Miami-Dade officials stand on Amendment 3",
+                 "https://www.axios.com/local/miami/2026/10/07/where-miami-dade-officials-stand-amendment-3-florida-property-tax"),
+                # Complex puts the author slug inside an article's path.
+                ("ComplexCon Attendees Fish For Bitcoin With Cash App",
+                 "https://www.complex.com/pop-culture/a/complexstaff3/complexcon-bitcoin-cash-app-activation"),
+                ("Oakley Foothill Ranch HQ: An Inside Look",
+                 "https://www.complex.com/style/a/mike-destefano/oakley-hq-foothill-ranch-inside-look"),
+                # A real article under a /people/ path.
+                ("Sportico Transactions: Moves and Mergers Roundup for Oct. 9",
+                 "https://www.sportico.com/personalities/people/2026/sportico-transactions-moves-mergers-roundup-oct-9-1234947100/"),
+                ("An article whose slug mentions authors",
+                 "https://www.axios.com/local/miami/2026/10/13/authors-book-festival-miami")]
+        for title, url in drop:
+            self.assertEqual(rules.filter_reason(title=title, url=url, pillars=["home"]), "url_regex:9", url)
+        for title, url in keep:
+            self.assertIsNone(rules.filter_reason(title=title, url=url, pillars=["home"]), url)
+
+    def test_db043_drops_pga_tour_player_pages_never_news(self) -> None:
+        """Owner, 2026-10-13 16:37: player profile and results pages (13 of
+        the 158 pgatour.com items, db_inspect), never news or clips."""
+        import re
+        from core.paths import REPO_ROOT
+        sql = (REPO_ROOT / "db" / "043_feed_rules_cross_cap.sql").read_text(encoding="utf-8")
+        _author, pga = (p.replace("''", "'") for p in re.findall(r"\('url_regex',\s+NULL,\s+'((?:[^']|'')*)'", sql))
+        rules = Rules([Rule(8, "url_regex", None, pga)])
+        drop = ["https://www.pgatour.com/player/profiles/32781/results",
+                "https://www.pgatour.com/player/18/6",
+                "https://www.pgatour.com/player/615/-/bio",
+                "https://www.pgatour.com/player/588/-/news-and-video",
+                "https://www.pgatour.com/player/37023/tyler-rody",
+                "https://www.pgatour.com/players/player.53465.justin-thomas.html",
+                "https://www.pgatour.com/korn-ferry-tour/player/45486/joaquin-niemann?deviceId=60122bca",
+                "https://www.pgatour.com/pt/korn-ferry-tour/player/30110/kyle-stanley/overview?deviceId=a3953",
+                "https://www.pgatour.com/pt/pgatour-champions/player/23386/david-roesch/career?deviceId=a3953",
+                "https://www.pgatour.com/pt/player/65922/koshin-nagasaki/results?deviceId=7c91e8f8"]
+        keep = ["https://www.pgatour.com/article/news/latest/2026/10/13/jackson-koivun-brooks-koepka-wyndham-clark-"
+                "justin-thomas-skins-game-black-friday-prime-video-atlantic-field-club",
+                "https://www.pgatour.com/article/news/betting-profile/2026/baycurrent-classic/ben-james-pga-tour-"
+                "betting-profile-baycurrent-classic-2026?webview=1",
+                "https://www.pgatour.com/korn-ferry-tour/article/news/latest/2026/10/11/korn-ferry-tour-championship-"
+                "austin-hitt-blades-brown-teenager-pga-tourbound-2027-cards-the-federal-club",
+                "https://www.pgatour.com/pgatour-champions/article/news/daily-wrapup/2026/10/10/round-2-constellation-"
+                "furyk-friends-ocean-course-hammock-beach-scores-leaderboard-results",
+                "https://www.pgatour.com/americas/article/news/latest/2026/10/13/four-players-secure-korn-ferry-tour-"
+                "cards-pga-tour-americas-season-finale",
+                "https://www.pgatour.com/video/competition/6406636817112/michael-brennans-winning-highlights-from-"
+                "round--at-baycurrent",
+                "https://www.pgatour.com/news"]
+        for url in drop:
+            self.assertEqual(rules.filter_reason(title="x", url=url, pillars=["sports"]), "url_regex:8", url)
+        for url in keep:
+            self.assertIsNone(rules.filter_reason(title="x", url=url, pillars=["sports"]), url)
+
     def test_every_seeded_db032_pattern_compiles_in_python(self) -> None:
         import re
         from core.paths import REPO_ROOT
@@ -547,7 +619,9 @@ class SummaryJobRun(unittest.TestCase):
         self.queue = [job(i, teaser="A short teaser.") for i in range(1, 13)]
         for name, fn in {
             "feed_summarized_today": lambda **kw: 0,
-            "feed_summary_queue": lambda limit, max_attempts, **kw: self.queue[:limit],
+            "feed_summary_queue": lambda limit, max_attempts, priority=None, **kw: self.queue[:limit],
+            "feed_follows": lambda **kw: [],
+            "feed_sports_entity_names": lambda **kw: frozenset({"nfl"}),
             "feed_save_summaries": lambda results, usage, **kw: self.saved.append((list(results), usage)),
             "_pool": lambda *a, **k: (_ for _ in ()).throw(AssertionError("database reached")),
         }.items():

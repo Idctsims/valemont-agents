@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 
+import { headers } from "next/headers";
+
+import { MoveProposals } from "@/components/feed/move-proposals";
 import { Fold } from "@/components/ui/fold";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireOwner } from "@/lib/auth";
-import { feedProfile, type FollowSummary, type ProfileSummary } from "@/lib/feed/data";
+import { MARKER_HEADER, decideMarker } from "@/lib/capital/marker";
+import { boostsNow, feedProfile, moveProposals, type BoostNow, type FollowSummary, type ProfileSummary } from "@/lib/feed/data";
 import { ago, type Pillar } from "@/lib/feed/types";
 import { createClient } from "@/lib/supabase/server";
 
@@ -107,7 +111,7 @@ function Follows({ follows }: { follows: FollowSummary[] }) {
     <section data-testid="profile-follows" className="border-t border-border pt-5 pb-8">
       <h2 className="font-display text-2xl text-text">Follows</h2>
       <p className="mt-1 text-sm text-text-muted text-pretty">
-        A story naming one of these ranks higher. Alabama is held near the top of For you; at most five tier-1 sports stories reach its first page.
+        A story naming one of these ranks higher. Alabama is held near the top of For you; at most five tier-1 sports stories reach Home&apos;s first page, and at most six stories per tier-1 name reach Sports&apos; (nine in that name&apos;s game week).
       </p>
       {([1, 2, 3] as const).map((tier) => {
         const rows = follows.filter((f) => f.tier === tier);
@@ -124,6 +128,7 @@ function Follows({ follows }: { follows: FollowSummary[] }) {
                 >
                   {f.name}
                   {f.floor && <span className="label-mono ml-2 text-accent">Near the top</span>}
+                  {f.via && <span className="label-mono ml-2 text-text-muted">{f.via}&apos;s team</span>}
                   {f.pillar && <span className="label-mono ml-2 text-text-muted">{PILLAR_LABEL[f.pillar]}</span>}
                 </li>
               ))}
@@ -135,13 +140,44 @@ function Follows({ follows }: { follows: FollowSummary[] }) {
   );
 }
 
+const CHICAGO_DAY = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+function Boosts({ boosts }: { boosts: BoostNow[] }) {
+  return (
+    <section data-testid="profile-boosts" className="border-t border-border pt-5 pb-8">
+      <h2 className="font-display text-2xl text-text">Event boosts</h2>
+      <p className="mt-1 text-sm text-text-muted text-pretty">
+        Game weeks and race weekends rank their stories about 12 hours fresher.
+      </p>
+      {boosts.length === 0 ? (
+        <p className="mt-3 text-sm text-text-muted">None active right now.</p>
+      ) : (
+        <ul className="mt-3 flex flex-col gap-1">
+          {boosts.map((b) => (
+            <li key={b.label} data-testid="boost" className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+              <span className="text-text">{b.label}</span>
+              <span className="font-mono text-xs text-text-muted">until {CHICAGO_DAY.format(new Date(b.endsAt))}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export default async function FeedProfilePage() {
   await requireOwner();
   const supabase = await createClient();
   // Display only: the worker builds on the database clock.
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
-  const { latest, history, follows, pendingReactions } = await feedProfile(supabase);
+  // Test proposals only for a verified e2e request (the rule for test stories).
+  const withTests = decideMarker((await headers()).get(MARKER_HEADER), process.env).kind === "test";
+  const [{ latest, history, follows, pendingReactions }, proposals, boosts] = await Promise.all([
+    feedProfile(supabase),
+    moveProposals(supabase, { withTests }),
+    boostsNow(supabase, new Date(now).toISOString()),
+  ]);
   const pillars = (["home", "sports"] as const).filter((p) => latest[p]);
 
   return (
@@ -166,7 +202,11 @@ export default async function FeedProfilePage() {
           pillars.map((p) => <PillarProfile key={p} p={latest[p]!} now={now} />)
         )}
 
+        <MoveProposals proposals={proposals} />
+
         <Follows follows={follows} />
+
+        <Boosts boosts={boosts} />
 
         {history.length > 0 && (
           <Fold label="Rebuilds" count={history.length} testId="profile-history">

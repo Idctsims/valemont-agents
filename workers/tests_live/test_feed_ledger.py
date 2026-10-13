@@ -196,6 +196,14 @@ class FoundAndJoin(FeedLedgerCase):
 
 
 class Summaries(FeedLedgerCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        with _rolled_back() as conn:
+            # From Chat 3 Phase 3 a saved summary also writes stories.category.
+            if conn.execute("SELECT to_regclass('public.boost_windows')").fetchone()[0] is None:
+                raise unittest.SkipTest("the summary save writes stories.category: db/042 not pasted")
+
     def test_the_backlog_counts_kept_real_waiting_stories_older_than_2h(self) -> None:
         """The health monitor's backlog alert (hotfix, owner 2026-10-12)."""
         with _rolled_back() as conn:
@@ -249,7 +257,9 @@ class Summaries(FeedLedgerCase):
                                              seed=None, conn=conn)
             order = [j.story_id for j in ledger.feed_summary_queue(5000, 2, conn=conn) if j.story_id in (older, newer)]
             self.assertEqual(order, [newer, older])
-            self.assertIn("ORDER BY i.published_at DESC", ledger.FEED_SUMMARY_QUEUE_SQL)
+            # Owner decision 10 (2026-10-12): a followed name first, then publish time.
+            self.assertIn("ORDER BY coalesce(lower(st.title) ~ %(priority)s::text, false) DESC, i.published_at DESC",
+                          ledger.FEED_SUMMARY_QUEUE_SQL)
 
     def test_an_invalid_result_counts_an_attempt_and_two_retire_it(self) -> None:
         with _rolled_back() as conn:
@@ -276,6 +286,14 @@ class Summaries(FeedLedgerCase):
 
 
 class Prune(FeedLedgerCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        with _rolled_back() as conn:
+            # From Chat 3 Phase 3 the prune also keeps a move proposal's story.
+            if conn.execute("SELECT to_regclass('public.entity_link_proposals')").fetchone()[0] is None:
+                raise unittest.SkipTest("the prune reads entity_link_proposals: db/042 not pasted")
+
     def test_the_prune_never_touches_a_kept_story(self) -> None:
         with _rolled_back() as conn:
             src = self.make_source(conn)

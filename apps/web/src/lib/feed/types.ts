@@ -42,6 +42,70 @@ export function tabFromParam(raw: string | string[] | undefined): FeedTab {
   return (Array.isArray(raw) ? raw[0] : raw) === "latest" ? "latest" : "for-you";
 }
 
+/** Sports News chips (stories.sport). A story with no sport shows under All only. */
+export type Sport = "cfb" | "nfl" | "nba" | "f1" | "golf";
+export const SPORT_CHIPS: readonly { sport: Sport | null; label: string }[] = [
+  { sport: null, label: "All" },
+  { sport: "cfb", label: "CFB" },
+  { sport: "nfl", label: "NFL" },
+  { sport: "nba", label: "NBA" },
+  { sport: "f1", label: "F1" },
+  { sport: "golf", label: "Golf" },
+];
+
+/** `?sport=` as a chip; anything else is All (null). */
+export function sportFromParam(raw: string | string[] | undefined): Sport | null {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  return SPORT_CHIPS.some((c) => c.sport === v) ? (v as Sport) : null;
+}
+
+/** /news category chips (stories.category, db/042; workers/feed/category.py).
+ * A story with no category yet shows under All only. */
+export type NewsCategory = "deals" | "hospitality" | "sports_business" | "film_music" | "luxury_marine" | "betting";
+export const NEWS_CHIPS: readonly { category: NewsCategory | null; label: string }[] = [
+  { category: null, label: "All" },
+  { category: "deals", label: "Deals & Capital" },
+  { category: "hospitality", label: "Hospitality & Real Estate" },
+  { category: "sports_business", label: "Sports Business" },
+  { category: "film_music", label: "Film/TV & Music" },
+  { category: "luxury_marine", label: "Luxury & Marine" },
+  { category: "betting", label: "Betting & Markets" },
+];
+
+/** `?category=` as a chip; anything else (including "other") is All. */
+export function categoryFromParam(raw: string | string[] | undefined): NewsCategory | null {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  return NEWS_CHIPS.some((c) => c.category === v) ? (v as NewsCategory) : null;
+}
+
+/** How many For you stories Home shows before "See all news". */
+export const HOME_TOP = 10;
+
+/** Tier-1 sports stories allowed into Home's short list (owner, 2026-10-13:
+ * at most 2). /news allows none (p_cross_cap 0). workers/feed/rank.py
+ * HOME_SHORT_CROSS; tests/test_feed_sports.py pins the two. */
+export const HOME_SHORT_CROSS = 2;
+
+/**
+ * A feed URL that keeps the chip, the tab and the page, anchored to the
+ * stories. Home's old URLs ("/#stories", "/?feed=latest&latest=2#stories")
+ * still build the same. News: "/news?category=deals&feed=latest#stories".
+ * Sports: "/sports?sport=golf&feed=latest#stories".
+ */
+export function feedHref(
+  base: "/" | "/news" | "/sports",
+  o: { tab: FeedTab; page?: number; sport?: Sport | null; category?: NewsCategory | null; anchor?: boolean },
+): string {
+  const q = new URLSearchParams();
+  if (o.sport) q.set("sport", o.sport);
+  if (o.category) q.set("category", o.category);
+  if (o.tab === "latest") q.set("feed", "latest");
+  const page = o.page ?? 1;
+  if (page > 1) q.set(o.tab === "latest" ? "latest" : "foryou", String(page));
+  const s = q.toString();
+  return `${base}${s ? `?${s}` : ""}${o.anchor === false ? "" : "#stories"}`;
+}
+
 /** The latest reaction hides a card when it is neutral or not interested. */
 export function hides(reaction: string | null | undefined): boolean {
   return reaction === "neutral" || reaction === "not_interested";

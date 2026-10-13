@@ -18,7 +18,7 @@ const SUMMARY = "The FAA grounded the plan, so the developers walked away from t
 const URL_A = `https://publisher.e2e.invalid/${Date.now()}-a`;
 const URL_B = `https://publisher.e2e.invalid/${Date.now()}-b`;
 // Test stories reach Latest only (For you never shows one: db/039).
-const LATEST = "/?feed=latest";
+const LATEST = "/news?feed=latest"; // Home's tabs moved to /news (Chat 3 Phase 3)
 
 let context: BrowserContext;
 let page: Page;
@@ -80,7 +80,7 @@ test.beforeEach(({}, testInfo) => {
   test.skip(testInfo.project.name !== "phone", "phone project");
 });
 
-test("Home's Latest renders cards that open the publisher in a new tab", async () => {
+test("News' Latest renders cards that open the publisher in a new tab", async () => {
   await page.goto(LATEST);
   await expect(page.getByTestId("feed").getByRole("heading", { level: 2 })).toHaveText(/^Latest/);
   await expect(page.getByTestId("feed-tab-latest")).toHaveAttribute("aria-current", "page");

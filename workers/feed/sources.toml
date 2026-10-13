@@ -328,6 +328,9 @@ slug = "al-com-alabama"
 name = "AL.com Alabama Sports"
 pillars = ["sports"]
 sport = "cfb"
+# Multi-sport in practice (former Alabama players in the NFL): the
+# summarizer's sport wins, cfb is the fallback (owner D8, 2026-10-12).
+sport_from = "model"
 kind = "rss"
 url = "https://www.al.com/arc/outboundfeeds/rss/category/alabamafootball/?outputType=xml"
 priority = 20

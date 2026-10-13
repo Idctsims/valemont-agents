@@ -2119,22 +2119,26 @@ class SummaryJob:
     source_name: str
     sport: str | None
     attempts: int
+    source_slug: str = ""
 
 
 #: The summarizer's queue: kept, real, linkable stories not yet summarized and
-#: with a try left, newest PUBLISHED first: the order Home shows them in
-#: (v_feed_stories by lead_published_at). Ordering by first_seen_at instead
-#: summarized an arbitrary slice of a big ingest, where every story shares one
-#: first-seen time: after the 2026-10-12 re-ingest only 1 of Home's first 30
-#: cards had a summary.
+#: with a try left. FIRST the stories whose title names a followed person or
+#: a derived team (`priority`, a POSIX regex from feed/rank.priority_pattern;
+#: owner decision 10, 2026-10-12: moves are read only from summaries), THEN
+#: newest PUBLISHED first: the order Home shows them in (v_feed_stories by
+#: lead_published_at). Ordering by first_seen_at instead summarized an
+#: arbitrary slice of a big ingest, where every story shares one first-seen
+#: time: after the 2026-10-12 re-ingest only 1 of Home's first 30 cards had a
+#: summary.
 FEED_SUMMARY_QUEUE_SQL: Final = """
-    SELECT st.id, st.title, i.teaser, s.name, st.sport, st.summary_attempts
+    SELECT st.id, st.title, i.teaser, s.name, st.sport, st.summary_attempts, s.slug
       FROM stories st
       JOIN content_items i ON i.id = st.lead_item_id
       JOIN sources s ON s.id = i.source_id
      WHERE st.summary IS NULL AND st.filtered_reason IS NULL AND NOT st.is_test
        AND st.summary_attempts < %(max_attempts)s
-     ORDER BY i.published_at DESC, st.id DESC
+     ORDER BY coalesce(lower(st.title) ~ %(priority)s::text, false) DESC, i.published_at DESC, st.id DESC
      LIMIT %(limit)s
 """
 
@@ -2144,10 +2148,12 @@ _LOCAL_DAY_START = """
 """
 
 
-def feed_summary_queue(limit: int, max_attempts: int, *,
+def feed_summary_queue(limit: int, max_attempts: int, priority: str | None = None, *,
                        conn: psycopg.Connection | None = None) -> list[SummaryJob]:
+    """`priority` None: publish order only."""
     with _brief_conn(conn) as c:
-        rows = c.execute(FEED_SUMMARY_QUEUE_SQL, {"limit": limit, "max_attempts": max_attempts}).fetchall()
+        rows = c.execute(FEED_SUMMARY_QUEUE_SQL,
+                         {"limit": limit, "max_attempts": max_attempts, "priority": priority}).fetchall()
     return [SummaryJob(*r) for r in rows]
 
 
@@ -2191,6 +2197,12 @@ class SummaryOut:
     filtered_reason: str | None = None
     #: Attempts this run used: 1, or 2 with the same-run targeted retry.
     attempts: int = 1
+    #: A multi-sport source (sources.toml sport_from = "model", owner D8): the
+    #: summarizer's sport replaces the story's; the story keeps its own when
+    #: the summarizer said none. Otherwise the story's own sport wins.
+    sport_from_model: bool = False
+    #: The /news category (feed/category.py, db/042). Kept if already set.
+    category: str | None = None
 
 
 def feed_save_summaries(results: Sequence[SummaryOut], ai_usage_id: int | None, *,
@@ -2211,19 +2223,143 @@ def feed_save_summaries(results: Sequence[SummaryOut], ai_usage_id: int | None, 
             c.execute(
                 """
                 UPDATE stories
-                   SET summary = %s, entities = %s, topics = %s, sport = coalesce(sport, %s),
+                   SET summary = %s, entities = %s, topics = %s,
+                       sport = CASE WHEN %s THEN coalesce(%s, sport) ELSE coalesce(sport, %s) END,
+                       category = coalesce(category, %s),
                        drop_category = %s, filtered_reason = coalesce(filtered_reason, %s),
                        summary_attempts = least(summary_attempts + %s, 5), summarized_at = now(),
                        ai_usage_id = %s
                  WHERE id = %s
                 """,
-                (r.summary, list(r.entities), list(r.topics), r.sport, r.drop, r.filtered_reason,
-                 r.attempts, ai_usage_id, r.story_id),
+                (r.summary, list(r.entities), list(r.topics), r.sport_from_model, r.sport, r.sport,
+                 r.category, r.drop, r.filtered_reason, r.attempts, ai_usage_id, r.story_id),
             )
 
 
+#: The one-off categorize pass (db/042; feed/categorize.py, owner
+#: 2026-10-12 23:38): kept, real Home stories with no category yet, with
+#: what Haiku reads (headline, summary when there is one, outlet).
+FEED_UNCATEGORIZED_SQL: Final = """
+    SELECT st.id, st.title, st.summary, s.name, st.sport, st.entities
+      FROM stories st
+      JOIN content_items i ON i.id = st.lead_item_id
+      JOIN sources s ON s.id = i.source_id
+     WHERE NOT st.is_test AND st.filtered_reason IS NULL AND st.category IS NULL
+       AND 'home' = ANY (st.pillars)
+     ORDER BY st.id
+"""
+
+
+@dataclass(frozen=True)
+class CategorizeJob:
+    story_id: int
+    title: str
+    summary: str | None
+    source_name: str
+    #: stories.sport: with one, the business-of-sports question decides
+    #: (category.decide).
+    sport: str | None = None
+    #: stories.entities as the summary named them (category.sports_entity).
+    entities: tuple[str, ...] = ()
+
+
+def feed_uncategorized_home_stories(*, conn: psycopg.Connection | None = None) -> list[CategorizeJob]:
+    with _brief_conn(conn) as c:
+        return [CategorizeJob(int(r[0]), r[1], r[2], r[3], r[4], tuple(r[5] or ()))
+                for r in c.execute(FEED_UNCATEGORIZED_SQL).fetchall()]
+
+
+#: Every real sports league, team, program and tour, by name and alias,
+#: lowercased: what category.sports_entity matches a story's entities to
+#: (owner, 2026-10-13, final categories round). People and companies are out.
+FEED_SPORTS_ENTITY_NAMES_SQL: Final = """
+    SELECT lower(e.name) FROM entities e
+     WHERE NOT e.is_test AND e.kind IN ('league', 'team', 'program', 'tour')
+    UNION
+    SELECT a FROM entities e, unnest(e.aliases) AS a
+     WHERE NOT e.is_test AND e.kind IN ('league', 'team', 'program', 'tour')
+"""
+
+
+def feed_sports_entity_names(*, conn: psycopg.Connection | None = None) -> frozenset[str]:
+    with _brief_conn(conn) as c:
+        return frozenset(" ".join(str(r[0]).split()) for r in c.execute(FEED_SPORTS_ENTITY_NAMES_SQL).fetchall())
+
+
+def feed_set_categories(pairs: Sequence[tuple[int, str]], *, conn: psycopg.Connection | None = None) -> int:
+    """Set each story's category, only where it is still NULL (a re-run, or a
+    summary that categorized the story meanwhile, never changes one). One
+    transaction. Returns rows written."""
+    written = 0
+    with _brief_conn(conn) as c, c.transaction():
+        for sid, category in pairs:
+            written += c.execute("UPDATE stories SET category = %s WHERE id = %s AND category IS NULL",
+                                 (category, sid)).rowcount
+    return written
+
+
+#: The re-run's id set (owner, 2026-10-13: sports_business and betting under
+#: the tightened definitions): kept, real Home stories now in the named
+#: categories, with their current category, read once before any call.
+FEED_CATEGORIZED_SQL: Final = """
+    SELECT st.id, st.title, st.summary, s.name, st.sport, st.entities, st.category
+      FROM stories st
+      JOIN content_items i ON i.id = st.lead_item_id
+      JOIN sources s ON s.id = i.source_id
+     WHERE NOT st.is_test AND st.filtered_reason IS NULL AND st.category = ANY (%s)
+       AND 'home' = ANY (st.pillars)
+     ORDER BY st.id
+"""
+
+
+def feed_category_jobs(categories: Sequence[str], *, conn: psycopg.Connection | None = None
+                       ) -> list[tuple[CategorizeJob, str]]:
+    """(job, its category now) for every story in `categories`."""
+    with _brief_conn(conn) as c:
+        return [(CategorizeJob(int(r[0]), r[1], r[2], r[3], r[4], tuple(r[5] or ())), r[6])
+                for r in c.execute(FEED_CATEGORIZED_SQL, (list(categories),)).fetchall()]
+
+
+#: The business-of-sports re-run's CANDIDATES (owner, 2026-10-13): kept,
+#: real, categorized Home stories with a sport, or now in sports_business,
+#: film_music or other. Betting is left out (its own chip). The id set is
+#: these filtered by category.decide's gate on the current category
+#: (categorize.money_set: film_music and other need a sports entity).
+FEED_MONEY_SET_SQL: Final = """
+    SELECT st.id, st.title, st.summary, s.name, st.sport, st.entities, st.category
+      FROM stories st
+      JOIN content_items i ON i.id = st.lead_item_id
+      JOIN sources s ON s.id = i.source_id
+     WHERE NOT st.is_test AND st.filtered_reason IS NULL AND st.category IS NOT NULL
+       AND st.category <> 'betting'
+       AND (st.sport IS NOT NULL OR st.category IN ('sports_business', 'film_music', 'other'))
+       AND 'home' = ANY (st.pillars)
+     ORDER BY st.id
+"""
+
+
+def feed_money_jobs(*, conn: psycopg.Connection | None = None) -> list[tuple[CategorizeJob, str]]:
+    """(job, its category now): the business-of-sports re-run's candidates."""
+    with _brief_conn(conn) as c:
+        return [(CategorizeJob(int(r[0]), r[1], r[2], r[3], r[4], tuple(r[5] or ())), r[6])
+                for r in c.execute(FEED_MONEY_SET_SQL).fetchall()]
+
+
+def feed_recategorize(moves: Sequence[tuple[int, str, str]], *, conn: psycopg.Connection | None = None) -> int:
+    """(story id, old, new): set `new` only where the category is still `old`
+    (compare-and-set: one changed meanwhile, by a summary or by hand, is left
+    alone). One transaction. Returns rows written."""
+    written = 0
+    with _brief_conn(conn) as c, c.transaction():
+        for sid, old, new in moves:
+            written += c.execute("UPDATE stories SET category = %s WHERE id = %s AND category = %s",
+                                 (new, sid, old)).rowcount
+    return written
+
+
 #: The nightly prune, in order; tests_live runs these texts. A story with ANY
-#: reaction is never deleted (db/039: feed_reactions.story_id is ON DELETE
+#: reaction, or named by a move proposal, is never deleted (db/039, db/042:
+#: feed_reactions.story_id and entity_link_proposals.story_id are ON DELETE
 #: RESTRICT, so a delete that reached one would fail the whole prune; every
 #: story delete here excludes them first).
 FEED_PRUNE_SQL: Final = {
@@ -2236,12 +2372,15 @@ FEED_PRUNE_SQL: Final = {
         DELETE FROM stories st
          WHERE st.filtered_reason IS NOT NULL AND st.last_seen_at < now() - interval '30 days'
            AND NOT EXISTS (SELECT 1 FROM feed_reactions r WHERE r.story_id = st.id)
+           AND NOT EXISTS (SELECT 1 FROM entity_link_proposals p WHERE p.story_id = st.id)
     """,
-    # Kept stories, 90 days after they were last seen, unless reacted to.
+    # Kept stories, 90 days after they were last seen, unless reacted to or
+    # named by a move proposal.
     "unreacted_stories_deleted": """
         DELETE FROM stories st
          WHERE st.filtered_reason IS NULL AND st.last_seen_at < now() - interval '90 days'
            AND NOT EXISTS (SELECT 1 FROM feed_reactions r WHERE r.story_id = st.id)
+           AND NOT EXISTS (SELECT 1 FROM entity_link_proposals p WHERE p.story_id = st.id)
     """,
     # Superseded scores (a newer row exists for the story and pillar) after 7 days.
     "story_scores_superseded_deleted": """
@@ -2288,16 +2427,142 @@ class FollowRow:
     aliases: tuple[str, ...]
     sport: str | None
     sport_wide: bool
+    kind: str | None = None
+
+
+#: Every follow, plus (owner D3, db/042) a DERIVED tier-2 Sports follow for
+#: the current team of each tier-1 person (v_entity_links_current): "his team"
+#: moves with him when a move is confirmed. Test entities never appear.
+FEED_FOLLOWS_SQL: Final = """
+    SELECT e.name, f.tier, f.pillar, f.floor, e.aliases, e.sport, e.sport_wide, e.kind
+      FROM follows f JOIN entities e ON e.id = f.entity_id
+     WHERE NOT e.is_test
+    UNION
+    SELECT t.name, 2, 'sports', false, t.aliases, t.sport, t.sport_wide, t.kind
+      FROM follows f
+      JOIN entities p ON p.id = f.entity_id AND p.kind = 'person' AND NOT p.is_test
+      JOIN v_entity_links_current l ON l.from_entity_id = p.id
+      JOIN entities t ON t.id = l.to_entity_id AND NOT t.is_test
+     WHERE f.tier = 1
+     ORDER BY 2, 1, 3 NULLS FIRST
+"""
 
 
 def feed_follows(*, conn: psycopg.Connection | None = None) -> list[FollowRow]:
     with _brief_conn(conn) as c:
-        rows = c.execute("""
-            SELECT e.name, f.tier, f.pillar, f.floor, e.aliases, e.sport, e.sport_wide
-              FROM follows f JOIN entities e ON e.id = f.entity_id
-             ORDER BY f.tier, e.name, f.pillar NULLS FIRST
+        rows = c.execute(FEED_FOLLOWS_SQL).fetchall()
+    return [FollowRow(r[0], int(r[1]), r[2], r[3], tuple(r[4]), r[5], r[6], r[7]) for r in rows]
+
+
+# ---------------------------------------------------------------- move proposals
+# db/042. The summarizer's `moves` become proposals (feed/moves.py) only when
+# both entities resolve; the owner decides on /settings/feed.
+
+@dataclass(frozen=True)
+class MoveEntity:
+    id: int
+    kind: str
+    name: str
+    aliases: tuple[str, ...]
+    sport: str | None
+    followed: bool
+
+
+@dataclass(frozen=True)
+class CurrentLink:
+    from_id: int
+    to_id: int
+    kind: str
+
+
+@dataclass(frozen=True)
+class MoveContext:
+    entities: tuple[MoveEntity, ...]
+    links: tuple[CurrentLink, ...]
+    #: People with an open proposal (at most one each, db/042).
+    open_persons: frozenset[int]
+    #: (person, kind, to) dismissed within DISMISS_QUIET_D days (owner D5).
+    recent_dismissals: frozenset[tuple[int, str, int | None]]
+
+
+def feed_move_context(quiet_days: int, *, conn: psycopg.Connection | None = None) -> MoveContext:
+    """Real entities only: a test entity is never a move's person or target."""
+    with _brief_conn(conn) as c:
+        ents = c.execute("""
+            SELECT e.id, e.kind, e.name, e.aliases, e.sport,
+                   EXISTS (SELECT 1 FROM follows f WHERE f.entity_id = e.id)
+              FROM entities e WHERE NOT e.is_test
         """).fetchall()
-    return [FollowRow(r[0], int(r[1]), r[2], r[3], tuple(r[4]), r[5], r[6]) for r in rows]
+        links = c.execute("""
+            SELECT l.from_entity_id, l.to_entity_id, l.kind FROM v_entity_links_current l
+              JOIN entities e ON e.id = l.from_entity_id WHERE NOT e.is_test
+        """).fetchall()
+        opened = c.execute(
+            "SELECT person_entity_id FROM entity_link_proposals WHERE decision IS NULL AND NOT is_test").fetchall()
+        dismissed = c.execute("""
+            SELECT person_entity_id, kind, to_entity_id FROM entity_link_proposals
+             WHERE decision = 'dismissed' AND NOT is_test
+               AND decided_at > now() - make_interval(days => %s)
+        """, (quiet_days,)).fetchall()
+    return MoveContext(
+        tuple(MoveEntity(int(r[0]), r[1], r[2], tuple(r[3]), r[4], bool(r[5])) for r in ents),
+        tuple(CurrentLink(int(r[0]), int(r[1]), r[2]) for r in links),
+        frozenset(int(r[0]) for r in opened),
+        frozenset((int(r[0]), r[1], int(r[2]) if r[2] is not None else None) for r in dismissed),
+    )
+
+
+@dataclass(frozen=True)
+class ProposalIn:
+    person_id: int
+    kind: str
+    link_kind: str
+    from_id: int | None
+    to_id: int | None
+    story_id: int
+
+
+def feed_insert_proposal(p: ProposalIn, *, conn: psycopg.Connection | None = None) -> int | None:
+    """The new proposal's id, or None when the database refused it as a
+    duplicate open proposal or a stale `from` (the world changed between the
+    read and the write). Anything else raises."""
+    with _brief_conn(conn) as c:
+        try:
+            with c.transaction():
+                row = c.execute("""
+                    INSERT INTO entity_link_proposals (person_entity_id, kind, link_kind, from_entity_id,
+                                                       to_entity_id, story_id)
+                    VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
+                """, (p.person_id, p.kind, p.link_kind, p.from_id, p.to_id, p.story_id)).fetchone()
+        except psycopg.errors.UniqueViolation:
+            return None
+        except psycopg.errors.RaiseException as exc:
+            if "is not the current" in str(exc):
+                return None
+            raise
+    return int(row[0])
+
+
+def feed_add_test_move(suffix: str, *, conn: psycopg.Connection | None = None) -> int:
+    """scripts/feed_test_proposal.py: "Test Player <s>" plays_for "Test Team
+    A <s>", and an open trade to "Test Team B <s>" (all is_test), for the
+    owner's phone check of Confirm. The id of the proposal."""
+    s = suffix.lower()
+    with _brief_conn(conn) as c, c.transaction():
+        ids = []
+        for kind, name in (("person", f"Test Player {s}"), ("team", f"Test Team A {s}"), ("team", f"Test Team B {s}")):
+            ids.append(int(c.execute(
+                "INSERT INTO entities (kind, name, aliases, sport, is_test) VALUES (%s, %s, %s, 'nba', true) RETURNING id",
+                (kind, name, [name.lower()])).fetchone()[0]))
+        person, a, b = ids
+        c.execute("""
+            INSERT INTO entity_links (from_entity_id, to_entity_id, kind, valid_from, confirmed_by_owner)
+            VALUES (%s, %s, 'plays_for', owner_today() - 1, true)
+        """, (person, a))
+        return int(c.execute("""
+            INSERT INTO entity_link_proposals (person_entity_id, kind, link_kind, from_entity_id, to_entity_id, is_test)
+            VALUES (%s, 'trade', 'plays_for', %s, %s, true) RETURNING id
+        """, (person, a, b)).fetchone()[0])
 
 
 def feed_seed_phrases(*, conn: psycopg.Connection | None = None) -> dict[str, dict[str, list[str]]]:

@@ -1,0 +1,76 @@
+asked 730 of 730 in 30 call(s); wrote 73; cost $0.015236 (ai_usage, purpose feed_recategorize)
+
+73 moved, 657 unchanged
+  776	other -> sports_business	John Harbaugh’s Giants Are Contenders, Even With a Tie in Washington
+  777	other -> sports_business	It’s Time for NFL Networks to Hire ‘Clock Management’ Specialists
+  837	other -> hospitality	Things to do in Miami this weekend: Art, election conversations and more
+  838	film_music -> sports_business	Inside the Halftime Music Strategy For the NFL’s International Games: ‘The Biggest Challenge Is Expe
+  1090	other -> luxury_marine	This Bordeaux-Style Wine Tells the Story of a Sicilian Legend
+  1091	other -> luxury_marine	Inside Robb Report’s 50th Anniversary Issue
+  1092	other -> luxury_marine	Taste Test: Maker’s Mark Nailed Its First Mizunara-Finished Bourbon
+  1093	other -> luxury_marine	All the Great Car Names Have Been Taken
+  1095	other -> luxury_marine	The Soft Power of the Modern Corduroy Suit
+  1114	other -> sports_business	Black Out: The Bledisloe Cup, a New Tackle Law, and Jason Kelce Playing Rugby
+  1147	film_music -> other	Nivea Says She Knew She'd 'Get Through' Leukemia Fight
+  1149	other -> sports_business	Caitlin Clark Blasts Attacks on Kelsey Mitchell: 'That's Not Something I Stand For'
+  1150	other -> film_music	'Spider-Man' Fans Fall Just Short of Breaking Guinness World Record at NYCC
+  1153	film_music -> other	Soulja Boy Teases Running for President in 2028
+  1155	film_music -> sports_business	Gilbert Arenas Pushes Back on Colorism Accusation: ‘Everybody Got Color’
+  1309	film_music -> sports_business	Pat McAfee Joins ESPN’s In-Game Super Bowl LXI Coverage & Expands MNF Role
+  1312	other -> sports_business	Stephen A. Smith Ditches the ‘Nopology’ in Lane Johnson Mea Culpa
+  1313	film_music -> sports_business	Aaron Cohen on the Saban Docuseries
+  1317	film_music -> sports_business	Once Focused on Combat Sports, DAZN Expands to MLB, NBA Teams
+  1324	film_music -> sports_business	Kenny Albert’s Last-Minute NLDS Fill-In Came Mid-Colonoscopy Prep
+  1326	film_music -> sports_business	MLB Division Series Extends Postseason Ratings Streak
+  1327	film_music -> other	Swisher on Brian Cashman’s Pressure
+  1328	film_music -> other	Shaquille O’Neal on Charles Barkley Retiring: ‘I Don’t Believe That’
+  1339	film_music -> sports_business	Sports Is Key to Skydance Becoming ‘Leading Content Engine’
+  1386	other -> film_music	Live Nation hit with class action lawsuits over data breach involving Social Security numbers and he
+  1506	other -> film_music	Meta’s smart glasses are innovative. Are they a security threat?
+  1507	other -> film_music	In the war to control social media feeds, VPNs are a battleground. A “day of action” defended them.
+  2410	other -> sports_business	NHL’s New Wave of GMs Are Built Different: ‘I Am In the Prediction Business’
+  2524	film_music -> sports_business	Could Pat McAfee’s Super Bowl Alt-Cast Be a Monday Night Football Tryout?
+  2540	film_music -> other	Nikola Jokić, Anthony Edwards Lead Sprite's New 'Never Stop Refreshing the Game' Campaign
+  2623	other -> film_music	Fox News Veteran Slams Network for ‘Journalistic Malpractice’ Over ‘Choice to Ignore’ Kimberly Guilf
+  2679	other -> deals	TechCrunch Disrupt 2026 starts tomorrow: Your final chance to secure up to $100 ticket savings
+  2713	other -> sports_business	What Has the NBA Lost?
+  2779	other -> film_music	In Defense of Kelly Clarkson (Kind Of) and the $15,000 Singing Bird Saga
+  2788	film_music -> other	Quiet Power: Imani Ellis on CultureCon, Creators, and Learning to Let Go
+  2793	other -> hospitality	Common Turns His Chicago South Side Roots Into a Wine Brand
+  2900	other -> sports_business	Advantage England, Spain’s Dominance, and Molly Bartrip’s Mental Health Journey
+  2976	other -> sports_business	Jaylen Brown Jokes Adidas Should Give Anthony Edwards Condoms After Ad Roasting
+  3018	film_music -> other	Eddie and Natashia Huang Are the Coolest Couple Eating Food on Your Phone
+  3114	other -> sports_business	The Tomlin Effect? NFL Analysts More Blunt Than Ever
+  3137	other -> sports_business	NFL Week 5 Recap! Plus, UGA Takes the Top Spot and a Bills-Rams Preview.
+  3157	other -> sports_business	What are your boldest takes for Bills-Rams ‘MNF’ showdown in Week 5?
+  3162	other -> sports_business	The Most Confusing Teams in the NBA!
+  3197	other -> film_music	Bloomberg Talks: Tim Cahill (Podcast)
+  3260	other -> sports_business	Man City’s Weird Return, Liverpool’s Wirtz Problem, and Carrick’s Future
+  3328	other -> sports_business	Hot Dogs Are on the Ice, and Teams Are Falling Apart
+  3838	film_music -> other	ABC Tells Judge That FCC Showed “Retaliatory Motive” By Ordering Early License Review Despite “Less 
+  3893	film_music -> other	Antitrust Experts Doubt Donald Trump’s DOJ Has A Case In Going After Networks For Suspending White H
+  3934	other -> film_music	‘Friday the 13th’ With Bill Simmons, Chris Ryan, and Van Lathan
+  4867	film_music -> sports_business	Netflix Takes World Cup Rights in Spain
+  4910	other -> sports_business	Don’t Love Your Sports Apps? With AI, Fans Are Building Their Own
+  4911	film_music -> deals	Disney Circles Character.ai as Chatbot Company Files For Chapter 11 Bankruptcy
+  4930	film_music -> deals	Just 5 years in, interactive chatbot platform Character.AI files for bankruptcy
+  4955	other -> sports_business	Week 5 Coaching Blunders, Who Are the 2026 Seahawks, and LeSean McCoy’s Top Running Backs
+  4960	other -> deals	Modi’s India Reliability Pitch Confronts a Mix of Dualities
+  4981	other -> sports_business	Week 6 Waiver Wire: Must-Add Players, Season-Long Stashes, and Yellowstone Bear Attacks
+  4982	other -> sports_business	Are Cricket Scores Good for Rugby? Leinster Return Home and NFL Star Joins Rugby Club
+  4984	other -> sports_business	The Man Behind the NBA’s Most Audacious Superteam
+  5043	other -> sports_business	The Ball Knower’s Notebook: Josh Allen’s Legs Are Inevitable
+  5064	film_music -> sports_business	Nielsen: Post–World Cup Soccer Audiences Surge Among Young Viewers
+  5206	film_music -> sports_business	Prime Video Adds Golf’s Revived Skins Game To 15-Hour Live Sports Blitz On Black Friday
+  5214	film_music -> sports_business	Tirico Defends NBC’s Michael Jordan Interview: ‘Completely Worth It’
+  5281	film_music -> deals	Kim Kardashian Endorses On-Demand Apparel Delivery With New Skims x DoorDash Partnership and Ad Spot
+  5318	film_music -> other	Lizzo Says She Was Healthy Before Weight Loss: 'All They Saw Was Fat'
+  5380	film_music -> sports_business	‘Michael Jackson at the Super Bowl’ Documentary Coming to Hulu and ESPN
+  5384	film_music -> sports_business	Michael Jackson 1993 Halftime Show Documentary Set From Hulu & ESPN
+  5387	film_music -> sports_business	How a Lunch in Atlanta Led to Josh Pate’s ESPN College Football Show
+  5623	other -> sports_business	Taylor Rooks Defends Friendships With Athletes She Covers
+  5657	other -> film_music	Tupac Shakur Murder Mastermind Gets Decades In Prison For 1996 Killing
+  5687	other -> sports_business	Court Skeptical of College Athletes’ Eligibility in Wisne-NCAA Case
+  5690	other -> film_music	New York Public Radio CEO Christy Tanner Steps Down
+  5696	other -> sports_business	PTPA Boss Accused of Harassment, Sexist Conduct in New Lawsuit
+  5734	other -> sports_business	Chris Berman: Damar Hamlin’s Cardiac Arrest Slowed NFL’s 18-Game Push

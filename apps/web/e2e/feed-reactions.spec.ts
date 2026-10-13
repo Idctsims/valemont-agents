@@ -21,7 +21,7 @@ test.skip(!hasOwner, "set E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD to run");
 test.describe.configure({ mode: "serial" });
 
 const P = runPrefix();
-const LATEST = "/?feed=latest";
+const LATEST = "/news?feed=latest"; // Home's tabs moved to /news (Chat 3 Phase 3)
 let context: BrowserContext;
 let page: Page;
 const opened: string[] = [];
@@ -208,8 +208,8 @@ test("opening the publisher writes one 'open' row", async () => {
   expect((await storyReactions(id)).map((r) => r.reaction)).toEqual(["open"]);
 });
 
-test("the tabs: For you is the default, Latest is one tap away", async () => {
-  await page.goto("/");
+test("the tabs on /news: For you is the default, Latest is one tap away", async () => {
+  await page.goto("/news");
   await expect(page.getByTestId("feed-tab-for-you")).toHaveAttribute("aria-current", "page");
   await expect(page.getByTestId("feed-tab-latest")).not.toHaveAttribute("aria-current", "page");
   // For you never shows a test story, even to a marked request.

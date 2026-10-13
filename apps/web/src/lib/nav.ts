@@ -39,6 +39,9 @@ export const NAV: NavGroup[] = [
         href: "/",
         pages: [
           { label: "Goals", href: "/goals" },
+          // Home's full feed (Chat 3 Phase 3 scope addition): Home keeps a
+          // short For you; the tabs and category chips live here.
+          { label: "News", href: "/news" },
           { label: "Morning brief", href: "/brief" },
         ],
       },
@@ -65,7 +68,7 @@ export const NAV: NavGroup[] = [
     key: "sports",
     name: "Sports",
     pillars: [
-      { n: 9, name: "Sports News", built: false, href: "/sports-news" },
+      { n: 9, name: "Sports News", built: true, href: "/sports" },
       { n: 10, name: "Game Day", built: false, href: "/game-day" },
       { n: 11, name: "Betting", built: false, href: "/betting" },
       { n: 12, name: "Live Bet Tracker", built: false, href: "/live-tracker" },

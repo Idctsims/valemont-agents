@@ -7,7 +7,7 @@ import { expect, test } from "@playwright/test";
 const webRoot = resolve(__dirname, "..");
 
 test.describe("logged out", () => {
-  for (const path of ["/goals", "/goals?view=history", "/ventures", "/ventures/sail-beach-club", "/capital", "/wags", "/brief", "/brief/2026-10-11", "/betting", "/design", "/onboarding", "/settings/health", "/settings/sources", "/settings/feed"]) {
+  for (const path of ["/goals", "/goals?view=history", "/ventures", "/ventures/sail-beach-club", "/capital", "/wags", "/brief", "/brief/2026-10-11", "/betting", "/design", "/onboarding", "/settings/health", "/settings/sources", "/settings/feed", "/news", "/news?category=deals", "/sports"]) {
     test(`${path} redirects to /login with next`, async ({ page }) => {
       await page.goto(path);
       await expect(page).toHaveURL(
@@ -22,7 +22,8 @@ test.describe("logged out", () => {
   });
 
   test("the feed leaks nothing: Home's feed pages, the sources and the profile land on /login empty", async ({ page }) => {
-    for (const path of ["/?feed=latest&latest=2", "/?foryou=2", "/settings/sources", "/settings/feed"]) {
+    for (const path of ["/?feed=latest&latest=2", "/?foryou=2", "/news?feed=latest&latest=2", "/news?category=deals",
+                        "/sports?sport=golf", "/settings/sources", "/settings/feed"]) {
       await page.goto(path);
       await expect(page).toHaveURL((url) => url.pathname === "/login");
       await expect(page.getByTestId("feed-latest")).toHaveCount(0);
