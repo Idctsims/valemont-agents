@@ -46,7 +46,7 @@ test("feed ranking screens", async ({ page }, testInfo) => {
 
   for (const theme of ["night", "day"] as const) {
     await setTheme(page, theme);
-    await page.goto("/#stories");
+    await page.goto("/news#stories"); // Home's tabs moved to /news (Chat 3 Phase 3)
     await expect(page.getByTestId("feed-tab-for-you")).toHaveAttribute("aria-current", "page");
     await page.getByTestId("feed").scrollIntoViewIfNeeded();
     await snap(page, "home-for-you", phone, theme);

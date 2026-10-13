@@ -2,9 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { addTestMoveProposal, decideTestMove, hasOwner, setTheme, signIn } from "./support/owner";
 
-// Screenshot review for Chat 3 Phase 3: /sports (All), /sports?sport=golf and
-// a proposed move on /settings/feed, in both themes, on the REAL feed (no
-// test marker). Phone 390x844 and desktop 1440. Written to
+// Screenshot review for Chat 3 Phase 3: /sports (All), /sports?sport=golf, a
+// proposed move on /settings/feed, /news (All), /news?category=deals and
+// Home's short feed, in both themes, on the REAL feed (no test marker). Phone 390x844 and desktop 1440. Written to
 // e2e/screenshots/chat3-p3/ (gitignored). Needs db/042.
 //   pnpm test:e2e e2e/screens-sports.spec.ts --workers=1 --output=test-results/screens-sports
 //
@@ -46,6 +46,19 @@ test("sports screens", async ({ page }, testInfo) => {
       await proposals.scrollIntoViewIfNeeded();
       await page.evaluate(() => window.scrollBy(0, -24));
       await snap(page, "settings-feed-proposal", phone, theme, false);
+
+      await page.goto("/news");
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText("News");
+      await expect(page.getByTestId("category-chip-all")).toHaveAttribute("aria-current", "page");
+      await snap(page, "news-all", phone, theme);
+
+      await page.goto("/news?category=deals");
+      await expect(page.getByTestId("category-chip-deals")).toHaveAttribute("aria-current", "page");
+      await snap(page, "news-deals", phone, theme);
+
+      await page.goto("/");
+      await page.getByTestId("home-feed").scrollIntoViewIfNeeded();
+      await snap(page, "home-short-feed", phone, theme);
     }
   } finally {
     await decideTestMove(pid, "dismissed");

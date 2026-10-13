@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { PAGE_SIZE, hides, otherOutlets, type FeedStory, type Pillar, type Sport } from "./types";
+import { PAGE_SIZE, hides, otherOutlets, type FeedStory, type NewsCategory, type Pillar, type Sport } from "./types";
 
 // Reads only: the worker writes the feed (db/032) and its scores (db/039);
 // the owner reads through RLS, and writes only reactions (feed/actions.ts,
@@ -110,7 +110,7 @@ async function finish(
  * dismissed (neutral, not interested). `hasMore` when another page exists. */
 export async function latestStories(
   supabase: SupabaseClient,
-  opts: { pillar: Pillar; page: number; withTests?: boolean; sport?: Sport | null },
+  opts: { pillar: Pillar; page: number; withTests?: boolean; sport?: Sport | null; category?: NewsCategory | null },
 ): Promise<{ stories: FeedStory[]; hasMore: boolean }> {
   const from = (opts.page - 1) * PAGE_SIZE;
   // One extra row tells whether a next page exists.
@@ -130,6 +130,7 @@ export async function latestStories(
       .not("lead_item_id", "is", null)
       .not("id", "in", notHidden);
     if (opts.sport) q = q.eq("sport", opts.sport);
+    if (opts.category) q = q.eq("category", opts.category);
     const { data, error } = await q
       .order("first_seen_at", { ascending: false })
       .order("id", { ascending: false })
@@ -149,6 +150,7 @@ export async function latestStories(
       .contains("pillars", [opts.pillar])
       .not("id", "in", notHidden);
     if (opts.sport) q = q.eq("sport", opts.sport);
+    if (opts.category) q = q.eq("category", opts.category);
     const { data, error } = await q
       .order("lead_published_at", { ascending: false })
       .order("id", { ascending: false })
@@ -176,17 +178,19 @@ function viewMeta(r: ViewRow): Meta {
  * recency plus any event boost, the capped Alabama floor, at most 5 tier-1
  * sports stories on Home's page one, 6 per tier-1 follow on Sports'; a chip
  * filters before ranking; dismissed stories already left out). Never shows a
- * test story. Without a sport the call is exactly Home's Phase 2 call:
- * p_sport is sent only when a chip is chosen (it defaults to NULL). */
+ * test story. Without a chip the call is exactly Home's Phase 2 call:
+ * p_sport / p_category are sent only when a chip is chosen (both default
+ * to NULL). */
 export async function forYouStories(
   supabase: SupabaseClient,
-  opts: { pillar: Pillar; page: number; sport?: Sport | null },
+  opts: { pillar: Pillar; page: number; sport?: Sport | null; category?: NewsCategory | null },
 ): Promise<{ stories: FeedStory[]; hasMore: boolean }> {
   const { data, error } = await supabase.rpc("feed_for_you", {
     p_pillar: opts.pillar,
     p_limit: PAGE_SIZE + 1,
     p_offset: (opts.page - 1) * PAGE_SIZE,
     ...(opts.sport ? { p_sport: opts.sport } : {}),
+    ...(opts.category ? { p_category: opts.category } : {}),
   });
   if (error) throw new Error(`Couldn't read For you: ${error.message}`);
   const rows = (data ?? []) as ForYouRow[];

@@ -16,6 +16,12 @@
 --                          never linked to or proposed with a real entity.
 --   add_test_sports_story  db/032's add_test_story plus a sport, for the
 --                          chips' e2e spec (owner only, verified marker).
+--   stories.category       the /news chips (scope addition, owner 2026-10-12
+--                          21:56): deals | hospitality | sports_business |
+--                          film_music | luxury_marine | betting | other, NULL
+--                          until categorized; in v_feed_stories; a
+--                          feed_for_you filter (p_category); test writer
+--                          add_test_news_story.
 --   entity_links           now APPEND-ONLY (UPDATE, DELETE and TRUNCATE
 --                          refused), with proposal_id and at most one current
 --                          link per (person, kind).
@@ -458,6 +464,66 @@ BEGIN
 END;
 $$;
 
+-- ===================================================================== 3b
+-- News categories (scope addition, owner 2026-10-12 21:56): one per story,
+-- for the /news chips. New stories get it from the summary call; stories
+-- summarized before that get it from their topics by the deterministic
+-- mapping in workers/feed/category.py (scripts/feed_backfill_category.py,
+-- run after this paste). NULL = not categorized yet (All only).
+
+ALTER TABLE stories ADD COLUMN IF NOT EXISTS category TEXT;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'stories_category_check') THEN
+        ALTER TABLE stories ADD CONSTRAINT stories_category_check CHECK (category IN ('deals', 'hospitality', 'sports_business', 'film_music', 'luxury_marine', 'betting', 'other'));
+    END IF;
+END
+$$;
+
+CREATE INDEX IF NOT EXISTS stories_category ON stories (category) WHERE category IS NOT NULL;
+
+-- v_feed_stories (db/032, db/039) gains category, appended so CREATE OR
+-- REPLACE keeps every existing column in place.
+CREATE OR REPLACE VIEW v_feed_stories
+WITH (security_invoker = true)
+AS
+SELECT st.id, st.pillars, st.sport, st.title, st.summary, st.entities, st.topics,
+       st.item_count, st.first_seen_at, st.last_seen_at,
+       i.id AS lead_item_id, i.url AS lead_url, i.published_at AS lead_published_at,
+       s.slug AS source_slug, s.name AS source_name,
+       st.why_it_matters,
+       st.category
+  FROM public.stories st
+  JOIN public.content_items i ON i.id = st.lead_item_id
+  JOIN public.sources s ON s.id = i.source_id
+ WHERE NOT st.is_test
+   AND st.filtered_reason IS NULL
+   AND i.url IS NOT NULL;
+
+-- The e2e writer of a test HOME story with a category (the /news chips'
+-- spec): db/032's add_test_story (owner only, verified marker, a .invalid
+-- URL), then the category. Still is_test: no real view or reader sees it.
+CREATE OR REPLACE FUNCTION public.add_test_news_story(p_marker text, p_category text, p_title text,
+                                                      p_summary text, p_url text)
+RETURNS bigint
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_id bigint;
+BEGIN
+    IF p_category IS NULL OR p_category NOT IN ('deals', 'hospitality', 'sports_business', 'film_music',
+                                                'luxury_marine', 'betting', 'other') THEN
+        RAISE EXCEPTION 'add_test_news_story: unknown category %', p_category;
+    END IF;
+    v_id := public.add_test_story(p_marker, 'home', p_title, p_summary, p_url);
+    UPDATE public.stories SET category = p_category WHERE id = v_id AND is_test;
+    RETURN v_id;
+END;
+$$;
+
 -- ===================================================================== 4
 -- boost_windows
 
@@ -654,7 +720,8 @@ UPDATE app_settings
 DROP FUNCTION IF EXISTS public.feed_for_you(text, integer, integer);
 
 CREATE OR REPLACE FUNCTION public.feed_for_you(p_pillar text, p_limit integer DEFAULT 30,
-                                               p_offset integer DEFAULT 0, p_sport text DEFAULT NULL)
+                                               p_offset integer DEFAULT 0, p_sport text DEFAULT NULL,
+                                               p_category text DEFAULT NULL)
 RETURNS TABLE (
     id bigint, pos bigint, rank double precision, score real, follow_tier smallint,
     floored boolean, cross_pillar boolean, components jsonb, reaction text,
@@ -716,6 +783,7 @@ AS $$
            AND (p_pillar = ANY (v.pillars) OR sc.cross_pillar)
            AND coalesce(r.reaction, '') NOT IN ('neutral', 'not_interested')
            AND (p_sport IS NULL OR v.sport = p_sport)
+           AND (p_category IS NULL OR v.category = p_category)
     ),
     base AS (
         SELECT c.*,
@@ -920,13 +988,18 @@ REVOKE ALL ON FUNCTION public.owner_today() FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.decide_entity_link_proposal(bigint, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.add_test_move_proposal(text, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.add_test_sports_story(text, text, text, text, text) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.feed_for_you(text, integer, integer, text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.add_test_news_story(text, text, text, text, text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.feed_for_you(text, integer, integer, text, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.ctx_sports_feed() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.owner_today() TO authenticated, valemont_readonly;
 GRANT EXECUTE ON FUNCTION public.decide_entity_link_proposal(bigint, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.add_test_move_proposal(text, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.add_test_sports_story(text, text, text, text, text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.feed_for_you(text, integer, integer, text) TO authenticated, valemont_readonly;
+GRANT EXECUTE ON FUNCTION public.add_test_news_story(text, text, text, text, text) TO authenticated;
+-- v_feed_stories was replaced above; its grants survive CREATE OR REPLACE,
+-- restated so the file says what it expects.
+GRANT SELECT ON v_feed_stories TO authenticated, valemont_readonly;
+GRANT EXECUTE ON FUNCTION public.feed_for_you(text, integer, integer, text, text) TO authenticated, valemont_readonly;
 GRANT EXECUTE ON FUNCTION public.ctx_sports_feed() TO authenticated, valemont_readonly;
 
 -- ===================================================================== 10
@@ -1112,6 +1185,28 @@ BEGIN
             RAISE EXCEPTION 'SELFTEST FAILED: a chip returned another sport';
         END IF;
 
+        -- 5b. News categories: the CHECK, and the /news chip filter (Home).
+        UPDATE public.stories SET category = 'deals' WHERE id = v_golf_h;
+        UPDATE public.stories SET category = 'film_music' WHERE id = v_home_e;
+        IF EXISTS (SELECT 1 FROM public.feed_for_you('home', 1000, 0, NULL, 'deals') f
+                    WHERE f.id IN (SELECT s.id FROM public.stories s WHERE s.category IS DISTINCT FROM 'deals'))
+           OR NOT EXISTS (SELECT 1 FROM public.feed_for_you('home', 1000, 0, NULL, 'deals') f WHERE f.id = v_golf_h)
+           OR EXISTS (SELECT 1 FROM public.feed_for_you('home', 1000, 0, NULL, 'deals') f WHERE f.id = v_home_e)
+           OR NOT EXISTS (SELECT 1 FROM public.feed_for_you('home', 1000, 0) f WHERE f.id = v_home_e) THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: the category filter';
+        END IF;
+        IF (SELECT v.category FROM public.v_feed_stories v WHERE v.id = v_golf_h) IS DISTINCT FROM 'deals' THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: v_feed_stories does not carry category';
+        END IF;
+        v_refused := 0;
+        BEGIN
+            UPDATE public.stories SET category = 'gossip' WHERE id = v_golf_h;
+        EXCEPTION WHEN check_violation THEN v_refused := 1;
+        END;
+        IF v_refused <> 1 THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: an unknown category was accepted';
+        END IF;
+
         -- 6. Proposals and links.
         INSERT INTO public.entities (kind, name, aliases, sport)
         VALUES ('person', 'Selftest 042 Person', ARRAY['selftest042 person'], 'nba') RETURNING id INTO v_person;
@@ -1290,8 +1385,12 @@ BEGIN
             PERFORM public.add_test_sports_story('x', 'golf', 'selftest', NULL, 'https://selftest.invalid/042/t');
         EXCEPTION WHEN raise_exception THEN v_refused := v_refused + 1;
         END;
-        IF v_refused <> 8 THEN
-            RAISE EXCEPTION 'SELFTEST FAILED: % of 8 test-isolation checks refused', v_refused;
+        BEGIN
+            PERFORM public.add_test_news_story('x', 'deals', 'selftest', NULL, 'https://selftest.invalid/042/n');
+        EXCEPTION WHEN raise_exception THEN v_refused := v_refused + 1;
+        END;
+        IF v_refused <> 9 THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: % of 9 test-isolation checks refused', v_refused;
         END IF;
         INSERT INTO public.entity_links (from_entity_id, to_entity_id, kind, valid_from, confirmed_by_owner)
         VALUES (v_tperson, v_ta, 'plays_for', '2026-01-01', true);
@@ -1365,9 +1464,9 @@ SELECT c.relname, has_table_privilege('valemont_readonly', c.oid, 'SELECT') AS r
  WHERE c.relnamespace = 'public'::regnamespace
    AND c.relname IN ('boost_windows', 'entity_link_proposals', 'entity_link_ends', 'v_entity_links_current')
  ORDER BY c.relname;
-SELECT has_function_privilege('valemont_readonly', 'public.feed_for_you(text, integer, integer, text)', 'EXECUTE') AS readonly_for_you,
+SELECT has_function_privilege('valemont_readonly', 'public.feed_for_you(text, integer, integer, text, text)', 'EXECUTE') AS readonly_for_you,
        has_function_privilege('valemont_readonly', 'public.ctx_sports_feed()', 'EXECUTE') AS readonly_ctx_sports,
-       has_function_privilege('anon', 'public.feed_for_you(text, integer, integer, text)', 'EXECUTE') AS anon_for_you,
+       has_function_privilege('anon', 'public.feed_for_you(text, integer, integer, text, text)', 'EXECUTE') AS anon_for_you,
        has_function_privilege('anon', 'public.decide_entity_link_proposal(bigint, text)', 'EXECUTE') AS anon_decide; -- (b)
 
 SELECT w.sport, e.name AS entity, count(*) AS windows,
@@ -1388,5 +1487,7 @@ SELECT jsonb_array_length(seed_interests #> '{feed,sports,love}') AS sports_love
 
 SELECT key, sort, brief_section, enabled FROM context_providers ORDER BY sort;           -- (f)
 SELECT id, kind, pattern, active FROM feed_rules WHERE pattern LIKE '%golfdigest%';       -- (f2) one active url_regex
+SELECT coalesce(category, '(none yet)') AS category, count(*) FROM stories
+ WHERE NOT is_test GROUP BY 1 ORDER BY 2 DESC;                                             -- (f3) all '(none yet)' until the backfill script runs
 
 SELECT name, applied_at FROM migration_log WHERE name = '042_sports';                     -- (g)

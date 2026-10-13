@@ -548,6 +548,27 @@ export async function addTestSportsStory(opts: { sport: "cfb" | "nfl" | "nba" | 
   });
 }
 
+/** A TEST Home story with a category (db/042 add_test_news_story): as
+ * addTestStory, pillar home, for the /news chips. */
+export async function addTestNewsStory(opts: {
+  category: "deals" | "hospitality" | "sports_business" | "film_music" | "luxury_marine" | "betting" | "other";
+  title: string;
+  summary: string | null;
+  url: string;
+}): Promise<number> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.rpc("add_test_news_story", {
+      p_marker: e2eMarker(),
+      p_category: opts.category,
+      p_title: opts.title,
+      p_summary: opts.summary,
+      p_url: opts.url,
+    });
+    if (error) throw new Error(`test news story failed: ${error.message}`);
+    return data as number;
+  });
+}
+
 /** A TEST move (db/042 add_test_move_proposal): "Test Player <s>" on "Test
  * Team A <s>" and an open trade to "Test Team B <s>", all is_test. Shown on
  * /settings/feed with a `test` tag; never a real entity. Rows are permanent,

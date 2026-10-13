@@ -39,6 +39,9 @@ export const NAV: NavGroup[] = [
         href: "/",
         pages: [
           { label: "Goals", href: "/goals" },
+          // Home's full feed (Chat 3 Phase 3 scope addition): Home keeps a
+          // short For you; the tabs and category chips live here.
+          { label: "News", href: "/news" },
           { label: "Morning brief", href: "/brief" },
         ],
       },

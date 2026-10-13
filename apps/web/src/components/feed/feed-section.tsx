@@ -1,11 +1,12 @@
 import Link from "next/link";
 
-import { feedHref, type FeedStory, type FeedTab, type Pillar, type Sport } from "@/lib/feed/types";
+import { feedHref, type FeedStory, type FeedTab, type NewsCategory, type Pillar, type Sport } from "@/lib/feed/types";
 
 import { FeedList } from "./feed-list";
 
-// A feed's two tabs, on Home (pillar home, at "/") and Sports News (pillar
-// sports, at "/sports", under the sport chips).
+// A feed's two tabs: News (pillar home, at "/news", under the category chips)
+// and Sports News (pillar sports, at "/sports", under the sport chips). Home
+// itself shows only For you's top 10 (components/feed/home-feed.tsx).
 //   For you  the learned order (db/042 feed_for_you): the interest profile's
 //            score minus recency plus any event boost; Alabama near the top;
 //            at most 5 tier-1 sports stories on Home's page one, at most 6
@@ -13,7 +14,7 @@ import { FeedList } from "./feed-list";
 //            default.
 //   Latest   newest first (Phase 1's order).
 // Both leave out what the owner dismissed in this pillar. 30 a page; older
-// pages are ?foryou=N or ?feed=latest&latest=N, the chip (?sport=) kept,
+// pages are ?foryou=N or ?feed=latest&latest=N, the chip (?sport=, ?category=) kept,
 // anchored to #stories.
 
 export function FeedSection({
@@ -23,8 +24,9 @@ export function FeedSection({
   hasMore,
   now,
   pillar = "home",
-  base = "/",
+  base = "/news",
   sport = null,
+  category = null,
 }: {
   tab: FeedTab;
   stories: FeedStory[];
@@ -32,21 +34,22 @@ export function FeedSection({
   hasMore: boolean;
   now: number;
   pillar?: Pillar;
-  base?: "/" | "/sports";
+  base?: "/news" | "/sports";
   sport?: Sport | null;
+  category?: NewsCategory | null;
 }) {
   const label = tab === "latest" ? "Latest" : "For you";
   const tabs: { tab: FeedTab; label: string }[] = [
     { tab: "for-you", label: "For you" },
     { tab: "latest", label: "Latest" },
   ];
-  const href = (t: FeedTab, p = 1) => feedHref(base, { tab: t, page: p, sport });
+  const href = (t: FeedTab, p = 1) => feedHref(base, { tab: t, page: p, sport, category });
   return (
     <section
       id="stories"
       aria-label="Feed"
       data-testid="feed"
-      className={`${pillar === "home" ? "mt-14" : "mt-6"} scroll-mt-6 lg:max-w-3xl`}
+      className="mt-6 scroll-mt-6 lg:max-w-3xl"
     >
       <h2 className="sr-only">
         {label}
@@ -74,15 +77,15 @@ export function FeedSection({
         <p data-testid="feed-empty" className="mt-3 border-t border-border pt-4 text-base text-text-muted">
           {page > 1
             ? "Nothing older."
-            : sport
-              ? "Nothing in this sport yet. All has every story."
+            : sport || category
+              ? `Nothing in this ${sport ? "sport" : "category"} yet. All has every story.`
               : tab === "for-you"
                 ? "Nothing ranked yet. For you fills in after the worker's next profile rebuild; Latest has every story now."
                 : "No stories yet. They arrive with the worker's next feed run."}
         </p>
       ) : (
         <FeedList
-          key={`${tab}-${page}-${sport ?? "all"}`}
+          key={`${tab}-${page}-${sport ?? category ?? "all"}`}
           stories={stories}
           pillar={pillar}
           now={now}

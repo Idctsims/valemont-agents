@@ -404,3 +404,26 @@ snapshot.
 - **Moves depend on summaries.** At 45% sports summary coverage, a move that
   is only in unsummarized stories goes unproposed until a summarized story
   carries it.
+
+## 9. Scope addition: /news and categories (owner, 2026-10-12 21:56)
+
+- **/news** is Home's whole feed (pillar home): For you / Latest and the
+  category chips All, Deals & Capital, Hospitality & Real Estate, Sports
+  Business, Film/TV & Music, Luxury & Marine, Betting & Markets, kept in the
+  URL (?category=, with ?feed= and the page). A "Sports" link goes to
+  /sports. Nav: News, inside Home. Reactions there are pillar home: they
+  train Home's profile.
+- **Home** shows For you's top 10 and "See all news". Its tabs moved to
+  /news; an old Home feed URL (?feed=latest, ?latest=N, ?foryou=N)
+  redirects to the same view there.
+- **stories.category** (db/042, CHECK on deals | hospitality |
+  sports_business | film_music | luxury_marine | betting | other; NULL until
+  categorized). feed_for_you gains p_category (default NULL), filtered before
+  ranking like the sport chip. In v_feed_stories.
+- **The summary call** returns one category from the same enum. A story
+  keeps the first category it gets.
+- **The backfill** (scripts/feed_backfill_category.py, after the paste) maps
+  existing stories' Haiku topics deterministically (workers/feed/category.py:
+  whole words or plurals, a trailing * for a prefix; most matching topics
+  wins; ties go to the specific category, Deals last; no match: other).
+  Dry run for review: docs/feed_checks/categories-2026-10-13/.

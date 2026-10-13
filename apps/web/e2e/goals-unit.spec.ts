@@ -173,7 +173,7 @@ test.describe("navigation registry", () => {
     );
   });
 
-  test("only built pages render: today, Home, Goals, Morning brief, Wags, Ventures HQ, Capital Tracker and Sports News", () => {
+  test("only built pages render: today, Home, Goals, News, Morning brief, Wags, Ventures HQ, Capital Tracker and Sports News", () => {
     expect(builtGroups()).toEqual([
       {
         key: "command",
@@ -181,6 +181,7 @@ test.describe("navigation registry", () => {
         pages: [
           { label: "Home", href: "/" },
           { label: "Goals", href: "/goals" },
+          { label: "News", href: "/news" },
           { label: "Morning brief", href: "/brief" },
           { label: "Wags", href: "/wags" },
           { label: "Ventures HQ", href: "/ventures" },

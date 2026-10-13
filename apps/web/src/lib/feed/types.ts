@@ -59,14 +59,41 @@ export function sportFromParam(raw: string | string[] | undefined): Sport | null
   return SPORT_CHIPS.some((c) => c.sport === v) ? (v as Sport) : null;
 }
 
+/** /news category chips (stories.category, db/042; workers/feed/category.py).
+ * A story with no category yet shows under All only. */
+export type NewsCategory = "deals" | "hospitality" | "sports_business" | "film_music" | "luxury_marine" | "betting";
+export const NEWS_CHIPS: readonly { category: NewsCategory | null; label: string }[] = [
+  { category: null, label: "All" },
+  { category: "deals", label: "Deals & Capital" },
+  { category: "hospitality", label: "Hospitality & Real Estate" },
+  { category: "sports_business", label: "Sports Business" },
+  { category: "film_music", label: "Film/TV & Music" },
+  { category: "luxury_marine", label: "Luxury & Marine" },
+  { category: "betting", label: "Betting & Markets" },
+];
+
+/** `?category=` as a chip; anything else (including "other") is All. */
+export function categoryFromParam(raw: string | string[] | undefined): NewsCategory | null {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  return NEWS_CHIPS.some((c) => c.category === v) ? (v as NewsCategory) : null;
+}
+
+/** How many For you stories Home shows before "See all news". */
+export const HOME_TOP = 10;
+
 /**
  * A feed URL that keeps the chip, the tab and the page, anchored to the
- * stories. Home: "/#stories", "/?feed=latest&latest=2#stories" (Phase 2's
- * URLs, unchanged). Sports: "/sports?sport=golf&feed=latest#stories".
+ * stories. Home's old URLs ("/#stories", "/?feed=latest&latest=2#stories")
+ * still build the same. News: "/news?category=deals&feed=latest#stories".
+ * Sports: "/sports?sport=golf&feed=latest#stories".
  */
-export function feedHref(base: "/" | "/sports", o: { tab: FeedTab; page?: number; sport?: Sport | null; anchor?: boolean }): string {
+export function feedHref(
+  base: "/" | "/news" | "/sports",
+  o: { tab: FeedTab; page?: number; sport?: Sport | null; category?: NewsCategory | null; anchor?: boolean },
+): string {
   const q = new URLSearchParams();
   if (o.sport) q.set("sport", o.sport);
+  if (o.category) q.set("category", o.category);
   if (o.tab === "latest") q.set("feed", "latest");
   const page = o.page ?? 1;
   if (page > 1) q.set(o.tab === "latest" ? "latest" : "foryou", String(page));

@@ -2201,6 +2201,8 @@ class SummaryOut:
     #: summarizer's sport replaces the story's; the story keeps its own when
     #: the summarizer said none. Otherwise the story's own sport wins.
     sport_from_model: bool = False
+    #: The /news category (feed/category.py, db/042). Kept if already set.
+    category: str | None = None
 
 
 def feed_save_summaries(results: Sequence[SummaryOut], ai_usage_id: int | None, *,
@@ -2223,14 +2225,42 @@ def feed_save_summaries(results: Sequence[SummaryOut], ai_usage_id: int | None, 
                 UPDATE stories
                    SET summary = %s, entities = %s, topics = %s,
                        sport = CASE WHEN %s THEN coalesce(%s, sport) ELSE coalesce(sport, %s) END,
+                       category = coalesce(category, %s),
                        drop_category = %s, filtered_reason = coalesce(filtered_reason, %s),
                        summary_attempts = least(summary_attempts + %s, 5), summarized_at = now(),
                        ai_usage_id = %s
                  WHERE id = %s
                 """,
                 (r.summary, list(r.entities), list(r.topics), r.sport_from_model, r.sport, r.sport,
-                 r.drop, r.filtered_reason, r.attempts, ai_usage_id, r.story_id),
+                 r.category, r.drop, r.filtered_reason, r.attempts, ai_usage_id, r.story_id),
             )
+
+
+#: The category backfill (db/042; scripts/feed_backfill_category.py): kept,
+#: real Home stories with topics and no category yet.
+FEED_UNCATEGORIZED_SQL: Final = """
+    SELECT id, topics FROM stories
+     WHERE NOT is_test AND filtered_reason IS NULL AND category IS NULL
+       AND 'home' = ANY (pillars) AND cardinality(topics) > 0
+     ORDER BY id
+"""
+
+
+def feed_uncategorized_home_stories(*, conn: psycopg.Connection | None = None) -> list[tuple[int, tuple[str, ...]]]:
+    with _brief_conn(conn) as c:
+        return [(int(r[0]), tuple(r[1] or ())) for r in c.execute(FEED_UNCATEGORIZED_SQL).fetchall()]
+
+
+def feed_set_categories(pairs: Sequence[tuple[int, str]], *, conn: psycopg.Connection | None = None) -> int:
+    """Set each story's category, only where it is still NULL (a re-run, or a
+    summary that categorized the story meanwhile, never changes one). One
+    transaction. Returns rows written."""
+    written = 0
+    with _brief_conn(conn) as c, c.transaction():
+        for sid, category in pairs:
+            written += c.execute("UPDATE stories SET category = %s WHERE id = %s AND category IS NULL",
+                                 (category, sid)).rowcount
+    return written
 
 
 #: The nightly prune, in order; tests_live runs these texts. A story with ANY

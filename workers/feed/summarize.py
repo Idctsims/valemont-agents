@@ -72,6 +72,7 @@ from typing import Any, Sequence
 from core import ai, ledger, memory
 from core.jobs import JobSkipped
 from feed import moves as move_rules
+from feed import category as categories
 from feed import rank, sources
 
 log = logging.getLogger("valemont.feed.summarize")
@@ -108,6 +109,8 @@ entities: the people, teams, leagues and companies the story is about (as named;
 topics: 1 to {MAX_TOPICS} short lowercase snake_case topics, e.g. media_rights, stadium_financing, nil, coaching_change, funding_round, m_and_a, hotel_development, music_publishing.
 sport: cfb, nfl, nba, f1 or golf when the story is about that sport, otherwise none.
 
+category: the one that fits best: deals (funding, M&A, VC, private equity, family offices, IPOs, earnings), hospitality (hotels, clubs, restaurants, real estate, development, travel), sports_business (team ownership, valuations, media rights, stadiums, sponsorship, NIL), film_music (film, TV, streaming, music, creators, talent), luxury_marine (yachts, boats, luxury and lifestyle brands), betting (sports betting, prediction markets, Kalshi), other.
+
 drop: classify against the reader's don't-care list. Pick the first that fits, else none.
 - gossip: celebrity gossip, dating, relationships, breakups, feuds between personalities, red-carpet looks. Business news about a celebrity's company, deal or earnings is NOT gossip.
 - partisan_politics: horse-race politics (polls, who is up or down, campaign trail) and culture-war fights. Policy that moves money (taxes, tariffs, regulation, antitrust, rates, budgets, labor law affecting a business or league) is none.
@@ -136,7 +139,7 @@ def schema() -> dict[str, Any]:
                 "items": {
                     "type": "object",
                     "additionalProperties": False,
-                    "required": ["id", "summary", "entities", "topics", "sport", "drop", "moves"],
+                    "required": ["id", "summary", "entities", "topics", "sport", "drop", "moves", "category"],
                     "properties": {
                         "id": {"type": "integer"},
                         "summary": {"type": "string"},
@@ -144,6 +147,7 @@ def schema() -> dict[str, Any]:
                         "topics": {"type": "array", "items": {"type": "string"}},
                         "sport": {"type": "string", "enum": list(SPORTS)},
                         "drop": {"type": "string", "enum": list(DROPS)},
+                        "category": {"type": "string", "enum": list(categories.CATEGORIES)},
                         "moves": {
                             "type": "array",
                             "items": {
@@ -247,6 +251,8 @@ class Valid:
     sport: str | None
     drop: str
     moves: tuple[move_rules.RawMove, ...] = ()
+    #: feed/category.py; None when the model gave none we know.
+    category: str | None = None
 
 
 def validate(item: dict[str, Any], job: ledger.SummaryJob) -> Valid:
@@ -272,7 +278,8 @@ def validate(item: dict[str, Any], job: ledger.SummaryJob) -> Valid:
                                             for x in item.get("topics") or []) if t))
     return Valid(summary, entities[:MAX_ENTITIES], topics[:MAX_TOPICS],
                  sport if sport in SPORTS and sport != "none" else None, drop,
-                 move_rules.parse(item.get("moves")))
+                 move_rules.parse(item.get("moves")),
+                 item.get("category") if item.get("category") in categories.CATEGORIES else None)
 
 
 def story_sport(job: ledger.SummaryJob, model_sport: str | None, from_model: bool) -> str | None:
@@ -333,6 +340,7 @@ def results_for(group: Sequence[ledger.SummaryJob], payload: Any, *,
         accepted[sid] = ledger.SummaryOut(
             story_id=sid, summary=v.summary, entities=v.entities, topics=v.topics, sport=v.sport,
             drop=v.drop, filtered_reason=f"drop:{v.drop}" if DROP_LIVE and v.drop != "none" else None,
+            category=v.category,
             attempts=attempts, sport_from_model=from_model)
         if v.moves and found is not None:
             found.append((sid, story_sport(by_id[sid], v.sport, from_model), v.moves))

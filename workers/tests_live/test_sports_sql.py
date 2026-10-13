@@ -255,6 +255,47 @@ class Context(SportsSqlCase):
                 self.window(conn, "nba", t, "-1 hour", "1 hour", 1)
 
 
+class Categories(SportsSqlCase):
+    """/news categories (db/042 scope addition)."""
+
+    def test_the_check_the_view_and_the_for_you_filter(self) -> None:
+        with _rolled_back() as conn:
+            deal = self.scored(conn, "nba", 30, pillar="home")
+            film = self.scored(conn, "nba", 30, pillar="home")
+            conn.execute("UPDATE stories SET sport = NULL, category = 'deals' WHERE id = %s", (deal,))
+            conn.execute("UPDATE stories SET sport = NULL, category = 'film_music' WHERE id = %s", (film,))
+            rows = conn.execute("SELECT id FROM feed_for_you('home', 100000, 0, NULL, 'deals')").fetchall()
+            ids = {r[0] for r in rows}
+            self.assertIn(deal, ids)
+            self.assertNotIn(film, ids)
+            cats = {r[0] for r in conn.execute(
+                "SELECT v.category FROM feed_for_you('home', 100000, 0, NULL, 'deals') f "
+                "JOIN v_feed_stories v ON v.id = f.id")}
+            self.assertEqual(cats, {"deals"})
+            with self.assertRaises(psycopg.errors.CheckViolation), conn.transaction():
+                conn.execute("UPDATE stories SET category = 'gossip' WHERE id = %s", (deal,))
+
+    def test_the_backfill_fills_only_null_categories(self) -> None:
+        with _rolled_back() as conn:
+            src = self.source(conn)
+            a, b = self.story(conn, src), self.story(conn, src)
+            conn.execute("UPDATE stories SET topics = ARRAY['m_and_a'] WHERE id IN (%s, %s)", (a, b))
+            conn.execute("UPDATE stories SET category = 'other' WHERE id = %s", (b,))
+            todo = dict(ledger.feed_uncategorized_home_stories(conn=conn))
+            self.assertIn(a, todo)
+            self.assertNotIn(b, todo)
+            self.assertEqual(ledger.feed_set_categories([(a, "deals"), (b, "deals")], conn=conn), 1)
+            got = dict(conn.execute("SELECT id, category FROM stories WHERE id IN (%s, %s)", (a, b)).fetchall())
+            self.assertEqual(got, {a: "deals", b: "other"})
+
+    def test_a_summary_sets_a_category_once(self) -> None:
+        with _rolled_back() as conn:
+            sid = self.story(conn, self.source(conn), done=False)
+            ledger.feed_save_summaries([ledger.SummaryOut(sid, "A summary.", category="betting")], None, conn=conn)
+            ledger.feed_save_summaries([ledger.SummaryOut(sid, "Again.", category="deals")], None, conn=conn)
+            self.assertEqual(conn.execute("SELECT category FROM stories WHERE id = %s", (sid,)).fetchone()[0], "betting")
+
+
 class WorkerQueries(SportsSqlCase):
     def test_derived_team_follow_from_the_current_link(self) -> None:
         with _rolled_back() as conn:
