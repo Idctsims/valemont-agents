@@ -48,7 +48,7 @@ class FakeCapital:
     def job_started(self, job: str) -> None:
         self.health.append(("started", job))
 
-    def job_succeeded(self, job: str) -> None:
+    def job_succeeded(self, job: str, note: str | None = None) -> None:
         self.health.append(("ok", job))
 
     def job_failed(self, job: str, error: str) -> None:

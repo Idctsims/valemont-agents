@@ -23,6 +23,7 @@ Numerics are `Decimal` end to end. Floats are accepted and converted via
 
 from __future__ import annotations
 
+from array import array
 from contextlib import contextmanager
 import logging
 import os
@@ -1743,6 +1744,18 @@ def _vec_parse(text: Any) -> tuple[float, ...] | None:
     return tuple(float(x) for x in str(text).strip("[]").split(",") if x)
 
 
+def _vec_array(text: Any) -> "array[float] | None":
+    """A vector as float32 (array 'f'): 4 bytes a dimension, against about 32
+    for a tuple of Python floats. The embeddings are halfvec (16-bit) in the
+    database, so float32 loses nothing (Chat 3 Phase 1 hotfix: 2,766
+    candidate vectors took 32.5 MB as tuples, about 4 MB as arrays)."""
+    if text is None:
+        return None
+    if isinstance(text, (list, tuple, array)):
+        return array("f", text)
+    return array("f", [float(x) for x in str(text).strip("[]").split(",") if x])
+
+
 @dataclass(frozen=True)
 class FeedSource:
     id: int
@@ -1939,17 +1952,20 @@ FEED_CANDIDATES_SQL: Final = """
 class CandidateStory:
     story_id: int
     item_count: int
-    #: (title, title-only embedding) per member.
-    members: tuple[tuple[str, tuple[float, ...]], ...]
+    #: (title, title-only embedding as float32) per member.
+    members: tuple[tuple[str, "array[float]"], ...]
 
 
 def feed_candidates(hours: int, *, is_test: bool = False,
                     conn: psycopg.Connection | None = None) -> list[CandidateStory]:
-    with _brief_conn(conn) as c:
-        rows = c.execute(FEED_CANDIDATES_SQL, {"is_test": is_test, "hours": hours}).fetchall()
-    stories: dict[int, tuple[int, list[tuple[str, tuple[float, ...]]]]] = {}
-    for sid, count, title, vec in rows:
-        stories.setdefault(sid, (count, []))[1].append((title, _vec_parse(vec)))
+    """Rows are read one at a time (no fetchall), each vector parsed straight
+    into float32, so the text rows and the parsed vectors are never all held
+    at once in Python objects."""
+    stories: dict[int, tuple[int, list[tuple[str, array[float]]]]] = {}
+    with _brief_conn(conn) as c, c.cursor() as cur:
+        cur.execute(FEED_CANDIDATES_SQL, {"is_test": is_test, "hours": hours})
+        for sid, count, title, vec in cur:
+            stories.setdefault(sid, (count, []))[1].append((title, _vec_array(vec)))
     return [CandidateStory(sid, count, tuple(members)) for sid, (count, members) in stories.items()]
 
 
@@ -2130,6 +2146,24 @@ def feed_summary_queue(limit: int, max_attempts: int, *,
     with _brief_conn(conn) as c:
         rows = c.execute(FEED_SUMMARY_QUEUE_SQL, {"limit": limit, "max_attempts": max_attempts}).fetchall()
     return [SummaryJob(*r) for r in rows]
+
+
+#: The summary backlog the health monitor watches (owner, 2026-10-12): kept,
+#: real stories still waiting for a summary (a try left) that were first seen
+#: more than `min_age_h` hours ago.
+FEED_SUMMARY_BACKLOG_SQL: Final = """
+    SELECT count(*) FROM stories
+     WHERE summary IS NULL AND filtered_reason IS NULL AND NOT is_test
+       AND summary_attempts < %(max_attempts)s
+       AND first_seen_at < now() - make_interval(hours => %(min_age_h)s)
+"""
+
+
+def feed_summary_backlog(min_age_h: int, max_attempts: int, *,
+                         conn: psycopg.Connection | None = None) -> int:
+    with _brief_conn(conn) as c:
+        return int(c.execute(FEED_SUMMARY_BACKLOG_SQL,
+                             {"min_age_h": min_age_h, "max_attempts": max_attempts}).fetchone()[0])
 
 
 def feed_summarized_today(*, conn: psycopg.Connection | None = None) -> int:

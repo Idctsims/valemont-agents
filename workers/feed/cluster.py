@@ -61,8 +61,8 @@ def normalize_title(title: str) -> str:
 @dataclass(frozen=True)
 class Member:
     title: str
-    #: Title-only embedding.
-    vector: tuple[float, ...]
+    #: Title-only embedding (float32 array('f') in a run; any float sequence).
+    vector: Sequence[float]
 
 
 @dataclass(frozen=True)
