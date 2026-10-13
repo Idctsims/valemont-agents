@@ -196,6 +196,14 @@ class FoundAndJoin(FeedLedgerCase):
 
 
 class Summaries(FeedLedgerCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        with _rolled_back() as conn:
+            # From Chat 3 Phase 3 a saved summary also writes stories.category.
+            if conn.execute("SELECT to_regclass('public.boost_windows')").fetchone()[0] is None:
+                raise unittest.SkipTest("the summary save writes stories.category: db/042 not pasted")
+
     def test_the_backlog_counts_kept_real_waiting_stories_older_than_2h(self) -> None:
         """The health monitor's backlog alert (hotfix, owner 2026-10-12)."""
         with _rolled_back() as conn:
