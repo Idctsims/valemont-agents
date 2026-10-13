@@ -444,9 +444,8 @@ class FilterRules(unittest.TestCase):
         import re
         from core.paths import REPO_ROOT
         sql = (REPO_ROOT / "db" / "043_feed_author_rules.sql").read_text(encoding="utf-8")
-        (pattern,) = re.findall(r"\('url_regex',\s+NULL,\s+'((?:[^']|'')*)'", sql)
-        pattern = pattern.replace("''", "'")
-        rules = Rules([Rule(9, "url_regex", None, pattern)])
+        author, _pga = (p.replace("''", "'") for p in re.findall(r"\('url_regex',\s+NULL,\s+'((?:[^']|'')*)'", sql))
+        rules = Rules([Rule(9, "url_regex", None, author)])
         drop = [("Chelsea Brasted", "https://www.axios.com/local/miami/authors/cbrasted"),
                 ("Carly Mallenbaum", "https://www.axios.com/local/miami/authors/cmallenbaum"),
                 ("Avery Lotz", "https://www.axios.com/local/miami/authors/alotz"),
@@ -474,6 +473,42 @@ class FilterRules(unittest.TestCase):
             self.assertEqual(rules.filter_reason(title=title, url=url, pillars=["home"]), "url_regex:9", url)
         for title, url in keep:
             self.assertIsNone(rules.filter_reason(title=title, url=url, pillars=["home"]), url)
+
+    def test_db043_drops_pga_tour_player_pages_never_news(self) -> None:
+        """Owner, 2026-10-13 16:37: player profile and results pages (13 of
+        the 158 pgatour.com items, db_inspect), never news or clips."""
+        import re
+        from core.paths import REPO_ROOT
+        sql = (REPO_ROOT / "db" / "043_feed_author_rules.sql").read_text(encoding="utf-8")
+        _author, pga = (p.replace("''", "'") for p in re.findall(r"\('url_regex',\s+NULL,\s+'((?:[^']|'')*)'", sql))
+        rules = Rules([Rule(8, "url_regex", None, pga)])
+        drop = ["https://www.pgatour.com/player/profiles/32781/results",
+                "https://www.pgatour.com/player/18/6",
+                "https://www.pgatour.com/player/615/-/bio",
+                "https://www.pgatour.com/player/588/-/news-and-video",
+                "https://www.pgatour.com/player/37023/tyler-rody",
+                "https://www.pgatour.com/players/player.53465.justin-thomas.html",
+                "https://www.pgatour.com/korn-ferry-tour/player/45486/joaquin-niemann?deviceId=60122bca",
+                "https://www.pgatour.com/pt/korn-ferry-tour/player/30110/kyle-stanley/overview?deviceId=a3953",
+                "https://www.pgatour.com/pt/pgatour-champions/player/23386/david-roesch/career?deviceId=a3953",
+                "https://www.pgatour.com/pt/player/65922/koshin-nagasaki/results?deviceId=7c91e8f8"]
+        keep = ["https://www.pgatour.com/article/news/latest/2026/10/13/jackson-koivun-brooks-koepka-wyndham-clark-"
+                "justin-thomas-skins-game-black-friday-prime-video-atlantic-field-club",
+                "https://www.pgatour.com/article/news/betting-profile/2026/baycurrent-classic/ben-james-pga-tour-"
+                "betting-profile-baycurrent-classic-2026?webview=1",
+                "https://www.pgatour.com/korn-ferry-tour/article/news/latest/2026/10/11/korn-ferry-tour-championship-"
+                "austin-hitt-blades-brown-teenager-pga-tourbound-2027-cards-the-federal-club",
+                "https://www.pgatour.com/pgatour-champions/article/news/daily-wrapup/2026/10/10/round-2-constellation-"
+                "furyk-friends-ocean-course-hammock-beach-scores-leaderboard-results",
+                "https://www.pgatour.com/americas/article/news/latest/2026/10/13/four-players-secure-korn-ferry-tour-"
+                "cards-pga-tour-americas-season-finale",
+                "https://www.pgatour.com/video/competition/6406636817112/michael-brennans-winning-highlights-from-"
+                "round--at-baycurrent",
+                "https://www.pgatour.com/news"]
+        for url in drop:
+            self.assertEqual(rules.filter_reason(title="x", url=url, pillars=["sports"]), "url_regex:8", url)
+        for url in keep:
+            self.assertIsNone(rules.filter_reason(title="x", url=url, pillars=["sports"]), url)
 
     def test_every_seeded_db032_pattern_compiles_in_python(self) -> None:
         import re

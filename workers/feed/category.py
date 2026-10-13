@@ -34,15 +34,19 @@ LABELS: dict[str, str] = {
 
 #: The one definition both calls send. sports_business and betting tightened
 #: by the owner, 2026-10-13 16:19, after the first pass put game coverage in
-#: sports_business and fantasy and stock-market pieces in betting.
+#: sports_business and fantasy and stock-market pieces in betting; at 16:37,
+#: sports media rights and league structure moved from film_music and other
+#: into sports_business, and film_music lost sports rights and broadcasting.
 PROMPT = ("category: the one that fits best: deals (funding, M&A, VC, private equity, family offices, IPOs, "
           "earnings), hospitality (hotels, clubs, restaurants, real estate, development, travel), "
-          "sports_business (the business of sport: ownership, stakes, valuations, media rights, athlete "
-          "businesses, league economics, stadiums, sponsorship, NIL; NOT games, coaching or player "
-          "performance, which are other), film_music (film, TV, streaming, music, creators, talent), "
-          "luxury_marine (yachts, boats, luxury and lifestyle brands), betting (the betting business: "
-          "sportsbooks, prediction markets, Kalshi, betting regulation; NOT fantasy sports, NOT the stock "
-          "market), other.")
+          "sports_business (the business of sport: ownership, stakes, valuations, athlete businesses, "
+          "stadiums, sponsorship; sports media rights and broadcasting deals on any platform; league "
+          "economics and structure, such as schedule length, eligibility and NIL rulings and expansion; and "
+          "the business of a sport's industry; NOT games, coaching or player performance, which are other), "
+          "film_music (film, TV, music, entertainment streaming, creators, talent; NOT sports rights or sports "
+          "broadcasting, which are sports_business), luxury_marine (yachts, boats, luxury and lifestyle "
+          "brands), betting (the betting business: sportsbooks, prediction markets, Kalshi, betting "
+          "regulation; NOT fantasy sports, NOT the stock market), other.")
 
 
 def valid(value: object) -> str | None:

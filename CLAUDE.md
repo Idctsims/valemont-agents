@@ -347,8 +347,13 @@ policies arrive in db/019+ before apps/web reads any table. db/019 (push_subscri
   touch a query or add a migration.** Also from `workers/`:
 
   ```
-  ..\venv\Scripts\python.exe -m unittest discover -s tests_live -t .
+  ..\venv\Scripts\python.exe -m unittest discover -v -s tests_live -t .
   ```
+
+  **Always `-v` (owner, 2026-10-13):** a quiet run reports "skipped=1" with
+  no name or reason, and a skip that cannot be named cannot be cleared. With
+  `-v` every skip prints its test and reason; keep the output. No merge with
+  an unnamed skip.
 
   The stub ledger refuses the database on purpose, which is what keeps the fast
   suite fast — and it means a defect in a query, a `CHECK`, a trigger or a
@@ -982,7 +987,8 @@ absent row as "I never looked."
     - **The first paste failed and applied nothing** (owner, 2026-10-13): the self-test's `TRUNCATE entity_link_proposals` raised 0A000, because TRUNCATE checks foreign keys before any TRUNCATE trigger. Read back via db_inspect: nothing from the file existed. The fix truncates the closed set (proposals, links, ends) and counts only the guard's P0001 message. **Rule for future self-tests: a TRUNCATE assertion on a table that other tables reference must name every referencing table in the same statement.**
     - Next new file: `db/043`.
   - **Rule (owner, 2026-10-12): the migration record updates in the same session a migration is verified, never deferred to a merge.** Record `applied_at` from `migration_log` and the verification, and move "Next new file" here and in MASTER_PLAN §"Migration numbering", in their own commit.
-- **Known intermittent `tests_live` skip (identified 2026-10-12):** `test_system_jobs_sql.SystemJobsSql.test_claim_retry_and_finish` skips with "another poller claimed the test job first" when the production worker's 10 s `job_queue` poller claims the test's `noop` job first (observed 2 of 60 isolated runs). By design (skip, not fail); not a broken invariant. A run reporting "1 skipped" is this test.
+- **Known intermittent `tests_live` skip (identified 2026-10-12):** `test_system_jobs_sql.SystemJobsSql.test_claim_retry_and_finish` skips with "another poller claimed the test job first" when the production worker's 10 s `job_queue` poller claims the test's `noop` job first (observed 2 of 60 isolated runs). By design (skip, not fail); not a broken invariant. Two sibling tests in the same file skip the same way ("another poller claimed/failed the test job first"). Since 2026-10-13 `tests_live` runs with `-v`, so a skip is named, not assumed.
+  - **2026-10-13, cleared (owner):** a quiet Phase 3 run reported "314 tests, OK (skipped=1)" with no name. The full verbose rerun had **0 skips** (314 OK, 593 s). The owner's judgment: the plausible cause is this documented poller race, since every migration-gated skip cannot fire (all applied). One alternative was not ruled out: a class whose own `setUpClass` hits a transient "database unreachable" is also reported as one skip.
 - **Immutability audit (2026-10-01, empirical).** UPDATE and DELETE were attempted on a `_test` row of every table, rolled back.
   - **Refused by trigger:** `commitments`, `events`, `resolution_attempts`, `commitment_factors`, `closing_snapshots`, `selections`, `model_versions`, `kalshi_markets`, `kalshi_candles`. `legs` UPDATE was refused too, by `legs_frozen`.
   - **ACCEPTED:**

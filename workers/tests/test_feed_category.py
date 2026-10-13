@@ -129,8 +129,16 @@ class Definitions(unittest.TestCase):
     """Owner, 2026-10-13 16:19: sports_business and betting, tighter."""
 
     def test_sports_business_is_the_business_not_the_games(self) -> None:
-        for phrase in ("ownership", "stakes", "valuations", "media rights", "athlete businesses",
-                       "league economics", "NOT games, coaching or player performance"):
+        for phrase in ("ownership", "stakes", "valuations", "athlete businesses",
+                       "sports media rights and broadcasting deals on any platform",
+                       "league economics and structure", "schedule length", "eligibility and NIL rulings",
+                       "expansion", "the business of a sport's industry",
+                       "NOT games, coaching or player performance"):
+            self.assertIn(phrase, category.PROMPT)
+
+    def test_film_music_is_entertainment_not_sports_rights(self) -> None:
+        """Owner, 2026-10-13 16:37: sports rights went to film_music."""
+        for phrase in ("entertainment streaming", "NOT sports rights or sports broadcasting"):
             self.assertIn(phrase, category.PROMPT)
 
     def test_betting_is_the_betting_business_not_fantasy_or_stocks(self) -> None:
