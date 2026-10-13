@@ -115,6 +115,29 @@ class Float32Candidates(unittest.TestCase):
         self.assertIn("_vec_array", src)
 
 
+class Phase2Audit(unittest.TestCase):
+    """The memory audit of Phase 2's rebuild (2026-10-13): the window's
+    centroids are float32 and streamed; the rebuild hands memory back."""
+
+    def test_rank_stories_carry_float32_centroids(self) -> None:
+        s = ledger._rank_story((1, ["home"], None, "t", None, None, "src", "[0.5,-0.25]"))
+        self.assertEqual((s.vec.typecode, list(s.vec)), ("f", [0.5, -0.25]))
+        self.assertEqual(len(ledger._rank_story((1, ["home"], None, "t", None, None, "src", None)).vec), 0)
+
+    def test_the_window_and_the_signals_are_streamed(self) -> None:
+        import inspect
+        for fn in (ledger.feed_stories_to_score, ledger.feed_reaction_signals):
+            self.assertNotIn(".fetchall(", inspect.getsource(fn), fn.__name__)
+
+    def test_the_rebuild_releases_memory_even_when_it_fails(self) -> None:
+        from feed import profile
+        with mock.patch.object(ledger, "feed_follows", side_effect=RuntimeError("db down")), \
+                mock.patch.object(memory, "release") as release:
+            with self.assertRaises(RuntimeError):
+                profile.rebuild(embed=lambda t: [])
+        release.assert_called_once_with()
+
+
 class Clients(unittest.TestCase):
     def tearDown(self) -> None:
         embed.close_http()

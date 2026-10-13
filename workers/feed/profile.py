@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Mapping, Sequence
 
 from core import embed as embedder
-from core import ledger
+from core import ledger, memory
 from core.jobs import JobSkipped
 from feed import rank
 from feed.summarize import MAX_ATTEMPTS
@@ -119,14 +119,20 @@ def score_stories(stories: Sequence[ledger.RankStory], profiles: Mapping[str, ra
 
 
 def rebuild(*, embed: Embed = embedder.embed) -> RebuildStats:
-    """Profiles for every pillar, then a rescore of the window."""
-    follows = follows_from(ledger.feed_follows())
-    profiles, ids, stats = build_profiles(embed=embed)
-    stories = ledger.feed_stories_to_score(rank.WINDOW_H, MAX_ATTEMPTS, unscored=False)
-    stats.stories = len(stories)
-    stats.scored = score_stories(stories, profiles, ids, follows) if profiles else 0
-    log.info("feed profile: %s", stats.line())
-    return stats
+    """Profiles for every pillar, then a rescore of the window. The window's
+    vectors are the job's biggest structure: dropped, and the memory handed
+    back, when it ends (core/memory.py; memory audit, 2026-10-13)."""
+    try:
+        follows = follows_from(ledger.feed_follows())
+        profiles, ids, stats = build_profiles(embed=embed)
+        stories = ledger.feed_stories_to_score(rank.WINDOW_H, MAX_ATTEMPTS, unscored=False)
+        stats.stories = len(stories)
+        stats.scored = score_stories(stories, profiles, ids, follows) if profiles else 0
+        del stories
+        log.info("feed profile: %s", stats.line())
+        return stats
+    finally:
+        memory.release()
 
 
 def profile_job(*, embed: Embed = embedder.embed) -> RebuildStats:
@@ -147,9 +153,12 @@ def score_new_job() -> int:
         raise JobSkipped("no interest profile yet; feed_profile builds the first")
     profiles = {p: profile_from(r) for p, r in latest.items()}
     ids = {p: r.id for p, r in latest.items()}
-    stories = ledger.feed_stories_to_score(rank.WINDOW_H, MAX_ATTEMPTS, unscored=True)
-    if not stories:
-        return 0
-    n = score_stories(stories, profiles, ids, follows_from(ledger.feed_follows()))
-    log.info("feed score: %d scores for %d new stories", n, len(stories))
-    return n
+    try:
+        stories = ledger.feed_stories_to_score(rank.WINDOW_H, MAX_ATTEMPTS, unscored=True)
+        if not stories:
+            return 0
+        n = score_stories(stories, profiles, ids, follows_from(ledger.feed_follows()))
+        log.info("feed score: %d scores for %d new stories", n, len(stories))
+        return n
+    finally:
+        memory.release()

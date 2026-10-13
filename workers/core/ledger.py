@@ -2339,12 +2339,15 @@ class RankStory:
     entities: tuple[str, ...]
     topics: tuple[str, ...]
     source_slug: str | None
-    vec: tuple[float, ...]
+    #: stories.centroid as float32 (array 'f'; empty when NULL). The rebuild
+    #: loads every kept story of the window: 1,105 centroids took 13.0 MB as
+    #: tuples of Python floats (memory audit, 2026-10-13), about 1.7 MB as this.
+    vec: Sequence[float]
 
 
 def _rank_story(r: Sequence[Any]) -> RankStory:
     return RankStory(int(r[0]), tuple(r[1]), r[2], r[3], tuple(r[4] or ()), tuple(r[5] or ()), r[6],
-                     _vec_parse(r[7]) or ())
+                     _vec_array(r[7]) or array("f"))
 
 
 _RANK_STORY_COLS = "st.id, st.pillars, st.sport, st.title, st.entities, st.topics, s.slug, st.centroid::text"
@@ -2371,9 +2374,10 @@ FEED_SIGNALS_SQL: Final = f"""
 
 
 def feed_reaction_signals(pillar: str, *, conn: psycopg.Connection | None = None) -> list[ReactionSignal]:
-    with _brief_conn(conn) as c:
-        rows = c.execute(FEED_SIGNALS_SQL, {"pillar": pillar}).fetchall()
-    return [ReactionSignal(_rank_story(r[:8]), r[8], bool(r[9])) for r in rows]
+    """Streamed row by row (no fetchall), vectors straight to float32."""
+    with _brief_conn(conn) as c, c.cursor() as cur:
+        cur.execute(FEED_SIGNALS_SQL, {"pillar": pillar})
+        return [ReactionSignal(_rank_story(r[:8]), r[8], bool(r[9])) for r in cur]
 
 
 #: Stories to score: kept, real, linkable, first seen in the window, with a
@@ -2396,10 +2400,10 @@ FEED_TO_SCORE_SQL: Final = f"""
 
 def feed_stories_to_score(hours: int, max_attempts: int, *, unscored: bool,
                           conn: psycopg.Connection | None = None) -> list[RankStory]:
-    with _brief_conn(conn) as c:
-        rows = c.execute(FEED_TO_SCORE_SQL, {"hours": hours, "max_attempts": max_attempts,
-                                             "unscored": unscored}).fetchall()
-    return [_rank_story(r) for r in rows]
+    """Streamed row by row (no fetchall), vectors straight to float32."""
+    with _brief_conn(conn) as c, c.cursor() as cur:
+        cur.execute(FEED_TO_SCORE_SQL, {"hours": hours, "max_attempts": max_attempts, "unscored": unscored})
+        return [_rank_story(r) for r in cur]
 
 
 @dataclass(frozen=True)
