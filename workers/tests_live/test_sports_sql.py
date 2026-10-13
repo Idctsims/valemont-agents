@@ -30,6 +30,7 @@ from psycopg.types.json import Jsonb
 
 from core import ledger
 from feed import rank
+from tests_live import twin_check
 from tests_live.test_feed_rank_sql import RankSqlCase, _act_as, _rolled_back
 
 
@@ -204,17 +205,20 @@ class Boosts(SportsSqlCase):
             boosted = {r[0] for r in conn.execute(
                 "SELECT e.name FROM boost_windows w JOIN entities e ON e.id = w.entity_id "
                 "WHERE w.starts_at <= now() AND now() < w.ends_at")}
+            # REAL columns as float8, the exact value the SQL ranks with; the
+            # order is compared up to exact ties (tests_live/twin_check.py:
+            # the golf window made ids 4943 and 5425 tie, 2026-10-13).
             rows = conn.execute("""
-                SELECT f.id, f.pos, sc.score, extract(epoch FROM now() - f.lead_published_at) / 3600.0,
-                       sc.floor, sc.cross_pillar, coalesce(f.floored, false), f.boost_hours,
-                       coalesce(sc.components -> 'follows', '[]'::jsonb)
+                SELECT f.id, f.pos, sc.score::float8, extract(epoch FROM now() - f.lead_published_at) / 3600.0,
+                       sc.floor, sc.cross_pillar, coalesce(f.floored, false), f.boost_hours::float8,
+                       coalesce(sc.components -> 'follows', '[]'::jsonb), f.rank
                   FROM feed_for_you('sports', 100000, 0) f
                   JOIN v_story_scores_latest sc ON sc.story_id = f.id AND sc.pillar = 'sports'
                  ORDER BY f.pos""").fetchall()
             cands = [rank.Candidate(r[0], float(r[2]), float(r[3]), r[4], r[5], boost_h=float(r[7]),
                                     tier1=tuple(n for n in r[8] if n in tier1)) for r in rows]
             twin = rank.order_for_you(cands, "sports", boosted)
-            self.assertEqual([(p.id, p.pos, p.floored) for p in twin], [(r[0], r[1], r[6]) for r in rows])
+            twin_check.assert_same_order(self, twin, [(r[0], r[1], r[9], r[6]) for r in rows])
             mine = [r for r in rows[:rank.PAGE_SIZE] if name in r[8]]
             self.assertEqual(len(mine), rank.ENTITY_CAP_BOOSTED)
 
@@ -291,8 +295,12 @@ class Categories(SportsSqlCase):
     def test_a_summary_sets_a_category_once(self) -> None:
         with _rolled_back() as conn:
             sid = self.story(conn, self.source(conn), done=False)
-            ledger.feed_save_summaries([ledger.SummaryOut(sid, "A summary.", category="betting")], None, conn=conn)
-            ledger.feed_save_summaries([ledger.SummaryOut(sid, "Again.", category="deals")], None, conn=conn)
+            # A real story's summary carries its ai_usage row (stories_check2).
+            usage = conn.execute(
+                """INSERT INTO ai_usage (purpose, model, tokens_in, tokens_out, cost_usd)
+                   VALUES ('feed_summarize', 'claude-haiku-5-5', 10, 10, 0) RETURNING id""").fetchone()[0]
+            ledger.feed_save_summaries([ledger.SummaryOut(sid, "A summary.", category="betting")], usage, conn=conn)
+            ledger.feed_save_summaries([ledger.SummaryOut(sid, "Again.", category="deals")], usage, conn=conn)
             self.assertEqual(conn.execute("SELECT category FROM stories WHERE id = %s", (sid,)).fetchone()[0], "betting")
 
 
@@ -333,7 +341,9 @@ class WorkerQueries(SportsSqlCase):
         with _rolled_back() as conn:
             m = self.move(conn)
             other = self.story(conn, self.source(conn, ("sports",)))
-            conn.execute("UPDATE stories SET last_seen_at = now() - interval '100 days' WHERE id IN (%s, %s)",
+            # Age both ends: last_seen_at >= first_seen_at (stories_check).
+            conn.execute("UPDATE stories SET first_seen_at = now() - interval '100 days', "
+                         "last_seen_at = now() - interval '100 days' WHERE id IN (%s, %s)",
                          (m["story"], other))
             conn.execute(ledger.FEED_PRUNE_SQL["unreacted_stories_deleted"])
             left = {r[0] for r in conn.execute("SELECT id FROM stories WHERE id IN (%s, %s)", (m["story"], other))}
