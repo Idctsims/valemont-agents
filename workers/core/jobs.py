@@ -13,6 +13,13 @@ Every system job runs through `run_tracked`, which:
      on failure, records a redacted, truncated error and counts it,
      then RE-RAISES, so the scheduler's error listener logs it as well.
 
+A success records a NOTE in job_health.last_error (no failure counted):
+the job's own note when its result carries one (`job_note`, e.g. the
+summarizer's "capped: ..."; a JobSkipped reason the same way), then the
+process RSS at the end and its peak during the job ("rss 84 MB, job peak
+131 MB"; core/memory.py, owner 2026-10-12). RSS is the whole process, so a
+peak includes any job that ran alongside.
+
 Failures are recorded and never swallowed. A failure to record (the
 database itself is down) is logged and the job's own exception still
 propagates: the health monitor cannot see that case, which is what the
@@ -31,7 +38,7 @@ from typing import Callable
 
 from apscheduler.triggers.base import BaseTrigger
 
-from core import ledger
+from core import ledger, memory
 
 log = logging.getLogger("valemont.jobs")
 
@@ -93,16 +100,24 @@ class JobSkipped(Exception):
     reason as a note: no failure counted, no alert, but visible in job_health."""
 
 
+def success_note(job_note: str | None, rss: str | None) -> str | None:
+    """'capped: ... · rss 84 MB, job peak 131 MB'; either part may be absent."""
+    parts = [p for p in (job_note, rss) if p]
+    return " · ".join(parts) if parts else None
+
+
 def run_tracked(job: SystemJob) -> None:
     """Run `job`, recording the outcome in job_health. Re-raises on failure."""
     try:
         ledger.job_started(job.name)
     except Exception:
         log.error("%s: could not record start (database unreachable?)", job.name, exc_info=True)
+    sampler = memory.PeakSampler()
     try:
-        job.fn()
+        with sampler:
+            result = job.fn()
     except JobSkipped as skip:
-        note = describe(skip).replace("JobSkipped: ", "skipped: ", 1)
+        note = success_note(describe(skip).replace("JobSkipped: ", "skipped: ", 1), sampler.note())
         log.info("%s %s", job.name, note)
         try:
             ledger.job_succeeded(job.name, note)
@@ -118,8 +133,12 @@ def run_tracked(job: SystemJob) -> None:
         except Exception:
             log.error("%s: could not record the failure either", job.name, exc_info=True)
         raise
+    own = getattr(result, "job_note", None)
+    note = success_note(own if isinstance(own, str) else None, sampler.note())
+    if own:
+        log.info("%s %s", job.name, own)
     try:
-        ledger.job_succeeded(job.name)
+        ledger.job_succeeded(job.name, note)
     except Exception:
         log.error("%s: ran, but could not record success", job.name, exc_info=True)
         raise

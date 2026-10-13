@@ -51,7 +51,7 @@ class FakeLedger:
     # job health
     def job_register(self, job, interval): self._rec("job_register", job, interval)
     def job_started(self, job): self._rec("job_started", job)
-    def job_succeeded(self, job): self._rec("job_succeeded", job)
+    def job_succeeded(self, job, note=None): self._rec("job_succeeded", job)
     def job_failed(self, job, error): self._rec("job_failed", job, error)
     def job_health_rows(self): return list(self.health)
     def set_job_alert_state(self, job, state): self._rec("set_job_alert_state", job, state)

@@ -130,6 +130,8 @@ class Candidates(FeedLedgerCase):
             self.assertAlmostEqual(cand.members[0][1][5], 1.0, places=3)
             self.assertAlmostEqual(cand.members[1][1][6], 1.0, places=3)
             self.assertEqual(len(cand.members[0][1]), 384)
+            # Chat 3 Phase 1 hotfix: float32 arrays, not tuples of Python floats.
+            self.assertEqual(cand.members[0][1].typecode, "f")
 
     def test_the_query_text_is_the_one_ledger_runs(self) -> None:
         self.assertIn("st.first_seen_at > now() - make_interval(hours => %(hours)s)", ledger.FEED_CANDIDATES_SQL)
@@ -194,6 +196,23 @@ class FoundAndJoin(FeedLedgerCase):
 
 
 class Summaries(FeedLedgerCase):
+    def test_the_backlog_counts_kept_real_waiting_stories_older_than_2h(self) -> None:
+        """The health monitor's backlog alert (hotfix, owner 2026-10-12)."""
+        with _rolled_back() as conn:
+            before = ledger.feed_summary_backlog(2, 2, conn=conn)
+            real, test = self.make_source(conn, is_test=False), self.make_source(conn)
+            old, _ = ledger.feed_new_story(real, _item(title="Waiting"), unit(0), unit(0), filtered_reason=None, seed=None, conn=conn)
+            young, _ = ledger.feed_new_story(real, _item(title="Fresh"), unit(1), unit(1), filtered_reason=None, seed=None, conn=conn)
+            filt, _ = ledger.feed_new_story(real, _item(title="Filtered"), unit(2), unit(2), filtered_reason="title_regex:1",
+                                            seed=None, conn=conn)
+            spent, _ = ledger.feed_new_story(real, _item(title="Out of tries"), unit(3), unit(3), filtered_reason=None,
+                                             seed=None, conn=conn)
+            tst, _ = ledger.feed_new_story(test, _item(title="Test"), unit(4), unit(4), filtered_reason=None, seed=None, conn=conn)
+            conn.execute("UPDATE stories SET first_seen_at = now() - interval '3 hours' WHERE id = ANY(%s)",
+                         ([old, filt, spent, tst],))
+            conn.execute("UPDATE stories SET summary_attempts = 2 WHERE id = %s", (spent,))
+            self.assertEqual(ledger.feed_summary_backlog(2, 2, conn=conn), before + 1)
+
     def test_queue_saves_and_test_stories_never_queue(self) -> None:
         with _rolled_back() as conn:
             real = self.make_source(conn, is_test=False)

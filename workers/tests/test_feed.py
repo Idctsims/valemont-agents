@@ -573,13 +573,33 @@ class SummaryJobRun(unittest.TestCase):
         self.assertEqual([u for _, u in self.saved], [555, 555])
 
     def test_caps(self) -> None:
-        self.assertEqual((summarize.RUN_CAP, summarize.DAILY_CAP), (60, 600))
-        with mock.patch.object(ledger, "feed_summarized_today", lambda **kw: 595), \
+        # Owner, 2026-10-12 hotfix: 2,000 a day (was 600), 60 a run.
+        self.assertEqual((summarize.RUN_CAP, summarize.DAILY_CAP), (60, 2000))
+        self.assertEqual((summarize.BACKLOG_ALERT, summarize.BACKLOG_MIN_AGE_H), (200, 2))
+        with mock.patch.object(ai, "complete", self._complete):
+            r = summarize.summarize_job()
+        self.assertEqual((r.accepted, r.capped, r.job_note), (12, False, None))  # room left: plain ok
+        with mock.patch.object(ledger, "feed_summarized_today", lambda **kw: 1995), \
                 mock.patch.object(ai, "complete", self._complete):
             r = summarize.summarize_job(); self.assertEqual((r.accepted, r.rejected), (5, 0))
-        with mock.patch.object(ledger, "feed_summarized_today", lambda **kw: 600), \
+        # This run used up the day: capped, and job_health is told so.
+        self.assertTrue(r.capped)
+        self.assertEqual(r.job_note, "capped: the daily cap of 2000 is reached (2000 sent today)")
+        with mock.patch.object(ledger, "feed_summarized_today", lambda **kw: 2000), \
                 mock.patch.object(ai, "complete", side_effect=AssertionError("no call past the cap")):
             r = summarize.summarize_job(); self.assertEqual((r.accepted, r.rejected), (0, 0))
+        self.assertTrue(r.job_note.startswith("capped:"))
+
+    def test_a_capped_run_shows_capped_in_job_health(self) -> None:
+        recorded = []
+        with mock.patch.object(ledger, "feed_summarized_today", lambda **kw: 2000), \
+                mock.patch.object(ledger, "job_started", lambda n: None), \
+                mock.patch.object(ledger, "job_succeeded", lambda n, note=None: recorded.append(("ok", note))), \
+                mock.patch.object(ledger, "job_failed", lambda n, e: recorded.append(("failed", e))):
+            jobs.run_tracked(system_jobs.FEED_SUMMARIZE)
+        self.assertEqual(len(recorded), 1)
+        self.assertEqual(recorded[0][0], "ok")
+        self.assertTrue(recorded[0][1].startswith("capped: the daily cap of 2000"), recorded[0][1])
 
     # -- the targeted retry (owner, 2026-10-11) ------------------------------
 

@@ -41,12 +41,13 @@ from __future__ import annotations
 
 import logging
 import time
+from array import array
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Sequence
 
 from core import embed as embedder
-from core import ledger, push
+from core import ledger, memory, push
 from core.jobs import describe
 from feed import cluster
 from feed.parse import RawItem, ParseFailed, canonical_url, keeps_category, parse_feed
@@ -80,12 +81,23 @@ Decode = Callable[[str], str | None]
 Embed = Callable[[Sequence[str]], list[list[float]]]
 
 
-def _httpx_get(url: str, headers: dict) -> Response:
-    import httpx
+class Fetcher:
+    """One httpx client for a whole run (46 sources), closed at the end: a
+    module-level httpx.get() built a new client, and a new TLS context, for
+    every source (Chat 3 Phase 1 hotfix)."""
 
-    r = httpx.get(url, headers={"User-Agent": USER_AGENT, **headers}, timeout=TIMEOUT_S,
-                  follow_redirects=True)
-    return Response(r.status_code, r.content, r.headers.get("etag"), r.headers.get("last-modified"))
+    def __init__(self) -> None:
+        import httpx
+
+        self.client = httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT_S,
+                                   follow_redirects=True)
+
+    def __call__(self, url: str, headers: dict) -> Response:
+        r = self.client.get(url, headers=headers)
+        return Response(r.status_code, r.content, r.headers.get("etag"), r.headers.get("last-modified"))
+
+    def close(self) -> None:
+        self.client.close()
 
 
 def _gnews_decode(url: str) -> str | None:
@@ -155,11 +167,17 @@ class _Candidate:
     count: int
     members: list[cluster.Member]
 
+    @property
+    def item_count(self) -> int:
+        """cluster.assign reads candidates by these three names, so the run's
+        own list is passed as is (no per-item copy; Chat 3 Phase 1 hotfix)."""
+        return self.count
+
 
 class Ingest:
     """One run. Dependencies are injected so tests drive it with no network."""
 
-    def __init__(self, *, get: Get = _httpx_get, decode: Decode = _gnews_decode,
+    def __init__(self, *, get: Get, decode: Decode = _gnews_decode,
                  embed: Embed = embedder.embed, send: Callable[[push.Message], Any] = push.send,
                  throttle: Throttle | None = None, now: Callable[[], datetime] | None = None) -> None:
         self.get, self.decode, self.embed, self.send = get, decode, embed, send
@@ -308,13 +326,12 @@ class Ingest:
 
     def _place(self, src: ledger.FeedSource, it: ledger.FeedItemIn, vec: Sequence[float],
                title_vec: Sequence[float], stats: SourceStats) -> None:
-        cands = [cluster.Candidate(c.story_id, c.count, tuple(c.members)) for c in self.candidates]
-        decision = cluster.assign(title_vec, it.title, cands)
+        decision = cluster.assign(title_vec, it.title, self.candidates)  # type: ignore[arg-type]
         seed = best_seed(vec, self.seeds)
         logged = [ledger.SimilarityRow(s.story_id, "near_miss", s.cosine, s.fuzz) for s in decision.near_misses]
         for s in decision.near_misses:
             log.info("feed near miss %.3f (fuzz %.0f): %r vs story %d", s.cosine, s.fuzz, it.title, s.story_id)
-        member = cluster.Member(it.title, tuple(title_vec))
+        member = cluster.Member(it.title, array("f", title_vec))
         if decision.story_id is not None:
             best = decision.best
             logged = [ledger.SimilarityRow(best.story_id, "join", best.cosine, best.fuzz, decision.joined_by)] + logged
@@ -375,10 +392,19 @@ def ingest_job(*, ingest: Ingest | None = None) -> RunStats:
     if not _SYNCED:
         sync_sources()
         _SYNCED = True
-    run = ingest or Ingest()
-    run.prepare(_SEED_CACHE)
-    stats = RunStats()
-    for src in ledger.feed_active_sources():
-        stats.sources.append(run.run_source(src))
-    log.info("feed ingest: %s", stats.line())
-    return stats
+    fetcher = None if ingest else Fetcher()
+    run = ingest or Ingest(get=fetcher)  # type: ignore[arg-type]
+    try:
+        run.prepare(_SEED_CACHE)
+        stats = RunStats()
+        for src in ledger.feed_active_sources():
+            stats.sources.append(run.run_source(src))
+        log.info("feed ingest: %s", stats.line())
+        return stats
+    finally:
+        # The run's candidate vectors are the job's biggest structure: drop
+        # them, then hand the freed memory back (core/memory.py).
+        run.candidates = []
+        if fetcher is not None:
+            fetcher.close()
+        memory.release()
