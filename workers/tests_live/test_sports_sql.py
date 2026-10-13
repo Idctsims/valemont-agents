@@ -275,15 +275,15 @@ class Categories(SportsSqlCase):
             with self.assertRaises(psycopg.errors.CheckViolation), conn.transaction():
                 conn.execute("UPDATE stories SET category = 'gossip' WHERE id = %s", (deal,))
 
-    def test_the_backfill_fills_only_null_categories(self) -> None:
+    def test_the_categorize_pass_reads_uncategorized_and_fills_only_null(self) -> None:
         with _rolled_back() as conn:
             src = self.source(conn)
-            a, b = self.story(conn, src), self.story(conn, src)
-            conn.execute("UPDATE stories SET topics = ARRAY['m_and_a'] WHERE id IN (%s, %s)", (a, b))
+            a, b = self.story(conn, src, title="TL categorize a"), self.story(conn, src)
             conn.execute("UPDATE stories SET category = 'other' WHERE id = %s", (b,))
-            todo = dict(ledger.feed_uncategorized_home_stories(conn=conn))
+            todo = {j.story_id: j for j in ledger.feed_uncategorized_home_stories(conn=conn)}
             self.assertIn(a, todo)
             self.assertNotIn(b, todo)
+            self.assertEqual((todo[a].title, todo[a].source_name), ("TL categorize a", src.name))
             self.assertEqual(ledger.feed_set_categories([(a, "deals"), (b, "deals")], conn=conn), 1)
             got = dict(conn.execute("SELECT id, category FROM stories WHERE id IN (%s, %s)", (a, b)).fetchall())
             self.assertEqual(got, {a: "deals", b: "other"})

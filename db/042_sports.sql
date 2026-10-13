@@ -467,9 +467,10 @@ $$;
 -- ===================================================================== 3b
 -- News categories (scope addition, owner 2026-10-12 21:56): one per story,
 -- for the /news chips. New stories get it from the summary call; stories
--- summarized before that get it from their topics by the deterministic
--- mapping in workers/feed/category.py (scripts/feed_backfill_category.py,
--- run after this paste). NULL = not categorized yet (All only).
+-- from before get it from a one-off Haiku categorize pass with the same
+-- definition and enum (workers/feed/categorize.py, scripts/feed_categorize.py,
+-- run after this paste; owner 2026-10-12 23:38: no keyword mapping).
+-- NULL = not categorized yet (All only).
 
 ALTER TABLE stories ADD COLUMN IF NOT EXISTS category TEXT;
 

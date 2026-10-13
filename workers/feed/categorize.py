@@ -1,0 +1,134 @@
+"""The one-off categorize pass (owner, 2026-10-12 23:38; after db/042).
+
+Every kept, real Home story with no category gets one from Haiku: headline,
+summary (when it has one) and outlet in, one category out, judged by the same
+definition the summary call sends (feed/category.PROMPT) and checked against
+the same enum. No keyword rule.
+
+    * groups of GROUP_SIZE, one core.ai.complete() call each: Haiku,
+      non-critical (the budget guard downgrades or refuses it like any other
+      feed call), thinking off, a cached system prompt, structured JSON;
+    * an answer that is not one of ours, or names a story not in the group,
+      is dropped: the story stays uncategorized and the summary call or a
+      re-run gives it one. Never a guess;
+    * a spent budget (BudgetExceeded) stops the pass with what was written
+      so far, reported;
+    * writes only NULL categories (ledger.feed_set_categories), so a re-run
+      changes nothing already set.
+
+scripts/feed_categorize.py runs it once and prints counts, ten samples per
+category for the owner's review, and the cost recorded in ai_usage.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import dataclass, field
+from decimal import Decimal
+from typing import Any, Sequence
+
+from core import ai, ledger
+from feed import category
+
+log = logging.getLogger("valemont.feed.categorize")
+
+MODEL = "claude-haiku-5-5"
+PURPOSE = "feed_categorize"
+GROUP_SIZE = 25
+
+SYSTEM = f"""You sort news stories for one reader's private dashboard into categories. For each story you get its id, headline, outlet and, when there is one, a short summary. Return one result per story.
+
+{category.PROMPT}
+
+Judge by what the story is about, read through the business lens. Output only the JSON object."""
+
+
+def schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["stories"],
+        "properties": {
+            "stories": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["id", "category"],
+                    "properties": {
+                        "id": {"type": "integer"},
+                        "category": {"type": "string", "enum": list(category.CATEGORIES)},
+                    },
+                },
+            }
+        },
+    }
+
+
+def user_message(group: Sequence[ledger.CategorizeJob]) -> str:
+    return "STORIES:\n" + json.dumps([
+        {"id": j.story_id, "headline": j.title, "outlet": j.source_name, "summary": j.summary or ""}
+        for j in group], ensure_ascii=False)
+
+
+def answers_for(group: Sequence[ledger.CategorizeJob], payload: Any) -> dict[int, str]:
+    """story id -> category, for valid answers about stories in the group,
+    first answer per story wins."""
+    ids = {j.story_id for j in group}
+    out: dict[int, str] = {}
+    items = payload.get("stories") if isinstance(payload, dict) else None
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        sid, cat = item.get("id"), category.valid(item.get("category"))
+        if sid in ids and cat is not None and sid not in out:
+            out[sid] = cat
+    return out
+
+
+@dataclass
+class PassResult:
+    asked: int = 0
+    written: int = 0
+    calls: int = 0
+    cost_usd: Decimal = Decimal("0")
+    stopped: str | None = None
+    #: category -> (story id, headline) of every story written.
+    by_category: dict[str, list[tuple[int, str]]] = field(default_factory=dict)
+
+
+def run(jobs: Sequence[ledger.CategorizeJob] | None = None, *, client: Any = None) -> PassResult:
+    jobs = list(jobs if jobs is not None else ledger.feed_uncategorized_home_stories())
+    res = PassResult()
+    titles = {j.story_id: j.title for j in jobs}
+    for i in range(0, len(jobs), GROUP_SIZE):
+        group = jobs[i:i + GROUP_SIZE]
+        costs: list[Decimal] = []
+        try:
+            response = ai.complete(
+                purpose=PURPOSE, model=MODEL, critical=False, max_tokens=2000, client=client,
+                system=[{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}],
+                messages=[{"role": "user", "content": user_message(group)}],
+                thinking={"type": "disabled"},
+                output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema()}},
+                on_recorded=lambda _id, _model, cost: costs.append(Decimal(str(cost))),
+            )
+        except ai.BudgetExceeded as exc:
+            res.stopped = f"AI budget: {exc}"
+            log.warning("feed categorize: stopped by the budget guard after %d calls", res.calls)
+            break
+        res.calls += 1
+        res.asked += len(group)
+        res.cost_usd += sum(costs, Decimal("0"))
+        text = "".join(getattr(b, "text", "") for b in response.content if getattr(b, "type", "") == "text")
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            log.warning("feed categorize: a group's answer was not JSON; its stories stay uncategorized")
+            continue
+        answers = answers_for(group, payload)
+        res.written += ledger.feed_set_categories(sorted(answers.items()))
+        for sid, cat in answers.items():
+            res.by_category.setdefault(cat, []).append((sid, titles[sid]))
+    return res

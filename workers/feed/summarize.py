@@ -109,7 +109,7 @@ entities: the people, teams, leagues and companies the story is about (as named;
 topics: 1 to {MAX_TOPICS} short lowercase snake_case topics, e.g. media_rights, stadium_financing, nil, coaching_change, funding_round, m_and_a, hotel_development, music_publishing.
 sport: cfb, nfl, nba, f1 or golf when the story is about that sport, otherwise none.
 
-category: the one that fits best: deals (funding, M&A, VC, private equity, family offices, IPOs, earnings), hospitality (hotels, clubs, restaurants, real estate, development, travel), sports_business (team ownership, valuations, media rights, stadiums, sponsorship, NIL), film_music (film, TV, streaming, music, creators, talent), luxury_marine (yachts, boats, luxury and lifestyle brands), betting (sports betting, prediction markets, Kalshi), other.
+{categories.PROMPT}
 
 drop: classify against the reader's don't-care list. Pick the first that fits, else none.
 - gossip: celebrity gossip, dating, relationships, breakups, feuds between personalities, red-carpet looks. Business news about a celebrity's company, deal or earnings is NOT gossip.
@@ -279,7 +279,7 @@ def validate(item: dict[str, Any], job: ledger.SummaryJob) -> Valid:
     return Valid(summary, entities[:MAX_ENTITIES], topics[:MAX_TOPICS],
                  sport if sport in SPORTS and sport != "none" else None, drop,
                  move_rules.parse(item.get("moves")),
-                 item.get("category") if item.get("category") in categories.CATEGORIES else None)
+                 categories.valid(item.get("category")))
 
 
 def story_sport(job: ledger.SummaryJob, model_sport: str | None, from_model: bool) -> str | None:

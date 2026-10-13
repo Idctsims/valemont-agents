@@ -422,8 +422,12 @@ snapshot.
   ranking like the sport chip. In v_feed_stories.
 - **The summary call** returns one category from the same enum. A story
   keeps the first category it gets.
-- **The backfill** (scripts/feed_backfill_category.py, after the paste) maps
-  existing stories' Haiku topics deterministically (workers/feed/category.py:
-  whole words or plurals, a trailing * for a prefix; most matching topics
-  wins; ties go to the specific category, Deals last; no match: other).
-  Dry run for review: docs/feed_checks/categories-2026-10-13/.
+- **The backfill is Haiku, not a keyword mapping** (owner, 2026-10-12
+  23:38). After the paste, a one-off categorize pass
+  (`scripts.feed_categorize`; workers/feed/categorize.py) sends every
+  uncategorized Home story's headline, summary and outlet, 25 a call, with
+  the summary call's own definition and enum (feed/category.PROMPT). It is
+  non-critical under the AI budget guard, drops any answer outside the enum
+  (never a guess), and writes NULL categories only. It reports counts, ten
+  samples per category, and the cost recorded in ai_usage (expected about
+  $0.05). A topics-mapping draft from 2026-10-13 was withdrawn.

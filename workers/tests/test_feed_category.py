@@ -1,67 +1,28 @@
-"""News categories (feed/category.py; Chat 3 Phase 3 scope addition): the
-deterministic topics -> category mapping the backfill uses, on the real topics
-the owner reviewed (2026-10-13 dry run), its word-boundary rules, its tie
-order, and the enum shared with db/042 and the summary call.
+"""News categories (Chat 3 Phase 3 scope addition): one enum and one
+definition shared by the summary call, the one-off Haiku categorize pass
+(feed/categorize.py; owner 2026-10-12 23:38: no keyword mapping) and db/042's
+CHECK; the pass's validation, grouping, budget stop and write rule.
 
-Pure: no database, no network, no Claude.
+Stubbed: no database, no network, no Claude.
 """
 
 from __future__ import annotations
 
+import inspect
+import json
 import re
 import unittest
+from types import SimpleNamespace
+from typing import Any
+from unittest import mock
 
+from core import ai, ledger
 from core.paths import REPO_ROOT
-from feed import category
-from feed.category import from_topics
+from feed import categorize, category, summarize
 
 
-class Mapping(unittest.TestCase):
-    def test_real_topics_from_the_dry_run(self) -> None:
-        cases = {
-            ("m_and_a", "bank_consolidation", "takeover_bid"): "deals",
-            ("funding_round", "ai_infrastructure", "venture_capital"): "deals",
-            ("hotel_recovery", "leisure_travel", "corporate_travel"): "hospitality",
-            ("foreclosure", "commercial_real_estate", "loan_default"): "hospitality",
-            ("team_valuation", "media_rights"): "sports_business",
-            ("stadium_financing", "ballpark_development"): "sports_business",
-            ("international_sales", "licensing", "scripted_tv"): "film_music",
-            ("kpop", "anniversary", "music_release"): "film_music",
-            ("superyachts", "yacht_launch"): "luxury_marine",
-            ("superyacht", "refit", "shipyards"): "luxury_marine",
-            ("sports_betting", "prediction_markets"): "betting",
-            ("prediction_markets", "regulation"): "betting",
-            ("celebrity_news", "collaboration"): "other",
-            ("voice_ai", "context_layer", "ai_infrastructure"): "other",
-        }
-        for topics, want in cases.items():
-            self.assertEqual(from_topics(topics), want, topics)
-
-    def test_no_topics_is_no_category(self) -> None:
-        self.assertIsNone(from_topics([]))
-        self.assertIsNone(from_topics(["", "  "]))
-
-    def test_whole_words_or_plurals_only(self) -> None:
-        self.assertNotIn("sports_business", category.category_of_topic("nile_river_cruise"))
-        self.assertNotIn("luxury_marine", category.category_of_topic("how_to_watch"))
-        self.assertNotIn("hospitality", category.category_of_topic("player_development"))
-        self.assertIn("luxury_marine", category.category_of_topic("yachts"))
-        self.assertIn("luxury_marine", category.category_of_topic("superyachting"))  # "superyacht*"
-        self.assertIn("film_music", category.category_of_topic("films"))
-
-    def test_ties_go_to_the_specific_category(self) -> None:
-        # real_estate (hospitality) vs m_and_a (deals): hospitality, Deals last.
-        self.assertEqual(from_topics(["industrial_real_estate", "m_and_a"]), "hospitality")
-        # prediction markets match betting and deals ("markets"): betting.
-        self.assertEqual(from_topics(["prediction_markets"]), "betting")
-        self.assertEqual(category.TIE_ORDER[-1], "deals")
-
-    def test_the_most_matches_win(self) -> None:
-        self.assertEqual(from_topics(["m_and_a", "private_equity", "hotel_development"]), "deals")
-
-    def test_deterministic(self) -> None:
-        t = ["box_office", "streaming", "m_and_a"]
-        self.assertEqual({from_topics(t) for _ in range(20)}, {"film_music"})
+def job(sid: int, title: str = "A headline") -> ledger.CategorizeJob:
+    return ledger.CategorizeJob(sid, title, "A summary.", "Axios")
 
 
 class Enum(unittest.TestCase):
@@ -69,7 +30,6 @@ class Enum(unittest.TestCase):
         self.assertEqual(category.CATEGORIES, ("deals", "hospitality", "sports_business", "film_music",
                                                "luxury_marine", "betting", "other"))
         self.assertEqual(set(category.LABELS), set(category.CATEGORIES))
-        self.assertEqual(set(category.TIE_ORDER), set(category.CATEGORIES) - {"other"})
 
     def test_db_042_checks_the_same_enum(self) -> None:
         sql = (REPO_ROOT / "db" / "042_sports.sql").read_text(encoding="utf-8")
@@ -77,35 +37,88 @@ class Enum(unittest.TestCase):
         self.assertIsNotNone(m, "db/042 must CHECK stories.category")
         self.assertEqual(tuple(x.strip(" '\n") for x in m.group(1).split(",")), category.CATEGORIES)
 
+    def test_both_calls_send_the_same_definition_and_enum(self) -> None:
+        self.assertIn(category.PROMPT, summarize.SYSTEM)
+        self.assertIn(category.PROMPT, categorize.SYSTEM)
+        s_item = summarize.schema()["properties"]["stories"]["items"]
+        c_item = categorize.schema()["properties"]["stories"]["items"]
+        self.assertIn("category", s_item["required"])
+        self.assertEqual(s_item["properties"]["category"]["enum"], list(category.CATEGORIES))
+        self.assertEqual(c_item["properties"]["category"]["enum"], list(category.CATEGORIES))
+
+    def test_no_keyword_mapping_is_left(self) -> None:
+        self.assertFalse(hasattr(category, "from_topics"))
+        self.assertFalse((REPO_ROOT / "workers" / "scripts" / "feed_backfill_category.py").exists())
+
 
 class SummaryCall(unittest.TestCase):
     GOOD = {"id": 1, "summary": "The fund closed its second vehicle at a record size.", "entities": [],
             "topics": ["fund_raise"], "sport": "none", "drop": "none", "moves": []}
 
-    def job(self):
-        from core import ledger
-        return ledger.SummaryJob(1, "Headline here", "A teaser.", "Axios", None, 0, "axios-pro-rata")
-
-    def test_category_is_a_required_enum_field_and_the_prompt_defines_it(self) -> None:
-        from feed import summarize
-        item = summarize.schema()["properties"]["stories"]["items"]
-        self.assertIn("category", item["required"])
-        self.assertEqual(item["properties"]["category"]["enum"], list(category.CATEGORIES))
-        self.assertIn("category: the one that fits best", summarize.SYSTEM)
-
     def test_the_category_reaches_the_save(self) -> None:
-        from feed import summarize
-        (r,), _, _ = summarize.results_for([self.job()], {"stories": [dict(self.GOOD, category="deals")]})
+        j = ledger.SummaryJob(1, "Headline here", "A teaser.", "Axios", None, 0, "axios-pro-rata")
+        (r,), _, _ = summarize.results_for([j], {"stories": [dict(self.GOOD, category="deals")]})
         self.assertEqual(r.category, "deals")
-        (r,), _, _ = summarize.results_for([self.job()], {"stories": [dict(self.GOOD, category="gossip")]})
+        (r,), _, _ = summarize.results_for([j], {"stories": [dict(self.GOOD, category="gossip")]})
         self.assertIsNone(r.category)  # not ours: none, never a guess
 
     def test_the_save_keeps_a_category_already_set(self) -> None:
-        import inspect
-
-        from core import ledger
         self.assertIn("category = coalesce(category, %s)", inspect.getsource(ledger.feed_save_summaries))
         self.assertIn("AND category IS NULL", inspect.getsource(ledger.feed_set_categories))
+
+
+class Pass(unittest.TestCase):
+    def setUp(self) -> None:
+        self.written: list[list[tuple[int, str]]] = []
+        p = mock.patch.object(ledger, "feed_set_categories",
+                              lambda pairs, **kw: self.written.append(list(pairs)) or len(pairs))
+        p.start()
+        self.addCleanup(p.stop)
+        p = mock.patch.object(ledger, "_pool", side_effect=AssertionError("database reached"))
+        p.start()
+        self.addCleanup(p.stop)
+
+    def fake(self, answer, calls: list) -> Any:
+        def complete(**kw: Any) -> Any:
+            calls.append(kw)
+            stories = json.loads(kw["messages"][0]["content"].split("\n", 1)[1])
+            kw["on_recorded"](1, kw["model"], 0.0003)
+            body = {"stories": [{"id": s["id"], "category": answer(s)} for s in stories]}
+            return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=json.dumps(body))])
+        return complete
+
+    def test_haiku_non_critical_in_groups_of_25_and_the_cost_recorded(self) -> None:
+        calls: list = []
+        with mock.patch.object(ai, "complete", self.fake(lambda s: "deals", calls)):
+            res = categorize.run([job(i) for i in range(1, 61)])
+        self.assertEqual([len(json.loads(c["messages"][0]["content"].split("\n", 1)[1])) for c in calls], [25, 25, 10])
+        for c in calls:
+            self.assertEqual((c["model"], c["critical"], c["purpose"], c["thinking"]),
+                             ("claude-haiku-5-5", False, "feed_categorize", {"type": "disabled"}))
+        self.assertEqual((res.asked, res.written, res.calls, str(res.cost_usd)), (60, 60, 3, "0.0009"))
+        self.assertEqual(len(res.by_category["deals"]), 60)
+
+    def test_an_unknown_answer_or_story_is_dropped_never_guessed(self) -> None:
+        group = [job(1), job(2), job(3)]
+        got = categorize.answers_for(group, {"stories": [
+            {"id": 1, "category": "betting"}, {"id": 2, "category": "gossip"}, {"id": 99, "category": "deals"},
+            {"id": 1, "category": "deals"}, "junk"]})
+        self.assertEqual(got, {1: "betting"})
+        self.assertEqual(categorize.answers_for(group, None), {})
+
+    def test_a_spent_budget_stops_the_pass_with_what_was_written(self) -> None:
+        calls: list = []
+        real = self.fake(lambda s: "other", calls)
+
+        def complete(**kw: Any) -> Any:
+            if calls:
+                raise ai.BudgetExceeded("spent")
+            return real(**kw)
+
+        with mock.patch.object(ai, "complete", complete):
+            res = categorize.run([job(i) for i in range(1, 51)])
+        self.assertEqual((res.calls, res.written), (1, 25))
+        self.assertTrue(res.stopped.startswith("AI budget"))
 
 
 if __name__ == "__main__":

@@ -2236,19 +2236,31 @@ def feed_save_summaries(results: Sequence[SummaryOut], ai_usage_id: int | None, 
             )
 
 
-#: The category backfill (db/042; scripts/feed_backfill_category.py): kept,
-#: real Home stories with topics and no category yet.
+#: The one-off categorize pass (db/042; feed/categorize.py, owner
+#: 2026-10-12 23:38): kept, real Home stories with no category yet, with
+#: what Haiku reads (headline, summary when there is one, outlet).
 FEED_UNCATEGORIZED_SQL: Final = """
-    SELECT id, topics FROM stories
-     WHERE NOT is_test AND filtered_reason IS NULL AND category IS NULL
-       AND 'home' = ANY (pillars) AND cardinality(topics) > 0
-     ORDER BY id
+    SELECT st.id, st.title, st.summary, s.name
+      FROM stories st
+      JOIN content_items i ON i.id = st.lead_item_id
+      JOIN sources s ON s.id = i.source_id
+     WHERE NOT st.is_test AND st.filtered_reason IS NULL AND st.category IS NULL
+       AND 'home' = ANY (st.pillars)
+     ORDER BY st.id
 """
 
 
-def feed_uncategorized_home_stories(*, conn: psycopg.Connection | None = None) -> list[tuple[int, tuple[str, ...]]]:
+@dataclass(frozen=True)
+class CategorizeJob:
+    story_id: int
+    title: str
+    summary: str | None
+    source_name: str
+
+
+def feed_uncategorized_home_stories(*, conn: psycopg.Connection | None = None) -> list[CategorizeJob]:
     with _brief_conn(conn) as c:
-        return [(int(r[0]), tuple(r[1] or ())) for r in c.execute(FEED_UNCATEGORIZED_SQL).fetchall()]
+        return [CategorizeJob(int(r[0]), r[1], r[2], r[3]) for r in c.execute(FEED_UNCATEGORIZED_SQL).fetchall()]
 
 
 def feed_set_categories(pairs: Sequence[tuple[int, str]], *, conn: psycopg.Connection | None = None) -> int:
