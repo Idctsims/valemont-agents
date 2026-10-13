@@ -2,7 +2,8 @@
 summary cap starved the feed):
 
 * RSS: read on this platform, sampled per job, written to job_health notes
-  next to the job's own note ("capped: ... · rss 84 MB, job peak 131 MB");
+  next to the job's own note ("capped: ... · rss 84 MB, job peak 131 MB"),
+  and the same note on the job's log line (its history);
 * the candidate vectors are float32, parse exactly, and cluster as before;
 * clients are reused (embed, Claude) and the ingest fetcher is closed;
 * the summary backlog alert: one push past 200, re-armed below, adopted
@@ -13,6 +14,7 @@ Stubbed only: no database, no network, no Claude.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import unittest
@@ -79,6 +81,24 @@ class Notes(unittest.TestCase):
             raise jobs.JobSkipped("AI budget spent")
         self.run_job(skipped)
         self.assertEqual(self.recorded, [("ok", "skipped: AI budget spent · rss 84 MB, job peak 131 MB")])
+
+    def logging_on(self) -> None:
+        # tests/__init__ silences logging package-wide; these tests read it.
+        logging.disable(logging.NOTSET)
+        self.addCleanup(logging.disable, logging.CRITICAL)
+
+    def test_the_log_line_carries_the_rss(self) -> None:
+        # job_health keeps only the latest note; the log line is the history.
+        self.logging_on()
+        with self.assertLogs("valemont.jobs", "INFO") as logs:
+            self.run_job(lambda: None)
+        self.assertEqual(logs.output, ["INFO:valemont.jobs:probe_job rss 84 MB, job peak 131 MB"])
+
+    def test_the_log_line_matches_the_recorded_note(self) -> None:
+        self.logging_on()
+        with self.assertLogs("valemont.jobs", "INFO") as logs:
+            self.run_job(lambda: summarize.SummaryRun(capped=True, sent_today=2000))
+        self.assertEqual(logs.output, [f"INFO:valemont.jobs:probe_job {self.recorded[0][1]}"])
 
     def test_a_failure_records_only_the_error(self) -> None:
         def broken():

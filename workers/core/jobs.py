@@ -18,7 +18,8 @@ the job's own note when its result carries one (`job_note`, e.g. the
 summarizer's "capped: ..."; a JobSkipped reason the same way), then the
 process RSS at the end and its peak during the job ("rss 84 MB, job peak
 131 MB"; core/memory.py, owner 2026-10-12). RSS is the whole process, so a
-peak includes any job that ran alongside.
+peak includes any job that ran alongside. The same note goes on the job's
+INFO log line, so the worker's logs keep the history job_health overwrites.
 
 Failures are recorded and never swallowed. A failure to record (the
 database itself is down) is logged and the job's own exception still
@@ -135,8 +136,10 @@ def run_tracked(job: SystemJob) -> None:
         raise
     own = getattr(result, "job_note", None)
     note = success_note(own if isinstance(own, str) else None, sampler.note())
-    if own:
-        log.info("%s %s", job.name, own)
+    if note:
+        # The whole note, RSS included: job_health keeps only the latest, so
+        # this line is the history (Railway logs; owner 2026-10-13).
+        log.info("%s %s", job.name, note)
     try:
         ledger.job_succeeded(job.name, note)
     except Exception:

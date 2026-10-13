@@ -39,6 +39,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Final, Sequence
 
 from core import ledger
+from core.paths import load_env
 from sports.nfl.schedule import Game, NflSchedule
 from venues.kalshi.client import Candle, KalshiClient, Quote
 
@@ -137,4 +138,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    load_env()  # the repo's one .env (core/paths.py); Railway injects variables instead
     sys.exit(main())
