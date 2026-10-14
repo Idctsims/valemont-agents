@@ -2138,10 +2138,19 @@ class SummaryJob:
     sport: str | None
     attempts: int
     source_slug: str = ""
+    #: For the rank order (feed/summarize.order_by_rank, owner 2026-10-14):
+    #: the story's pillars, its centroid (float32), the lead's published time,
+    #: and whether its title names a followed person or derived team.
+    pillars: tuple[str, ...] = ()
+    vec: Sequence[float] = ()
+    published_at: datetime | None = None
+    followed: bool = False
 
 
-#: The summarizer's queue: kept, real, linkable stories not yet summarized and
-#: with a try left. FIRST the stories whose title names a followed person or
+#: The summarizer's CANDIDATE POOL (owner, 2026-10-14: each run takes its
+#: stories in For you rank order, feed/summarize.order_by_rank; this SQL
+#: order is the pool's and the tie-break): kept, real, linkable stories not
+#: yet summarized and with a try left. FIRST the stories whose title names a followed person or
 #: a derived team (`priority`, a POSIX regex from feed/rank.priority_pattern;
 #: owner decision 10, 2026-10-12: moves are read only from summaries), THEN
 #: newest PUBLISHED first: the order Home shows them in (v_feed_stories by
@@ -2150,7 +2159,9 @@ class SummaryJob:
 #: time: after the 2026-10-12 re-ingest only 1 of Home's first 30 cards had a
 #: summary.
 FEED_SUMMARY_QUEUE_SQL: Final = """
-    SELECT st.id, st.title, i.teaser, s.name, st.sport, st.summary_attempts, s.slug
+    SELECT st.id, st.title, i.teaser, s.name, st.sport, st.summary_attempts, s.slug,
+           st.pillars, st.centroid::text, i.published_at,
+           coalesce(lower(st.title) ~ %(priority)s::text, false)
       FROM stories st
       JOIN content_items i ON i.id = st.lead_item_id
       JOIN sources s ON s.id = i.source_id
@@ -2167,7 +2178,7 @@ FEED_SUMMARY_QUEUE_SQL: Final = """
 #: then newest published. The Home/Sports queue above leaves tech out.
 FEED_TECH_SUMMARY_QUEUE_SQL: Final = """
     SELECT st.id, st.title, i.teaser, s.name, s.official, st.summary_attempts,
-           i.backfill, i.published_at, i.fetched_at
+           i.backfill, i.published_at, i.fetched_at, s.slug, st.centroid::text
       FROM stories st
       JOIN content_items i ON i.id = st.lead_item_id
       JOIN sources s ON s.id = i.source_id
@@ -2192,14 +2203,39 @@ class TechSummaryJob:
     backfill: bool = False
     published_at: datetime | None = None
     first_seen_at: datetime | None = None
+    #: For the rank order: the lead source's slug and the story's centroid.
+    source_slug: str = ""
+    vec: Sequence[float] = ()
 
 
 def feed_tech_summary_queue(limit: int, max_attempts: int, *,
                             conn: psycopg.Connection | None = None) -> list[TechSummaryJob]:
-    with _brief_conn(conn) as c:
-        rows = c.execute(FEED_TECH_SUMMARY_QUEUE_SQL, {"limit": limit, "max_attempts": max_attempts}).fetchall()
-    return [TechSummaryJob(int(r[0]), r[1], r[2], r[3], bool(r[4]), int(r[5]), bool(r[6]), r[7], r[8])
-            for r in rows]
+    with _brief_conn(conn) as c, c.cursor() as cur:
+        cur.execute(FEED_TECH_SUMMARY_QUEUE_SQL, {"limit": limit, "max_attempts": max_attempts})
+        return [TechSummaryJob(int(r[0]), r[1], r[2], r[3], bool(r[4]), int(r[5]), bool(r[6]), r[7], r[8],
+                               r[9] or "", _vec_array(r[10]) or array("f")) for r in cur]
+
+
+#: The 48-hour retirement (owner, 2026-10-14): a kept story first seen more
+#: than `hours` ago that never got a summary leaves the queue as
+#: headline-only, the way Chat 3 retires a story out of attempts
+#: (summary_attempts = max). summarized_at stays NULL, so no daily cap counts
+#: it; feed_score then scores it like any retired story.
+FEED_RETIRE_STALE_SQL: Final = """
+    UPDATE stories SET summary_attempts = %(max_attempts)s
+     WHERE summary IS NULL AND filtered_reason IS NULL AND NOT is_test
+       AND summary_attempts < %(max_attempts)s AND lead_item_id IS NOT NULL
+       AND first_seen_at <= now() - make_interval(hours => %(hours)s)
+       AND ('tech' = ANY (pillars)) = %(tech)s
+"""
+
+
+def feed_retire_stale(hours: int, max_attempts: int, *, tech: bool,
+                      conn: psycopg.Connection | None = None) -> int:
+    """Retire this pillar group's unsummarized stories older than `hours`.
+    Returns rows retired."""
+    with _brief_conn(conn) as c, c.transaction():
+        return c.execute(FEED_RETIRE_STALE_SQL, {"hours": hours, "max_attempts": max_attempts, "tech": tech}).rowcount
 
 _LOCAL_DAY_START = """
     (date_trunc('day', now() AT TIME ZONE coalesce((SELECT timezone FROM app_settings), 'America/Chicago'))
@@ -2209,11 +2245,12 @@ _LOCAL_DAY_START = """
 
 def feed_summary_queue(limit: int, max_attempts: int, priority: str | None = None, *,
                        conn: psycopg.Connection | None = None) -> list[SummaryJob]:
-    """`priority` None: publish order only."""
-    with _brief_conn(conn) as c:
-        rows = c.execute(FEED_SUMMARY_QUEUE_SQL,
-                         {"limit": limit, "max_attempts": max_attempts, "priority": priority}).fetchall()
-    return [SummaryJob(*r) for r in rows]
+    """`priority` None: publish order only. Streamed row by row, each centroid
+    straight to float32 (the pool can be a backlog)."""
+    with _brief_conn(conn) as c, c.cursor() as cur:
+        cur.execute(FEED_SUMMARY_QUEUE_SQL, {"limit": limit, "max_attempts": max_attempts, "priority": priority})
+        return [SummaryJob(int(r[0]), r[1], r[2], r[3], r[4], int(r[5]), r[6], tuple(r[7]),
+                           _vec_array(r[8]) or array("f"), r[9], bool(r[10])) for r in cur]
 
 
 #: The summary backlog the health monitor watches (owner, 2026-10-12): kept,
@@ -2235,12 +2272,31 @@ def feed_summary_backlog(min_age_h: int, max_attempts: int, *,
 
 
 def feed_summarized_today(*, conn: psycopg.Connection | None = None) -> int:
-    """Real stories sent to Haiku since local midnight (each counted once,
-    whether or not its summary was accepted)."""
+    """Real HOME and SPORTS stories sent to Haiku since local midnight (each
+    counted once, whether or not its summary was accepted). Tech has its own
+    count (owner, 2026-10-14: separate caps per pillar group)."""
     with _brief_conn(conn) as c:
         return int(c.execute(
-            f"SELECT count(*) FROM stories WHERE NOT is_test AND summarized_at >= {_LOCAL_DAY_START}"
+            f"SELECT count(*) FROM stories WHERE NOT is_test AND NOT ('tech' = ANY (pillars)) "
+            f"AND summarized_at >= {_LOCAL_DAY_START}"
         ).fetchone()[0])
+
+
+#: Tech's own daily count (owner, 2026-10-14): COMMUNITY tech stories sent to
+#: Haiku since local midnight. Official ones are never held by a daily cap,
+#: so they are not counted.
+FEED_TECH_COMMUNITY_TODAY_SQL: Final = f"""
+    SELECT count(*) FROM stories st
+      JOIN content_items i ON i.id = st.lead_item_id
+      JOIN sources s ON s.id = i.source_id
+     WHERE NOT st.is_test AND 'tech' = ANY (st.pillars) AND NOT s.official
+       AND st.summarized_at >= {_LOCAL_DAY_START}
+"""
+
+
+def feed_tech_community_summarized_today(*, conn: psycopg.Connection | None = None) -> int:
+    with _brief_conn(conn) as c:
+        return int(c.execute(FEED_TECH_COMMUNITY_TODAY_SQL).fetchone()[0])
 
 
 @dataclass(frozen=True)

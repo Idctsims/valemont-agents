@@ -646,6 +646,29 @@ Measured on production (db_inspect, 2026-10-14 ~03:00 UTC), per Chicago day:
 - Cost: `feed_summarize` $0.18 on Oct 13 (307 calls, backlog included);
   month-to-date AI spend $0.47 of $20 on Oct 14.
 
+**Caps and order, from 2026-10-14 (owner):**
+
+- Separate daily caps per pillar group. Home+Sports: 2,000 stories a
+  Chicago day (`summarize.DAILY_CAP`, counted by `feed_summarized_today`,
+  which now leaves tech out). Tech: its own 300 a day on COMMUNITY (Hacker
+  News) stories (`tech.COMMUNITY_DAILY_CAP`); official tech stories are
+  never held by a daily cap, only by the per-run cap (40) and the AI budget
+  guard.
+- Summarize by rank, not age. Each run ranks its waiting stories as For you
+  would (`summarize.order_by_rank`: `rank.score_story` on what is known
+  before the summary, the centroid, title, source and follows, minus
+  recency) and takes them in that order: followed-name stories first (owner
+  decision 10), then Home and Sports in turn. Tech: official first, each
+  group by rank (`tech.order_queue`).
+- A story waiting more than 48 hours with no summary retires as
+  headline-only (`ledger.feed_retire_stale`: `summary_attempts` set to the
+  maximum, Chat 3's retirement; `summarized_at` stays NULL, so no cap counts
+  it, and feed_score scores it like any retired story).
+- Tonight's 115 waiting stories (12 Home, 52 Sports, 51 tech; oldest first
+  seen 2026-10-14 00:33 UTC) are all under 48 hours: under the new order 0
+  retire and all 115 are summarized (Home+Sports after the cap's reset at
+  Chicago midnight, tech over its next two runs).
+
 **Storage, at this volume** (the feed shares the 500 MB tier with the props
 archive; the Oct 20 decision needs it):
 

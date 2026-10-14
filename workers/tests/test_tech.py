@@ -9,6 +9,7 @@ inside a kept region was rewritten.
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import math
@@ -440,13 +441,19 @@ class CapPath(unittest.TestCase):
         self.assertIn("push failed", run.job_note)
 
 
-class TechJob(unittest.TestCase):
+class TechJobCase(unittest.TestCase):
+    """The tech job with a stubbed ledger and a scripted model (no tests here)."""
+
     def setUp(self) -> None:
+        self.community_today = 0
         self.saved: list[tuple[list[ledger.SummaryOut], int | None]] = []
         self.queue = [job(1, teaser="OpenAI is giving new API accounts free credits this month."),
                       job(2, official=False)]
         for name, fn in {
             "feed_tech_summary_queue": lambda limit, max_attempts: list(self.queue),
+            "feed_retire_stale": lambda hours, max_attempts, **kw: 0,
+            "feed_tech_community_summarized_today": lambda **kw: self.community_today,
+            "feed_latest_profiles": lambda **kw: {},
             "feed_save_summaries": lambda results, uid: self.saved.append((list(results), uid)),
             "tech_credit_push": lambda sid, send: send() or 7,
         }.items():
@@ -464,6 +471,8 @@ class TechJob(unittest.TestCase):
         p.start()
         self.addCleanup(p.stop)
 
+
+class TechJob(TechJobCase):
     def test_official_first_one_retry_then_the_push(self) -> None:
         bad = {"id": 1, "summary": "One. Two. Three.", "entities": [], "topics": [], "category": "pricing_credits",
                "claimable": True}
@@ -484,6 +493,97 @@ class TechJob(unittest.TestCase):
         self.assertRegex(sql, r"ORDER BY s\.official DESC, i\.published_at DESC")
         self.assertIn("'tech' = ANY (st.pillars)", sql)
         self.assertIn("NOT ('tech' = ANY (st.pillars))", ledger.FEED_SUMMARY_QUEUE_SQL)
+
+
+class SeparateCaps(TechJobCase):
+    """Owner, 2026-10-14: Home+Sports 2,000/day, Tech its own 300/day on
+    community stories; official tech is never held by any daily cap."""
+
+    def good(self, sid: int) -> dict:
+        return {"id": sid, "summary": "A new model is out for developers today.", "entities": [], "topics": [],
+                "category": "models_features", "claimable": False}
+
+    def test_a_spent_home_cap_never_blocks_an_official_tech_summary(self) -> None:
+        self.queue = [job(1)]
+        self.answers = [{"stories": [self.good(1)]}]
+        with mock.patch.object(ledger, "feed_summarized_today",
+                               side_effect=AssertionError("tech never reads the Home+Sports count")):
+            run = tech.tech_summarize_job(send=lambda m: [])
+        self.assertEqual(run.accepted, 1)
+        with mock.patch.object(ledger, "feed_summarized_today", lambda **kw: 2000), \
+                mock.patch.object(ai_module(), "complete", side_effect=AssertionError("no call past the cap")):
+            from feed import summarize
+            self.assertTrue(summarize.summarize_job().capped)  # Home+Sports is spent; Tech ran anyway
+
+    def test_tech_community_has_its_own_cap_and_official_is_never_held(self) -> None:
+        self.community_today = tech.COMMUNITY_DAILY_CAP  # the day's 300 are spent
+        self.queue = [job(1), job(2, official=False)]
+        self.answers = [{"stories": [self.good(1)]}]
+        run = tech.tech_summarize_job(send=lambda m: [])
+        self.assertEqual((run.accepted, [o.story_id for o in self.saved[0][0]]), (1, [1]))  # HN held, official not
+        self.assertEqual(tech.COMMUNITY_DAILY_CAP, 300)
+
+    def test_the_counts_are_apart(self) -> None:
+        self.assertIn("NOT ('tech' = ANY (pillars))", inspect.getsource(ledger.feed_summarized_today))
+        self.assertIn("NOT s.official", ledger.FEED_TECH_COMMUNITY_TODAY_SQL)
+        self.assertIn("'tech' = ANY (st.pillars)", ledger.FEED_TECH_COMMUNITY_TODAY_SQL)
+
+
+def ai_module():
+    from core import ai
+    return ai
+
+
+class RankOrder(unittest.TestCase):
+    """Owner, 2026-10-14: summarize by rank, not age; a story waiting more
+    than 48 h retires as headline-only."""
+
+    A, B = (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)
+
+    def profile(self, pillar: str) -> rank.Profile:
+        return rank.build_profile(pillar, (0.0, 0.0, 0.0), 10, [self.A], [], [])  # loves direction A
+
+    def sj(self, sid: int, vec, hours: float, pillars=("home",), followed: bool = False) -> ledger.SummaryJob:
+        return ledger.SummaryJob(sid, f"Story {sid}", None, "Outlet", None, 0, "outlet", tuple(pillars),
+                                 vec, NOW - timedelta(hours=hours), followed)
+
+    def test_a_loved_older_story_goes_before_a_fresh_one_the_profile_skips(self) -> None:
+        from feed import summarize
+        jobs = [self.sj(1, self.B, 1), self.sj(2, self.A, 10)]  # the pool's order: newest first
+        order = summarize.order_by_rank(jobs, {"home": self.profile("home")}, [], NOW)
+        self.assertEqual([j.story_id for j in order], [2, 1])
+        # With no profile the pool's order stands.
+        self.assertEqual([j.story_id for j in summarize.order_by_rank(jobs, {}, [], NOW)], [1, 2])
+
+    def test_followed_first_then_home_and_sports_in_turn(self) -> None:
+        from feed import summarize
+        jobs = [self.sj(1, self.A, 1), self.sj(2, self.A, 2), self.sj(3, self.A, 1, ("sports",)),
+                self.sj(4, self.A, 2, ("sports",)), self.sj(5, self.B, 30, ("sports",), followed=True)]
+        profiles = {"home": self.profile("home"), "sports": self.profile("sports")}
+        self.assertEqual([j.story_id for j in summarize.order_by_rank(jobs, profiles, [], NOW)], [5, 1, 3, 2, 4])
+
+    def test_the_run_retires_stale_stories_first_and_ranks_the_pool(self) -> None:
+        from feed import summarize
+        calls = []
+        with mock.patch.object(ledger, "feed_retire_stale", lambda h, m, **kw: calls.append((h, m, kw)) or 3), \
+                mock.patch.object(ledger, "feed_summarized_today", lambda **kw: 2000):
+            summarize.summarize_job()
+        self.assertEqual(calls, [(48, MAX_ATTEMPTS, {"tech": False})])
+        self.assertEqual(summarize.STALE_AFTER_H, 48)
+        sql = ledger.FEED_RETIRE_STALE_SQL
+        self.assertIn("SET summary_attempts = %(max_attempts)s", sql)  # Chat 3's retirement, not a new state
+        self.assertIn("first_seen_at <= now() - make_interval(hours => %(hours)s)", sql)
+        self.assertNotIn("summarized_at", sql.split("WHERE")[0])  # never stamped, so no cap counts it
+
+    def test_tech_official_first_each_in_rank_order(self) -> None:
+        prof = rank.build_profile("tech", (0.0, 0.0, 0.0), 10, [self.A], [], [])
+        pool = [ledger.TechSummaryJob(1, "x", None, "HN", False, 0, False, NOW - timedelta(hours=1), NOW, "hn", self.A),
+                ledger.TechSummaryJob(2, "x", None, "OpenAI", True, 0, False, NOW - timedelta(hours=1), NOW, "o", self.B),
+                ledger.TechSummaryJob(3, "x", None, "OpenAI", True, 0, False, NOW - timedelta(hours=5), NOW, "o", self.A),
+                ledger.TechSummaryJob(4, "x", None, "HN", False, 0, False, NOW - timedelta(hours=1), NOW, "hn", self.B)]
+        self.assertEqual([j.story_id for j in tech.order_queue(pool, prof, NOW, 10)], [3, 2, 1, 4])
+        self.assertEqual([j.story_id for j in tech.order_queue(pool, prof, NOW, 1)], [3, 2, 1])
+        self.assertEqual([j.story_id for j in tech.order_queue(pool, None, NOW, 0)], [2, 3])
 
 
 # ====================================================================== the brief
