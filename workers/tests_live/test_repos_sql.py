@@ -356,6 +356,23 @@ class WorkerQueries(RepoSqlCase):
             self.assertEqual(conn.execute("SELECT why_it_matters FROM repos WHERE id = %s", (rid,)).fetchone()[0],
                              "General interest.")
 
+    def test_reset_repo_why_clears_story_and_repo_and_requeues(self) -> None:
+        with _rolled_back() as conn:
+            sid, rid, _ = self.surfaced(conn)
+            usage = conn.execute("SELECT max(id) FROM ai_usage").fetchone()[0]
+            conn.execute("UPDATE stories SET summary = 'Does a thing.', summarized_at = now(), ai_usage_id = %s "
+                         "WHERE id = %s", (usage, sid))
+            ledger.feed_save_repo_why({sid: "General interest."}, usage, conn=conn)
+            self.assertNotIn(sid, [j.story_id for j in ledger.feed_repo_why_queue(1000, 2, conn=conn)])
+            self.assertEqual(ledger.feed_reset_repo_why([sid], conn=conn), 1)
+            self.assertEqual(conn.execute("SELECT why_it_matters, why_generated_at FROM stories WHERE id = %s",
+                                          (sid,)).fetchone(), (None, None))
+            self.assertIsNone(conn.execute("SELECT why_it_matters FROM repos WHERE id = %s", (rid,)).fetchone()[0])
+            self.assertIn(sid, [j.story_id for j in ledger.feed_repo_why_queue(1000, 2, conn=conn)])
+            # A non-repo story is never touched by it.
+            home = self.story(conn, self.source(conn))
+            self.assertEqual(ledger.feed_reset_repo_why([home], conn=conn), 0)
+
     def test_home_why_queue_never_asks_a_repo_story(self) -> None:
         with _rolled_back() as conn:
             sid, _, _ = self.surfaced(conn)

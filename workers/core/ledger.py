@@ -3315,6 +3315,20 @@ def feed_repo_why_queue(limit: int, max_attempts: int, *,
     return [RepoWhyJob(int(r[0]), r[1], r[2], r[3], r[4], tuple(r[5] or ())) for r in rows]
 
 
+def feed_reset_repo_why(story_ids: Sequence[int], *, conn: psycopg.Connection | None = None) -> int:
+    """By hand only (feed/why.py repo_ask_again): forget that these real repo
+    stories were asked, on the story and its repo, so they are asked again.
+    Returns stories reset."""
+    with _brief_conn(conn) as c, c.transaction():
+        n = c.execute("""
+            UPDATE stories SET why_it_matters = NULL, why_generated_at = NULL, why_ai_usage_id = NULL
+             WHERE id = ANY(%s) AND NOT is_test AND category = 'repos'
+        """, (list(story_ids),)).rowcount
+        c.execute("UPDATE repos SET why_it_matters = NULL WHERE story_id = ANY(%s) AND NOT is_test",
+                  (list(story_ids),))
+    return n
+
+
 def feed_save_repo_why(answers: Mapping[int, str], ai_usage_id: int | None, *,
                        conn: psycopg.Connection | None = None) -> int:
     """A repo story's line (never NULL: "General interest." when there is no

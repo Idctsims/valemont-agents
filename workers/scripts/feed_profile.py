@@ -9,9 +9,12 @@ r"""The feed's interest profile by hand (feed/profile.py, feed/why.py).
            then rescores the last 72 h (exactly what the 04:00 job does,
            without its once-a-day skip). Prints counts only.
 --score    scores stories that finished summarizing and have no score yet.
---why      one feed_why pass (Haiku; the daily cap of 20 calls applies).
+--why      one feed_why pass (Haiku; the daily cap of 100 calls applies).
            With --again ID,ID,... it forgets that those stories were asked
            and asks once more (at most 8), printing each line or null.
+--repo-why --again ID,ID,...  the same for REPO stories (feed/why.py
+           repo_ask_again: at most 8, one same-run retry for a refused line;
+           the repo cap of 4 calls a day applies), printing each line.
 --context  prints the exact venture context feed_why sends Haiku.
 --top N    Home's For you, the first N positions: position, story id,
            floored / cross-pillar flags and the headline. Read-only.
@@ -32,11 +35,12 @@ from core.paths import load_env
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     group = parser.add_mutually_exclusive_group(required=True)
-    for flag in ("--rebuild", "--score", "--why", "--context"):
+    for flag in ("--rebuild", "--score", "--why", "--repo-why", "--context"):
         group.add_argument(flag, action="store_true")
     group.add_argument("--top", type=int, metavar="N")
     parser.add_argument("--pillar", choices=("home", "sports"), default="home", help="for --top")
-    parser.add_argument("--again", metavar="IDS", help="with --why: story ids to ask again, comma-separated")
+    parser.add_argument("--again", metavar="IDS",
+                        help="with --why or --repo-why: story ids to ask again, comma-separated")
     args = parser.parse_args(argv)
 
     load_env()
@@ -59,6 +63,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"why again: {sum(1 for a in answers.values() if a)} line(s), "
                   f"{sum(1 for a in answers.values() if not a)} null ({len(why.REFUSED)} refused by the rules), "
                   f"of {len(answers)}")
+        elif args.repo_why:
+            if not args.again:
+                parser.error("--repo-why needs --again ID,ID,...")
+            ids = [int(x) for x in args.again.split(",") if x.strip()]
+            answers = why.repo_ask_again(ids)
+            for sid, line in answers.items():
+                print(f"{sid:7}  -> {line}")
+            for sid, line, reason in why.REFUSED:
+                print(f"  refused {sid}: {reason}: {line!r}")
+            print(f"repo why again: {sum(1 for a in answers.values() if a != why.GENERAL)} concrete, "
+                  f"{sum(1 for a in answers.values() if a == why.GENERAL)} general, of {len(answers)}")
         elif args.why:
             print(f"why: {why.why_job()} line(s) kept")
         elif args.context:
