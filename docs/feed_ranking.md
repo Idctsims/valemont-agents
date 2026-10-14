@@ -625,3 +625,43 @@ before and after positions from `feed_for_you` through `db_inspect`.
 - **No time decay on reactions in v1.** Tastes drift; a `REACTION_HALF_LIFE_D`
   constant can be added later without schema change, because `created_at` is
   stored.
+
+## 8. Daily volume (owner decision, 2026-10-14)
+
+**About 1,300 stories a day is the new normal**, replacing Chat 3's ~300.
+Measured on production (db_inspect, 2026-10-14 ~03:00 UTC), per Chicago day:
+
+| Day | Kept new stories | Items | Stories stamped by the summarizer |
+|---|---|---|---|
+| Oct 11 | 941 | 1,207 | 445 |
+| Oct 12 | 1,289 | 1,748 | 897 |
+| Oct 13 | 1,265 | 1,689 | 2,040 (backlog cleared; the 2,000 cap reached 21:33 Chicago) |
+
+- The summary cap counts stories stamped since Chicago midnight, not calls.
+  At 60 a run, two runs an hour, the summarizer's ceiling is ~120 an hour.
+  On Oct 13 it ran at that ceiling from 00:00 to 15:00 Chicago on stories
+  first seen Oct 11-12, then kept pace with arrivals.
+- No story was summarized twice: 3,082 stories took one attempt and 300
+  took two; 483 calls covered 3,303 stories in 72 h (about 7 a call).
+- Cost: `feed_summarize` $0.18 on Oct 13 (307 calls, backlog included);
+  month-to-date AI spend $0.47 of $20 on Oct 14.
+
+**Storage, at this volume** (the feed shares the 500 MB tier with the props
+archive; the Oct 20 decision needs it):
+
+- Database: 94.1 MB on 2026-10-14 ~03:00 UTC, against 46.7 MB on Oct 13
+  before the props archive run (13:33 Chicago) and 87.6 MB after it.
+- Feed tables now: 26.3 MB for 49.5 hours of data (content_items 13.5 MB /
+  4,644 rows, stories 6.4 MB / 3,726, story_scores 3.4 MB / 8,907,
+  feed_similarity_log 1.7 MB / 8,208). That is **~12.7 MB a day gross** while
+  every row is young: no row is yet old enough for the prune.
+- Per row: a story ~1.7 KB (its 384-d centroid stays), an item ~2.9 KB with
+  its two embeddings (~1.5 KB, cleared after 72 h), ~1.4 KB after. Steady
+  state, once embeddings clear: **~6 MB a day kept** (stories 2.2, items 2.2,
+  scores 0.8 with superseded rows pruned after 7 days, the similarity log
+  0.7 pruned after 30 days).
+- Kept stories and their items are deleted 90 days after they were last
+  seen (feed_prune). At ~6 MB a day that is **~0.5 GB at the 90-day steady
+  state, the whole tier, before the props archive.** Postgres reuses freed
+  space after autovacuum but does not shrink the files, so the database's
+  reported size tracks the high-water mark.
