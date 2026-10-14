@@ -342,7 +342,13 @@ Thirteen build chats after this one, each split into phases with a test you run 
 - Tech Hub pushes only for free credits and promos, at most 3 per Chicago day.
 
 1. Tech Hub: official changelogs and Hacker News (Phase 1), GitHub trending with a "why this matters to you" line (Phase 2; its repos migration takes the next free number, since db/045–048 went to Phase 1's fixes).
-   - [ ] A new Claude or OpenAI release shows up within one ingest cycle
+   - [x] A new Claude or OpenAI release shows up within one ingest cycle. **Phase 1 GREEN Oct 14 (owner)**, except three open watch items that do not block Phase 2 (below). The feed path met it: `-m scripts.tech_latency` at 06:10 UTC Oct 14 showed 3 releases first seen after deploy (claude-code v2.1.299 24.4 min, openai-python v3.30.0 12.7 min and v3.31.0 13.3 min), 0 over the limit.
+     - **Owner checks, Oct 14:** `e2e/tech.spec.ts` on phone 7/7 pass; the screenshot gate on phone and desktop, both themes, approved; the forced test push (`-m scripts.tech_test_push`) arrived with the phone locked and opened the story: notification 353 ("Free credits (test): Update to OpenAI API Rate Limits", `/tech/story/8941`, sent 06:07:03 UTC, no error), `tech_credit_pushes` row 76 `is_test`, so it used none of the day's 3 real pushes.
+     - **Open watch items (do not block Phase 2):**
+       1. Page-watcher latency: the first anthropic.com/news, claude.com/blog or openai.com/news post first seen after deploy. None yet at 06:10 UTC Oct 14.
+       2. Worker memory at rest against ~130 MB, from the Railway log RSS lines; due after 08:50 UTC Oct 14.
+       3. The why-it-matters Haiku cost for one full Chicago day.
+     - Migrations: db/045–db/048, all applied and recorded (CLAUDE.md, Current State). PRs #29–#34.
 2. Screening Room: TMDB search, watchlist, currently watching, release dates, trailers, where to stream.
    - [ ] Recommendations reflect the six seed shows on day one and shift after reactions
 
