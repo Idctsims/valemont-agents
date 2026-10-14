@@ -251,6 +251,55 @@ class OfficialDecay(TechSqlCase):
                 self.assertFalse(conn.execute("SELECT tech_push_eligible(8359)").fetchone()[0])
 
 
+class CapsAndRetirement(TechSqlCase):
+    """Owner, 2026-10-14: separate daily counts per pillar group, and the
+    48-hour retirement, in the real SQL."""
+
+    def stamp(self, conn: psycopg.Connection, sid: int) -> None:
+        conn.execute("UPDATE stories SET summarized_at = now(), summary_attempts = 1 WHERE id = %s", (sid,))
+
+    def test_each_group_counts_only_its_own(self) -> None:
+        with _rolled_back() as conn:
+            home0 = ledger.feed_summarized_today(conn=conn)
+            tech0 = ledger.feed_tech_community_summarized_today(conn=conn)
+            self.stamp(conn, self.tech_story(conn, official=True, done=False))
+            self.assertEqual((ledger.feed_summarized_today(conn=conn),
+                              ledger.feed_tech_community_summarized_today(conn=conn)), (home0, tech0))
+            self.stamp(conn, self.tech_story(conn, official=False, done=False))
+            self.assertEqual((ledger.feed_summarized_today(conn=conn),
+                              ledger.feed_tech_community_summarized_today(conn=conn)), (home0, tech0 + 1))
+            self.stamp(conn, self.story(conn, self.source(conn), done=False))
+            self.assertEqual((ledger.feed_summarized_today(conn=conn),
+                              ledger.feed_tech_community_summarized_today(conn=conn)), (home0 + 1, tech0 + 1))
+
+    def test_a_story_waiting_over_48_hours_retires_headline_only(self) -> None:
+        with _rolled_back() as conn:
+            old = self.story(conn, self.source(conn), done=False)
+            fresh = self.story(conn, self.source(conn), done=False)
+            old_tech = self.tech_story(conn, done=False)
+            conn.execute("UPDATE stories SET first_seen_at = now() - interval '50 hours', "
+                         "last_seen_at = now() - interval '50 hours' WHERE id = ANY(%s)", ([old, old_tech],))
+            self.assertGreaterEqual(ledger.feed_retire_stale(48, 2, tech=False, conn=conn), 1)
+            rows = dict(conn.execute("SELECT id, summary_attempts FROM stories WHERE id = ANY(%s)",
+                                     ([old, fresh, old_tech],)).fetchall())
+            self.assertEqual((rows[old], rows[fresh], rows[old_tech]), (2, 0, 0))  # tech is its own group
+            pool = {j.story_id for j in ledger.feed_summary_queue(100000, 2, conn=conn)}
+            self.assertNotIn(old, pool)
+            self.assertIn(fresh, pool)
+            ledger.feed_retire_stale(48, 2, tech=True, conn=conn)
+            self.assertEqual(conn.execute("SELECT summary_attempts, summarized_at FROM stories WHERE id = %s",
+                                          (old_tech,)).fetchone(), (2, None))
+
+    def test_the_pools_carry_what_the_rank_order_needs(self) -> None:
+        with _rolled_back() as conn:
+            sid = self.story(conn, self.source(conn, ("home",)), done=False)
+            job = next(j for j in ledger.feed_summary_queue(100000, 2, conn=conn) if j.story_id == sid)
+            self.assertEqual((job.pillars, len(job.vec), job.published_at is not None), (("home",), 384, True))
+            tid = self.tech_story(conn, done=False)
+            tj = next(j for j in ledger.feed_tech_summary_queue(100000, 2, conn=conn) if j.story_id == tid)
+            self.assertEqual((len(tj.vec), bool(tj.source_slug)), (384, True))
+
+
 class WorkerQueries(TechSqlCase):
     def test_the_tech_queue_puts_official_first_and_the_home_queue_leaves_tech_out(self) -> None:
         with _rolled_back() as conn:

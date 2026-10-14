@@ -6,8 +6,11 @@ before the Home and Sports summarizer, so an official item gets its summary
 in the same 30-minute cycle it was found in. One core.ai.complete() call per
 group (direct, never the batch path): Haiku, non-critical, thinking off, a
 cached system prompt, structured JSON. Its queue: kept, real, linkable TECH
-stories with no summary and a try left, OFFICIAL FIRST, then newest
-published. The Home/Sports queue leaves tech stories out
+stories with no summary and a try left, OFFICIAL FIRST, each group in Tech's
+For you rank order (owner, 2026-10-14; order_queue). Official stories are
+never held by a daily cap; community ones by COMMUNITY_DAILY_CAP (300),
+counted apart from Home and Sports. A story waiting more than 48 h retires as
+headline-only. The Home/Sports queue leaves tech stories out
 (ledger.FEED_SUMMARY_QUEUE_SQL). Until its summary lands a story shows its
 headline (feed_for_you lists an unscored tech story; db/045).
 
@@ -44,7 +47,8 @@ from typing import Any, Callable, Sequence
 from core import ai, ledger, memory, push
 from core.jobs import JobSkipped
 from feed.summarize import (COPY_RUN, MAX_ATTEMPTS, MAX_ENTITIES, MAX_SENTENCES, MAX_TOPICS, MAX_WORDS,
-                            SummaryInvalid, copied_run, sentence_count)
+                            STALE_AFTER_H, SummaryInvalid, copied_run, latest_profiles, rank_now,
+                            sentence_count)
 
 log = logging.getLogger("valemont.feed.tech")
 
@@ -338,9 +342,43 @@ def summarize_group(group: Sequence[ledger.TechSummaryJob], run: TechRun, *, cli
         maybe_push(out, by_id[out.story_id], run, send=send)
 
 
-def tech_summarize_job(*, client: Any = None, send: Send = push.send) -> TechRun:
+#: Tech's own daily cap (owner, 2026-10-14), on COMMUNITY stories only:
+#: official ones are never held by a daily cap (still bounded by RUN_CAP and
+#: the AI budget guard). Home and Sports keep summarize.DAILY_CAP, counted
+#: apart, so a spent Home cap never blocks Tech.
+COMMUNITY_DAILY_CAP = 300
+POOL = 1000
+
+
+def order_queue(pool: Sequence[ledger.TechSummaryJob], profile: Any, now: datetime,
+                community_room: int) -> list[ledger.TechSummaryJob]:
+    """The run's order: every official story first, then community stories up
+    to `community_room`, each group in Tech's For you rank order (official
+    ones at their slower half-life, db/046); the pool's order (official, then
+    newest) where there is no profile yet. At most RUN_CAP."""
+    def ranked(group: list[ledger.TechSummaryJob]) -> list[ledger.TechSummaryJob]:
+        if profile is None:
+            return group
+        r = {j.story_id: rank_now("tech", j.vec, j.title, None, j.source_slug, ("tech",), j.published_at,
+                                  {"tech": profile}, (), now, j.official) for j in group}
+        return sorted(group, key=lambda j: (r[j.story_id] is None, -(r[j.story_id] or 0.0)))
+
+    official = ranked([j for j in pool if j.official])
+    community = ranked([j for j in pool if not j.official])[:max(community_room, 0)]
+    return (official + community)[:RUN_CAP]
+
+
+def tech_summarize_job(*, client: Any = None, send: Send = push.send, now: datetime | None = None) -> TechRun:
     """The feed_tech_summarize system job."""
-    queue = ledger.feed_tech_summary_queue(RUN_CAP, MAX_ATTEMPTS)
+    from datetime import timezone
+    retired = ledger.feed_retire_stale(STALE_AFTER_H, MAX_ATTEMPTS, tech=True)
+    if retired:
+        log.info("feed tech: %d stories older than %d h retired as headline-only", retired, STALE_AFTER_H)
+    pool = ledger.feed_tech_summary_queue(POOL, MAX_ATTEMPTS)
+    room = COMMUNITY_DAILY_CAP - ledger.feed_tech_community_summarized_today() if pool else 0
+    queue = order_queue(pool, latest_profiles().get("tech") if pool else None,
+                        now or datetime.now(timezone.utc), room)
+    del pool
     run = TechRun()
     try:
         for i in range(0, len(queue), GROUP_SIZE):

@@ -479,8 +479,75 @@ def summarize_group(group: Sequence[ledger.SummaryJob], *, client: Any = None,
     return run
 
 
-def summarize_job(*, client: Any = None) -> SummaryRun:
-    """The feed_summarize system job."""
+def rank_now(pillar: str, vec: Sequence[float], title: str, sport: str | None, slug: str,
+             pillars: tuple[str, ...], published_at: Any, profiles: dict[str, rank.Profile],
+             follows: Sequence[rank.Follow], now: Any, official: bool = False) -> float | None:
+    """A waiting story's provisional For you rank in `pillar`: rank.score_story
+    on what is known before the summary (centroid, title, source, follows; no
+    entities or topics yet) minus recency, as feed_for_you would rank it.
+    None when there is no profile for the pillar or no vector."""
+    prof = profiles.get(pillar)
+    if prof is None or not len(vec):
+        return None
+    st = rank.StoryIn(0, pillars, sport, title, (), (), slug or None, tuple(vec))
+    score = rank.score_story(st, pillar, prof, follows).score  # type: ignore[arg-type]
+    age_h = max((now - published_at).total_seconds() / 3600.0, 0.0) if published_at else 0.0
+    return rank.rank_of(score, age_h, 0.0, rank.half_life(pillar, official))
+
+
+def order_by_rank(jobs: Sequence[ledger.SummaryJob], profiles: dict[str, rank.Profile],
+                  follows: Sequence[rank.Follow], now: Any) -> list[ledger.SummaryJob]:
+    """The run's order (owner, 2026-10-14: "summarize by rank, not age"):
+    stories whose title names a followed person or team first (owner decision
+    10: a move is read soon), then Home's and Sports' waiting stories each in
+    their own For you rank order, taken in turn, one from each pillar. A
+    story in both pillars is taken once, at its first turn. A pillar with no
+    profile keeps the pool's order (newest published first)."""
+    followed = [j for j in jobs if j.followed]
+    rest = [j for j in jobs if not j.followed]
+    lists: list[list[ledger.SummaryJob]] = []
+    for pillar in rank.CROSS_PILLARS:
+        mine = [j for j in rest if pillar in j.pillars]
+        ranks = {j.story_id: rank_now(pillar, j.vec, j.title, j.sport, j.source_slug, j.pillars,
+                                      j.published_at, profiles, follows, now) for j in mine}
+        if any(r is not None for r in ranks.values()):
+            mine.sort(key=lambda j: (ranks[j.story_id] is None, -(ranks[j.story_id] or 0.0)))
+        lists.append(mine)
+    out: list[ledger.SummaryJob] = []
+    seen: set[int] = set()
+    for j in followed:
+        if j.story_id not in seen:
+            seen.add(j.story_id)
+            out.append(j)
+    for i in range(max((len(x) for x in lists), default=0)):
+        for x in lists:
+            if i < len(x) and x[i].story_id not in seen:
+                seen.add(x[i].story_id)
+                out.append(x[i])
+    # Anything left (a pillar outside Home and Sports, never expected here).
+    out += [j for j in rest if j.story_id not in seen]
+    return out
+
+
+#: The candidate pool a run ranks (newest first); a backlog bigger than this
+#: is ranked over its newest POOL.
+POOL = 2000
+#: A story waiting longer than this without a summary retires as headline-only
+#: (owner, 2026-10-14; the same retirement as running out of attempts).
+STALE_AFTER_H = 48
+
+
+def latest_profiles() -> dict[str, rank.Profile]:
+    from feed import profile as feed_profile
+    return {p: feed_profile.profile_from(r) for p, r in ledger.feed_latest_profiles().items()}
+
+
+def summarize_job(*, client: Any = None, now: Any = None) -> SummaryRun:
+    """The feed_summarize system job (Home and Sports)."""
+    from datetime import datetime, timezone
+    retired = ledger.feed_retire_stale(STALE_AFTER_H, MAX_ATTEMPTS, tech=False)
+    if retired:
+        log.info("feed summarize: %d stories older than %d h retired as headline-only", retired, STALE_AFTER_H)
     sent = ledger.feed_summarized_today()
     total = SummaryRun(sent_today=sent)
     day_left = DAILY_CAP - sent
@@ -491,7 +558,10 @@ def summarize_job(*, client: Any = None) -> SummaryRun:
         return total
     follows = [rank.Follow(r.name, r.tier, r.pillar, r.floor, r.aliases, r.sport, r.sport_wide, r.kind)  # type: ignore[arg-type]
                for r in ledger.feed_follows()]
-    queue = ledger.feed_summary_queue(room, MAX_ATTEMPTS, rank.priority_pattern(follows))
+    pool = ledger.feed_summary_queue(POOL, MAX_ATTEMPTS, rank.priority_pattern(follows))
+    queue = order_by_rank(pool, latest_profiles() if pool else {}, follows,
+                          now or datetime.now(timezone.utc))[:room]
+    del pool
     model_sport = sources.model_sport_slugs()
     sports_names = ledger.feed_sports_entity_names() if queue else frozenset()
     try:
