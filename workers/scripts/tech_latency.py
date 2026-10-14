@@ -7,7 +7,9 @@ READ-ONLY: it connects as valemont_readonly through scripts/db_inspect.py's
 readonly_url() (CLAUDE.md §5), and rolls back.
 
 For every OFFICIAL tech item first seen after --since (default: the first
-non-backfill official item ever), not a first-fetch backfill:
+non-backfill official item ever), not a first-fetch backfill, not seeded and
+not LATE (stored more than 72 h, 96 h date-only, after publication: not new
+when first seen, so not a latency sample):
 
     first_seen_at   content_items.fetched_at (when the worker first saw it)
     published_at    as the source states it
@@ -35,9 +37,15 @@ from scripts.db_inspect import STATEMENT_TIMEOUT_MS, readonly_url
 
 LIMIT = timedelta(minutes=30)
 
+#: Not new when first seen: stored more than 72 h (date-only: 96 h) after it
+#: was published. The worker records such an item as seen and never shows it
+#: (2026-10-14 fix); the ones stored before the fix are late, not slow, so
+#: they are not latency samples (db/047 hid the stories made only of them).
+LATE = """i.fetched_at - i.published_at > CASE WHEN i.published_precision = 'date'
+                                              THEN interval '96 hours' ELSE interval '72 hours' END"""
+
 #: Official items first seen after `since`, not a first-fetch backfill, not
-#: recorded-as-seen (seeded: too old when first seen), and not in a story
-#: db/047 hid as stale (the late items stored before the 2026-10-14 fix).
+#: recorded-as-seen (seeded: too old when first seen), and not late.
 ITEMS_SQL = """
     SELECT s.slug, i.title, i.published_at, i.published_precision, i.fetched_at, st.summary IS NOT NULL, s.kind
       FROM content_items i
@@ -45,7 +53,7 @@ ITEMS_SQL = """
       LEFT JOIN stories st ON st.id = i.story_id
      WHERE 'tech' = ANY (s.pillars) AND s.official AND NOT s.is_test
        AND NOT i.backfill AND NOT i.seeded
-       AND coalesce(st.filtered_reason, '') NOT LIKE 'stale:%%'
+       AND NOT (""" + LATE + """)
        AND i.fetched_at > %(since)s
      ORDER BY s.kind, i.fetched_at, i.id
 """
@@ -60,7 +68,7 @@ DEFAULT_SINCE_SQL = """
       FROM content_items i JOIN sources s ON s.id = i.source_id
       LEFT JOIN stories st ON st.id = i.story_id
      WHERE 'tech' = ANY (s.pillars) AND s.official AND NOT s.is_test AND NOT i.backfill AND NOT i.seeded
-       AND coalesce(st.filtered_reason, '') NOT LIKE 'stale:%%'
+       AND NOT (""" + LATE + """)
 """
 
 SOURCES_SQL = """

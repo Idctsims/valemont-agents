@@ -322,7 +322,7 @@ class HideLateItems(TechSqlCase):
                                          False)
                 v = [1.0] + [0.0] * 383
                 ids.append(ledger.feed_new_story(src, item, v, v, filtered_reason=None, seed=None, conn=conn)[0])
-            self.react(conn, ids[2], "open")
+            self.react(conn, ids[2], "open", pillar="tech")  # a tech story takes tech reactions only (db/045)
             conn.execute("SELECT feed_hide_late_stories()")
             reasons = dict(conn.execute("SELECT id, filtered_reason FROM stories WHERE id = ANY(%s)", (ids,)).fetchall())
             self.assertEqual([reasons[i] for i in ids], ["stale:first_seen_after_72h", None, None])
