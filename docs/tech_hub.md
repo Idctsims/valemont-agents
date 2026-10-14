@@ -148,6 +148,30 @@ then sends and records in one transaction, so a refused push is never sent
 and a failed send records nothing. `scripts/tech_test_push.py` forces an
 `is_test` push that is never counted.
 
+**Only a fresh item pushes (db/046; owner, 2026-10-14).** The first cycle on
+production pushed a first-fetch backfill item (notification 323, story 8359,
+Vercel "Drama 3 now available on AI Gateway", tech_credit_pushes row 20; it
+stays as history and counts toward 2026-10-13's cap). A real push now needs
+the story's lead item to be push-eligible: not a backfill (first seen on a
+cycle after its source's first successful fetch) AND published within 24 h
+of first seen. `tech_push_eligible()` decides it; the push trigger refuses
+and `tech_credit_push_allowed()` answers false otherwise. The worker checks
+the same rule first (`feed/tech.py` `push_eligible`) and never asks.
+
+## 6. The Home and Sports summary cap (investigated 2026-10-14, read-only)
+
+The cap counts STORIES whose `summarized_at` falls on or after Chicago
+midnight (rejected attempts and, since db/045, tech stories included), not
+calls or items. Kept new stories: 941 (Oct 11), 1,289 (Oct 12), 1,265 (Oct
+13), against Chat 3's ~300/day sizing. Oct 11 and 12 stamped 445 and 897,
+so ~1,000 carried over; on Oct 13 the summarizer ran at its ceiling (113-119
+an hour, 60 a run) from 00:00 to 15:00 Chicago on stories first seen Oct
+11-12, and reached 2,000 at 21:33 Chicago (02:33 UTC). No story was
+summarized twice (3,082 one attempt, 300 two; 483 calls for 3,303 stories in
+72 h). The saturation predates every deploy that day. Spend: $0.47 of $20
+month-to-date; `feed_summarize` $0.18 on Oct 13 (307 calls). Remaining
+backlog at 03:00 UTC: 115 stories, all from that night. No change made.
+
 **Context.** `ctx_tech` (Wags; the official items published in the last 7
 days, the most-loved categories, the top of For you in them).
 `ctx_tech_brief` (the brief): official items that LANDED (first seen, not

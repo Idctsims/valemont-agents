@@ -296,8 +296,10 @@ class NoCrossIn(unittest.TestCase):
 # ====================================================================== categories and the push
 
 def job(sid: int, *, official: bool = True, title: str = "A headline", teaser: str | None = None,
-        attempts: int = 0) -> ledger.TechSummaryJob:
-    return ledger.TechSummaryJob(sid, title, teaser, "OpenAI" if official else "Hacker News", official, attempts)
+        attempts: int = 0, backfill: bool = False, age: timedelta = timedelta(hours=1)) -> ledger.TechSummaryJob:
+    """A fresh item by default: first seen NOW, published `age` before."""
+    return ledger.TechSummaryJob(sid, title, teaser, "OpenAI" if official else "Hacker News", official, attempts,
+                                 backfill, NOW - age, NOW)
 
 
 class Categorizer(unittest.TestCase):
@@ -352,6 +354,38 @@ class PushDecision(unittest.TestCase):
                          ("tech_free_credits", "Free credits: OpenAI doubles free API credits",
                           "/tech/story/42", "tech-credits-42"))
         self.assertTrue(tech.push_message(42, "x", None, test=True).title.startswith("Free credits (test): "))
+
+
+class PushEligibility(unittest.TestCase):
+    """Owner, 2026-10-14: a backfill never pushes. Eligible only if first seen
+    after the source's first fetch (not backfill) AND published within 24 h
+    of first seen. db/046 tech_push_eligible enforces it in SQL too."""
+
+    def test_both_conditions(self) -> None:
+        seen = NOW
+        self.assertTrue(tech.push_eligible(False, seen - timedelta(hours=1), seen))
+        self.assertTrue(tech.push_eligible(False, seen - timedelta(hours=24), seen))      # exactly 24 h
+        self.assertFalse(tech.push_eligible(True, seen - timedelta(hours=1), seen))       # a backfill
+        self.assertFalse(tech.push_eligible(False, seen - timedelta(hours=24, seconds=1), seen))  # old news
+        self.assertFalse(tech.push_eligible(False, None, seen))
+
+    def test_an_ineligible_story_is_never_sent(self) -> None:
+        sends: list[push.Message] = []
+        asked: list[int] = []
+        with mock.patch.object(ledger, "tech_credit_push", lambda sid, send: asked.append(sid) or send() or 1):
+            run = tech.TechRun()
+            out = ledger.SummaryOut(9, "Summary.", category="pricing_credits", claimable=True)
+            tech.maybe_push(out, job(9, backfill=True), run, send=lambda m: sends.append(m) or [])
+            tech.maybe_push(out, job(10, age=timedelta(hours=30)), run, send=lambda m: sends.append(m) or [])
+            tech.maybe_push(out, job(11), run, send=lambda m: sends.append(m) or [])
+        self.assertEqual((asked, run.ineligible, len(sends)), ([11], [9, 10], 1))  # the database is never asked
+        self.assertIn("2 not push-eligible", run.job_note)
+
+    def test_the_sql_is_the_twin(self) -> None:
+        sql = (REPO_ROOT / "db" / "046_tech_official_decay.sql").read_text(encoding="utf-8")
+        self.assertIn("NOT i.backfill AND i.fetched_at - i.published_at <= interval '24 hours'", sql)
+        self.assertEqual(tech.PUSH_FRESH, timedelta(hours=24))
+        self.assertIn("i.backfill, i.published_at, i.fetched_at", ledger.FEED_TECH_SUMMARY_QUEUE_SQL)
 
 
 class CapPath(unittest.TestCase):
