@@ -2166,7 +2166,8 @@ FEED_SUMMARY_QUEUE_SQL: Final = """
 #: speed rule: an official item is summarized in the cycle it was found),
 #: then newest published. The Home/Sports queue above leaves tech out.
 FEED_TECH_SUMMARY_QUEUE_SQL: Final = """
-    SELECT st.id, st.title, i.teaser, s.name, s.official, st.summary_attempts
+    SELECT st.id, st.title, i.teaser, s.name, s.official, st.summary_attempts,
+           i.backfill, i.published_at, i.fetched_at
       FROM stories st
       JOIN content_items i ON i.id = st.lead_item_id
       JOIN sources s ON s.id = i.source_id
@@ -2186,13 +2187,19 @@ class TechSummaryJob:
     source_name: str
     official: bool
     attempts: int
+    #: The lead item (db/046 push eligibility): a first-fetch backfill, when
+    #: it was published, and when it was first seen.
+    backfill: bool = False
+    published_at: datetime | None = None
+    first_seen_at: datetime | None = None
 
 
 def feed_tech_summary_queue(limit: int, max_attempts: int, *,
                             conn: psycopg.Connection | None = None) -> list[TechSummaryJob]:
     with _brief_conn(conn) as c:
         rows = c.execute(FEED_TECH_SUMMARY_QUEUE_SQL, {"limit": limit, "max_attempts": max_attempts}).fetchall()
-    return [TechSummaryJob(int(r[0]), r[1], r[2], r[3], bool(r[4]), int(r[5])) for r in rows]
+    return [TechSummaryJob(int(r[0]), r[1], r[2], r[3], bool(r[4]), int(r[5]), bool(r[6]), r[7], r[8])
+            for r in rows]
 
 _LOCAL_DAY_START = """
     (date_trunc('day', now() AT TIME ZONE coalesce((SELECT timezone FROM app_settings), 'America/Chicago'))

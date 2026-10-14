@@ -21,7 +21,9 @@ Community chip is the community's and an HN post never triggers a push.
 
 THE PUSH (owner): a story whose category is pricing_credits AND whose answer
 to CREDITS_QUESTION is yes gets one push, "Free credits: <headline>", deep
-link /tech/story/<id>. At most 3 a Chicago day and never the same story
+link /tech/story/<id>, if its lead item is push-eligible (push_eligible,
+db/046: not a first-fetch backfill, and published within 24 h of first
+seen). At most 3 a Chicago day and never the same story
 twice: the database decides (db/045 tech_credit_pushes; its trigger refuses
 a 4th and a repeat, and ledger.tech_credit_push asks first under the same
 lock). A failed push is not recorded and is logged as an error.
@@ -36,6 +38,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from typing import Any, Callable, Sequence
 
 from core import ai, ledger, memory, push
@@ -133,6 +136,20 @@ def wants_push(category: str | None, claimable: object) -> bool:
     """The owner's rule: pricing_credits AND a yes to CREDITS_QUESTION. The
     cap and the never-twice rule are the database's (db/045)."""
     return category == "pricing_credits" and claimable is True
+
+
+#: An item first seen more than this after it was published is old news.
+PUSH_FRESH = timedelta(hours=24)
+
+
+def push_eligible(backfill: bool, published_at: datetime | None, first_seen_at: datetime | None) -> bool:
+    """Owner, 2026-10-14 (after notification 323 pushed a backfill item): only
+    an item first seen on a cycle after its source's first successful fetch
+    (not a first-fetch backfill) AND published within 24 h of first seen.
+    The twin of db/046 tech_push_eligible, which the database enforces."""
+    if backfill or published_at is None or first_seen_at is None:
+        return False
+    return first_seen_at - published_at <= PUSH_FRESH
 
 
 def push_message(story_id: int, title: str, summary: str | None, *, test: bool = False) -> push.Message:
@@ -243,12 +260,16 @@ class TechRun:
     #: Story ids whose push was wanted but refused by the cap or a repeat.
     capped: list[int] = field(default_factory=list)
     push_errors: list[str] = field(default_factory=list)
+    #: Free-credits stories not pushed: a backfill, or old news (db/046).
+    ineligible: list[int] = field(default_factory=list)
 
     @property
     def job_note(self) -> str | None:
         parts = []
         if self.pushes:
             parts.append(f"{self.pushes} free-credits push(es)")
+        if self.ineligible:
+            parts.append(f"{len(self.ineligible)} not push-eligible (backfill or old)")
         if self.capped:
             parts.append(f"{len(self.capped)} over the cap or already pushed")
         if self.push_errors:
@@ -261,6 +282,10 @@ Send = Callable[[push.Message], Any]
 
 def maybe_push(out: ledger.SummaryOut, job: ledger.TechSummaryJob, run: TechRun, *, send: Send = push.send) -> None:
     if not wants_push(out.category, out.claimable):
+        return
+    if not push_eligible(job.backfill, job.published_at, job.first_seen_at):
+        run.ineligible.append(job.story_id)
+        log.info("feed tech: story %d is a free-credits story but not push-eligible (backfill or old)", job.story_id)
         return
     msg = push_message(job.story_id, job.title, out.summary)
     try:

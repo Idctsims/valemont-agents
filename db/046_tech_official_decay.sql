@@ -22,6 +22,19 @@
 -- Same 6 arguments and the same 27 output columns as db/045, so CREATE OR
 -- REPLACE keeps the function's grants.
 --
+-- Section 1b, push eligibility (owner, 2026-10-14, after notification 323
+-- pushed a first-fetch backfill item): a REAL free-credits push needs the
+-- story's lead item to be push-eligible:
+--   * first seen on a cycle after its source's first successful fetch (not
+--     a first-fetch backfill: content_items.backfill is false), AND
+--   * published within 24 hours of first seen (fetched_at - published_at
+--     <= 24 h).
+-- tech_credit_push_guard refuses anything else, and tech_credit_push_allowed
+-- answers false for it, so the worker never sends it. A forced test push
+-- (is_test) is not held to this. workers/feed/tech.py push_eligible is the
+-- twin. Notification 323 (tech_credit_pushes row 20) stays as history and
+-- counts toward 2026-10-13's cap.
+--
 -- A self-test runs on paste (section 2), rolled back: no row survives. A
 -- wrong result raises SELFTEST FAILED and nothing in this file is applied.
 --
@@ -183,6 +196,73 @@ AS $$
      LIMIT p_limit OFFSET p_offset;
 $$;
 
+-- ===================================================================== 1b
+-- Push eligibility: only a fresh item, never a first-fetch backfill.
+
+-- True when story p_story's lead item may trigger a real push.
+CREATE OR REPLACE FUNCTION public.tech_push_eligible(p_story bigint)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+    SELECT coalesce((
+        SELECT NOT i.backfill AND i.fetched_at - i.published_at <= interval '24 hours'
+          FROM public.stories st
+          JOIN public.content_items i ON i.id = st.lead_item_id
+         WHERE st.id = p_story), false);
+$$;
+
+CREATE OR REPLACE FUNCTION public.tech_credit_push_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+    -- One writer at a time: the count below and this insert are one decision.
+    PERFORM pg_advisory_xact_lock(hashtext('tech_credit_pushes'));
+    NEW.local_day := public.owner_today();
+    NEW.created_at := now();
+    IF NOT EXISTS (SELECT 1 FROM public.stories st WHERE st.id = NEW.story_id AND 'tech' = ANY (st.pillars)) THEN
+        RAISE EXCEPTION 'tech_credit_pushes: story % is not a tech story', NEW.story_id;
+    END IF;
+    IF NOT NEW.is_test THEN
+        IF EXISTS (SELECT 1 FROM public.stories st WHERE st.id = NEW.story_id AND st.is_test) THEN
+            RAISE EXCEPTION 'tech_credit_pushes: a real push for test story %', NEW.story_id;
+        END IF;
+        IF NOT public.tech_push_eligible(NEW.story_id) THEN
+            RAISE EXCEPTION 'tech_credit_pushes: story % is not push-eligible (a first-fetch backfill, or published more than 24 h before first seen)', NEW.story_id;
+        END IF;
+        IF EXISTS (SELECT 1 FROM public.tech_credit_pushes p WHERE p.story_id = NEW.story_id AND NOT p.is_test) THEN
+            RAISE EXCEPTION 'tech_credit_pushes: story % was already pushed', NEW.story_id;
+        END IF;
+        IF (SELECT count(*) FROM public.tech_credit_pushes p
+             WHERE p.local_day = NEW.local_day AND NOT p.is_test) >= 3 THEN
+            RAISE EXCEPTION 'tech_credit_pushes: the cap of 3 a day is reached for %', NEW.local_day;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.tech_credit_push_allowed(p_story bigint)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+    SELECT public.tech_credit_push_room() > 0
+       AND EXISTS (SELECT 1 FROM public.stories st
+                    WHERE st.id = p_story AND 'tech' = ANY (st.pillars) AND NOT st.is_test)
+       AND public.tech_push_eligible(p_story)
+       AND NOT EXISTS (SELECT 1 FROM public.tech_credit_pushes p WHERE p.story_id = p_story AND NOT p.is_test);
+$$;
+
+REVOKE ALL ON FUNCTION public.tech_push_eligible(bigint) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.tech_push_eligible(bigint) TO authenticated, valemont_readonly;
+
 -- ===================================================================== 2
 -- Self-test, run on paste, rolled back ('selftest-rollback').
 --
@@ -244,6 +324,59 @@ BEGIN
         IF abs(v_rank - (40 - ln(2.0) * 30 / 18)) > 0.001 THEN
             RAISE EXCEPTION 'SELFTEST FAILED: Home rank % changed (expected %)', v_rank, 40 - ln(2.0) * 30 / 18;
         END IF;
+        -- 5. Push eligibility. Three pricing stories from the official
+        --    source: a backfill item, one published 30 h before first seen,
+        --    and a fresh one (published 1 h before first seen).
+        DECLARE
+            v_bf    bigint;
+            v_old   bigint;
+            v_fresh bigint;
+            v_ok    boolean;
+            v_osrc  bigint := (SELECT id FROM public.sources WHERE slug = 'selftest-046-1');
+            j       int;
+        BEGIN
+            FOR j IN 1..3 LOOP
+                INSERT INTO public.stories (pillars, title, category)
+                VALUES (ARRAY['tech'], 'self-test 046 push #' || j, 'pricing_credits') RETURNING id INTO v_item;
+                INSERT INTO public.content_items (source_id, external_id, url, title, published_at, fetched_at,
+                                                  story_id, backfill)
+                VALUES (v_osrc, 'selftest046push:' || j, 'https://selftest.invalid/046/push/' || j,
+                        'self-test 046 push #' || j,
+                        now() - CASE j WHEN 2 THEN interval '30 hours' ELSE interval '1 hour' END, now(),
+                        v_item, j = 1)
+                RETURNING id INTO v_src;
+                UPDATE public.stories SET lead_item_id = v_src WHERE id = v_item;
+                CASE j WHEN 1 THEN v_bf := v_item; WHEN 2 THEN v_old := v_item; ELSE v_fresh := v_item; END CASE;
+            END LOOP;
+            IF public.tech_push_eligible(v_bf) OR public.tech_push_eligible(v_old)
+               OR NOT public.tech_push_eligible(v_fresh) THEN
+                RAISE EXCEPTION 'SELFTEST FAILED: tech_push_eligible (backfill %, 30 h %, fresh %)',
+                    public.tech_push_eligible(v_bf), public.tech_push_eligible(v_old),
+                    public.tech_push_eligible(v_fresh);
+            END IF;
+            -- The worker's check says no for both (whatever today's room).
+            IF public.tech_credit_push_allowed(v_bf) OR public.tech_credit_push_allowed(v_old) THEN
+                RAISE EXCEPTION 'SELFTEST FAILED: tech_credit_push_allowed said yes to an ineligible story';
+            END IF;
+            -- The trigger refuses both as real pushes, with the eligibility reason.
+            FOREACH v_item IN ARRAY ARRAY[v_bf, v_old] LOOP
+                v_ok := false;
+                BEGIN
+                    INSERT INTO public.tech_credit_pushes (story_id) VALUES (v_item);
+                EXCEPTION WHEN raise_exception THEN v_ok := SQLERRM LIKE '%not push-eligible%';
+                END;
+                IF NOT v_ok THEN
+                    RAISE EXCEPTION 'SELFTEST FAILED: an ineligible story (%) was pushed', v_item;
+                END IF;
+            END LOOP;
+            -- A test push is not held to it; the fresh story passes eligibility
+            -- (the cap may still refuse it on a day with 3 real pushes).
+            INSERT INTO public.tech_credit_pushes (story_id, is_test) VALUES (v_bf, true);
+            IF public.tech_credit_push_room() > 0 THEN
+                INSERT INTO public.tech_credit_pushes (story_id) VALUES (v_fresh);
+            END IF;
+        END;
+
         -- 4. The callers by name still resolve.
         IF jsonb_typeof(public.ctx_tech() -> 'top_stories') IS DISTINCT FROM 'array'
            OR jsonb_typeof(public.ctx_feed() -> 'top_stories') IS DISTINCT FROM 'array' THEN
@@ -268,6 +401,9 @@ ON CONFLICT (name) DO NOTHING;
 --   (a) feed_for_you's body has the 72-hour half-life; 27 output columns;
 --       readonly executes it, anon does not
 --   (b) the migration_log row (and the NOTICE "046 self-test passed")
+--   (c) push eligibility: the guard and the check call tech_push_eligible;
+--       readonly executes it, anon does not; story 8359 (notification 323,
+--       the Vercel backfill item) is NOT eligible; its push row 20 stays
 -- ---------------------------------------------------------------------------
 
 SELECT pg_get_functiondef(p.oid) LIKE '%tech_official_half_life_h%' AS slow_official,
@@ -278,3 +414,10 @@ SELECT pg_get_functiondef(p.oid) LIKE '%tech_official_half_life_h%' AS slow_offi
  WHERE p.oid = 'public.feed_for_you(text, integer, integer, text, text, integer)'::regprocedure; -- (a)
 
 SELECT name, applied_at FROM migration_log WHERE name = '046_tech_official_decay';        -- (b)
+
+SELECT pg_get_functiondef('public.tech_credit_push_guard()'::regprocedure) LIKE '%tech_push_eligible%' AS guard_checks,
+       pg_get_functiondef('public.tech_credit_push_allowed(bigint)'::regprocedure) LIKE '%tech_push_eligible%' AS allowed_checks,
+       has_function_privilege('valemont_readonly', 'public.tech_push_eligible(bigint)', 'EXECUTE') AS readonly_exec,
+       has_function_privilege('anon', 'public.tech_push_eligible(bigint)', 'EXECUTE') AS anon_exec,
+       tech_push_eligible(8359) AS story_8359_eligible,
+       (SELECT count(*) FROM tech_credit_pushes WHERE id = 20) AS row_20_kept;               -- (c)

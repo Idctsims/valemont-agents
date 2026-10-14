@@ -201,7 +201,8 @@ class NoCrossIn(TechSqlCase):
 
 
 class OfficialDecay(TechSqlCase):
-    """db/046: an official tech story decays at rank.TECH_OFFICIAL_HALF_LIFE_H."""
+    """db/046: an official tech story decays at rank.TECH_OFFICIAL_HALF_LIFE_H,
+    and only a push-eligible item may push."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -222,6 +223,32 @@ class OfficialDecay(TechSqlCase):
             self.assertAlmostEqual(rows[off], rank.rank_of(5, 48, 0, rank.half_life("tech", True)), places=2)
             self.assertAlmostEqual(rows[com], rank.rank_of(5, 20, 0, rank.half_life("tech", False)), places=2)
             self.assertGreater(rows[off], rows[com])
+
+    def test_a_backfill_or_old_item_never_pushes(self) -> None:
+        # Owner, 2026-10-14: eligible only if not a first-fetch backfill AND
+        # published within 24 h of first seen; the database refuses the rest.
+        from datetime import datetime, timedelta, timezone
+        with _rolled_back() as conn:
+            src = self.tech_source(conn)
+            ids = {}
+            for name, backfill, age in (("backfill", True, 1), ("old", False, 30), ("fresh", False, 1)):
+                item = ledger.FeedItemIn(f"tl:{uuid.uuid4().hex}", f"https://tests-live.invalid/{uuid.uuid4().hex}",
+                                         None, f"TL push {name}", None,
+                                         datetime.now(timezone.utc) - timedelta(hours=age), False, "time", backfill)
+                v = [1.0] + [0.0] * 383
+                ids[name] = ledger.feed_new_story(src, item, v, v, filtered_reason=None, seed=None, conn=conn)[0]
+                conn.execute("UPDATE stories SET category = 'pricing_credits' WHERE id = %s", (ids[name],))
+            got = {n: conn.execute("SELECT tech_push_eligible(%s)", (sid,)).fetchone()[0] for n, sid in ids.items()}
+            self.assertEqual(got, {"backfill": False, "old": False, "fresh": True})
+            sent: list[int] = []
+            for n in ("backfill", "old"):
+                self.assertIsNone(ledger.tech_credit_push(ids[n], lambda: sent.append(1), conn=conn))
+                with self.assertRaises(psycopg.errors.RaiseException), conn.transaction():
+                    conn.execute("INSERT INTO tech_credit_pushes (story_id) VALUES (%s)", (ids[n],))
+            self.assertEqual(sent, [])
+            # The Vercel backfill item that pushed before the rule (story 8359).
+            if conn.execute("SELECT EXISTS (SELECT 1 FROM stories WHERE id = 8359)").fetchone()[0]:
+                self.assertFalse(conn.execute("SELECT tech_push_eligible(8359)").fetchone()[0])
 
 
 class WorkerQueries(TechSqlCase):
