@@ -307,7 +307,11 @@ and in the root `.env`; absent on Vercel; `GITHUB_TOKEN` set nowhere.
   measured. `stars_7d` is MEASURED (today's snapshot minus the one exactly 7
   days ago) or an ESTIMATE, always labelled: trending's stars in period
   ("trending est."), every star of a repo under 7 days old ("since created"),
-  or the age average ("est."). The labels live once in `repos.LABELS` and the
+  or the age average ("avg est."; it was "est." until the owner asked, on
+  2026-10-14, to tell the two guesses apart). A trending count over the
+  repo's total stars is a parse failure; one over half the total on a repo
+  older than 30 days is FLAGGED (logged and listed in the job note, not
+  dropped). The labels live once in `repos.LABELS` and the
   web's `STARS_7D_LABELS`, pinned equal by `e2e/repos-unit.spec.ts`.
 - **Selection.** Hard filters: archived, fork, no README, not pushed in 90
   days. Rank: the tech profile (`rank.score_story` with the repo's embedding
@@ -399,8 +403,17 @@ order:
 | 8 | 2.05 | Louis-CFM/coucou | 2,144 (age_average) | A Mac notch / iPhone companion that watches your agents |
 
 Next below the line: mhtsec/ARTEX 2.03, boykopovar/AnyPS5 2.02,
-yetone/magpie 1.99, cosscom/shipyard 1.95. The deploy's first real run will
-differ (a later day's trending and searches); its 8 are recorded separately.
+yetone/magpie 1.99, cosscom/shipyard 1.95. The deploy's first real run
+(21:27–21:29 UTC Oct 14) surfaced the same 8.
+
+**morluto/rea's 183,758 stars_7d (checked 2026-10-14, owner's question).**
+Not a parse error: the saved fixture and the live weekly page both show
+"183,758 stars this week" on that card beside 238,274–239,045 total, and
+the parser reads each from its own element. The number is GitHub's, on a repo
+created 2026-04-14: 77% of its stars in one week, at six months old. Under
+the flag rule (above) it is flagged from the next run. Its rank is
+unchanged: the flag does not alter the score, by design, until the owner
+decides otherwise.
 
 ### 7.3 Order of operations
 

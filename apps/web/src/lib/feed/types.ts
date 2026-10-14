@@ -52,7 +52,7 @@ export const STARS_7D_LABELS: Readonly<Record<Stars7dSource, string>> = {
   trending_weekly: "trending est.",
   trending_daily: "trending est.",
   since_created: "since created",
-  age_average: "est.",
+  age_average: "avg est.",
 };
 
 export type RepoInfo = {

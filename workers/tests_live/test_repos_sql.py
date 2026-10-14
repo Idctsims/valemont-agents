@@ -363,6 +363,24 @@ class WorkerQueries(RepoSqlCase):
             self.assertIn(sid, [r[0] for r in conn.execute("SELECT id FROM feed_for_you('tech', 8, 0)").fetchall()])
             self.assertNotIn(sid, [j.story_id for j in ledger.feed_why_queue(8, conn=conn)])
 
+    def test_the_why_queue_is_page_one_in_rank_order_across_home_and_tech(self) -> None:
+        """Owner, 2026-10-14: position 1 of each pillar, then 2, ... (Home
+        before Tech at a tie), never Home's whole list first."""
+        with _rolled_back() as conn:
+            home = self.story(conn, self.source(conn))
+            tech = self.story(conn, self.gh_source(conn))  # a tech story, not category repos
+            self.score(conn, home, 49.9)
+            self.score(conn, tech, 49.9, pillar="tech")
+            pos = {}
+            for feed, pillar in ((0, "home"), (1, "tech")):
+                for sid, p in conn.execute("SELECT id, pos FROM feed_for_you(%s, 30, 0)", (pillar,)).fetchall():
+                    pos[sid] = (p, feed)
+            queue = [j.story_id for j in ledger.feed_why_queue(30, conn=conn)]
+            self.assertIn(home, queue)
+            self.assertIn(tech, queue)
+            self.assertEqual([pos[s] for s in queue], sorted(pos[s] for s in queue))
+            self.assertTrue(all(pos[s][0] <= 30 for s in queue))
+
     def test_the_prune_keeps_a_surfaced_story(self) -> None:
         with _rolled_back() as conn:
             sid, _, _ = self.surfaced(conn)

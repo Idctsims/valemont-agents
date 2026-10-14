@@ -3002,9 +3002,11 @@ class WhyJob:
 
 
 #: Home's and Tech's top `top` stories in For you that were never asked "why
-#: it matters" (Tech since db/045: the why-it-matters engine is shared).
-#: Home first, then Tech, each in For you order. Repo stories are asked by
-#: their own job (db/049; FEED_REPO_WHY_QUEUE_SQL, feed/why.py repo_why_job).
+#: it matters" (Tech since db/045: the why-it-matters engine is shared). In
+#: rank order across the two (owner, 2026-10-14): position 1 of each, then
+#: position 2, Home before Tech at a tie, so page one is asked first. It was
+#: Home's whole list, then Tech's. Repo stories are asked by their own job
+#: (db/049; FEED_REPO_WHY_QUEUE_SQL, feed/why.py repo_why_job).
 FEED_WHY_QUEUE_SQL: Final = """
     SELECT x.id, x.title, x.summary, x.source_name
       FROM (SELECT f.id, f.title, f.summary, f.source_name, 0 AS feed, f.pos
@@ -3014,7 +3016,7 @@ FEED_WHY_QUEUE_SQL: Final = """
               FROM feed_for_you('tech', %(top)s, 0) f) x
       JOIN stories st ON st.id = x.id
      WHERE st.why_generated_at IS NULL AND st.category IS DISTINCT FROM 'repos'
-     ORDER BY x.feed, x.pos
+     ORDER BY x.pos, x.feed
 """
 
 

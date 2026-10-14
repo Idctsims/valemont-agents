@@ -1,9 +1,11 @@
 """feed_why: the "Why it matters" line (Chat 3 Phase 2; docs/feed_ranking.md §3).
 
 Chained after every feed_score (so after each ingest) and after every
-feed_profile rebuild. Its queue is Home's top TOP stories in For you
-(db/039 feed_for_you) that were never asked; a story is asked once, whatever
-the answer (stories.why_generated_at).
+feed_profile rebuild. Its queue is Home's and Tech's top TOP stories in For
+you (db/039 feed_for_you, page one) that were never asked, in rank order:
+position 1 of each, then position 2, and so on (owner, 2026-10-14). A story
+is asked once, whatever the answer (stories.why_generated_at). Repo stories
+are asked by repo_why_job instead.
 
 One core.ai.complete() call per group of up to GROUP_SIZE stories: Haiku,
 non-critical, thinking off, a cached system prompt, structured JSON. At most
@@ -35,9 +37,15 @@ log = logging.getLogger("valemont.feed.why")
 
 MODEL = "claude-haiku-5-5"
 PURPOSE = "feed_why"
-TOP = 8
+#: Home's and Tech's For you page one (rank.PAGE_SIZE), asked in rank order,
+#: position by position across the two (owner, 2026-10-14: "rank-ordered like
+#: summaries, page-one stories first"). It was the top 8 each.
+TOP = 30
 GROUP_SIZE = 8
-DAILY_CALLS = 20
+#: Owner, 2026-10-14: 20 a day ran out at 14:55 Chicago on Oct 14 (19 of 20
+#: used), so the evening feed got no lines. ~$0.0002 a call: ~$0.02 a day at
+#: the cap (docs/feed_ranking.md). Repo stories keep their own cap.
+DAILY_CALLS = 100
 MAX_WORDS = 20
 MAX_CHARS = 200
 #: The prompt forbids hedging; a line that hedges is guessing at a link, so it

@@ -69,6 +69,21 @@ class TrendingParser(unittest.TestCase):
         with self.assertRaisesRegex(repos.TrendingParseFailed, "card 2"):
             repos.parse_trending(fixture("trending_broken_card"), "daily")
 
+    def test_more_stars_in_the_period_than_in_total_is_impossible(self) -> None:
+        page = ('<article class="Box-row"><h2><a href="/o/r">o / r</a></h2>'
+                '<a href="/o/r/stargazers">1,000</a>'
+                '<span class="d-inline-block float-sm-right">1,001 stars this week</span></article>')
+        with self.assertRaisesRegex(repos.TrendingParseFailed, "1001 stars in the period but 1000 in total"):
+            repos.parse_trending(page, "weekly")
+        ok = page.replace("1,001 stars", "1,000 stars")
+        self.assertEqual(repos.parse_trending(ok, "weekly")[0].stars_period, 1000)
+
+    def test_the_fixture_reads_rea_as_github_states_it(self) -> None:
+        # The page itself says "183,758 stars this week" next to 238,274
+        # total (checked against the live page, 2026-10-14): not a parse error.
+        rea = repos.parse_trending(fixture("trending_weekly"), "weekly")[0]
+        self.assertEqual((rea.full_name, rea.stars, rea.stars_period), ("morluto/rea", 238274, 183758))
+
     def test_counts(self) -> None:
         self.assertEqual(repos.parse_count("238,274"), 238274)
         self.assertEqual(repos.parse_count("1.2k"), 1200)
@@ -124,7 +139,9 @@ class Stars7d(unittest.TestCase):
         self.assertEqual(repos.stars_7d(young, None, NOW), (120, "since_created"))
         older = cand(created_at=NOW - timedelta(days=14), stars=1400)
         self.assertEqual(repos.stars_7d(older, None, NOW), (700, "age_average"))
-        self.assertEqual(repos.LABELS["age_average"], "est.")
+        self.assertEqual(repos.LABELS["age_average"], "avg est.")
+        # The two guesses read differently on the card (owner, 2026-10-14).
+        self.assertNotEqual(repos.LABELS["age_average"], repos.LABELS["trending_weekly"])
         self.assertTrue(all(repos.is_estimate(s) for s in ("since_created", "age_average")))
         self.assertEqual(repos.stars_7d(cand(created_at=NOW - timedelta(days=400)), None, NOW), (None, None))
 
@@ -145,6 +162,18 @@ class Stars7d(unittest.TestCase):
         self.assertIn("<= p_day - 14", fn)
         self.assertIn("p_stars_7d >= 2 * greatest((SELECT b.stars_7d FROM baseline b), 1)", fn)
         self.assertIn("RAISE NOTICE '050 self-test passed (rolled back)'", sql)
+
+    def test_over_half_the_total_on_an_old_repo_is_flagged(self) -> None:
+        rea = cand(stars=239045, trending_weekly=183758, created_at=NOW - timedelta(days=183))
+        self.assertTrue(repos.trending_suspect(rea, NOW))
+        # Half or less: not flagged. A repo 30 days old or younger: not flagged.
+        self.assertFalse(repos.trending_suspect(cand(stars=1000, trending_weekly=500,
+                                                     created_at=NOW - timedelta(days=90)), NOW))
+        self.assertFalse(repos.trending_suspect(cand(stars=1000, trending_weekly=900,
+                                                     created_at=NOW - timedelta(days=30)), NOW))
+        self.assertTrue(repos.trending_suspect(cand(stars=1000, trending_daily=600,
+                                                    created_at=NOW - timedelta(days=31)), NOW))
+        self.assertFalse(repos.trending_suspect(cand(stars=1000, created_at=NOW - timedelta(days=400)), NOW))
 
     def test_a_negative_measurement_is_floored(self) -> None:
         self.assertEqual(repos.stars_7d(cand(), -5, NOW), (0, "measured"))
@@ -490,6 +519,15 @@ class RepoWhy(unittest.TestCase):
                                    self.NAMES)
         self.assertEqual(out, {1: "Speeds up the dashboard feed.", 2: why.GENERAL})
         self.assertEqual(why.repo_answers_for(jobs, None, self.NAMES), {1: why.GENERAL, 2: why.GENERAL})
+
+    def test_home_and_tech_why_cap_and_rank_order(self) -> None:
+        """Owner, 2026-10-14: 100 calls a day (20 ran out at 14:55 Chicago),
+        page one of each pillar, asked position by position across both;
+        repo why keeps its own cap."""
+        self.assertEqual((why.DAILY_CALLS, why.TOP, why.REPO_DAILY_CALLS), (100, 30, 4))
+        self.assertEqual(why.TOP, rank.PAGE_SIZE)
+        self.assertIn("ORDER BY x.pos, x.feed", ledger.FEED_WHY_QUEUE_SQL)
+        self.assertNotEqual(why.PURPOSE, why.REPO_PURPOSE)
 
     def test_home_why_never_asks_a_repo_story(self) -> None:
         self.assertIn("st.category IS DISTINCT FROM 'repos'", ledger.FEED_WHY_QUEUE_SQL)

@@ -29,7 +29,9 @@ test.describe("stars_7d labels", () => {
     expect(stars7dText({ stars7d: 1204, stars7dSource: "trending_weekly" })).toBe("+1,204 trending est.");
     expect(stars7dText({ stars7d: 88, stars7dSource: "trending_daily" })).toBe("+88 trending est.");
     expect(stars7dText({ stars7d: 120, stars7dSource: "since_created" })).toBe("+120 since created");
-    expect(stars7dText({ stars7d: 50, stars7dSource: "age_average" })).toBe("+50 est.");
+    expect(stars7dText({ stars7d: 50, stars7dSource: "age_average" })).toBe("+50 avg est.");
+    // The two guesses read differently (owner, 2026-10-14).
+    expect(STARS_7D_LABELS.age_average).not.toBe(STARS_7D_LABELS.trending_weekly);
     const estimates: Stars7dSource[] = ["trending_weekly", "trending_daily", "since_created", "age_average"];
     for (const s of estimates) expect(STARS_7D_LABELS[s]).not.toBe("7d");
   });
