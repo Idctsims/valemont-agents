@@ -49,7 +49,13 @@ class Rules:
 
     @staticmethod
     def _applies(rule: Rule, pillars: Sequence[str]) -> bool:
-        return rule.pillar is None or rule.pillar in pillars
+        """A rule with no pillar is Home's and Sports' (db/032 meant "both"
+        before Tech existed): it never touches a tech story, where "promo
+        code" or "deals" can be exactly the free-credits news the owner wants
+        (db/045). A tech rule names pillar 'tech'."""
+        if rule.pillar is None:
+            return "tech" not in pillars
+        return rule.pillar in pillars
 
     def filter_reason(self, *, title: str, url: str | None, pillars: Sequence[str]) -> str | None:
         """'url_regex:<id>' or 'title_regex:<id>' for the first live rule that

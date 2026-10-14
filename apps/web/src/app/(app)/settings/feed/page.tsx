@@ -3,11 +3,15 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 
 import { MoveProposals } from "@/components/feed/move-proposals";
+import { StatusChip, type LegStatus } from "@/components/ui/badges";
 import { Fold } from "@/components/ui/fold";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireOwner } from "@/lib/auth";
 import { MARKER_HEADER, decideMarker } from "@/lib/capital/marker";
-import { boostsNow, feedProfile, moveProposals, type BoostNow, type FollowSummary, type ProfileSummary } from "@/lib/feed/data";
+import {
+  boostsNow, feedProfile, moveProposals, techSourcesHealth,
+  type BoostNow, type FollowSummary, type ProfileSummary, type TechSourceRow,
+} from "@/lib/feed/data";
 import { ago, type Pillar } from "@/lib/feed/types";
 import { createClient } from "@/lib/supabase/server";
 
@@ -19,7 +23,7 @@ export const metadata: Metadata = { title: "Feed profile" };
 // and how the profile moved rebuild by rebuild. Reads only, through RLS; the
 // worker rebuilds at 04:00 Chicago (feed_profile).
 
-const PILLAR_LABEL: Record<Pillar, string> = { home: "Home", sports: "Sports" };
+const PILLAR_LABEL: Record<Pillar, string> = { home: "Home", sports: "Sports", tech: "Tech" };
 const TOP = 6;
 
 function top(weights: Record<string, number>, sign: 1 | -1): [string, number][] {
@@ -140,6 +144,59 @@ function Follows({ follows }: { follows: FollowSummary[] }) {
   );
 }
 
+const FEED_INTERVAL_MS = 30 * 60 * 1000;
+
+/** /settings/sources' rule: off, failing (6 in a row), N failed, not yet,
+ * stale (two missed runs), OK. */
+function techStatus(s: TechSourceRow, now: number): { status: LegStatus; label: string } {
+  if (!s.active) return { status: "dead", label: "Off" };
+  if (s.failures >= 6) return { status: "danger", label: "Failing" };
+  if (s.failures > 0) return { status: "on-pace", label: `${s.failures} failed` };
+  if (!s.lastOkAt) return { status: "on-pace", label: "Not yet" };
+  if (now - Date.parse(s.lastOkAt) > 2 * FEED_INTERVAL_MS) return { status: "danger", label: "Stale" };
+  return { status: "hit", label: "OK" };
+}
+
+/** Tech Hub's sources (db/045): each one's last good fetch, newest item and
+ * failures in a row, so a broken page watcher shows here before its items
+ * go missing from /tech. */
+function TechSources({ rows, now }: { rows: TechSourceRow[]; now: number }) {
+  return (
+    <section data-testid="tech-sources" className="border-t border-border pt-5 pb-8">
+      <h2 className="font-display text-2xl text-text">Tech sources</h2>
+      <p className="mt-1 text-sm text-text-muted text-pretty">
+        Checked every 30 minutes. Official sources are summarized first; a failing one alerts after six misses in a row.
+      </p>
+      {rows.length === 0 ? (
+        <p className="mt-3 text-sm text-text-muted">No tech sources yet. They sync at the worker&apos;s next start.</p>
+      ) : (
+        <ul className="mt-3 flex flex-col">
+          {rows.map((s) => (
+            <li key={s.slug} data-testid="tech-source" data-slug={s.slug} className="border-b border-border py-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <span className="text-sm text-text">
+                  {s.name}
+                  {s.official && <span className="label-mono ml-2 text-accent">Official</span>}
+                  {!s.active && <span className="label-mono ml-2 text-text-muted">Off</span>}
+                </span>
+                <span data-testid="tech-source-status">
+                  <StatusChip {...techStatus(s, now)} />
+                </span>
+              </div>
+              <p className="mt-1 font-mono text-xs text-text-muted">
+                last ok {ago(s.lastOkAt, now)} · last item {ago(s.lastItemAt, now)} · {s.items24h} in 24 h
+              </p>
+              {(s.failures > 0 && s.lastError) || (!s.active && s.notes) ? (
+                <p className="mt-1 text-xs text-text-muted text-pretty">{s.failures > 0 ? s.lastError : s.notes}</p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 const CHICAGO_DAY = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 function Boosts({ boosts }: { boosts: BoostNow[] }) {
@@ -173,12 +230,13 @@ export default async function FeedProfilePage() {
   const now = Date.now();
   // Test proposals only for a verified e2e request (the rule for test stories).
   const withTests = decideMarker((await headers()).get(MARKER_HEADER), process.env).kind === "test";
-  const [{ latest, history, follows, pendingReactions }, proposals, boosts] = await Promise.all([
+  const [{ latest, history, follows, pendingReactions }, proposals, boosts, techSources] = await Promise.all([
     feedProfile(supabase),
     moveProposals(supabase, { withTests }),
     boostsNow(supabase, new Date(now).toISOString()),
+    techSourcesHealth(supabase),
   ]);
-  const pillars = (["home", "sports"] as const).filter((p) => latest[p]);
+  const pillars = (["home", "sports", "tech"] as const).filter((p) => latest[p]);
 
   return (
     <>
@@ -207,6 +265,8 @@ export default async function FeedProfilePage() {
         <Follows follows={follows} />
 
         <Boosts boosts={boosts} />
+
+        <TechSources rows={techSources} now={now} />
 
         {history.length > 0 && (
           <Fold label="Rebuilds" count={history.length} testId="profile-history">

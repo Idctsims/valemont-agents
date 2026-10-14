@@ -36,8 +36,12 @@
     feed_ingest      30 min  and 20 s after boot: syncs workers/feed/sources.toml
                              (first run only), fetches every active source,
                              dedupes and clusters into stories (feed/ingest.py).
-                             Then runs feed_summarize, whatever the outcome.
-    feed_summarize   chained Haiku summaries for new stories (feed/summarize.py).
+                             Then runs feed_tech_summarize and feed_summarize,
+                             whatever the outcome.
+    feed_tech_summarize chained, first: Haiku summaries and categories for
+                             new TECH stories, official first, and the
+                             free-credits push (feed/tech.py, db/045).
+    feed_summarize   chained Haiku summaries for new Home and Sports stories (feed/summarize.py).
                              Never scheduled on its own (SystemJob.scheduled
                              False) but registered and watched: stale after an
                              hour means ingest has stopped calling it.
@@ -80,6 +84,7 @@ from core.jobs import SystemJob, describe, run_tracked
 from feed import ingest as feed_ingest
 from feed import profile as feed_profile_mod
 from feed import summarize as feed_summarize
+from feed import tech as feed_tech
 from feed import why as feed_why
 
 log = logging.getLogger("valemont.system")
@@ -407,7 +412,11 @@ def snapshot_capital() -> dict[str, int]:
 FEED_INTERVAL_S = 30 * 60
 
 #: Run by feed_ingest_job, never by the scheduler (scheduled=False). The
-#: trigger is required by SystemJob and unused.
+#: trigger is required by SystemJob and unused. Tech's summaries come first
+#: (owner, 2026-10-13: an official item is summarized in the cycle it was
+#: found, before the Home and Sports backlog).
+FEED_TECH_SUMMARIZE = SystemJob("feed_tech_summarize", FEED_INTERVAL_S, IntervalTrigger(seconds=FEED_INTERVAL_S),
+                                feed_tech.tech_summarize_job, scheduled=False)
 FEED_SUMMARIZE = SystemJob("feed_summarize", FEED_INTERVAL_S, IntervalTrigger(seconds=FEED_INTERVAL_S),
                            feed_summarize.summarize_job, scheduled=False)
 #: Chained the same way: feed_score after feed_summarize, feed_why after it.
@@ -435,7 +444,7 @@ def feed_ingest_job() -> None:
     try:
         feed_ingest.ingest_job()
     finally:
-        _chain(FEED_SUMMARIZE, FEED_SCORE, FEED_WHY)
+        _chain(FEED_TECH_SUMMARIZE, FEED_SUMMARIZE, FEED_SCORE, FEED_WHY)
 
 
 def feed_profile_job() -> None:
@@ -497,6 +506,7 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
                   brief.morning_brief_push_job, misfire_grace=600),
         SystemJob("feed_ingest", FEED_INTERVAL_S, IntervalTrigger(seconds=FEED_INTERVAL_S),
                   feed_ingest_job, misfire_grace=600, start_delay_s=20),
+        FEED_TECH_SUMMARIZE,
         FEED_SUMMARIZE,
         FEED_SCORE,
         FEED_WHY,

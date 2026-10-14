@@ -78,11 +78,12 @@ class RebuildStats:
         return "; ".join(parts) + f"; {self.scored} scores for {self.stories} stories"
 
 
-def build_profiles(*, embed: Embed = embedder.embed) -> tuple[dict[str, rank.Profile], dict[str, int], RebuildStats]:
-    """A new profile per pillar that has stories in the mean window. Returns
-    (profiles, their ids, stats)."""
+def build_profiles(*, embed: Embed = embedder.embed,
+                   pillars: Sequence[str] = rank.PILLARS) -> tuple[dict[str, rank.Profile], dict[str, int], RebuildStats]:
+    """A new profile per pillar (of `pillars`) that has stories in the mean
+    window. Returns (profiles, their ids, stats)."""
     seeds = ledger.feed_seed_phrases()
-    phrases = [(p, kind, text) for p in rank.PILLARS for kind in ("love", "not_interested")
+    phrases = [(p, kind, text) for p in pillars for kind in ("love", "not_interested")
                for text in seeds.get(p, {}).get(kind, [])]
     vectors = embed([t for _, _, t in phrases]) if phrases else []
     seed_vecs: dict[tuple[str, str], list[rank.Vec]] = {}
@@ -92,7 +93,7 @@ def build_profiles(*, embed: Embed = embedder.embed) -> tuple[dict[str, rank.Pro
     profiles: dict[str, rank.Profile] = {}
     ids: dict[str, int] = {}
     stats = RebuildStats()
-    for pillar in rank.PILLARS:
+    for pillar in pillars:
         ps = PillarStats(pillar)
         stats.pillars.append(ps)
         mean_vec, n = ledger.feed_mean_vector(pillar, rank.MEAN_WINDOW_D)
@@ -147,13 +148,24 @@ def profile_job(*, embed: Embed = embedder.embed) -> RebuildStats:
     return rebuild(embed=embed)
 
 
-def score_new_job() -> int:
-    """The feed_score system job: score stories with no score row yet."""
+def score_new_job(*, embed: Embed = embedder.embed) -> int:
+    """The feed_score system job: score stories with no score row yet. Once
+    any profile exists, a pillar with none (Tech, the first time its stories
+    arrive: db/045) gets its first one built here, so its stories are scored
+    in the same cycle instead of waiting for the 04:00 rebuild. With no
+    profile at all it skips: feed_profile builds the first ones."""
     latest = ledger.feed_latest_profiles()
     if not latest:
         raise JobSkipped("no interest profile yet; feed_profile builds the first")
     profiles = {p: profile_from(r) for p, r in latest.items()}
     ids = {p: r.id for p, r in latest.items()}
+    missing = [p for p in rank.PILLARS if p not in latest]
+    if missing:
+        built, built_ids, stats = build_profiles(embed=embed, pillars=missing)
+        profiles.update(built)
+        ids.update(built_ids)
+        if built:
+            log.info("feed score: first profile for %s: %s", ", ".join(sorted(built)), stats.line())
     try:
         stories = ledger.feed_stories_to_score(rank.WINDOW_H, MAX_ATTEMPTS, unscored=True)
         if not stories:

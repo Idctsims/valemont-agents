@@ -15,7 +15,9 @@ import { createClient } from "@/lib/supabase/server";
 // applies (owner_id defaults to auth.uid(); the policy checks it). Returns an
 // ActionResult and never throws an expected failure (src/lib/action-result.ts).
 
-const PILLARS: Pillar[] = ["home", "sports"];
+// Tech (db/045): a tech reaction only on a tech story; the database's
+// feed_pillar_guard refuses a cross-line row, and the error reads plainly.
+const PILLARS: Pillar[] = ["home", "sports", "tech"];
 
 export async function reactToStory(input: { storyId: number; pillar: Pillar; reaction: CardReaction }): Promise<ActionResult> {
   return settle(async () => {
@@ -29,7 +31,9 @@ export async function reactToStory(input: { storyId: number; pillar: Pillar; rea
       .from("feed_reactions")
       .insert({ story_id: storyId, pillar: input.pillar, reaction: input.reaction });
     if (error) {
-      throw new Refusal(error.code === "23503" ? "That story is gone." : `Couldn't save that: ${error.message}`);
+      if (error.code === "23503") throw new Refusal("That story is gone.");
+      if (error.message.includes("crosses the tech line")) throw new Refusal("That story belongs to another feed.");
+      throw new Refusal(`Couldn't save that: ${error.message}`);
     }
     refresh();
   });

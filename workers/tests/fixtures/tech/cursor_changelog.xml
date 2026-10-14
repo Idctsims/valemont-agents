@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Cursor Changelog</title>
+    <description>The latest product updates, release notes, and improvements from Cursor.</description>
+    <link>https://cursor.com/changelog</link>
+    <language>en-US</language>
+    <lastBuildDate>Wed, 14 Oct 2026 01:55:02 GMT</lastBuildDate>
+    <atom:link href="https://cursor.com/changelog/rss.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Origin App Marketplace</title>
+      <link>https://cursor.com/changelog/origin-app-marketplace</link>
+      <guid isPermaLink="true">https://cursor.com/changelog/origin-app-marketplace</guid>
+      <pubDate>Tue, 13 Oct 2026 00:00:00 GMT</pubDate>
+      <description>Origin integrates with over 20 apps for deployments, CI, code review, security, monitoring, and project management, and the marketplace is now open to public submissions.</description>
+
+      <content:encoded><![CDATA[<p>Origin now integrates with over 20 apps for deployments, CI, code review, security, monitoring, and project management, from partners including Cloudflare, Linear, Sentry, and Socket Security.</p>
+<p>Starting today, the marketplace is also open to public submissions, so any team building developer tools can publish an app for Origin.</p>
+<h2>Apps for your stack</h2>
+<p>The marketplace now includes apps for:</p>
+<ul>
+<li>**Deployments:** <a href="https://cursor.com/codebase/apps/public/cloudflare">Cloudflare</a>, <a href="https://cursor.com/codebase/apps/public/netlify">Netlify</a>, <a href="https://cursor.com/codebase/apps/public/render">Render</a>, <a href="https://cursor.com/codebase/apps/public/spacelift-deploy-us">Spacelift</a>, and <a href="https://cursor.com/codebase/apps/public/vercel">Vercel</a></li>
+<li>**CI:** <a href="https://cursor.com/codebase/apps/public/buildkite">Buildkite</a>, <a href="https://cursor.com/codebase/apps/public/circleci">CircleCI</a>, <a href="https://www.cloudbees.com/blog/enterprise-jenkins-now-builds-from-cursor-origin">CloudBees</a>, <a href="https://cursor.com/codebase/apps/public/depot">Depot</a>, <a href="https://cursor.com/codebase/apps/public/engflow">EngFlow</a>, <a href="https://cursor.com/codebase/apps/public/namespacelabs">Namespace</a>, and <a href="https://cursor.com/codebase/apps/public/rwx">RWX</a></li>
+<li>**Code review:** <a href="https://cursor.com/codebase/apps/public/coderabbitai">CodeRabbit</a>, <a href="https://cursor.com/codebase/apps/public/greptile">Greptile</a>, and <a href="https://cursor.com/codebase/apps/public/tenki">Tenki</a></li>
+<li>**Security:** <a href="https://cursor.com/codebase/apps/public/artemis-security">Artemis Security</a>, <a href="https://cursor.com/codebase/apps/public/semgrep">Semgrep</a>, <a href="https://cursor.com/codebase/apps/public/socket-security">Socket Security</a>, and <a href="https://cursor.com/codebase/apps/public/upwind-security">Upwind</a></li>
+<li>**Monitoring:** <a href="https://cursor.com/codebase/apps/public/sentry">Sentry</a></li>
+<li>**Project management:** <a href="https://cursor.com/codebase/apps/public/linear">Linear</a></li>
+</ul>
+<p>&lt;figure&gt;&lt;img src=&quot;https://ptht05hbb1ssoooe.public.blob.vercel-storage.com/assets/changelog/origin-apps-QQ9ZPw6HtXmhbhtleevXGQ5xw1ncs1.png&quot; loading=&quot;lazy&quot; alt=&quot;Origin App Marketplace listing apps across deployments, CI, code review, security, monitoring, and project management&quot; /&gt;&lt;figcaption&gt;Origin App Marketplace listing apps across deployments, CI, code review, security, monitoring, and project management&lt;/figcaption&gt;&lt;/figure&gt;</p>
+<h2>Publish to Marketplace</h2>
+<p>To submit an app:</p>
+<ol>
+<li><a href="https://cursor.com/codebase/settings/apps">Create an app</a> in your namespace. It stays private to your namespace while you build.</li>
+<li>Build against the <a href="https://cursor.com/docs/api/origin">Origin API</a>. Apps authenticate with an app JWT and installation access tokens, receive webhook events, and write back check runs, pull request comments, and reviews.</li>
+<li>Make the app public, then submit it from the app&#39;s page with a slug, suggested tags, and a demo video. The video should show install, uninstall, and your core product flows.</li>
+<li>We review the submission and list the app once it&#39;s approved.</li>
+</ol>
+<p>&lt;figure&gt;&lt;img src=&quot;https://ptht05hbb1ssoooe.public.blob.vercel-storage.com/assets/changelog/origin-submit-marketplace-XuhYvHQND62RTK4kNpUTDga6SIdPyu.png&quot; loading=&quot;lazy&quot; alt=&quot;Submitting an app to the Origin App Marketplace&quot; /&gt;&lt;figcaption&gt;Submitting an app to the Origin App Marketplace&lt;/figcaption&gt;&lt;/figure&gt;</p>
+<h2>Get started</h2>
+<p><a href="https://cursor.com/codebase/apps">Try the apps</a> in the Origin App Marketplace today.</p>
+<p>Want to build an Origin app? Start with the <a href="https://cursor.com/docs/origin/apps/publish">publishing guide</a> and the <a href="https://cursor.com/docs/api/origin">Origin API reference</a>.</p>
+<p>The <a href="https://github.com/cursor/plugins/tree/main/origin-apps">Origin Apps plugin</a> can also answer questions from the live Origin API docs and plan a port to Origin for an app you already run.</p>]]></content:encoded>
+    </item>
+    <item>
+      <title>Remote control for local agents</title>
+      <link>https://cursor.com/changelog/remote-control-local-agents</link>
+      <guid isPermaLink="true">https://cursor.com/changelog/remote-control-local-agents</guid>
+      <pubDate>Tue, 06 Oct 2026 00:00:00 GMT</pubDate>
+      <description>See and reply to the local agents running on your computer from the Cursor iOS app.</description>
+
+      <content:encoded><![CDATA[<p>You can now see and reply to the local agents running on your computer from the Cursor iOS app.</p>
+<h2>Get started</h2>
+<p>Remote Control is on by default for everyone except Enterprise organizations.</p>
+<p>Download the Cursor iOS app and sign in. Computers on your account appear in the app automatically. Tap your computer in the app and approve your pairing request in the Cursor desktop app. Your local agents appear in a list. Tap one to see what it&#39;s doing or send it a message.</p>
+<p>&lt;figure&gt;&lt;img src=&quot;https://ptht05hbb1ssoooe.public.blob.vercel-storage.com/assets/changelog/remote-control-cl-pezewO3SZRrIQxMNaTzdpsP9TD1ChS.png&quot; loading=&quot;lazy&quot; alt=&quot;Remote Control for local agents in the Cursor iOS app&quot; /&gt;&lt;figcaption&gt;Remote Control for local agents in the Cursor iOS app&lt;/figcaption&gt;&lt;/figure&gt;</p>
+<h2>Agents keep running on your computer</h2>
+<p>Remote control doesn&#39;t move your agents anywhere. It keeps running on your computer, and the app connects to it. Your computer needs to stay on and online for remote control to work.</p>
+<h2>Keep your computer awake</h2>
+<p>To stop your computer from sleeping while you&#39;re away, turn on &quot;Keep this computer awake&quot; under Remote Control in Cursor&#39;s desktop settings. Your computer needs to be plugged in with the lid open.</p>
+<h2>For Enterprise teams</h2>
+<p>Remote control is on by default, except for Enterprise organizations. Enterprise admins can turn it on in Org settings &gt; Security and identity &gt; Remote control.</p>
+<p>Remote control doesn&#39;t require cloud agents to work.</p>
+<p>Remote control is available today in the <a href="https://cursor.com/mobile">Cursor iOS app</a>.</p>]]></content:encoded>
+    </item>
+    <item>
+      <title>Rollouts and Security Review</title>
+      <link>https://cursor.com/changelog/rollouts-and-security-reviewer</link>
+      <guid isPermaLink="true">https://cursor.com/changelog/rollouts-and-security-reviewer</guid>
+      <pubDate>Wed, 23 Sep 2026 00:00:00 GMT</pubDate>
+      <description>Two bots for the last mile of shipping code: Rollouts watches every change as it deploys, and Security Review reports exploitable bugs on every pull request.</description>
+
+      <content:encoded><![CDATA[<p>Today we&#39;re launching two Cursor bots for the last mile of shipping code. Rollouts watches every change as it deploys and reports its health per environment. Security Review reports exploitable bugs on every pull request.</p>
+<p>Both are available today on Teams and Enterprise plans.</p>
+<h2>Rollouts</h2>
+<p>Rollouts attaches a monitor to every pull request and watches the change as it deploys, reporting change health per environment: verified healthy, regression detected, or inconclusive. It&#39;s the Cursor version of <a href="https://cursor.com/blog/firetiger">Firetiger</a> Change Monitors, rebuilt with the Bot Development Kit.</p>
+<p>Enable it from the dashboard and connect source control, your deploy system, and your telemetry provider. Rollouts starts watching on the next pull request.</p>
+<h4>Monitoring plans</h4>
+<p>When a pull request opens, Rollouts reads the diff and the systems it touches, then writes a monitoring plan as a PR comment. The plan lists the risks it identified, the effect the change is meant to have, the signals it will check, and any gaps in instrumentation that would make the change hard to verify. Edit the plan in the PR and Rollouts uses your version.</p>
+<h4>Deploy tracking</h4>
+<p>Rollouts wakes on deploy events for the change&#39;s commit and runs the plan against your logs, metrics, and traces. It tracks each environment separately, so a change can be verified in staging and still flagged in production. Rollouts checks the change&#39;s intended effect alongside error and latency signals, and reports back on the PR when it reaches a verdict.</p>
+<h4>Regressions</h4>
+<p>When Rollouts detects a regression, it names the change it suspects and notifies the author. Depending on configuration, it can also open a revert PR for review or hand the finding to a cloud agent for a fix. Rollouts does not merge or roll back on its own today.</p>
+<h4>Integrations</h4>
+<p>Rollouts connects to Origin or GitHub for source control, to your continuous delivery system for deploy events, and to Datadog and other telemetry providers for signals. Feature flag integration is coming soon.</p>
+<h2>Security Review</h2>
+<p>Security Review is available today. It reads every pull request in the context of the codebase and posts one review comment reporting exploitable bugs. Style and quality stay with Bugbot.</p>
+<p>&lt;figure&gt;&lt;img src=&quot;https://ptht05hbb1ssoooe.public.blob.vercel-storage.com/assets/changelog/security-review-N8azgyLevr8FvNIRqJN6hk71os2Oxu.png&quot; loading=&quot;lazy&quot; alt=&quot;Security Review comment on a pull request reporting an exploitable bug with a severity and proposed fix&quot; /&gt;&lt;figcaption&gt;Security Review comment on a pull request reporting an exploitable bug with a severity and proposed fix&lt;/figcaption&gt;&lt;/figure&gt;</p>
+<p>Enable it from the dashboard for the repositories you want reviewed. Draft PRs are skipped.</p>
+<h4>What it reports</h4>
+<p>Security Review looks for injection across SQL, command, and template surfaces, along with authentication and authorization bypasses, including checks that a refactor stopped running. It also flags secrets and credentials committed to source, SSRF and unvalidated redirects, unsafe deserialization, and dependency changes that introduce known vulnerabilities. It traces where user input enters and what it passes through.</p>
+<h4>Findings</h4>
+<p>Each finding carries a severity, the attack path, and a proposed fix. Dismiss one with a reason and Security Review won&#39;t raise it again on that PR.</p>
+<h4>Team rules</h4>
+<p>Add rules for your codebase, such as which client external calls must go through or which tables are never queried from a request handler, and Security Review enforces them on every PR.</p>
+<h2>Get started</h2>
+<p>Rollouts and Security Reviewer are available today on Teams and Enterprise plans. Enable either bot from the <a href="https://cursor.com/automations">automations</a> tab.</p>
+<p>For the next 10 days, we&#39;re including usage credits so teams can try Rollouts on real changes. Teams and Enterprise customers receive credits for roughly 50 and 500 changes, respectively.</p>]]></content:encoded>
+    </item>
+    <item>
+      <title>Cursor Projects</title>
+      <link>https://cursor.com/changelog/projects</link>
+      <guid isPermaLink="true">https://cursor.com/changelog/projects</guid>
+      <pubDate>Thu, 10 Sep 2026 00:00:00 GMT</pubDate>
+      <description>Projects lets you take on larger bodies of work, maintain context over months, and delegate tasks to thousands of subagents.</description>
+
+      <content:encoded><![CDATA[<p>Today we&#39;re launching Projects in Cursor. Projects lets you take on larger bodies of work, such as a feature, a migration, or a full app. It maintains context over months of work, delegates tasks to thousands of subagents, and performs recurring work without being prompted.</p>
+<p>Access Projects from the left-hand nav. The coordinator agent in a project doesn&#39;t write code itself; it plans the work, delegates it to agents that implement it, and brings the finished work back to you to check. Coordinators create and manage agents on your behalf, running as many in parallel as the work needs.</p>
+<h2>Powered by Cloud Agents</h2>
+<p>A Project runs on its own computer in the cloud, so closing your laptop doesn&#39;t stop it. When something needs testing on your machine, the coordinator spins up a local agent to run it there.</p>
+<h2>Shared context</h2>
+<p>You shouldn&#39;t have to onboard an agent every time you start a task. Each Project maintains a set of files that sync across every cloud and local machine its agents use. Agents add research and artifacts, along with what they learn about the codebase and how you prefer work to be done. If one agent figures out how to test a service, for example, every future agent can use those instructions. The shared context grows with the Project, making the coordinator more effective over time.</p>
+<h2>Subscriptions</h2>
+<p>Tell the coordinator agent to watch a Slack channel, run on a schedule, or follow all your PRs. This way it can take action based on signals it detects, without waiting for your prompt.</p>
+<p>Connect Slack and point it at a bug-report channel, and it starts delegating each time a bug comes in.</p>
+<p>Projects are available in beta and rolling out to all users starting today.</p>]]></content:encoded>
+    </item>
+    <item>
+      <title>Self-hosted machines</title>
+      <link>https://cursor.com/changelog/self-hosted-machines</link>
+      <guid isPermaLink="true">https://cursor.com/changelog/self-hosted-machines</guid>
+      <pubDate>Wed, 02 Sep 2026 00:00:00 GMT</pubDate>
+      <description>Cursor supports self-hosted machines, which let you keep tool execution entirely in your own network.</description>
+
+      <content:encoded><![CDATA[<p>Cursor supports **self-hosted machines**, which let you keep tool execution entirely in your own network.</p>
+<p>Your codebase, build outputs, and secrets all stay on internal machines running in your infrastructure, while the agent handles tool calls locally.</p>
+<p>&lt;figure&gt;&lt;img src=&quot;https://ptht05hbb1ssoooe.public.blob.vercel-storage.com/assets/uploads/remote-machines-QjJ0ZzGDelSdT7v2CXDdh0BQHqjmH0.png&quot; loading=&quot;lazy&quot; alt=&quot;Run on menu showing Remote Machines with self-hosted options lambda-test, cloud-demo, and jacks-desktop&quot; /&gt;&lt;figcaption&gt;Run on menu showing Remote Machines with self-hosted options lambda-test, cloud-demo, and jacks-desktop&lt;/figcaption&gt;&lt;/figure&gt;</p>
+<h2>Dynamic pool scheduling</h2>
+<p>**My Machines** connects a single laptop or VM to your account for personal workflows.</p>
+<p>**Team pools** are named queues of workers for a team or enterprise. Capacity can grow as requests arrive and shrink when workers disconnect, so your self-hosted machines can scale with demand. Pools are not tied to one repository: name the pool, and any available worker can claim the request.</p>
+<p>Pools can also hibernate idle machines, then restore within a reconnect window when a follow-up arrives, so you don&#39;t keep expensive capacity warm just for the next prompt.</p>
+<p>&lt;figure&gt;&lt;img src=&quot;https://ptht05hbb1ssoooe.public.blob.vercel-storage.com/assets/uploads/pools-mNNea8rJyNxaBuz7rSVT2SJOKkRsmv.png&quot; loading=&quot;lazy&quot; alt=&quot;Cloud Agents dashboard listing Self-hosted Machines pools with active and idle worker counts&quot; /&gt;&lt;figcaption&gt;Cloud Agents dashboard listing Self-hosted Machines pools with active and idle worker counts&lt;/figcaption&gt;&lt;/figure&gt;</p>
+<h2>Run on your sandboxes</h2>
+<p>Cloud agents can now execute on <a href="https://cursor.com/docs/cloud-agent/self-hosted/integrations">infrastructure you already use</a>, including from AWS Lambda, Coder, Cloudflare, Daytona, Modal, Namespace, Vercel, and E2B.</p>
+<h2>Computer use on Linux and Mac</h2>
+<p>Self-hosted workers now support computer use on Linux and Mac. With the right desktop packages, an agent can click, type, take screenshots, and drive the browser. You can watch its desktop or take control from Cursor.</p>]]></content:encoded>
+    </item>
+</channel>
+</rss>

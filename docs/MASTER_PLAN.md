@@ -65,7 +65,7 @@ flowchart TB
   R -->|write ledger, poll queue| S
   R -->|AI jobs| C
   R -.->|Web Push alerts| P
-  X["Outside data<br/>Sports: Kalshi, ESPN, The Odds API<br/>Crypto: Alpaca, Coinbase, Deribit, DexScreener, Jupiter, RugCheck, GoPlus<br/>Culture/news: RSS, Reddit, HN, GitHub, TMDB, Pinterest, Unsplash, Pexels"] -->|pulled by workers| R
+  X["Outside data<br/>Sports: Kalshi, ESPN, The Odds API<br/>Crypto: Alpaca, Coinbase, Deribit, DexScreener, Jupiter, RugCheck, GoPlus<br/>Culture/news: RSS, HN, GitHub, TMDB, Pinterest, Unsplash, Pexels"] -->|pulled by workers| R
   W["Watchdog<br/>cron-job.org → Vercel /api/watchdog<br/>healthchecks.io dead-man's switch"] -.->|checks heartbeat| S
   W -.->|"Worker down" push| P
 ```
@@ -81,7 +81,7 @@ flowchart TB
 
 One Supabase Postgres database, `public` schema, migrations continuing at `db/018`. The existing ledger tables stay the single source of truth for anything that wins or loses: generated parlays, played slips, bot trades and 15-minute BTC calls are all `commitments` with `legs` and `resolutions`. Everything else is ordinary app data.
 
-**(as built) Migration numbering.** Applied: `db/001`–`012` and `db/014`–`020`. `db/013` (production roster, go-live) is deliberately unpasted. Chat 1 used: `018` read-only inspection role, `019` push tables, `020` shared tables plus ledger read policies, the TRUNCATE guard and grant lockdown. **Since then (from `migration_log`, 2026-10-12):** `db/021`–`041` are all applied: `040` venture taglines at 05:36:53 UTC and `041` the film/TV seed split at 21:59:10 UTC, both on Oct 12; `042` Sports News at 20:26:05 UTC on Oct 13 (second paste; the first failed in its self-test and applied nothing); `043` drop rules and the cross-in cap at 21:53:59 UTC on Oct 13; `044` broadcaster and league entities at 22:27:30 UTC on Oct 13. The per-file record is CLAUDE.md, Current State, "Migrations". **Next new file: `db/045`.**
+**(as built) Migration numbering.** Applied: `db/001`–`012` and `db/014`–`020`. `db/013` (production roster, go-live) is deliberately unpasted. Chat 1 used: `018` read-only inspection role, `019` push tables, `020` shared tables plus ledger read policies, the TRUNCATE guard and grant lockdown. **Since then (from `migration_log`, 2026-10-12):** `db/021`–`041` are all applied: `040` venture taglines at 05:36:53 UTC and `041` the film/TV seed split at 21:59:10 UTC, both on Oct 12; `042` Sports News at 20:26:05 UTC on Oct 13 (second paste; the first failed in its self-test and applied nothing); `043` drop rules and the cross-in cap at 21:53:59 UTC on Oct 13; `044` broadcaster and league entities at 22:27:30 UTC on Oct 13; `045` the Tech Hub pillar at 02:32:51 UTC on Oct 14 (second paste; the first failed on the test source's slug and applied nothing). The per-file record is CLAUDE.md, Current State, "Migrations". `db/046` (official tech items decay last) is written, not yet pasted. **Next new file: `db/047`.**
 
 **Paper vs live, from day one.** Every money table carries `mode text not null check (mode in ('paper','live'))` with default `'paper'`, alongside the existing `is_test`. Capital Tracker, model stats and bot stats always group by `mode`, so live money never mixes with paper numbers and flipping a bot to live needs no schema change. **(as built)** `commitments` gained `mode` (default `'paper'`) and `origin` (default `'agent'`) in db/020; every existing row reads paper/agent.
 
@@ -121,7 +121,7 @@ Rows marked **built** exist as of Chat 1.
 | Shared | `job_health` **built** | job, expected\_interval\_s, last\_ok\_at, last\_error, consecutive\_failures, alert\_state |
 | Shared | `ai_usage` **built** | purpose, model, tokens\_in, tokens\_out, cache tokens, batch, cost\_usd, critical, created\_at (append-only) |
 | Shared | `job_queue` **built** | kind, payload, status, attempts, run\_after, locked\_at, last\_error |
-| Learning engine | `sources` | pillar, name, kind (rss / reddit / github / api), url, weight, active |
+| Learning engine | `sources` | pillar, name, kind (rss / github / api; Reddit dropped, §4), url, weight, active |
 | Learning engine | `content_items` | pillar, source\_id, external\_id, url, title, ai\_summary, published\_at, tags\[\], embedding vector(384); unique (source\_id, external\_id) |
 | Learning engine | `reactions` | item\_id, reaction (love / neutral / not\_interested), created\_at |
 | Learning engine | `interest_profiles` | pillar, profile\_vector, topic\_weights, source\_weights, updated\_at |
@@ -195,7 +195,7 @@ Views the app reads: `v_model_performance` (hit rate, ROI net of fees and CLV by
 | Service | Used for | Tier and limits | $/mo | Account or key | Fallback |
 | --- | --- | --- | --- | --- | --- |
 | Publisher RSS | Home feed, Sports News, crypto news | Free; Bloomberg and The Information give headline and teaser only | 0 | None | Google News RSS query per source |
-| Reddit API | r/ClaudeAI, r/OpenAI, r/LocalLLaMA | Free personal script app | 0 | Reddit app client id and secret | Subreddit `.rss` feeds, no key |
+| ~~Reddit API~~ **Dropped Oct 13 (owner)** | ~~r/ClaudeAI, r/OpenAI, r/LocalLLaMA~~ | Reddit closed self-service access to the public Data API on Nov 11, 2025: new OAuth tokens need approval, and practitioners report denials for personal scripts. Source: Reddit's r/redditdev announcement "Introducing the Responsible Builder Policy + new approval process for API access" (Nov 11, 2025; thread 1oug31u). **Verified by the planning chat, 2026-10-13** | 0 | None | None; Hacker News is Tech Hub's community source |
 | Hacker News (Algolia) | Tech Hub | Free | 0 | None | HN Firebase API |
 | GitHub REST | Trending and most-starred repos | 5,000 requests/hour with a token | 0 | Personal access token | Search sorted by recent stars |
 | TMDB | Titles, release dates, trailers, where to stream | Free with attribution | 0 | API key | OMDb |
@@ -328,22 +328,20 @@ Thirteen build chats after this one, each split into phases with a test you run 
   - the shadow `drop` review: the Oct 12 report found ~17% of non-none labels wrong, 3 of them a love (yachts); likely retire the shadow classifier rather than turn it on;
   - a watch on duplicate merges of the Skins Game kind (one event, several stories).
 - **Mon Oct 20:** the NFL props archive moves to Supabase Storage: design it (Step 0) before week 6 is archived. Week 5's candles and prints took ~34 MB; weeks 5–18 at that rate are ~470 MB, the whole 500 MB tier (CLAUDE.md, RECURRING).
-- **Owner decision, made Oct 13:** a free Supabase staging project for migration dry runs. The rule is CLAUDE.md §5, "Staging first" (every migration pasted on staging first); the project is set up in Chat 4, Step 0. db/042's first paste, which failed in its self-test on production, is the case for it.
+- ~~**Owner decision, made Oct 13:** a free Supabase staging project for migration dry runs.~~ **Reversed Oct 13 (owner, Chat 4 planning): no staging project.** Migrations stay paste-to-production; the rolled-back self-test DO block is the guard, and db/042's lesson stays in CLAUDE.md §5 (a TRUNCATE assertion names every referencing table).
 
 ### Chat 4 — Tech Hub and Screening Room
 
-**Set up in this chat:** the Supabase staging project (Step 0, below), Reddit script app, GitHub fine-grained token (public read only), TMDB API key.
+**Set up in this chat:** GitHub fine-grained token, public read only (Phase 2); TMDB API key (Phase 3). ~~Reddit script app~~: dropped (§4).
 
-0. **Step 0: the Supabase staging project** (owner decision Oct 13; the rule is CLAUDE.md §5, "Staging first"). Before any Chat 4 migration:
-   1. The owner creates a second free project in the same Supabase account, `valemont-staging`, in the production project's region (us-east-1). It is not connected to any MCP.
-   2. The owner pastes every applied migration on it, in order: `db/001`–`db/012`, then `db/014` onward to the latest applied (`db/013`, the production roster, stays unpasted there too). Two need care:
-      - `db/018` creates `valemont_readonly`: set its own password on staging, never production's.
-      - `db/020` keeps the `__OWNER_USER_ID__` placeholder in the committed file: on staging, use a throwaway UUID (no real user exists there).
-   3. Each paste's self-test NOTICE and verify output are checked as on production. Any difference from production is recorded in CLAUDE.md, Current State, before the next step.
-   4. The connection string goes into the root `.env` as `DATABASE_URL_STAGING` (Session pooler, port 5432); `.env.example` documents the name. It is printed nowhere and set nowhere else.
-   5. Done when: staging's `migration_log` lists the same files as production's (minus `db/013`, and minus any row older than `db/015`, which created the log), and the first Chat 4 migration has been pasted on staging before production.
+0. ~~**Step 0: the Supabase staging project.**~~ **Struck Oct 13 (owner, Chat 4 planning): no staging project**; migrations stay paste-to-production (CLAUDE.md §5).
 
-1. Tech Hub: official changelogs, Hacker News, the three subreddits, GitHub trending with a "why this matters to you" line.
+**Owner decisions, Oct 13 (Chat 4 planning):**
+- Reddit is dropped from Tech Hub: Reddit closed self-service Data API access on Nov 11, 2025 (§4, with the source).
+- Tech Hub ingests on the existing 30-minute feed cycle.
+- Tech Hub pushes only for free credits and promos, at most 3 per Chicago day.
+
+1. Tech Hub: official changelogs and Hacker News (Phase 1), GitHub trending with a "why this matters to you" line (Phase 2).
    - [ ] A new Claude or OpenAI release shows up within one ingest cycle
 2. Screening Room: TMDB search, watchlist, currently watching, release dates, trailers, where to stream.
    - [ ] Recommendations reflect the six seed shows on day one and shift after reactions

@@ -44,7 +44,9 @@ class StubLedger:
         self.unscored_flags: list[bool] = []
         self.built_today = False
         self.latest: dict[str, ledger.ProfileRow] = {}
-        self.signals: dict[str, list[ledger.ReactionSignal]] = {"home": [], "sports": []}
+        self.signals: dict[str, list[ledger.ReactionSignal]] = {"home": [], "sports": [], "tech": []}
+        #: Pillars with stories in the mean window (db/045 added tech; none here).
+        self.with_stories = {"home": 40, "sports": 60}
         self.stories = [
             rstory(1, "Fund raises $50M for Miami marina"),
             rstory(2, "Crimson Tide beat Tennessee", pillars=("sports",), sport="cfb"),
@@ -58,7 +60,8 @@ class StubLedger:
         fns = {
             "feed_seed_phrases": lambda: {"home": {"love": ["marinas"], "not_interested": ["gossip"]},
                                           "sports": {"love": [], "not_interested": []}},
-            "feed_mean_vector": lambda pillar, days: ((1.1,) * DIMS, 40 if pillar == "home" else 60),
+            "feed_mean_vector": lambda pillar, days: (((1.1,) * DIMS, self.with_stories[pillar])
+                                                      if pillar in self.with_stories else (None, 0)),
             "feed_reaction_signals": lambda pillar: self.signals[pillar],
             "feed_insert_profile": self._insert_profile,
             "feed_follows": lambda: FOLLOW_ROWS,
@@ -153,14 +156,32 @@ class ScoreNew(unittest.TestCase):
             profile.score_new_job()
 
     def test_scores_only_unscored_stories_against_the_latest_profiles(self) -> None:
+        self.db.with_stories = {"home": 40}  # no sports or tech stories: no first profile built for them
         self.db.latest = {"home": ledger.ProfileRow(
             7, "home", (1.1,) * DIMS, 40, vec(0), None, {}, {}, {}, 0, 0, 0, 0, 1.0, 0.0, None)}
-        n = profile.score_new_job()
+        n = profile.score_new_job(embed=fake_embed)
         self.assertEqual(self.db.unscored_flags, [True])
         scores, ids = self.db.scores[0]
         self.assertEqual(ids, {"home": 7})
         self.assertEqual(n, len(scores))
         self.assertTrue(all(s.pillar == "home" for s in scores))  # no sports profile: none scored there
+        self.assertEqual(self.db.profiles, [])
+
+    def test_a_pillar_with_no_profile_gets_its_first_in_the_same_cycle(self) -> None:
+        # db/045: Tech's first stories arrive between nightly rebuilds. Once
+        # Home and Sports have profiles, feed_score builds Tech's first one
+        # and scores the tech story in Tech only, never elsewhere.
+        row = lambda pid, p: ledger.ProfileRow(pid, p, (1.1,) * DIMS, 40, vec(0), None, {}, {}, {}, 0, 0, 0, 0,
+                                               1.0, 0.0, None)
+        self.db.latest = {"home": row(7, "home"), "sports": row(8, "sports")}
+        self.db.with_stories = {"home": 40, "sports": 60, "tech": 5}
+        self.db.stories.append(rstory(4, "Claude Haiku 5.5 launch", pillars=("tech",)))
+        profile.score_new_job(embed=fake_embed)
+        self.assertEqual([p.pillar for p in self.db.profiles], ["tech"])
+        scores, ids = self.db.scores[0]
+        self.assertEqual(ids, {"home": 7, "sports": 8, "tech": 101})
+        self.assertEqual({s.pillar for s in scores if s.story_id == 4}, {"tech"})
+        self.assertFalse(any(s.pillar == "tech" for s in scores if s.story_id != 4))
 
 
 NAMES = ["Sail Beach Club", "Clipd"]

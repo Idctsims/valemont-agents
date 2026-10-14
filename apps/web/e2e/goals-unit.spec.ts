@@ -173,7 +173,7 @@ test.describe("navigation registry", () => {
     );
   });
 
-  test("only built pages render: today, Home, Goals, News, Morning brief, Wags, Ventures HQ, Capital Tracker and Sports News", () => {
+  test("only built pages render: today, Home, Goals, News, Morning brief, Wags, Ventures HQ, Capital Tracker, Tech Hub and Sports News", () => {
     expect(builtGroups()).toEqual([
       {
         key: "command",
@@ -188,6 +188,8 @@ test.describe("navigation registry", () => {
           { label: "Capital Tracker", href: "/capital" },
         ],
       },
+      // Chat 4 Phase 1.
+      { key: "tech", name: "Tech", pages: [{ label: "Tech Hub", href: "/tech" }] },
       // Chat 3 Phase 3.
       { key: "sports", name: "Sports", pages: [{ label: "Sports News", href: "/sports" }] },
     ]);

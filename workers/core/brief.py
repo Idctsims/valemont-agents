@@ -5,7 +5,9 @@ THE SECTION CONTRACT (read this before adding a pillar)
     every row of context_providers with enabled AND brief_section, in sort
     order, is one section, titled by its label, fed by its provider's slice of
     context_snapshot(). Today: goals, ventures, capital, feed (db/039, the
-    top 3 of For you). A later chat that
+    top 3 of For you), tech_brief (db/045: one line, and only when an
+    official tech item landed in the last 24 h; its provider returns NULL
+    otherwise and a NULL section is left out). A later chat that
     ships a pillar adds its provider function and registry row in its own
     migration and sets brief_section = true; its section appears in the next
     brief with NO change here. ctx_brief (the brief itself, for Wags) is
@@ -271,9 +273,12 @@ def generate_ai(payload: Mapping[str, Any], sections: Sequence[ledger.BriefSecti
             last_error = exc
             log.warning("brief attempt %d invalid: %s", attempt, exc)
             continue
-        # The registry's label is the title, whatever the model wrote.
+        # The registry's label is the title, whatever the model wrote; a
+        # one-line section keeps its first line only (owner: one Tech line).
         for s in body["sections"]:
             s["title"] = titles[s["key"]]
+            if s["key"] in ONE_LINE_SECTIONS:
+                s["lines"] = s["lines"][:1]
         usage_id, model = recorded[-1] if recorded else (None, MODEL)
         return Generated(body, model, usage_id, False, word_count(body))
     raise BriefInvalid(f"invalid twice: {last_error}")
@@ -360,12 +365,28 @@ def _feed_lines(f: Mapping[str, Any]) -> list[str]:
     return lines
 
 
+def _tech_lines(t: Mapping[str, Any]) -> list[str]:
+    """One line (db/045 ctx_tech_brief): the newest official item that landed
+    in the last 24 hours, and how many more."""
+    items = t.get("official_24h") or []
+    if not items:
+        return []
+    first = items[0]
+    more = f" Plus {len(items) - 1} more." if len(items) > 1 else ""
+    return [f"Official: {first.get('title')} ({first.get('source')}).{more}"]
+
+
+#: Sections held to one line, however many the model wrote (owner,
+#: 2026-10-13: "one Tech line").
+ONE_LINE_SECTIONS = frozenset({"tech_brief"})
+
 #: How the fallback words each section it knows. A later pillar adds one.
 FALLBACK_SECTIONS: dict[str, Callable[[Mapping[str, Any], str], list[str]]] = {
     "goals": lambda p, _today: _goals_lines(p.get("goals") or {}),
     "ventures": lambda p, today: _ventures_lines(p.get("ventures") or {}, today),
     "capital": lambda p, _today: _capital_lines(p.get("capital") or {}),
     "feed": lambda p, _today: _feed_lines(p.get("feed") or {}),
+    "tech_brief": lambda p, _today: _tech_lines(p.get("tech_brief") or {}),
 }
 
 
@@ -416,7 +437,10 @@ def build_today(*, allow_fallback: bool, client: Any = None, day: date | None = 
     payload = ledger.context_snapshot(conn=conn)
     # Registered brief sections that have a slice in the snapshot. A reserved
     # key (calendar) appears only once its provider is registered and enabled.
-    sections = [s for s in ledger.brief_sections(conn=conn) if s.key in payload]
+    # A provider that returned NULL has nothing to say today and its section
+    # is left out before the model sees it (db/045 ctx_tech_brief: silent
+    # unless an official tech item landed in the last 24 hours).
+    sections = [s for s in ledger.brief_sections(conn=conn) if payload.get(s.key) is not None]
     try:
         made = generate_ai(payload, sections, client=client)
     except (BriefRefused, BriefInvalid) as exc:

@@ -569,6 +569,29 @@ export async function addTestNewsStory(opts: {
   });
 }
 
+/** A TEST tech story (db/045 add_test_tech_story): is_test, from the official
+ * test source `_e2e-tech` (so its card carries the Official tag), pillar
+ * tech, with a category for the /tech chips. Invisible to the real feed; a
+ * marked request shows it. */
+export async function addTestTechStory(opts: {
+  category: "models_features" | "pricing_credits" | "tooling" | "agents" | "stack" | "community" | "other";
+  title: string;
+  summary: string | null;
+  url: string;
+}): Promise<number> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.rpc("add_test_tech_story", {
+      p_marker: e2eMarker(),
+      p_category: opts.category,
+      p_title: opts.title,
+      p_summary: opts.summary,
+      p_url: opts.url,
+    });
+    if (error) throw new Error(`test tech story failed: ${error.message}`);
+    return data as number;
+  });
+}
+
 /** A TEST move (db/042 add_test_move_proposal): "Test Player <s>" on "Test
  * Team A <s>" and an open trade to "Test Team B <s>", all is_test. Shown on
  * /settings/feed with a `test` tag; never a real entity. Rows are permanent,

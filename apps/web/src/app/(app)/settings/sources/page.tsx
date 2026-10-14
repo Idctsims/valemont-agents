@@ -26,7 +26,9 @@ function status(r: SourceRow, now: number): { status: LegStatus; label: string }
   return { status: "hit", label: "OK" };
 }
 
-const pillarLabel = (p: string[]) => p.map((x) => (x === "home" ? "Home" : "Sports")).join(" · ");
+const PILLAR: Record<string, string> = { home: "Home", sports: "Sports", tech: "Tech" };
+const KIND: Record<SourceRow["kind"], string> = { rss: "RSS", gnews: "Google News", page: "Page watcher", hn: "Hacker News" };
+const pillarLabel = (p: string[]) => p.map((x) => PILLAR[x] ?? x).join(" · ");
 
 function SourceItem({ r, now }: { r: SourceRow; now: number }) {
   const s = status(r, now);
@@ -37,7 +39,7 @@ function SourceItem({ r, now }: { r: SourceRow; now: number }) {
         <StatusChip status={s.status} label={s.label} />
       </div>
       <p className="mt-1 font-mono text-xs text-text-muted">
-        {pillarLabel(r.pillars)} · {r.kind === "gnews" ? "Google News" : "RSS"}
+        {pillarLabel(r.pillars)} · {KIND[r.kind] ?? r.kind}
       </p>
       <dl className="mt-3 grid grid-cols-4 gap-2 text-sm">
         <div>

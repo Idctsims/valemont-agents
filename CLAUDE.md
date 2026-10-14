@@ -251,30 +251,16 @@ policies arrive in db/019+ before apps/web reads any table. db/019 (push_subscri
   types (`extensions.halfvec`), and compare vectors by their text form
   (`v::text`), not with `=` / `IS DISTINCT FROM`, which need pgvector's
   operators. That was db/034's bug (2026-10-11).
-- **Staging first (owner, 2026-10-13; set up in Chat 4, Step 0).** A second,
-  free Supabase project in the same account, `valemont-staging`, built from
-  the same `db/` files. Once it exists:
-  - **Every new migration is pasted on staging first.** Its self-test NOTICE
-    and its verify output must come out as the file says. Only then does the
-    owner paste it on production. A staging failure is fixed in the file
-    (same number, never pasted on production), and the fix is pasted on
-    staging again.
-  - Staging holds **no production data**: no copy, no dump, no sync. A
-    self-test inserts its own rows, so it runs the same on an empty schema.
-    A migration whose behaviour depends on production rows (a backfill, a
-    seed keyed to real entities) says so in its header, and its staging run
-    proves the SQL runs, not the outcome.
-  - Its connection strings live in the root `.env` as `DATABASE_URL_STAGING`
-    (Session pooler, port 5432), never in place of `DATABASE_URL`, never on
-    Railway or Vercel. No worker, script or test reads it until a session
-    adds that deliberately, by name.
-  - The staging-first rule does not change the paste rule: the owner pastes,
-    on both projects. The Supabase MCP is not used for staging either.
-  - The free tier pauses a project after 7 idle days, and staging has no
-    heartbeat: restore it from the dashboard before a dry run.
-  - Why: db/042's first paste failed in its own self-test on production
-    (2026-10-13; TRUNCATE checks foreign keys before triggers). Nothing was
-    applied, but production was the first database to run the file.
+- **No staging project: decided against, 2026-10-13 (owner, Chat 4
+  planning).** It reverses the same day's "staging first" decision, which
+  was never set up. Migrations stay paste-to-production. The guard is the
+  rolled-back self-test DO block above: a wrong result raises, the SQL
+  Editor's transaction rolls the whole file back, and nothing is applied.
+  - Keep db/042's lesson (2026-10-13): its first paste failed in its own
+    self-test on production and applied nothing, because TRUNCATE checks
+    foreign keys before any TRUNCATE trigger. **A TRUNCATE assertion on a
+    table that other tables reference must name every referencing table in
+    the same statement.**
 
 ---
 
@@ -985,7 +971,7 @@ absent row as "I never looked."
   - ~~**Tue 2026-10-13:** NFL props archive, week 5; also weeks 1–4, once~~ **Done 2026-10-13** (see RECURRING below). Next: week 6 on Tue 2026-10-20.
   - **Sun 2026-10-19:** the owner's one-week watch of Love effects on /settings/feed closes (Chat 3 Phase 2 learning item; MASTER_PLAN checklist, `docs/feed_ranking.md` decision 7). Same day: the shadow `drop` review (likely retire it) and the watch on Skins Game–style duplicate merges (MASTER_PLAN, Chat 3 close-out).
   - **Mon 2026-10-20:** design the NFL props archive's move to Supabase Storage (Step 0) **before** week 6 is archived: at week 5's ~34 MB, weeks 5–18 fill the 500 MB tier (RECURRING, Archive).
-  - **Decided 2026-10-13 (owner): a free Supabase staging project for migration dry runs.** The rule is in §5 ("Staging first"); the project is set up in Chat 4, Step 0 (MASTER_PLAN §6).
+  - ~~**Decided 2026-10-13 (owner): a free Supabase staging project for migration dry runs.**~~ **Reversed 2026-10-13 (owner, Chat 4 planning): no staging project**; migrations stay paste-to-production, guarded by the rolled-back self-test (§5).
   - ~~**~2026-10-18:** the Railway trial ends~~ **Closed 2026-10-13: Railway is on Hobby** (Current State, "Railway"); no lapse, no hand redeploy.
 
 - **Migrations:** **`db/001`–`db/012` and `db/014`–`db/018` applied.** 007–012 verified live by `workers/scripts/verify_migrations_007_012.sql` (20/20). 014–018 were pasted 2026-10-08 and verified by read-only SELECTs. `migration_log` (UTC): 015 04:41:03, 016 04:41:16, 017 04:41:30, 018 04:50:35. 014 predates the log; its tables and triggers are present.
@@ -1014,7 +1000,10 @@ absent row as "I never looked."
     - **The first paste failed and applied nothing** (owner, 2026-10-13): the self-test's `TRUNCATE entity_link_proposals` raised 0A000, because TRUNCATE checks foreign keys before any TRUNCATE trigger. Read back via db_inspect: nothing from the file existed. The fix truncates the closed set (proposals, links, ends) and counts only the guard's P0001 message. **Rule for future self-tests: a TRUNCATE assertion on a table that other tables reference must name every referencing table in the same statement.**
   - **`db/043_feed_rules_cross_cap.sql` applied 2026-10-13 21:53:59 UTC** (`migration_log`; the 349-line file, self-test NOTICE shown once). Two url_regex rules (feed_rules 162 author pages, Axios Local and Complex; 163 PGA Tour player pages) and `feed_for_you`'s 6th argument `p_cross_cap` (NULL = 5; 0 = no tier-1 sports cross-in at any position, /news; Home's short list passes 2; floored cross-ins count first). **Verified via db_inspect the same session:** both rules active, 52 active rules; the 6-argument function exists and the 5-argument one is gone; readonly executes it, anon does not; on real data the cross-ins number 0 at cap 0 (all positions), 2 in Home's top 10 at cap 2, 5 on page one by default.
   - **`db/044_sports_business_entities.sql` applied 2026-10-13 22:27:30 UTC** (`migration_log`; the 62-line file, rows and a CHECK, no self-test). `entities.kind` gains `broadcaster`; 7 broadcasters (ESPN, NBC Sports, CBS Sports, FOX Sports, Amazon Prime Video, Netflix, TNT Sports) and 4 leagues (MLB, NWSL, WNBA, NCAA), sport NULL, for the business-of-sports gate only. **Verified via db_inspect the same session:** the CHECK lists broadcaster; the 11 rows with their aliases, none test, none followed; follows still 30 (7 tier 1, 23 tier 3).
-    - Next new file: `db/045`.
+  - **`db/045_tech_hub.sql` applied 2026-10-14 02:32:51 UTC** (`migration_log`). Chat 4 Phase 1, the Tech Hub pillar: `tech` exclusive on sources and stories; source kinds `page` and `hn`, `sources.official` and `config`; `content_items.backfill` and `published_precision`; `feed_pillar_guard` (no tech cross-in at write time); `feed_for_you` with `category` and `official` (27 columns, tech window 168 h, unscored tech stories listed); `tech_credit_pushes` (append-only; 3 real a day, never twice, by trigger); `ctx_tech` and `ctx_tech_brief` (sort 50 both; only `tech_brief` is a brief section); tech seeds; `_e2e-tech` and `add_test_tech_story`. **Verified via db_inspect the same session:** (a) 12 constraints present (the file's comment said 10: a miscount, 8 named + 4 pillar CHECKs; corrected); (b) `tech_credit_pushes` RLS on, 1 policy, anon none, authenticated read-only, 0 rows; (c) `feed_for_you` 27 output columns ending `category, official`, readonly executes it and `ctx_tech`, `ctx_tech_brief`, `tech_credit_push_room`, anon none; (d) `tech` 50 not a brief section, `tech_brief` 50 a brief section; (e) tech seeds love 8 / not interested 4, home 10 / 7 and sports 8 / 2 unchanged; (f) `_e2e-tech` inactive, is_test, official, `{tech}`; (g) push room 3, `ctx_tech_brief()` NULL. The self-test NOTICE was not seen here (the owner's paste); the log row exists only if it passed. `tests_live -v` on the branch after: 331 OK, 0 skipped.
+    - **The first paste failed and applied nothing** (2026-10-14): the test source slug `_e2e_tech` broke db/032's `sources_slug_check` (`^_?[a-z0-9][a-z0-9-]*$`: one leading underscore only). Read back via db_inspect: no db/045 column, table or log row. Renamed `_e2e-tech`.
+    - `db/046_tech_official_decay.sql` (official tech items decay at a 72 h half-life) is written, not pasted.
+    - Next new file: `db/047`.
   - **Rule (owner, 2026-10-12): the migration record updates in the same session a migration is verified, never deferred to a merge.** Record `applied_at` from `migration_log` and the verification, and move "Next new file" here and in MASTER_PLAN §"Migration numbering", in their own commit.
 - **Known intermittent `tests_live` skip (identified 2026-10-12):** `test_system_jobs_sql.SystemJobsSql.test_claim_retry_and_finish` skips with "another poller claimed the test job first" when the production worker's 10 s `job_queue` poller claims the test's `noop` job first (observed 2 of 60 isolated runs). By design (skip, not fail); not a broken invariant. Two sibling tests in the same file skip the same way ("another poller claimed/failed the test job first"). Since 2026-10-13 `tests_live` runs with `-v`, so a skip is named, not assumed.
   - **2026-10-13, cleared (owner):** a quiet Phase 3 run reported "314 tests, OK (skipped=1)" with no name. The full verbose rerun had **0 skips** (314 OK, 593 s). The owner's judgment: the plausible cause is this documented poller race, since every migration-gated skip cannot fire (all applied). One alternative was not ruled out: a class whose own `setUpClass` hits a transient "database unreachable" is also reported as one skip.
