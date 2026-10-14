@@ -4,7 +4,7 @@ import { useEffect, useOptimistic, useState, useTransition } from "react";
 
 import { reactToStory } from "@/app/(app)/feed/actions";
 import type { ActionResult } from "@/lib/action-result";
-import { nextReaction, relativeTime, type CardReaction, type FeedStory, type Pillar } from "@/lib/feed/types";
+import { cardWhen, nextReaction, type CardReaction, type FeedStory, type Pillar } from "@/lib/feed/types";
 
 import { FeedCard } from "./feed-card";
 
@@ -89,7 +89,7 @@ export function FeedList({ stories, pillar, now, testId }: { stories: FeedStory[
       {list.length > 0 && (
         <ul className="mt-2 border-t border-border">
           {list.map((s) => (
-            <FeedCard key={s.id} story={s} pillar={pillar} when={relativeTime(s.publishedAt, now)} onReact={(r) => react(s, r)} />
+            <FeedCard key={s.id} story={s} pillar={pillar} when={cardWhen(s.publishedAt, s.publishedPrecision, now)} onReact={(r) => react(s, r)} />
           ))}
         </ul>
       )}

@@ -179,6 +179,26 @@ stories they reach the existing 30-day filtered prune.
   `scripts/tech_latency.py` reports both, and leaves out backfill, seeded and
   db/047-hidden items.
 
+## 5c. Dates (db/048; owner, 2026-10-14)
+
+- **Undated items** (the source gave no date) are stored as
+  `published_precision = 'none'`, dated by first seen as before. They still
+  show on Home and Sports, but never push (`tech_push_eligible` requires a
+  stated date; the worker's `push_eligible` checks first) and are never a
+  latency sample. Before, an RSS item that dropped its date on a later fetch
+  looked fresh to every rule (0 such rows on 2026-10-14; the gap was in
+  the code). On a first fetch an undated item is still recorded, never shown.
+- **Date-only cards print their stated UTC day** (`cardWhen`): a listing that
+  says "Oct 6" is stored at 00:00 UTC, which read as "Oct 5" in Chicago.
+- **The backfill window:** For you counts from first seen, except a
+  first-fetch backfill item, which counts from when it was published (a
+  date-only one from the end of its stated day). At 06:01 UTC on Oct 14 this
+  retires 25 of the 100 Tech For you cards: the MCP blog and spec posts of
+  June to August, Cursor's September entries, and the Oct 2-6 items from
+  Anthropic, the Claude blog and API notes, Supabase, the OpenAI API
+  changelog and the OpenAI community (the "Oct 5" Pricing & credits card
+  among them). More retire as each backfill item passes 7 days.
+
 ## 6. The Home and Sports summary cap (investigated 2026-10-14, read-only)
 
 The cap counts STORIES whose `summarized_at` falls on or after Chicago

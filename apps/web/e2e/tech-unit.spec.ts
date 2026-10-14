@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
 
 import { builtGroups } from "../src/lib/nav";
 import { pageSlice, parsePageContext } from "../src/lib/wags/page-context";
-import { TECH_CHIPS, feedHref, techCategoryFromParam } from "../src/lib/feed/types";
+import { TECH_CHIPS, cardWhen, feedHref, techCategoryFromParam } from "../src/lib/feed/types";
 
 // /tech's pure helpers (Chat 4 Phase 1; docs/tech_hub.md): the category chips,
 // their URL state, and the nav. No page, no server.
@@ -42,6 +42,21 @@ test.describe("tech URLs", () => {
     expect(feedHref("/tech", { tab: "for-you", category: "pricing_credits" })).toBe("/tech?category=pricing_credits#stories");
     expect(feedHref("/tech", { tab: "latest", category: "tooling", page: 2 })).toBe("/tech?category=tooling&feed=latest&latest=2#stories");
     expect(feedHref("/tech", { tab: "for-you", category: null, anchor: false })).toBe("/tech");
+  });
+});
+
+test.describe("card dates (db/048)", () => {
+  const now = Date.parse("2026-10-14T06:00:00Z");
+
+  test("a date-only item prints its stated UTC day, never the evening before in Chicago", () => {
+    // Stored at 00:00 UTC of Oct 6: 19:00 on Oct 5 in Chicago.
+    expect(cardWhen("2026-10-06T00:00:00Z", "date", now)).toBe("Oct 6");
+    expect(cardWhen("2026-10-13T00:00:00Z", "date", now)).toBe("Oct 13"); // not "Yesterday"
+  });
+
+  test("timed and undated items keep the relative time", () => {
+    expect(cardWhen("2026-10-14T03:00:00Z", "time", now)).toBe("3h");
+    expect(cardWhen("2026-10-14T05:30:00Z", "none", now)).toBe("30m");
   });
 });
 

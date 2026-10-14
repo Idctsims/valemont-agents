@@ -2178,7 +2178,7 @@ FEED_SUMMARY_QUEUE_SQL: Final = """
 #: then newest published. The Home/Sports queue above leaves tech out.
 FEED_TECH_SUMMARY_QUEUE_SQL: Final = """
     SELECT st.id, st.title, i.teaser, s.name, s.official, st.summary_attempts,
-           i.backfill, i.published_at, i.fetched_at, s.slug, st.centroid::text
+           i.backfill, i.published_at, i.fetched_at, s.slug, st.centroid::text, i.published_precision
       FROM stories st
       JOIN content_items i ON i.id = st.lead_item_id
       JOIN sources s ON s.id = i.source_id
@@ -2206,6 +2206,8 @@ class TechSummaryJob:
     #: For the rank order: the lead source's slug and the story's centroid.
     source_slug: str = ""
     vec: Sequence[float] = ()
+    #: The lead item's published_precision; 'none' (undated) never pushes (db/048).
+    precision: str = "time"
 
 
 def feed_tech_summary_queue(limit: int, max_attempts: int, *,
@@ -2213,7 +2215,7 @@ def feed_tech_summary_queue(limit: int, max_attempts: int, *,
     with _brief_conn(conn) as c, c.cursor() as cur:
         cur.execute(FEED_TECH_SUMMARY_QUEUE_SQL, {"limit": limit, "max_attempts": max_attempts})
         return [TechSummaryJob(int(r[0]), r[1], r[2], r[3], bool(r[4]), int(r[5]), bool(r[6]), r[7], r[8],
-                               r[9] or "", _vec_array(r[10]) or array("f")) for r in cur]
+                               r[9] or "", _vec_array(r[10]) or array("f"), r[11] or "time") for r in cur]
 
 
 #: The 48-hour retirement (owner, 2026-10-14): a kept story first seen more

@@ -2,7 +2,9 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { PAGE_SIZE, hides, otherOutlets, type FeedCategory, type FeedStory, type Pillar, type Sport } from "./types";
+import {
+  PAGE_SIZE, hides, otherOutlets, type FeedCategory, type FeedStory, type Pillar, type PublishedPrecision, type Sport,
+} from "./types";
 
 // Reads only: the worker writes the feed (db/032) and its scores (db/039);
 // the owner reads through RLS, and writes only reactions (feed/actions.ts,
@@ -23,6 +25,8 @@ type ViewRow = {
   source_name: string;
   /** v_feed_stories (db/045); feed_for_you returns it as `official`. */
   source_official?: boolean | null;
+  /** v_feed_stories (db/048); feed_for_you returns it as `published_precision`. */
+  lead_published_precision?: PublishedPrecision | null;
 };
 
 type TestRow = {
@@ -33,11 +37,15 @@ type TestRow = {
   item_count: number;
   is_test: boolean;
   lead_item_id: number;
-  lead: { url: string | null; published_at: string; source: { name: string; official: boolean } | null } | null;
+  lead: {
+    url: string | null; published_at: string; published_precision: PublishedPrecision | null;
+    source: { name: string; official: boolean } | null;
+  } | null;
 };
 
 type ForYouRow = ViewRow & {
   pos: number; reaction: string | null; floored: boolean | null; cross_pillar: boolean; official: boolean | null;
+  published_precision: PublishedPrecision | null;
 };
 
 /** Hidden in Latest: the most recent stories whose latest reaction in this
@@ -128,7 +136,7 @@ export async function latestStories(
   if (opts.withTests) {
     let q = supabase
       .from("stories")
-      .select("id, title, summary, why_it_matters, item_count, is_test, lead_item_id, lead:content_items!stories_lead_item_fk(url, published_at, source:sources(name, official))")
+      .select("id, title, summary, why_it_matters, item_count, is_test, lead_item_id, lead:content_items!stories_lead_item_fk(url, published_at, published_precision, source:sources(name, official))")
       .contains("pillars", [opts.pillar])
       .is("filtered_reason", null)
       .not("lead_item_id", "is", null)
@@ -145,12 +153,13 @@ export async function latestStories(
       id: r.id, title: r.title, summary: r.summary, sourceName: r.lead!.source?.name ?? "Unknown",
       url: r.lead!.url!, publishedAt: r.lead!.published_at, itemCount: r.item_count, isTest: r.is_test,
       whyItMatters: r.why_it_matters, official: !!r.lead!.source?.official,
+      publishedPrecision: r.lead!.published_precision ?? "time",
     }));
     meta = rows.map((r) => ({ id: r.id, leadItemId: r.lead_item_id, sourceName: r.lead!.source?.name ?? "Unknown", itemCount: r.item_count }));
   } else {
     let q = supabase
       .from("v_feed_stories")
-      .select("id, title, summary, why_it_matters, item_count, lead_item_id, lead_url, lead_published_at, source_name, source_official")
+      .select("id, title, summary, why_it_matters, item_count, lead_item_id, lead_url, lead_published_at, source_name, source_official, lead_published_precision")
       .contains("pillars", [opts.pillar])
       .not("id", "in", notHidden);
     if (opts.sport) q = q.eq("sport", opts.sport);
@@ -167,11 +176,12 @@ export async function latestStories(
   return finish(supabase, opts.pillar, base, meta);
 }
 
-function viewStory(r: ViewRow & { official?: boolean | null }): Base {
+function viewStory(r: ViewRow & { official?: boolean | null; published_precision?: PublishedPrecision | null }): Base {
   return {
     id: r.id, title: r.title, summary: r.summary, sourceName: r.source_name, url: r.lead_url,
     publishedAt: r.lead_published_at, itemCount: r.item_count, isTest: false, whyItMatters: r.why_it_matters,
     official: !!(r.source_official ?? r.official),
+    publishedPrecision: r.lead_published_precision ?? r.published_precision ?? "time",
   };
 }
 
@@ -211,7 +221,7 @@ export async function forYouStories(
 export async function techStory(supabase: SupabaseClient, id: number): Promise<FeedStory | null> {
   const { data, error } = await supabase
     .from("v_feed_stories")
-    .select("id, title, summary, why_it_matters, item_count, lead_item_id, lead_url, lead_published_at, source_name, source_official")
+    .select("id, title, summary, why_it_matters, item_count, lead_item_id, lead_url, lead_published_at, source_name, source_official, lead_published_precision")
     .eq("id", id)
     .contains("pillars", ["tech"])
     .maybeSingle();

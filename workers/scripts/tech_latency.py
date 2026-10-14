@@ -54,6 +54,8 @@ ITEMS_SQL = """
      WHERE 'tech' = ANY (s.pillars) AND s.official AND NOT s.is_test
        AND NOT i.backfill AND NOT i.seeded
        AND NOT (""" + LATE + """)
+       -- Undated (db/048): its published time is only when we first saw it.
+       AND i.published_precision <> 'none'
        AND i.fetched_at > %(since)s
      ORDER BY s.kind, i.fetched_at, i.id
 """
@@ -68,7 +70,7 @@ DEFAULT_SINCE_SQL = """
       FROM content_items i JOIN sources s ON s.id = i.source_id
       LEFT JOIN stories st ON st.id = i.story_id
      WHERE 'tech' = ANY (s.pillars) AND s.official AND NOT s.is_test AND NOT i.backfill AND NOT i.seeded
-       AND NOT (""" + LATE + """)
+       AND NOT (""" + LATE + """) AND i.published_precision <> 'none'
 """
 
 SOURCES_SQL = """
