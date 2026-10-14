@@ -56,7 +56,17 @@ into `workers/feed/sources.toml`. Fixtures of each page are in
 | `hn-front` | HN Algolia `search?tags=front_page&numericFilters=points>=100` | hn | 200 JSON. Threshold 100, checked again per hit. |
 | `hn-show` | HN Algolia `search_by_date?tags=show_hn&numericFilters=points>=50` | hn | 200 JSON. Threshold 50. |
 
-17 active, 16 official (every row but the two HN ones).
+Added on the owner's decision (2026-10-13, after db/045), each verified live
+the same day:
+
+| Slug | Source | Kind | What was found |
+|---|---|---|---|
+| `openai-community-announcements` | OpenAI Developer Community, Announcements | rss | `/c/announcements.rss` redirects to `/c/announcements/6.rss` (category id 6, "Announcements", in `categories.json`): 200, 25 entries, newest Oct 9. Official, priority 25 (below openai.com/news at 10). Replaces the ChatGPT release notes. |
+| `openai-python` | github.com/openai/openai-python releases.atom | rss | 200, 10 releases, newest v3.29.0 (Oct 11). Official. |
+| `anthropic-sdk-python` | github.com/anthropics/anthropic-sdk-python releases.atom | rss | 200, 10 releases, newest v1.13.0 (Oct 9). Official. |
+
+`chatgpt-release-notes` stays inactive, no workaround (owner). Totals: 21 tech
+sources, 20 active, 19 official (every row but the two HN ones).
 
 ## 3. Design
 
@@ -99,6 +109,16 @@ the cycle they arrive, not at 04:00.
 **Window.** Tech's For you window is 168 hours (Home and Sports keep 72):
 official changelogs move slower than news.
 
+**Official items decay last (db/046; owner, 2026-10-13).** Under db/045 an
+official item decayed on the same 18-hour half-life as a Hacker News story,
+so a busy HN day could push it off page one within a day or two. db/046
+gives an official story on Tech a 72-hour half-life (community stories,
+Home, Sports and every boost keep 18 h): at 48 h it has lost 0.46 rank
+instead of 1.85, as much as a 12-hour-old HN story. It is not an absolute
+guarantee of page one: 30 community stories that outrank it still fill the
+page first, and "seen" (an open or a reaction) is not tracked as an
+impression, so the ranking cannot know whether the owner has seen an item.
+
 **Backfill.** A tech source's first fetch keeps its 5 newest dated items
 whatever their age, so every official source shows something on day one.
 Every first-fetch item is marked `backfill` and never counted in the latency
@@ -140,24 +160,41 @@ the response body dropped as soon as it is parsed, and `memory.release()`
 still runs after each ingest. The worker's RSS delta is measured after deploy
 from the job log lines (pending).
 
-## 4. Decisions made while building, for the owner's review
+## 4. Decisions made while building, and the owner's answers (2026-10-13)
 
-1. **ChatGPT release notes are blocked** by a Cloudflare challenge. Not
-   bypassed. The row is in the toml, inactive. Options: leave it off (OpenAI
-   news and the API changelog cover launches), or name another source.
+1. **ChatGPT release notes are blocked** by a Cloudflare challenge. Owner:
+   leave it inactive, no workaround; replaced by the OpenAI Developer
+   Community announcements, plus the OpenAI and Anthropic Python SDK
+   releases (section 2).
 2. **Vercel's only feed mixes changelog and blog.** Kept as one source; Haiku
    categorizes each entry.
 3. **HN stories are always `community`** (see Categories), so they never
-   push.
+   push. Approved.
 4. **The Wags slice on /tech** is `ctx_tech` (added to the page-context map).
+   Approved on the condition that a cross-pillar question still gets the
+   full snapshot. It does: `/api/wags` puts EVERY provider's slice in the
+   cached system block; the page slice is only an extra note on the newest
+   turn (`apps/web/src/app/api/wags/route.ts`, the system block and the
+   `[Page detail: …]` note).
 5. **why-it-matters** now also asks about Tech's top 8 (same venture rule,
-   same 20-call daily cap shared with Home).
+   same 20-call daily cap shared with Home). Approved; its Haiku cost per
+   day goes in the report (`ai_usage`, purpose `feed_why`).
+6. **The 7-day window**: approved, with official items decaying last
+   (db/046, section 3).
+7. **`tech` and `tech_brief` share sort 50.** No reader orders by sort
+   alone where the tie matters: `context_snapshot()` orders by `sort, key`
+   (db/029) and the brief's section list by `sort, key`
+   (`ledger.brief_sections`), and `tech` is not a brief section, so
+   `tech_brief` is the only brief section at 50. Only old verify SELECTs
+   order by sort alone, for display. No change.
 
 ## 5. Order of operations
 
 1. Owner pastes db/045 on production (`db/045_tech_hub.sql`). Expect the
    NOTICE `045 self-test passed (rolled back)`; the verify block's
-   expectations are at the end of the file.
+   expectations are at the end of the file. **Done 2026-10-14 02:32:51 UTC**
+   (the first paste failed at the `_e2e_tech` slug and applied nothing; the
+   test source is `_e2e-tech`). Then db/046 (official decay).
 2. Record the migration (`migration_log.applied_at`) in CLAUDE.md and
    MASTER_PLAN in the same session.
 3. `tests_live -v` on this branch (needs db/045: the worker's queries read

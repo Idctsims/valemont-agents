@@ -560,6 +560,36 @@ notes = "platform.openai.com/docs/changelog redirects here (2026-10-13); no feed
 config = { mode = "blocks", block_class = "grid-cols-[3rem_1fr]", content_class = "_ChangelogMarkdown", max_bytes = 900000 }
 
 [[source]]
+slug = "openai-community-announcements"
+name = "OpenAI Developer Community"
+pillars = ["tech"]
+kind = "rss"
+url = "https://community.openai.com/c/announcements/6.rss"
+priority = 25
+official = true
+notes = "Discourse Announcements category (id 6); /c/announcements.rss redirects here (2026-10-13). Replaces the ChatGPT release notes (owner, 2026-10-13); below openai.com/news."
+
+[[source]]
+slug = "openai-python"
+name = "OpenAI Python SDK releases"
+pillars = ["tech"]
+kind = "rss"
+url = "https://github.com/openai/openai-python/releases.atom"
+priority = 20
+official = true
+notes = "SDK releases land the day a model or API feature ships: a second path to the one-cycle check (owner, 2026-10-13)."
+
+[[source]]
+slug = "anthropic-sdk-python"
+name = "Anthropic Python SDK releases"
+pillars = ["tech"]
+kind = "rss"
+url = "https://github.com/anthropics/anthropic-sdk-python/releases.atom"
+priority = 20
+official = true
+notes = "SDK releases land the day a model or API feature ships: a second path to the one-cycle check (owner, 2026-10-13)."
+
+[[source]]
 slug = "chatgpt-release-notes"
 name = "ChatGPT release notes"
 pillars = ["tech"]
@@ -568,7 +598,7 @@ url = "https://help.openai.com/en/articles/6825453-chatgpt-release-notes"
 priority = 10
 official = true
 active = false
-notes = "Cloudflare challenge (403, cf-mitigated: challenge) to our fetcher, 2026-10-13. Not bypassed; inactive pending the owner's decision."
+notes = "Cloudflare challenge (403, cf-mitigated: challenge) to our fetcher, 2026-10-13. Not bypassed; inactive by owner decision 2026-10-13 (replaced by the OpenAI Developer Community announcements)."
 config = { mode = "sections", heading = ["h2", "h3"] }
 
 [[source]]

@@ -60,6 +60,10 @@ HALF_LIFE_H = 18.0
 WINDOW_H = 72
 #: Tech's For you window (db/045): official changelogs move slower than news.
 TECH_WINDOW_H = 168
+#: An official tech story's recency half-life (db/046; owner, 2026-10-13:
+#: official items are "the last thing to decay, not the first"). Community
+#: (Hacker News) stories keep HALF_LIFE_H.
+TECH_OFFICIAL_HALF_LIFE_H = 72.0
 FLOOR_MAX = 3
 FLOOR_POSITION = 6
 FLOOR_MAX_AGE_H = 48.0
@@ -425,6 +429,9 @@ class Candidate:
     boost_h: float = 0.0
     #: The tier-1 follows the story matched (for the Sports entity cap).
     tier1: tuple[str, ...] = ()
+    #: From an official source (db/045): on Tech it decays at
+    #: TECH_OFFICIAL_HALF_LIFE_H (db/046).
+    official: bool = False
 
 
 @dataclass(frozen=True)
@@ -435,9 +442,15 @@ class Placed:
     floored: bool
 
 
-def rank_of(score: float, age_h: float, boost_h: float = 0.0) -> float:
-    """A boost of h hours ranks the story as if it were h hours fresher."""
-    return score + math.log(2.0) * boost_h / HALF_LIFE_H - math.log(2.0) * max(age_h, 0.0) / HALF_LIFE_H
+def rank_of(score: float, age_h: float, boost_h: float = 0.0, half_life_h: float = HALF_LIFE_H) -> float:
+    """A boost of h hours ranks the story as if it were h hours fresher. The
+    age decays at `half_life_h` (TECH_OFFICIAL_HALF_LIFE_H for an official
+    story on Tech, db/046); the boost always at HALF_LIFE_H."""
+    return score + math.log(2.0) * boost_h / HALF_LIFE_H - math.log(2.0) * max(age_h, 0.0) / half_life_h
+
+
+def half_life(pillar: str, official: bool) -> float:
+    return TECH_OFFICIAL_HALF_LIFE_H if pillar == "tech" and official else HALF_LIFE_H
 
 
 def entity_cap(name: str, boosted: frozenset[str] | set[str]) -> int:
@@ -456,7 +469,7 @@ def order_for_you(cands: Sequence[Candidate], pillar: Pillar = "home",
     cap = CROSS_CAP if cross_cap is None else cross_cap
     if cap == 0:
         cands = [c for c in cands if not c.cross_pillar]
-    r = {c.id: rank_of(c.score, c.age_h, c.boost_h) for c in cands}
+    r = {c.id: rank_of(c.score, c.age_h, c.boost_h, half_life(pillar, c.official)) for c in cands}
 
     def key(cid: int, value: float) -> tuple[float, int]:
         return (-value, -cid)

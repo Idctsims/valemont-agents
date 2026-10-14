@@ -955,7 +955,8 @@ ON CONFLICT (name) DO NOTHING;
 -- Verify — expect:
 --   (a) the new CHECKs: sources pillars/kind/kind_url/config, stories
 --       pillars/category/category_pillar, content_items published_precision,
---       and the four pillar CHECKs list tech (10 rows)
+--       and the four pillar CHECKs list tech (12 rows: 8 named + 4 pillar
+--       CHECKs; this comment said 10 when pasted on 2026-10-14, a miscount)
 --   (b) tech_credit_pushes: RLS on, 1 policy, anon nothing, authenticated
 --       SELECT only; 0 rows
 --   (c) feed_for_you has 27 output columns ending category, official; the

@@ -200,6 +200,30 @@ class NoCrossIn(TechSqlCase):
                 self.assertEqual(cur.fetchall(), [("tech", "love")])
 
 
+class OfficialDecay(TechSqlCase):
+    """db/046: an official tech story decays at rank.TECH_OFFICIAL_HALF_LIFE_H."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        with _rolled_back() as conn:
+            body = conn.execute("SELECT pg_get_functiondef('public.feed_for_you(text, integer, integer, text, "
+                                "text, integer)'::regprocedure)").fetchone()[0]
+            if "tech_official_half_life_h" not in body:
+                raise unittest.SkipTest("db/046 not pasted")
+
+    def test_the_sql_rank_is_the_twins(self) -> None:
+        from feed import rank
+        with _rolled_back() as conn:
+            off = self.tech_story(conn, official=True, score=5, hours_ago=48)
+            com = self.tech_story(conn, official=False, score=5, hours_ago=20)
+            rows = dict(conn.execute("SELECT id, rank FROM feed_for_you('tech', 100000, 0) WHERE id = ANY(%s)",
+                                     ([off, com],)).fetchall())
+            self.assertAlmostEqual(rows[off], rank.rank_of(5, 48, 0, rank.half_life("tech", True)), places=2)
+            self.assertAlmostEqual(rows[com], rank.rank_of(5, 20, 0, rank.half_life("tech", False)), places=2)
+            self.assertGreater(rows[off], rows[com])
+
+
 class WorkerQueries(TechSqlCase):
     def test_the_tech_queue_puts_official_first_and_the_home_queue_leaves_tech_out(self) -> None:
         with _rolled_back() as conn:

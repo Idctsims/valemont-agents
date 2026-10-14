@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import unittest
 from datetime import date, timedelta
@@ -209,9 +210,13 @@ class HackerNews(unittest.TestCase):
 class SourcesFile(unittest.TestCase):
     def test_the_tech_sources(self) -> None:
         t = {s.slug: s for s in load_sources() if "tech" in s.pillars}
-        self.assertEqual(len(t), 18)
-        self.assertEqual(sum(s.active for s in t.values()), 17)
-        self.assertEqual(sum(s.official for s in t.values()), 16)
+        self.assertEqual(len(t), 21)
+        self.assertEqual(sum(s.active for s in t.values()), 20)
+        self.assertEqual(sum(s.official for s in t.values()), 19)
+        # The owner's replacement for the blocked ChatGPT notes, below openai.com/news.
+        self.assertGreater(t["openai-community-announcements"].priority, t["openai-news"].priority)
+        self.assertTrue(all(t[s].official and t[s].active for s in
+                            ("openai-community-announcements", "openai-python", "anthropic-sdk-python")))
         self.assertTrue(all(s.pillars == ("tech",) for s in t.values()))
         chatgpt = t["chatgpt-release-notes"]
         self.assertFalse(chatgpt.active)
@@ -263,6 +268,19 @@ class NoCrossIn(unittest.TestCase):
                          [("sports", False), ("home", True)])
         # A follow with no pillar is Home's and Sports', never Tech's.
         self.assertIsNone(rank.match_follows("tech", follows, "Alabama", (), "cfb").tier)
+
+    def test_official_tech_items_decay_last(self) -> None:
+        # db/046 (owner): a 48 h official item outranks a 20 h HN item of the
+        # same score on Tech; the same pair on Home keeps 18 h for both.
+        official = rank.Candidate(1, 5.0, 48.0, official=True)
+        community = rank.Candidate(2, 5.0, 20.0)
+        self.assertEqual([p.id for p in rank.order_for_you([community, official], "tech")], [1, 2])
+        self.assertEqual([p.id for p in rank.order_for_you([community, official], "home")], [2, 1])
+        self.assertAlmostEqual(rank.rank_of(5.0, 48.0, 0.0, rank.half_life("tech", True)),
+                               5.0 - math.log(2) * 48 / 72)
+        sql = (REPO_ROOT / "db" / "046_tech_official_decay.sql").read_text(encoding="utf-8")
+        self.assertIn(f"{rank.TECH_OFFICIAL_HALF_LIFE_H}::float8 AS tech_official_half_life_h, "
+                      "-- rank.TECH_OFFICIAL_HALF_LIFE_H", sql)
 
     def test_the_read_path_constants_match_db_045(self) -> None:
         sql = (REPO_ROOT / "db" / "045_tech_hub.sql").read_text(encoding="utf-8")
