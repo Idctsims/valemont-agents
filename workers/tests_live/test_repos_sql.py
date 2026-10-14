@@ -176,6 +176,56 @@ class TheRulesInSql(RepoSqlCase):
                                           (rid, FAR + timedelta(days=60))).fetchone()[0])
 
 
+    def test_the_guard_refuses_the_same_repo_again_today(self) -> None:
+        with _rolled_back() as conn:
+            sid, rid, name = self.surfaced(conn, stars_7d=10)
+            stories = conn.execute("SELECT count(*) FROM stories").fetchone()[0]
+            # The real path, guard on: refused (by the rule, or by the cap when
+            # today's 8 are used), and nothing at all is written.
+            self.assertIsNone(ledger.repo_surface(self.gh_source(conn), rid, self.row(name, conn, 1000), conn=conn))
+            self.assertEqual(conn.execute("SELECT count(*) FROM stories").fetchone()[0], stories)
+            self.assertFalse(ledger.repo_may_surface(rid, 1000, conn=conn))
+            today = ledger.owner_today(conn=conn)
+            self.assertEqual(conn.execute("SELECT surfaced_on, stars_7d, stars_7d_source FROM repo_surfacings "
+                                          "WHERE story_id = %s", (sid,)).fetchone(), (today, 10, "measured"))
+            self.assertEqual(conn.execute("SELECT category, pillars FROM stories WHERE id = %s", (sid,)).fetchone(),
+                             ("repos", ["tech"]))
+            self.assertEqual(conn.execute(
+                "SELECT i.published_precision, i.published_at = date_trunc('day', i.published_at) "
+                "FROM stories st JOIN content_items i ON i.id = st.lead_item_id WHERE st.id = %s",
+                (sid,)).fetchone(), ("date", True))
+
+    def test_the_cap_of_8_a_day(self) -> None:
+        with _rolled_back() as conn:
+            self.assertEqual(conn.execute("SELECT repo_surface_room(%s)", (FAR,)).fetchone()[0], 8)
+            for _ in range(8):
+                self.far_surfacing(conn, self.repo(conn)[0], FAR, 5)
+            self.assertEqual(conn.execute("SELECT repo_surface_room(%s)", (FAR,)).fetchone()[0], 0)
+            # Today, through the guard: fill whatever room is left, then one more is refused.
+            src = self.gh_source(conn)
+            for _ in range(ledger.repos_surfaced_today(conn=conn), 8):
+                rid, name = self.repo(conn)
+                self.assertIsNotNone(ledger.repo_surface(src, rid, self.row(name, conn), conn=conn))
+            rid, name = self.repo(conn)
+            self.assertIsNone(ledger.repo_surface(src, rid, self.row(name, conn), conn=conn))
+            self.assertEqual(ledger.repos_surfaced_today(conn=conn), 8)
+            self.assertEqual(conn.execute("SELECT repo_surface_room(owner_today())").fetchone()[0], 0)
+
+    def test_append_only(self) -> None:
+        with _rolled_back() as conn:
+            sid, rid, _ = self.surfaced(conn)
+            ledger.repo_snapshot([(rid, 100)], conn=conn)
+            for sql in ("UPDATE repo_surfacings SET stars = 1 WHERE story_id = %(s)s",
+                        "DELETE FROM repo_surfacings WHERE story_id = %(s)s",
+                        "UPDATE repo_star_snapshots SET stars = 1 WHERE repo_id = %(r)s",
+                        "DELETE FROM repo_star_snapshots WHERE repo_id = %(r)s"):
+                with self.subTest(sql=sql), self.assertRaises(psycopg.errors.RaiseException):
+                    with conn.transaction():
+                        conn.execute(sql, {"s": sid, "r": rid})
+            with self.assertRaises(psycopg.errors.ForeignKeyViolation), conn.transaction():
+                conn.execute("DELETE FROM stories WHERE id = %s", (sid,))
+
+
 class MeasuredBaseline(RepoSqlCase):
     """db/050 (owner, 2026-10-14): a repo that first surfaced without a
     MEASURED stars_7d takes its first measured stars_7d (snapshots on D and
@@ -245,55 +295,6 @@ class MeasuredBaseline(RepoSqlCase):
             self.far_surfacing(conn, rid, FAR, 0)
             self.assertFalse(self.ask(conn, rid, 1, FAR + timedelta(days=14)))
             self.assertTrue(self.ask(conn, rid, 2, FAR + timedelta(days=14)))
-
-    def test_the_guard_refuses_the_same_repo_again_today(self) -> None:
-        with _rolled_back() as conn:
-            sid, rid, name = self.surfaced(conn, stars_7d=10)
-            stories = conn.execute("SELECT count(*) FROM stories").fetchone()[0]
-            # The real path, guard on: refused (by the rule, or by the cap when
-            # today's 8 are used), and nothing at all is written.
-            self.assertIsNone(ledger.repo_surface(self.gh_source(conn), rid, self.row(name, conn, 1000), conn=conn))
-            self.assertEqual(conn.execute("SELECT count(*) FROM stories").fetchone()[0], stories)
-            self.assertFalse(ledger.repo_may_surface(rid, 1000, conn=conn))
-            today = ledger.owner_today(conn=conn)
-            self.assertEqual(conn.execute("SELECT surfaced_on, stars_7d, stars_7d_source FROM repo_surfacings "
-                                          "WHERE story_id = %s", (sid,)).fetchone(), (today, 10, "measured"))
-            self.assertEqual(conn.execute("SELECT category, pillars FROM stories WHERE id = %s", (sid,)).fetchone(),
-                             ("repos", ["tech"]))
-            self.assertEqual(conn.execute(
-                "SELECT i.published_precision, i.published_at = date_trunc('day', i.published_at) "
-                "FROM stories st JOIN content_items i ON i.id = st.lead_item_id WHERE st.id = %s",
-                (sid,)).fetchone(), ("date", True))
-
-    def test_the_cap_of_8_a_day(self) -> None:
-        with _rolled_back() as conn:
-            self.assertEqual(conn.execute("SELECT repo_surface_room(%s)", (FAR,)).fetchone()[0], 8)
-            for _ in range(8):
-                self.far_surfacing(conn, self.repo(conn)[0], FAR, 5)
-            self.assertEqual(conn.execute("SELECT repo_surface_room(%s)", (FAR,)).fetchone()[0], 0)
-            # Today, through the guard: fill whatever room is left, then one more is refused.
-            src = self.gh_source(conn)
-            for _ in range(ledger.repos_surfaced_today(conn=conn), 8):
-                rid, name = self.repo(conn)
-                self.assertIsNotNone(ledger.repo_surface(src, rid, self.row(name, conn), conn=conn))
-            rid, name = self.repo(conn)
-            self.assertIsNone(ledger.repo_surface(src, rid, self.row(name, conn), conn=conn))
-            self.assertEqual(ledger.repos_surfaced_today(conn=conn), 8)
-            self.assertEqual(conn.execute("SELECT repo_surface_room(owner_today())").fetchone()[0], 0)
-
-    def test_append_only(self) -> None:
-        with _rolled_back() as conn:
-            sid, rid, _ = self.surfaced(conn)
-            ledger.repo_snapshot([(rid, 100)], conn=conn)
-            for sql in ("UPDATE repo_surfacings SET stars = 1 WHERE story_id = %(s)s",
-                        "DELETE FROM repo_surfacings WHERE story_id = %(s)s",
-                        "UPDATE repo_star_snapshots SET stars = 1 WHERE repo_id = %(r)s",
-                        "DELETE FROM repo_star_snapshots WHERE repo_id = %(r)s"):
-                with self.subTest(sql=sql), self.assertRaises(psycopg.errors.RaiseException):
-                    with conn.transaction():
-                        conn.execute(sql, {"s": sid, "r": rid})
-            with self.assertRaises(psycopg.errors.ForeignKeyViolation), conn.transaction():
-                conn.execute("DELETE FROM stories WHERE id = %s", (sid,))
 
 
 class Reactions(RepoSqlCase):
