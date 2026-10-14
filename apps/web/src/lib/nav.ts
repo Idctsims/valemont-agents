@@ -62,7 +62,8 @@ export const NAV: NavGroup[] = [
   {
     key: "tech",
     name: "Tech",
-    pillars: [{ n: 8, name: "Tech Hub", built: false, href: "/tech-hub" }],
+    // Built in Chat 4 Phase 1 (db/045); the owner named the route /tech.
+    pillars: [{ n: 8, name: "Tech Hub", built: true, href: "/tech" }],
   },
   {
     key: "sports",

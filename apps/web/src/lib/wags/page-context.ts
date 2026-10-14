@@ -3,7 +3,7 @@
 // used to pull that page's slice out of the context snapshot. Shared by the
 // client (which builds it) and the route (which validates it).
 
-export const PILLARS = ["goals", "ventures", "capital", "brief"] as const;
+export const PILLARS = ["goals", "ventures", "capital", "brief", "tech"] as const;
 export type Pillar = (typeof PILLARS)[number];
 
 export type PageContext = {

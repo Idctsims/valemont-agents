@@ -36,6 +36,8 @@ const PILLAR_OF: Record<string, Pillar> = {
   "/ventures": "ventures",
   "/capital": "capital",
   "/brief": "brief",
+  // Tech Hub (db/045 ctx_tech): official items of the last 7 days.
+  "/tech": "tech",
 };
 
 /** "Context · Brief": what Ask Wags about this opens with. */

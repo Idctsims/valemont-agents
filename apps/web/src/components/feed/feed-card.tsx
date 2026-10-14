@@ -6,7 +6,8 @@ import { useId, useRef, useState } from "react";
 import { SWIPE_COMMIT_PX, swipeReaction, type FeedStory, type Pillar } from "@/lib/feed/types";
 
 // One story in a feed list: a hairline row, not a boxed card (ledger
-// language, as the brief). Mono "SOURCE · 3H", the headline in Instrument
+// language, as the brief). Mono "SOURCE · 3H" (plus OFFICIAL for a
+// first-party tech source), the headline in Instrument
 // Serif, Haiku's summary (or nothing: the headline stands alone), the "Why it
 // matters" line when the story has one, a "+N outlets" fold when other outlets
 // carry the story, and the three reactions. The headline's link covers the
@@ -142,6 +143,13 @@ export function FeedCard({
           <span data-testid="feed-meta">
             {story.sourceName} · {when}
           </span>
+          {/* A first-party source (db/045): shown with or without a summary,
+              so a fresh release reads as official before Haiku has run. */}
+          {story.official && (
+            <span data-testid="feed-official" className="rounded-pill border border-accent px-2 text-accent">
+              Official
+            </span>
+          )}
           {story.isTest && (
             <span data-testid="feed-test" className="rounded-pill border border-text-muted px-2 normal-case tracking-normal text-text">
               test

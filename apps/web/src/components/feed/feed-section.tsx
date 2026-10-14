@@ -1,11 +1,12 @@
 import Link from "next/link";
 
-import { feedHref, type FeedStory, type FeedTab, type NewsCategory, type Pillar, type Sport } from "@/lib/feed/types";
+import { feedHref, type FeedCategory, type FeedStory, type FeedTab, type Pillar, type Sport } from "@/lib/feed/types";
 
 import { FeedList } from "./feed-list";
 
-// A feed's two tabs: News (pillar home, at "/news", under the category chips)
-// and Sports News (pillar sports, at "/sports", under the sport chips). Home
+// A feed's two tabs: News (pillar home, at "/news", under the category chips),
+// Sports News (pillar sports, at "/sports", under the sport chips) and Tech
+// Hub (pillar tech, at "/tech", under the tech category chips; db/045). Home
 // itself shows only For you's top 10 (components/feed/home-feed.tsx).
 //   For you  the learned order (db/042 feed_for_you): the interest profile's
 //            score minus recency plus any event boost; Alabama near the top;
@@ -34,9 +35,9 @@ export function FeedSection({
   hasMore: boolean;
   now: number;
   pillar?: Pillar;
-  base?: "/news" | "/sports";
+  base?: "/news" | "/sports" | "/tech";
   sport?: Sport | null;
-  category?: NewsCategory | null;
+  category?: FeedCategory | null;
 }) {
   const label = tab === "latest" ? "Latest" : "For you";
   const tabs: { tab: FeedTab; label: string }[] = [

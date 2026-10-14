@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { PAGE_SIZE, hides, otherOutlets, type FeedStory, type NewsCategory, type Pillar, type Sport } from "./types";
+import { PAGE_SIZE, hides, otherOutlets, type FeedCategory, type FeedStory, type Pillar, type Sport } from "./types";
 
 // Reads only: the worker writes the feed (db/032) and its scores (db/039);
 // the owner reads through RLS, and writes only reactions (feed/actions.ts,
@@ -21,6 +21,8 @@ type ViewRow = {
   lead_url: string;
   lead_published_at: string;
   source_name: string;
+  /** v_feed_stories (db/045); feed_for_you returns it as `official`. */
+  source_official?: boolean | null;
 };
 
 type TestRow = {
@@ -31,10 +33,12 @@ type TestRow = {
   item_count: number;
   is_test: boolean;
   lead_item_id: number;
-  lead: { url: string | null; published_at: string; source: { name: string } | null } | null;
+  lead: { url: string | null; published_at: string; source: { name: string; official: boolean } | null } | null;
 };
 
-type ForYouRow = ViewRow & { pos: number; reaction: string | null; floored: boolean | null; cross_pillar: boolean };
+type ForYouRow = ViewRow & {
+  pos: number; reaction: string | null; floored: boolean | null; cross_pillar: boolean; official: boolean | null;
+};
 
 /** Hidden in Latest: the most recent stories whose latest reaction in this
  * pillar is neutral or not interested. For you hides them in SQL. */
@@ -110,7 +114,7 @@ async function finish(
  * dismissed (neutral, not interested). `hasMore` when another page exists. */
 export async function latestStories(
   supabase: SupabaseClient,
-  opts: { pillar: Pillar; page: number; withTests?: boolean; sport?: Sport | null; category?: NewsCategory | null },
+  opts: { pillar: Pillar; page: number; withTests?: boolean; sport?: Sport | null; category?: FeedCategory | null },
 ): Promise<{ stories: FeedStory[]; hasMore: boolean }> {
   const from = (opts.page - 1) * PAGE_SIZE;
   // One extra row tells whether a next page exists.
@@ -124,7 +128,7 @@ export async function latestStories(
   if (opts.withTests) {
     let q = supabase
       .from("stories")
-      .select("id, title, summary, why_it_matters, item_count, is_test, lead_item_id, lead:content_items!stories_lead_item_fk(url, published_at, source:sources(name))")
+      .select("id, title, summary, why_it_matters, item_count, is_test, lead_item_id, lead:content_items!stories_lead_item_fk(url, published_at, source:sources(name, official))")
       .contains("pillars", [opts.pillar])
       .is("filtered_reason", null)
       .not("lead_item_id", "is", null)
@@ -140,13 +144,13 @@ export async function latestStories(
     base = rows.map((r) => ({
       id: r.id, title: r.title, summary: r.summary, sourceName: r.lead!.source?.name ?? "Unknown",
       url: r.lead!.url!, publishedAt: r.lead!.published_at, itemCount: r.item_count, isTest: r.is_test,
-      whyItMatters: r.why_it_matters,
+      whyItMatters: r.why_it_matters, official: !!r.lead!.source?.official,
     }));
     meta = rows.map((r) => ({ id: r.id, leadItemId: r.lead_item_id, sourceName: r.lead!.source?.name ?? "Unknown", itemCount: r.item_count }));
   } else {
     let q = supabase
       .from("v_feed_stories")
-      .select("id, title, summary, why_it_matters, item_count, lead_item_id, lead_url, lead_published_at, source_name")
+      .select("id, title, summary, why_it_matters, item_count, lead_item_id, lead_url, lead_published_at, source_name, source_official")
       .contains("pillars", [opts.pillar])
       .not("id", "in", notHidden);
     if (opts.sport) q = q.eq("sport", opts.sport);
@@ -163,10 +167,11 @@ export async function latestStories(
   return finish(supabase, opts.pillar, base, meta);
 }
 
-function viewStory(r: ViewRow): Base {
+function viewStory(r: ViewRow & { official?: boolean | null }): Base {
   return {
     id: r.id, title: r.title, summary: r.summary, sourceName: r.source_name, url: r.lead_url,
     publishedAt: r.lead_published_at, itemCount: r.item_count, isTest: false, whyItMatters: r.why_it_matters,
+    official: !!(r.source_official ?? r.official),
   };
 }
 
@@ -184,7 +189,7 @@ function viewMeta(r: ViewRow): Meta {
  * Home's pillar only); omitted, the default 5. */
 export async function forYouStories(
   supabase: SupabaseClient,
-  opts: { pillar: Pillar; page: number; sport?: Sport | null; category?: NewsCategory | null; crossCap?: number },
+  opts: { pillar: Pillar; page: number; sport?: Sport | null; category?: FeedCategory | null; crossCap?: number },
 ): Promise<{ stories: FeedStory[]; hasMore: boolean }> {
   const { data, error } = await supabase.rpc("feed_for_you", {
     p_pillar: opts.pillar,
@@ -200,6 +205,70 @@ export async function forYouStories(
   return finish(supabase, opts.pillar, rows.map(viewStory), rows.map(viewMeta), loved);
 }
 
+/** One tech story by id, for the free-credits push's deep link
+ * (/tech/story/[id]): real, kept, linkable, pillar tech (v_feed_stories), or
+ * null. Its Love/Neutral/Not interested write pillar tech. */
+export async function techStory(supabase: SupabaseClient, id: number): Promise<FeedStory | null> {
+  const { data, error } = await supabase
+    .from("v_feed_stories")
+    .select("id, title, summary, why_it_matters, item_count, lead_item_id, lead_url, lead_published_at, source_name, source_official")
+    .eq("id", id)
+    .contains("pillars", ["tech"])
+    .maybeSingle();
+  if (error) throw new Error(`Couldn't read the story: ${error.message}`);
+  if (!data) return null;
+  const row = data as ViewRow;
+  const { stories } = await finish(supabase, "tech", [viewStory(row)], [viewMeta(row)]);
+  return stories[0] ?? null;
+}
+
+// ------------------------------------------------------------ /settings/feed: tech sources
+
+export type TechSourceRow = {
+  slug: string;
+  name: string;
+  kind: string;
+  official: boolean;
+  active: boolean;
+  lastOkAt: string | null;
+  lastStatus: "ok" | "not_modified" | "error" | null;
+  lastError: string | null;
+  failures: number;
+  lastItemAt: string | null;
+  items24h: number;
+  notes: string | null;
+};
+
+/** Every Tech Hub source's health (db/045): last good fetch, newest item,
+ * failures in a row. Official first, then by name. */
+export async function techSourcesHealth(supabase: SupabaseClient): Promise<TechSourceRow[]> {
+  const [sources, stats] = await Promise.all([
+    supabase
+      .from("sources")
+      .select("id, slug, name, kind, official, active, last_ok_at, last_status, last_error, consecutive_failures, notes")
+      .eq("is_test", false)
+      .contains("pillars", ["tech"])
+      .order("official", { ascending: false })
+      .order("name"),
+    supabase.from("v_feed_source_stats").select("source_id, items_24h, last_item_at"),
+  ]);
+  for (const r of [sources, stats]) {
+    if (r.error) throw new Error(`Couldn't read the tech sources: ${r.error.message}`);
+  }
+  const byId = new Map(
+    ((stats.data ?? []) as { source_id: number; items_24h: number; last_item_at: string | null }[]).map((s) => [s.source_id, s]),
+  );
+  type Db = {
+    id: number; slug: string; name: string; kind: string; official: boolean; active: boolean; last_ok_at: string | null;
+    last_status: TechSourceRow["lastStatus"]; last_error: string | null; consecutive_failures: number; notes: string | null;
+  };
+  return ((sources.data ?? []) as Db[]).map((s) => ({
+    slug: s.slug, name: s.name, kind: s.kind, official: s.official, active: s.active, lastOkAt: s.last_ok_at,
+    lastStatus: s.last_status, lastError: s.last_error, failures: s.consecutive_failures,
+    lastItemAt: byId.get(s.id)?.last_item_at ?? null, items24h: Number(byId.get(s.id)?.items_24h ?? 0), notes: s.notes,
+  }));
+}
+
 // ------------------------------------------------------------ /settings/sources
 
 export type SourceRow = {
@@ -207,7 +276,7 @@ export type SourceRow = {
   slug: string;
   name: string;
   pillars: string[];
-  kind: "rss" | "gnews";
+  kind: "rss" | "gnews" | "page" | "hn";
   active: boolean;
   priority: number;
   last_ok_at: string | null;

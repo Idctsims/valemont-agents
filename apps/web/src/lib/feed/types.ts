@@ -8,7 +8,7 @@ export const MAX_PAGE = 20;
 
 export type Outlet = { name: string; url: string };
 
-export type Pillar = "home" | "sports";
+export type Pillar = "home" | "sports" | "tech";
 
 /** What a card's buttons and swipes write (db/039 feed_reactions); 'open'
  * comes only from the beacon (/api/feed/open). */
@@ -32,6 +32,8 @@ export type FeedStory = {
   whyItMatters: string | null;
   /** Loved in this pillar (the latest reaction): the card stays marked. */
   loved: boolean;
+  /** From a first-party source (db/045 sources.official): the "Official" tag. */
+  official: boolean;
 };
 
 /** Home's two orders: the learned ranking (db/039 feed_for_you) and newest first. */
@@ -78,6 +80,29 @@ export function categoryFromParam(raw: string | string[] | undefined): NewsCateg
   return NEWS_CHIPS.some((c) => c.category === v) ? (v as NewsCategory) : null;
 }
 
+/** /tech category chips (stories.category for pillar tech, db/045;
+ * workers/feed/tech.py CHIP_CATEGORIES, pinned by e2e/tech-unit.spec.ts).
+ * `repos` arrives with GitHub in Phase 2; `other` shows under All only. */
+export type TechCategory = "models_features" | "pricing_credits" | "tooling" | "agents" | "stack" | "community";
+export const TECH_CHIPS: readonly { category: TechCategory | null; label: string }[] = [
+  { category: null, label: "All" },
+  { category: "models_features", label: "Models & features" },
+  { category: "pricing_credits", label: "Pricing & credits" },
+  { category: "tooling", label: "Tooling" },
+  { category: "agents", label: "Agents" },
+  { category: "stack", label: "Stack" },
+  { category: "community", label: "Community" },
+];
+
+/** `?category=` on /tech as a chip; anything else is All. */
+export function techCategoryFromParam(raw: string | string[] | undefined): TechCategory | null {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  return TECH_CHIPS.some((c) => c.category === v) ? (v as TechCategory) : null;
+}
+
+/** A chip on either page: a /news or a /tech category. */
+export type FeedCategory = NewsCategory | TechCategory;
+
 /** How many For you stories Home shows before "See all news". */
 export const HOME_TOP = 10;
 
@@ -93,8 +118,8 @@ export const HOME_SHORT_CROSS = 2;
  * Sports: "/sports?sport=golf&feed=latest#stories".
  */
 export function feedHref(
-  base: "/" | "/news" | "/sports",
-  o: { tab: FeedTab; page?: number; sport?: Sport | null; category?: NewsCategory | null; anchor?: boolean },
+  base: "/" | "/news" | "/sports" | "/tech",
+  o: { tab: FeedTab; page?: number; sport?: Sport | null; category?: FeedCategory | null; anchor?: boolean },
 ): string {
   const q = new URLSearchParams();
   if (o.sport) q.set("sport", o.sport);
