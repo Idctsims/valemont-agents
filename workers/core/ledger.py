@@ -1835,10 +1835,12 @@ def feed_sync_sources(specs: Sequence[Any], *, conn: psycopg.Connection | None =
 
 
 def feed_active_sources(*, conn: psycopg.Connection | None = None) -> list[FeedSource]:
-    """Active real sources, lowest priority number first."""
+    """Active real sources the 30-minute ingest fetches, lowest priority
+    number first. Not the `github` source: the daily repos job owns it
+    (db/049, feed/repos.py)."""
     with _brief_conn(conn) as c:
         rows = c.execute(f"SELECT {_FEED_SOURCE_COLS} FROM sources WHERE active AND NOT is_test "
-                         "ORDER BY priority, slug").fetchall()
+                         "AND kind <> 'github' ORDER BY priority, slug").fetchall()
     return [_feed_source(r) for r in rows]
 
 
@@ -2340,10 +2342,13 @@ def feed_save_summaries(results: Sequence[SummaryOut], ai_usage_id: int | None, 
                     (r.attempts, r.story_id),
                 )
                 continue
+            # A repo story keeps its GitHub topics (db/049, feed/repos.py):
+            # they are what a Not interested on a repo trains.
             c.execute(
                 """
                 UPDATE stories
-                   SET summary = %s, entities = %s, topics = %s,
+                   SET summary = %s, entities = %s,
+                       topics = CASE WHEN category = 'repos' AND cardinality(topics) > 0 THEN topics ELSE %s END,
                        sport = CASE WHEN %s THEN coalesce(%s, sport) ELSE coalesce(sport, %s) END,
                        category = coalesce(category, %s),
                        claimable_offer = coalesce(claimable_offer, %s),
@@ -2576,15 +2581,18 @@ FEED_PRUNE_SQL: Final = {
            AND NOT EXISTS (SELECT 1 FROM feed_reactions r WHERE r.story_id = st.id)
            AND NOT EXISTS (SELECT 1 FROM entity_link_proposals p WHERE p.story_id = st.id)
            AND NOT EXISTS (SELECT 1 FROM tech_credit_pushes t WHERE t.story_id = st.id)
+           AND NOT EXISTS (SELECT 1 FROM repo_surfacings rs WHERE rs.story_id = st.id)
     """,
     # Kept stories, 90 days after they were last seen, unless reacted to or
-    # named by a move proposal.
+    # named by a move proposal, a push or a repo surfacing (db/049: the
+    # surfacing record is append-only and refuses the delete).
     "unreacted_stories_deleted": """
         DELETE FROM stories st
          WHERE st.filtered_reason IS NULL AND st.last_seen_at < now() - interval '90 days'
            AND NOT EXISTS (SELECT 1 FROM feed_reactions r WHERE r.story_id = st.id)
            AND NOT EXISTS (SELECT 1 FROM entity_link_proposals p WHERE p.story_id = st.id)
            AND NOT EXISTS (SELECT 1 FROM tech_credit_pushes t WHERE t.story_id = st.id)
+           AND NOT EXISTS (SELECT 1 FROM repo_surfacings rs WHERE rs.story_id = st.id)
     """,
     # Superseded scores (a newer row exists for the story and pillar) after 7 days.
     "story_scores_superseded_deleted": """
@@ -2995,7 +3003,8 @@ class WhyJob:
 
 #: Home's and Tech's top `top` stories in For you that were never asked "why
 #: it matters" (Tech since db/045: the why-it-matters engine is shared).
-#: Home first, then Tech, each in For you order.
+#: Home first, then Tech, each in For you order. Repo stories are asked by
+#: their own job (db/049; FEED_REPO_WHY_QUEUE_SQL, feed/why.py repo_why_job).
 FEED_WHY_QUEUE_SQL: Final = """
     SELECT x.id, x.title, x.summary, x.source_name
       FROM (SELECT f.id, f.title, f.summary, f.source_name, 0 AS feed, f.pos
@@ -3004,7 +3013,7 @@ FEED_WHY_QUEUE_SQL: Final = """
             SELECT f.id, f.title, f.summary, f.source_name, 1 AS feed, f.pos
               FROM feed_for_you('tech', %(top)s, 0) f) x
       JOIN stories st ON st.id = x.id
-     WHERE st.why_generated_at IS NULL
+     WHERE st.why_generated_at IS NULL AND st.category IS DISTINCT FROM 'repos'
      ORDER BY x.feed, x.pos
 """
 
@@ -3064,6 +3073,263 @@ def feed_save_why(answers: Mapping[int, str | None], ai_usage_id: int | None, *,
                  WHERE id = %s AND why_generated_at IS NULL
                 """, (line, ai_usage_id, story_id))
             written += cur.rowcount
+    return written
+
+
+# ---------------------------------------------------------------------------
+# GitHub repos in Tech Hub (db/049; feed/repos.py). `repos` is an app table
+# the worker updates; repo_star_snapshots and repo_surfacings are append-only
+# and their days are the database's (owner_today()). The 8-a-day cap and the
+# resurface rule are repo_surfacings' trigger: repo_surface() asks the rule
+# first and, if the trigger still refuses, rolls the whole pick back.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class RepoIn:
+    full_name: str
+    html_url: str
+    description: str | None
+    language: str | None
+    topics: tuple[str, ...]
+    license: str | None
+    archived: bool
+    fork: bool
+    gh_created_at: datetime | None
+    pushed_at: datetime | None
+    stars: int
+
+
+def owner_today(*, conn: psycopg.Connection | None = None) -> date:
+    with _brief_conn(conn) as c:
+        return c.execute("SELECT public.owner_today()").fetchone()[0]
+
+
+#: This job's own success today, in the owner's timezone (a JobSkipped
+#: counts: it means the run already happened).
+JOB_OK_TODAY_SQL: Final = f"""
+    SELECT coalesce((SELECT last_ok_at >= {_LOCAL_DAY_START} FROM job_health WHERE job = %s), false)
+"""
+
+
+def job_ok_today(job: str, *, conn: psycopg.Connection | None = None) -> bool:
+    with _brief_conn(conn) as c:
+        return bool(c.execute(JOB_OK_TODAY_SQL, (job,)).fetchone()[0])
+
+
+def repos_upsert(rows: Sequence[RepoIn], *, conn: psycopg.Connection | None = None) -> dict[str, int]:
+    """Insert or refresh each repo (real rows only) by lower(full_name).
+    Returns {lower(full_name): id}."""
+    out: dict[str, int] = {}
+    if not rows:
+        return out
+    with _brief_conn(conn) as c, c.transaction():
+        for r in rows:
+            rid = c.execute(
+                """
+                INSERT INTO repos (full_name, html_url, description, language, topics, license, archived, fork,
+                                   gh_created_at, pushed_at, stars, last_checked_at)
+                VALUES (%(full_name)s, %(html_url)s, left(%(description)s, 1000), left(%(language)s, 60),
+                        %(topics)s, left(%(license)s, 100), %(archived)s, %(fork)s, %(created)s, %(pushed)s,
+                        %(stars)s, now())
+                ON CONFLICT (lower(full_name)) DO UPDATE SET
+                    html_url = EXCLUDED.html_url, description = coalesce(EXCLUDED.description, repos.description),
+                    language = coalesce(EXCLUDED.language, repos.language), topics = EXCLUDED.topics,
+                    license = EXCLUDED.license, archived = EXCLUDED.archived, fork = EXCLUDED.fork,
+                    gh_created_at = coalesce(EXCLUDED.gh_created_at, repos.gh_created_at),
+                    pushed_at = coalesce(EXCLUDED.pushed_at, repos.pushed_at), stars = EXCLUDED.stars,
+                    last_checked_at = now()
+                 WHERE NOT repos.is_test
+                RETURNING id
+                """,
+                {"full_name": r.full_name, "html_url": r.html_url, "description": r.description,
+                 "language": r.language, "topics": list(r.topics)[:30], "license": r.license,
+                 "archived": r.archived, "fork": r.fork, "created": r.gh_created_at, "pushed": r.pushed_at,
+                 "stars": r.stars},
+            ).fetchone()
+            if rid is None:
+                raise LedgerError(f"repo {r.full_name!r} collides with a test repo")
+            out[r.full_name.lower()] = int(rid[0])
+    return out
+
+
+def repo_snapshot(pairs: Sequence[tuple[int, int]], *, conn: psycopg.Connection | None = None) -> int:
+    """Today's star count per repo (repo id, stars); the day is the
+    database's. A repo already snapshotted today is left as it is. Returns
+    rows written."""
+    written = 0
+    if not pairs:
+        return written
+    with _brief_conn(conn) as c, c.transaction(), c.cursor() as cur:
+        for rid, stars in pairs:
+            cur.execute("INSERT INTO repo_star_snapshots (repo_id, stars) VALUES (%s, %s) "
+                        "ON CONFLICT (repo_id, snapped_on) DO NOTHING", (rid, max(int(stars), 0)))
+            written += cur.rowcount
+    return written
+
+
+#: Real repos to keep snapshotting though they were not candidates today:
+#: first seen in the last `days`, or surfaced in the last 60 days (their
+#: stars_7d decides whether they may surface again). Oldest checked first.
+REPOS_TO_TRACK_SQL: Final = """
+    SELECT r.id, r.full_name FROM repos r
+     WHERE NOT r.is_test AND NOT (r.id = ANY (%(exclude)s))
+       AND (r.first_seen_at > now() - make_interval(days => %(days)s)
+            OR EXISTS (SELECT 1 FROM repo_surfacings s
+                        WHERE s.repo_id = r.id AND s.surfaced_on > owner_today() - 60))
+       AND NOT EXISTS (SELECT 1 FROM repo_star_snapshots x WHERE x.repo_id = r.id AND x.snapped_on = owner_today())
+     ORDER BY r.last_checked_at, r.id
+     LIMIT %(limit)s
+"""
+
+
+def repos_to_track(days: int, limit: int, *, exclude: Sequence[int] = (),
+                   conn: psycopg.Connection | None = None) -> list[tuple[int, str]]:
+    with _brief_conn(conn) as c:
+        return [(int(r[0]), r[1]) for r in c.execute(
+            REPOS_TO_TRACK_SQL, {"days": days, "limit": limit, "exclude": list(exclude)}).fetchall()]
+
+
+#: stars_7d MEASURED: today's snapshot minus the one exactly 7 days ago. A
+#: repo without both has no row (its stars_7d is an estimate, feed/repos.py).
+REPO_STARS_7D_SQL: Final = """
+    SELECT t.repo_id, t.stars - w.stars
+      FROM repo_star_snapshots t
+      JOIN repo_star_snapshots w ON w.repo_id = t.repo_id AND w.snapped_on = t.snapped_on - 7
+     WHERE t.repo_id = ANY (%(ids)s) AND t.snapped_on = owner_today()
+"""
+
+
+def repo_stars_7d_measured(repo_ids: Sequence[int], *, conn: psycopg.Connection | None = None) -> dict[int, int]:
+    if not repo_ids:
+        return {}
+    with _brief_conn(conn) as c:
+        return {int(r[0]): int(r[1]) for r in c.execute(REPO_STARS_7D_SQL, {"ids": list(repo_ids)}).fetchall()}
+
+
+def repos_surfaced_today(*, conn: psycopg.Connection | None = None) -> int:
+    with _brief_conn(conn) as c:
+        return int(c.execute("SELECT count(*) FROM repo_surfacings "
+                             "WHERE surfaced_on = owner_today() AND NOT is_test").fetchone()[0])
+
+
+def repo_may_surface(repo_id: int, stars_7d: int | None, *, conn: psycopg.Connection | None = None) -> bool:
+    """db/049 repo_may_surface for today: the resurface rule, asked first."""
+    with _brief_conn(conn) as c:
+        return bool(c.execute("SELECT repo_may_surface(%s, %s, owner_today())", (repo_id, stars_7d)).fetchone()[0])
+
+
+@dataclass(frozen=True)
+class RepoSurfaceIn:
+    full_name: str
+    html_url: str
+    teaser: str | None
+    #: snake_case GitHub topics: the story's topics, which train the profile.
+    topics: tuple[str, ...]
+    vec: Sequence[float]
+    day: date
+    stars: int
+    stars_7d: int | None
+    stars_7d_source: str | None
+
+
+def repo_surface(source: FeedSource, repo_id: int, s: RepoSurfaceIn, *,
+                 conn: psycopg.Connection | None = None) -> int | None:
+    """One repo becomes a tech story in category repos: the story, its one
+    item (published the day it surfaced, precision 'date'), the surfacing
+    row and the repo's latest values, in ONE transaction. Returns the story
+    id, or None when the database refused (the cap of 8, the resurface
+    rule) and nothing was written. A repo URL another item already holds
+    (a Hacker News link to it) gets a #surfaced-<day> fragment."""
+    vec = _vec_text(s.vec)
+    published = datetime(s.day.year, s.day.month, s.day.day, tzinfo=timezone.utc)
+    try:
+        with _brief_conn(conn) as c, c.transaction():
+            story_id = c.execute(
+                """
+                INSERT INTO stories (pillars, title, centroid, category, topics, is_test)
+                VALUES (ARRAY['tech'], %s, %s::extensions.halfvec, 'repos', %s, %s)
+                RETURNING id
+                """, (s.full_name, vec, list(s.topics), source.is_test)).fetchone()[0]
+            taken = c.execute("SELECT EXISTS (SELECT 1 FROM content_items WHERE url = %s)", (s.html_url,)).fetchone()[0]
+            url = f"{s.html_url}#surfaced-{s.day.isoformat()}" if taken else s.html_url
+            item_id = c.execute(
+                """
+                INSERT INTO content_items (source_id, external_id, url, title, teaser, published_at, fetched_at,
+                                           story_id, embedding, title_embedding, is_test, published_precision)
+                VALUES (%s, %s, %s, %s, left(%s, 500), LEAST(%s, now()), now(), %s, %s::extensions.halfvec,
+                        %s::extensions.halfvec, %s, 'date')
+                RETURNING id
+                """, (source.id, f"{s.full_name.lower()}@{s.day.isoformat()}", url, s.full_name, s.teaser,
+                      published, story_id, vec, vec, source.is_test)).fetchone()[0]
+            c.execute("UPDATE stories SET lead_item_id = %s WHERE id = %s", (item_id, story_id))
+            c.execute(
+                """
+                INSERT INTO repo_surfacings (repo_id, story_id, stars, stars_7d, stars_7d_source, is_test)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """, (repo_id, story_id, s.stars, s.stars_7d, s.stars_7d_source if s.stars_7d is not None else None,
+                      source.is_test))
+            c.execute("UPDATE repos SET story_id = %s, stars_7d = %s, stars_7d_source = %s WHERE id = %s",
+                      (story_id, s.stars_7d, s.stars_7d_source if s.stars_7d is not None else None, repo_id))
+    except psycopg.errors.RaiseException as exc:
+        if "repo_surfacings:" in str(exc):
+            return None
+        raise
+    return int(story_id)
+
+
+#: Repo stories waiting for their why-it-matters line (feed/why.py
+#: repo_why_job): real, kept, never asked, and summarized (or out of
+#: summary attempts, or an hour old, so a stuck summary never holds it).
+FEED_REPO_WHY_QUEUE_SQL: Final = """
+    SELECT st.id, st.title, st.summary, s.name, r.description, r.topics
+      FROM stories st
+      JOIN repo_surfacings rs ON rs.story_id = st.id AND NOT rs.is_test
+      JOIN repos r ON r.id = rs.repo_id
+      JOIN content_items i ON i.id = st.lead_item_id
+      JOIN sources s ON s.id = i.source_id
+     WHERE st.category = 'repos' AND NOT st.is_test AND st.filtered_reason IS NULL
+       AND st.why_generated_at IS NULL
+       AND (st.summary IS NOT NULL OR st.summary_attempts >= %(max_attempts)s
+            OR st.first_seen_at < now() - interval '1 hour')
+     ORDER BY st.first_seen_at, st.id
+     LIMIT %(limit)s
+"""
+
+
+@dataclass(frozen=True)
+class RepoWhyJob:
+    story_id: int
+    full_name: str
+    summary: str | None
+    source_name: str
+    description: str | None
+    topics: tuple[str, ...]
+
+
+def feed_repo_why_queue(limit: int, max_attempts: int, *,
+                        conn: psycopg.Connection | None = None) -> list[RepoWhyJob]:
+    with _brief_conn(conn) as c:
+        rows = c.execute(FEED_REPO_WHY_QUEUE_SQL, {"limit": limit, "max_attempts": max_attempts}).fetchall()
+    return [RepoWhyJob(int(r[0]), r[1], r[2], r[3], r[4], tuple(r[5] or ())) for r in rows]
+
+
+def feed_save_repo_why(answers: Mapping[int, str], ai_usage_id: int | None, *,
+                       conn: psycopg.Connection | None = None) -> int:
+    """A repo story's line (never NULL: "General interest." when there is no
+    concrete use), on the story and on its repo. Returns stories written."""
+    if not answers:
+        return 0
+    with _brief_conn(conn) as c, c.transaction(), c.cursor() as cur:
+        written = 0
+        for story_id, line in answers.items():
+            cur.execute(
+                """
+                UPDATE stories SET why_it_matters = %s, why_generated_at = now(), why_ai_usage_id = %s
+                 WHERE id = %s AND why_generated_at IS NULL
+                """, (line, ai_usage_id, story_id))
+            if cur.rowcount:
+                written += 1
+                cur.execute("UPDATE repos SET why_it_matters = %s WHERE story_id = %s", (line, story_id))
     return written
 
 

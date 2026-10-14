@@ -1,4 +1,4 @@
-# Tech Hub (Chat 4, Phase 1)
+# Tech Hub (Chat 4, Phases 1 and 2)
 
 A new feed pillar, `tech`, on the existing feed engine (sources, items,
 stories, clustering, Haiku summaries, categories, reactions, interest
@@ -268,3 +268,110 @@ from the job log lines (pending).
    `apps/web`). The worker must not run this code before step 1.
 5. After the first cycles: latency report, RSS readings, the owner's phone
    checks.
+
+## 7. Phase 2: GitHub repos (db/049; owner's brief, 2026-10-14)
+
+### 7.0 Baseline (2026-10-14, before any Phase 2 code)
+
+Branch `chat4-phase2-repos` from `main` at `3f50954` (#35). `vercel whoami`:
+`idctsims`. `GITHUB_PUBLIC_READ_TOKEN` checked by name only: set on Railway
+and in the root `.env`; absent on Vercel; `GITHUB_TOKEN` set nowhere.
+
+| Suite | Command (from `workers/`) | Result |
+|---|---|---|
+| `tests/` | `..\venv\Scripts\python.exe -m unittest discover -s tests -t .` | **807 OK** (1.5 s) |
+| `tests_live/` | `..\venv\Scripts\python.exe -m unittest discover -v -s tests_live -t .` | **339 OK, 0 skipped** (637.8 s) |
+
+### 7.1 Design
+
+- **One daily job, `tech_repos`** (`workers/feed/repos.py`), 07:00 Chicago and
+  at boot unless today's run already succeeded (its own `job_health` ok
+  today). It is not part of the 30-minute ingest: the `github-repos` source
+  (`kind = 'github'`) is never listed by `feed_active_sources`.
+- **Discovery.** github.com/trending daily and weekly, parsed with stdlib
+  `html.parser` on the reference repos' selectors (`article.Box-row`, the `h2`
+  link, `p.col-9`, `itemprop=programmingLanguage`, the `/stargazers` link, the
+  `float-sm-right` "stars today/this week" span). **0 cards, or a card with
+  no owner/name or no star count, raises `TrendingParseFailed`**: a
+  job_health failure, never an empty day (the reference scrapers swallow
+  both). Then nine Search API queries, one per interest, created in the last
+  30 days, by stars, 10 each, paced 2.5 s apart (24 a minute at most).
+- **Enrichment.** Search results are REST repository objects already
+  (topics, stars, pushed_at, license, archived, fork), so only trending-only
+  repos get `GET /repos/{name}`. The README is asked LAST, only of repos that
+  pass the metadata filters: its first 2,048 bytes, streamed and dropped.
+- **Snapshots.** One `repo_star_snapshots` row per repo per owner's day, the
+  day set by the trigger (no backdating). Repos first seen in the last 30
+  days, or surfaced in the last 60, are re-read and snapshotted daily even
+  when they are not candidates (at most 150), so their stars_7d can later be
+  measured. `stars_7d` is MEASURED (today's snapshot minus the one exactly 7
+  days ago) or an ESTIMATE, always labelled: trending's stars in period
+  ("trending est."), every star of a repo under 7 days old ("since created"),
+  or the age average ("est."). The labels live once in `repos.LABELS` and the
+  web's `STARS_7D_LABELS`, pinned equal by `e2e/repos-unit.spec.ts`.
+- **Selection.** Hard filters: archived, fork, no README, not pushed in 90
+  days. Rank: the tech profile (`rank.score_story` with the repo's embedding
+  and its GitHub topics in snake_case) + 0.35 × log10(1 + stars_7d) + 0.4 for
+  a repo found by an interest search − 0.5 under 50 stars in 7 days. **The 8
+  a day and the resurface rule are the database's** (`repo_surfacings`'
+  trigger, `repo_surface_room`, `repo_may_surface`); the worker asks the rule
+  first and a refusal rolls the pick back whole.
+- **Into the feed engine.** Each pick is a tech story, category `repos`, title
+  owner/name, topics = its GitHub topics (kept through the summary:
+  `feed_save_summaries` never overwrites a repo story's topics, so a Not
+  interested trains those topics' weights), one item from `github-repos`
+  (published the day it surfaced, precision `date`, teaser = description +
+  README head). The 30-minute chain summarizes it (Tech's community cap;
+  not official, never pushes) and `feed_repo_why` (after `feed_why`) writes
+  its line.
+- **Why it matters for a repo** (`feed/why.py` `repo_why_job`): the same
+  venture context and validator, plus "the dashboard" as a target; no
+  concrete use, or a line the rules refuse, stores **"General interest."**
+  (never NULL). Its own purpose `feed_repo_why`, at most 4 calls a day.
+  Home's why queue never asks a repo story.
+- **Context.** `ctx_tech` gains `repos_this_week` and `loved_repos`;
+  `ctx_tech_brief` gains `top_repo` only when the owner loved a repo story in
+  the last 14 days. The brief's fallback writes it into the one Tech line.
+- **Web.** The Repos chip on /tech; a repo card adds stars, stars_7d with
+  its label (`data-estimate` on an estimate), language and at most 3 topics.
+- **The fetch log line** (owner, 2026-10-14, from Phase 1 watch item 1):
+  every feed fetch logs `feed <slug> fetch: N items, newest: a | b | c`, the
+  newest 3 GUIDs cut to 40 characters, or `not modified`. No table.
+
+### 7.2 Decisions made while building (2026-10-14), for the owner
+
+1. **A third table, `repo_surfacings`** (append-only), beside the two the
+   brief named. The resurface rule needs every surfacing's day and
+   first-shown stars_7d, and a repo can surface more than once, so one
+   `repos.story_id` cannot hold it. It also lets the trigger enforce the cap
+   and the rule. `repos.story_id` and `repos.why_it_matters` keep the latest.
+2. **The ranking weights were tuned on a dry run** (real GitHub, the real
+   embedder, the real tech profile read as `valemont_readonly`, every ledger
+   write faked; nothing written). With velocity at 0.6 alone a PS5 porting
+   tool and an Xcode replacement took day one; with the profile alone 8-star
+   repos did. The shipped blend picked, for 2026-10-14: morluto/rea,
+   bas3line/ascii, rehan-remade/universal-modder, zai-org/ZCode,
+   kuratlielia/arc-library, cathrynlavery/diagram-design, juliobsz/skills,
+   Louis-CFM/coucou. The "half I'd use" check is the owner's.
+3. **A repo with no first-shown stars_7d (or 0) never resurfaces**: there is
+   no baseline to double.
+4. **"Today's run happened"** is the job's own success today, not today's
+   snapshots, so a run that failed after snapshotting runs again.
+5. **Search hits reuse the search result's REST object** instead of a second
+   `GET /repos` per repo (same fields, about 90 fewer calls a day).
+6. **A repo URL another item already holds** (a Hacker News link to the same
+   repo) gets `#surfaced-<day>` so the unique URL index never drops a pick.
+
+### 7.3 Order of operations
+
+1. Owner pastes `db/049_repos.sql` on production. Expect the NOTICE
+   `049 self-test passed (rolled back)`; the verify SELECTs are at the end of
+   the file. **The paste must land before the merge**: the worker reads the
+   new tables and the github kind, and /tech reads `repo_surfacings`.
+2. Record it (`migration_log.applied_at`) in CLAUDE.md and MASTER_PLAN the
+   same session.
+3. `tests_live -v` on this branch (its db/049 classes skip by name until
+   step 1).
+4. Merge (merge commit) and deploy. The boot run surfaces day one.
+5. The owner's phone checks, `e2e/repos.spec.ts`, the screenshot gate, the
+   per-run call count (the job note) and RAM against 138 MB.

@@ -349,6 +349,14 @@ Thirteen build chats after this one, each split into phases with a test you run 
        2. Worker memory at rest against ~130 MB, from the Railway log RSS lines; due after 08:50 UTC Oct 14.
        3. The why-it-matters Haiku cost for one full Chicago day.
      - Migrations: db/045–db/048, all applied and recorded (CLAUDE.md, Current State). PRs #29–#34.
+   - **Phase 2, GitHub repos: built on `chat4-phase2-repos`, PENDING** (2026-10-14). Design, decisions and order: `docs/tech_hub.md` §7. `db/049_repos.sql` written, **not pasted**; it must land before the merge. Nothing on the phone checklist is verified yet:
+     - [ ] The Repos chip shows today's surfaced repos (8 max), each with stars, stars_7d or a labelled estimate, why-it-matters and the link
+     - [ ] At least half of day one's repos are something the owner would plausibly use (owner's judgment, on screen)
+     - [ ] A Not interested on a repo topic visibly drops that kind of repo over the next two daily runs
+     - [ ] No repo appears twice outside the resurface rule
+     - [ ] Wags answers "any repos worth using this week?" from real rows
+     - [ ] The token is only in Railway and the root .env; search calls stay under the limit (the per-run call count)
+     - [ ] Worker RAM at rest within ~15 MB of 138 MB
 2. Screening Room: TMDB search, watchlist, currently watching, release dates, trailers, where to stream.
    - [ ] Recommendations reflect the six seed shows on day one and shift after reactions
 

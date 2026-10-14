@@ -32,6 +32,11 @@ For each active source, lowest priority number first, completely before the next
   7. Only then is the fetch recorded as ok (with the new ETag), so a crash
      between fetch and store cannot hide items behind a 304.
 
+Every fetch logs one INFO line: "feed <slug> fetch: N items, newest: a | b |
+c", the newest 3 item GUIDs cut to 40 characters (owner, 2026-10-14), or
+"not modified". No table: Railway's logs are the record, so an item that
+looks late can be checked against what earlier fetches held.
+
 One source failing never fails the run: its failure is recorded on its row
 (redacted), and after FAILURES_TO_ALERT in a row ONE push goes out, linking
 /settings/sources, re-armed by its next success. The run itself fails only
@@ -285,6 +290,7 @@ class Ingest:
                 ledger.feed_source_ok(src.id, status="not_modified", etag=src.etag,
                                       last_modified=src.last_modified)
                 stats.status = "not_modified"
+                log.info("feed %s fetch: not modified", src.slug)
                 return stats
             if resp.status != 200:
                 raise FetchFailed(f"HTTP {resp.status}")
@@ -299,6 +305,9 @@ class Ingest:
             self._fail(src, stats, exc)
             return stats
         stats.fetched = len(items)
+        # Owner, 2026-10-14 (Phase 1 watch item 1): what this fetch held, so a
+        # later "late" item can be checked against earlier fetches' logs.
+        log.info("feed %s fetch: %d items, newest: %s", src.slug, len(items), newest_guids(items))
         try:
             self._store(src, items, fetched_at, stats)
         except embedder.EmbedError:
@@ -467,6 +476,22 @@ class Ingest:
         stats.new_stories += 1
         stats.filtered += int(reason is not None)
         self.candidates.insert(0, _Candidate(made[0], 1, [member], tech))
+
+
+#: How many GUIDs a fetch's log line carries, and how much of each.
+LOG_GUIDS = 3
+LOG_GUID_CHARS = 40
+
+
+def newest_guids(items: Sequence[RawItem], n: int = LOG_GUIDS, width: int = LOG_GUID_CHARS) -> str:
+    """The fetch's newest `n` item GUIDs (external ids), newest published
+    first (undated ones last, in feed order), each cut to `width`
+    characters: "a | b | c", or "none"."""
+    order = sorted(range(len(items)), key=lambda i: (items[i].published_at is None,
+                                                     -(items[i].published_at.timestamp())
+                                                     if items[i].published_at else 0.0, i))
+    ids = [items[i].external_id[:width] for i in order[:n]]
+    return " | ".join(ids) if ids else "none"
 
 
 class FetchFailed(RuntimeError):

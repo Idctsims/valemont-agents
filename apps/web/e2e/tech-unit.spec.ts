@@ -11,12 +11,12 @@ import { TECH_CHIPS, cardWhen, feedHref, techCategoryFromParam } from "../src/li
 // their URL state, and the nav. No page, no server.
 
 test.describe("tech chips", () => {
-  test("the owner's seven, in order, keyed by the db/045 categories", () => {
+  test("the owner's seven plus Repos (Phase 2), in order, keyed by the db/045 categories", () => {
     expect(TECH_CHIPS.map((c) => c.label)).toEqual([
-      "All", "Models & features", "Pricing & credits", "Tooling", "Agents", "Stack", "Community",
+      "All", "Models & features", "Pricing & credits", "Tooling", "Agents", "Stack", "Community", "Repos",
     ]);
     expect(TECH_CHIPS.map((c) => c.category)).toEqual([
-      null, "models_features", "pricing_credits", "tooling", "agents", "stack", "community",
+      null, "models_features", "pricing_credits", "tooling", "agents", "stack", "community", "repos",
     ]);
   });
 
@@ -28,10 +28,11 @@ test.describe("tech chips", () => {
     expect(worker).toEqual(TECH_CHIPS.filter((c) => c.category).map((c) => c.category));
   });
 
-  test("?category= is a chip; anything else, Home's categories and 'repos' included, is All", () => {
+  test("?category= is a chip; anything else, Home's categories included, is All", () => {
     expect(techCategoryFromParam("pricing_credits")).toBe("pricing_credits");
     expect(techCategoryFromParam(["tooling", "agents"])).toBe("tooling");
-    for (const raw of [undefined, "", "Tooling", "other", "deals", "repos", ["x"]]) {
+    expect(techCategoryFromParam("repos")).toBe("repos");
+    for (const raw of [undefined, "", "Tooling", "other", "deals", "Repos", ["x"]]) {
       expect(techCategoryFromParam(raw)).toBeNull();
     }
   });

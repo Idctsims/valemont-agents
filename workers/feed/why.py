@@ -223,6 +223,151 @@ def ask_again(story_ids: Sequence[int], *, client: Any = None) -> dict[int, str 
     return ask_group(jobs, ctx, venture_names(ctx), client=client)
 
 
+# ------------------------------------------------------------------ repos
+#
+# Repo stories (db/049, feed/repos.py) get their own question, chained after
+# feed_why: a concrete use for ONE venture (named exactly, as above) or for
+# the dashboard itself, or plainly "General interest." Unlike news, a repo's
+# line is never NULL: "General interest." is the stored answer when the model
+# names no use, or names one the rules refuse (logged with its reason).
+
+REPO_PURPOSE = "feed_repo_why"
+REPO_GROUP_SIZE = 8
+#: 8 repos a day is one call; the cap leaves room for a retry or a second run.
+REPO_DAILY_CALLS = 4
+GENERAL = "General interest."
+DASHBOARD = "dashboard"
+#: The owner's own dashboard, described for the model (no secrets, no hosts).
+DASHBOARD_ABOUT = ("Valemont Command, the reader's private dashboard: a Next.js app on Vercel, Supabase "
+                   "Postgres, Python workers on Railway, Claude for summaries and the Wags assistant, a feed "
+                   "engine with embeddings, push notifications, and paper-trading and forecast-tracking agents.")
+
+REPO_SYSTEM = f"""You decide whether a GitHub repository is something one reader would actually use, and say for what in one line.
+
+You get the reader's ventures (name, what it does, and for some the stage, next action and workstreams), a description of the reader's own dashboard, and a few repositories (id, owner/name, description, topics, summary).
+
+For each repository answer with a target and a line:
+- target = a venture's exact name, when the repository has a concrete use in that venture's work: it does a job the venture needs done (its product, its marketing, its operations, its data).
+- target = "{DASHBOARD}", when the repository has a concrete use in the reader's dashboard: a library, tool or pattern the dashboard's stack (Next.js, Vercel, Supabase, Python workers, Claude, agents, feeds, push) would adopt.
+- target = null, when there is no concrete use. That is the common answer, and it is correct. Never stretch.
+
+When the target is not null, write ONE sentence of at most {MAX_WORDS} words that names the target (the venture's exact name, or the word "dashboard") and the concrete use. Plain words, no hype, no "could", no "might".
+
+Return one result per repository: its id, the target (or null) and the line (or null). Output only the JSON object."""
+
+
+def repo_schema() -> dict[str, Any]:
+    nullable = {"anyOf": [{"type": "string"}, {"type": "null"}]}
+    return {
+        "type": "object", "additionalProperties": False, "required": ["repos"],
+        "properties": {"repos": {"type": "array", "items": {
+            "type": "object", "additionalProperties": False, "required": ["id", "target", "why"],
+            "properties": {"id": {"type": "integer"}, "target": nullable, "why": nullable},
+        }}},
+    }
+
+
+def check_repo(item: dict[str, Any], names: Sequence[str]) -> tuple[str, str | None]:
+    """(line, None) when kept; (GENERAL, None) for the model's own null;
+    (GENERAL, reason) when the model wrote a line the rules refuse."""
+    why = " ".join(str(item.get("why") or "").split())
+    target = item.get("target")
+    if not why or not target:
+        return GENERAL, None
+    if str(target).strip().lower() == DASHBOARD:
+        if not re.search(r"\bdashboard\b", why, re.IGNORECASE):
+            return GENERAL, "does not name the dashboard in the line"
+    else:
+        name = resolve_venture(target, names)
+        if name is None:
+            return GENERAL, f"names no known venture or the dashboard ({target!r})"
+        if not any(_names_in(why, form) for form in name_forms(name)):
+            return GENERAL, f"does not name {name!r} in the line"
+    hedge = HEDGE.search(why)
+    if hedge:
+        return GENERAL, f"hedges ({hedge.group(0)!r}): a real use is stated, not guessed"
+    n = len(why.split())
+    if n > MAX_WORDS:
+        return GENERAL, f"{n} words; the cap is {MAX_WORDS}"
+    if sentence_count(why) != 1:
+        return GENERAL, f"{sentence_count(why)} sentences; one only"
+    if len(why) > MAX_CHARS:
+        return GENERAL, f"{len(why)} characters; the cap is {MAX_CHARS}"
+    return why, None
+
+
+def repo_user_message(ctx: dict[str, Any], group: Sequence[ledger.RepoWhyJob]) -> str:
+    return ("VENTURES:\n" + json.dumps(venture_context(ctx), ensure_ascii=False, indent=1)
+            + "\nDASHBOARD:\n" + DASHBOARD_ABOUT
+            + "\nREPOSITORIES:\n" + json.dumps([{"id": j.story_id, "repo": j.full_name,
+                                                 "description": j.description or "",
+                                                 "topics": list(j.topics[:8]), "summary": j.summary or ""}
+                                                for j in group], ensure_ascii=False))
+
+
+def repo_answers_for(group: Sequence[ledger.RepoWhyJob], payload: Any, names: Sequence[str]) -> dict[int, str]:
+    """Every repo in the group gets a line: its validated one or GENERAL."""
+    out: dict[int, str] = {j.story_id: GENERAL for j in group}
+    seen: set[int] = set()
+    items = payload.get("repos") if isinstance(payload, dict) else None
+    for item in items if isinstance(items, list) else []:
+        sid = item.get("id") if isinstance(item, dict) else None
+        if sid in out and sid not in seen:
+            seen.add(sid)
+            line, refused = check_repo(item, names)
+            out[sid] = line
+            if refused:
+                REFUSED.append((sid, str(item.get("why")), refused))
+                log.warning("feed why: repo story %s line refused (%s): %r", sid, refused, item.get("why"))
+    return out
+
+
+def ask_repo_group(group: Sequence[ledger.RepoWhyJob], ctx: dict[str, Any], names: Sequence[str], *,
+                   client: Any = None) -> dict[int, str]:
+    recorded: list[int] = []
+    response = ai.complete(
+        purpose=REPO_PURPOSE, model=MODEL, critical=False, max_tokens=2000, client=client,
+        system=[{"type": "text", "text": REPO_SYSTEM, "cache_control": {"type": "ephemeral"}}],
+        messages=[{"role": "user", "content": repo_user_message(ctx, group)}],
+        thinking={"type": "disabled"},
+        output_config={"effort": "low", "format": {"type": "json_schema", "schema": repo_schema()}},
+        on_recorded=lambda usage_id, _model, _cost: recorded.append(usage_id),
+    )
+    payload = None
+    if getattr(response, "stop_reason", None) != "refusal":
+        text = "".join(getattr(b, "text", "") for b in response.content if getattr(b, "type", "") == "text")
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            log.warning("feed why: the repo answer was not JSON")
+    answers = repo_answers_for(group, payload, names)
+    ledger.feed_save_repo_why(answers, recorded[-1] if recorded else None)
+    return answers
+
+
+def repo_why_job(*, client: Any = None) -> int:
+    """The feed_repo_why system job, chained after feed_why. Returns the
+    repo stories that got a concrete line (not "General interest.")."""
+    from feed.summarize import MAX_ATTEMPTS
+    queue = ledger.feed_repo_why_queue(REPO_GROUP_SIZE * REPO_DAILY_CALLS, MAX_ATTEMPTS)
+    if not queue:
+        return 0
+    room = REPO_DAILY_CALLS - ledger.ai_calls_today(REPO_PURPOSE)
+    if room <= 0:
+        raise JobSkipped(f"daily cap of {REPO_DAILY_CALLS} calls reached; {len(queue)} repos waiting")
+    ctx = ledger.ctx_ventures()
+    names = venture_names(ctx)
+    concrete = 0
+    for i in range(0, min(len(queue), room * REPO_GROUP_SIZE), REPO_GROUP_SIZE):
+        try:
+            answers = ask_repo_group(queue[i:i + REPO_GROUP_SIZE], ctx, names, client=client)
+        except ai.BudgetExceeded as exc:
+            raise JobSkipped("AI budget spent; repos keep no why-it-matters line yet") from exc
+        concrete += sum(1 for a in answers.values() if a != GENERAL)
+    log.info("feed why: %d of %d repo(s) with a concrete use", concrete, len(queue))
+    return concrete
+
+
 def why_job(*, client: Any = None) -> int:
     """The feed_why system job. Returns lines kept."""
     queue = ledger.feed_why_queue(TOP)

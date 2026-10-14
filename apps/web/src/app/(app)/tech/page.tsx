@@ -21,7 +21,9 @@ export const metadata: Metadata = { title: "Tech Hub" };
 // all kept in the URL. Tech's pillar ONLY, in both directions: no tech story
 // reaches Home or /news, and no Home or Sports story reaches this page
 // (feed_for_you and the database's pillar guard). Reactions here write
-// pillar 'tech' and train only the tech profile.
+// pillar 'tech' and train only the tech profile. The Repos chip (Phase 2,
+// db/049) lists the GitHub repos the worker surfaced, at most 8 a day, each
+// card with its stars and stars over 7 days (an estimate says so).
 
 type TechParams = {
   category?: string | string[];
@@ -51,7 +53,7 @@ export default async function TechPage({ searchParams }: { searchParams: Promise
       <PageHeader
         label="Tech"
         title="Tech Hub"
-        summary="Official releases from Anthropic, OpenAI and your stack, and what Hacker News is reading."
+        summary="Official releases from Anthropic, OpenAI and your stack, what Hacker News is reading, and up to eight GitHub repos a day."
       />
 
       <nav aria-label="Category" data-testid="category-chips" className="-ml-1 flex flex-wrap items-center lg:max-w-3xl">

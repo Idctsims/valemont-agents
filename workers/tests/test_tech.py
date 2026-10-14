@@ -212,9 +212,11 @@ class HackerNews(unittest.TestCase):
 class SourcesFile(unittest.TestCase):
     def test_the_tech_sources(self) -> None:
         t = {s.slug: s for s in load_sources() if "tech" in s.pillars}
-        self.assertEqual(len(t), 21)
-        self.assertEqual(sum(s.active for s in t.values()), 20)
+        # Phase 2 (db/049) adds github-repos: active, not official.
+        self.assertEqual(len(t), 22)
+        self.assertEqual(sum(s.active for s in t.values()), 21)
         self.assertEqual(sum(s.official for s in t.values()), 19)
+        self.assertEqual((t["github-repos"].kind, t["github-repos"].official), ("github", False))
         # The owner's replacement for the blocked ChatGPT notes, below openai.com/news.
         self.assertGreater(t["openai-community-announcements"].priority, t["openai-news"].priority)
         self.assertTrue(all(t[s].official and t[s].active for s in

@@ -1,16 +1,20 @@
 "use client";
 
-import { ArrowUpRight, CaretDown, EyeSlash, Heart, Minus } from "@phosphor-icons/react";
+import { ArrowUpRight, CaretDown, EyeSlash, Heart, Minus, Star } from "@phosphor-icons/react";
 import { useId, useRef, useState } from "react";
 
-import { SWIPE_COMMIT_PX, swipeReaction, type FeedStory, type Pillar } from "@/lib/feed/types";
+import {
+  REPO_TOPICS_SHOWN, SWIPE_COMMIT_PX, starCount, stars7dText, swipeReaction, type FeedStory, type Pillar, type RepoInfo,
+} from "@/lib/feed/types";
 
 // One story in a feed list: a hairline row, not a boxed card (ledger
 // language, as the brief). Mono "SOURCE · 3H" (plus OFFICIAL for a
 // first-party tech source), the headline in Instrument
 // Serif, Haiku's summary (or nothing: the headline stands alone), the "Why it
 // matters" line when the story has one, a "+N outlets" fold when other outlets
-// carry the story, and the three reactions. The headline's link covers the
+// carry the story, and the three reactions. A GitHub repo story (db/049) adds
+// its stars, stars over 7 days (labelled when it is an estimate), language
+// and up to 3 topics; its headline is owner/name and links to the repo. The headline's link covers the
 // whole row, so a tap anywhere opens the publisher in a new tab; the fold and
 // the reaction buttons sit above that layer and never open it.
 //
@@ -177,6 +181,7 @@ export function FeedCard({
             {story.summary}
           </p>
         )}
+        {story.repo && <RepoFacts repo={story.repo} />}
         {story.whyItMatters && (
           <p data-testid="feed-why" className="mt-3 border-l-2 border-accent pl-3 text-sm text-text text-pretty">
             <span className="label-mono mr-2 text-accent">Why it matters</span>
@@ -223,6 +228,42 @@ export function FeedCard({
         )}
       </div>
     </li>
+  );
+}
+
+/** A GitHub repo story's facts (db/049): stars, stars over 7 days with
+ * where the number came from (only "7d" is measured; every estimate says
+ * so), the language and at most 3 topics. */
+function RepoFacts({ repo }: { repo: RepoInfo }) {
+  const delta = stars7dText(repo);
+  const estimate = repo.stars7dSource !== null && repo.stars7dSource !== "measured";
+  return (
+    <div data-testid="repo-facts" className="mt-3 flex flex-col gap-2">
+      <p className="label-mono flex flex-wrap items-center gap-x-3 gap-y-1 normal-case tracking-normal text-text-muted">
+        {repo.stars !== null && (
+          <span data-testid="repo-stars" className="inline-flex items-center gap-1 text-text">
+            <Star size={14} weight="fill" aria-hidden className="text-accent" />
+            {starCount(repo.stars)}
+            <span className="sr-only"> stars</span>
+          </span>
+        )}
+        {delta && (
+          <span data-testid="repo-stars-7d" data-estimate={estimate || undefined}>
+            {delta}
+          </span>
+        )}
+        {repo.language && <span data-testid="repo-language">{repo.language}</span>}
+      </p>
+      {repo.topics.length > 0 && (
+        <ul aria-label="Topics" className="flex flex-wrap gap-1.5">
+          {repo.topics.slice(0, REPO_TOPICS_SHOWN).map((t) => (
+            <li key={t} data-testid="repo-topic" className="rounded-pill border border-border px-2 font-mono text-xs text-text-muted">
+              {t}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

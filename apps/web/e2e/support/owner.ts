@@ -592,6 +592,32 @@ export async function addTestTechStory(opts: {
   });
 }
 
+/** A TEST GitHub repo story (db/049 add_test_repo): a repo, its story in
+ * category repos (pillar tech) and its surfacing, all is_test, from the
+ * `_e2e-repos` source with a .invalid link. Shown only to a request with the
+ * verified e2e marker (Latest); never in For you, the cap, the resurface
+ * rule, Wags or the brief. Rows are permanent; names carry the run prefix. */
+export async function addTestRepo(opts: {
+  fullName: string;
+  summary: string | null;
+  stars: number;
+  stars7d: number | null;
+  stars7dSource: "measured" | "trending_weekly" | "trending_daily" | "since_created" | "age_average" | null;
+}): Promise<number> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.rpc("add_test_repo", {
+      p_marker: e2eMarker(),
+      p_full_name: opts.fullName,
+      p_summary: opts.summary,
+      p_stars: opts.stars,
+      p_stars_7d: opts.stars7d,
+      p_stars_7d_source: opts.stars7dSource,
+    });
+    if (error) throw new Error(`test repo failed: ${error.message}`);
+    return data as number;
+  });
+}
+
 /** A TEST move (db/042 add_test_move_proposal): "Test Player <s>" on "Test
  * Team A <s>" and an open trade to "Test Team B <s>", all is_test. Shown on
  * /settings/feed with a `test` tag; never a real entity. Rows are permanent,

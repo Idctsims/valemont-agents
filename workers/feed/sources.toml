@@ -686,3 +686,15 @@ url = "https://hn.algolia.com/api/v1/search_by_date?tags=show_hn&numericFilters=
 priority = 80
 notes = "Show HN posts at 50 points or more (owner, 2026-10-13)."
 config = { min_points = 50 }
+
+# GitHub repos (Chat 4 Phase 2, db/049): the daily repos job (feed/repos.py,
+# 07:00 Chicago) writes these stories, at most 8 a day. The 30-minute ingest
+# never fetches this source. Not official; never pushes.
+[[source]]
+slug = "github-repos"
+name = "GitHub"
+pillars = ["tech"]
+kind = "github"
+url = "https://github.com/trending"
+priority = 90
+notes = "GitHub trending (daily, weekly) and Search API repos; 8 a day at most (owner, 2026-10-14)."
