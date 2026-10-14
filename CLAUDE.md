@@ -417,7 +417,9 @@ each in phases with a "done when" checklist). It supersedes the former steps
 - **Chat 2, Phase 4** (context layer and Wags, with the TypeScript twin of the AI budget guard) ✓ (PR #16, merge `7709d22`, live 2026-10-10; owner's real call and phone checklist green). Owner runs on the mock model: `wags.spec` 10/10, `screens-wags` 2/2.
 - **Chat 2, Phase 5** (Morning Brief generator on Railway, sections switching on as pillars register) ✓ (PRs #20, #21). **First scheduled brief pushed Sun 2026-10-11 09:45 Chicago; owner confirmed arrival.**
 - **Chat 2 complete (2026-10-11).**
-- **Chat 3** (Learning engine, Home feed, Sports News; MASTER_PLAN §6) ✓ **(closed 2026-10-13: Phases 1–3 GREEN, PR #27 merge `922e22d` live; the close-out with evidence and carried items is in MASTER_PLAN §6, Chat 3).** The db/044 entities follow-up is the last open piece ← **you are here**
+- **Chat 3** (Learning engine, Home feed, Sports News; MASTER_PLAN §6) ✓ **(closed 2026-10-13: Phases 1–3 GREEN, PR #27 merge `922e22d` live; the close-out with evidence and carried items is in MASTER_PLAN §6, Chat 3).** The db/044 entities follow-up is the last open piece.
+- **Chat 4, Phase 1** (Tech Hub: official changelogs and Hacker News) ✓ **GREEN 2026-10-14 (owner)**, with three open watch items that do not block Phase 2 (Current State, "Tech Hub"). PRs #29–#34; migrations db/045–db/048.
+- **Chat 4, Phase 2** (GitHub trending, "why this matters to you"; its repos migration is `db/049`) ← **you are here**
   - **Phase 3 news categories: SHIPPED STATE recorded 2026-10-13** (owner: final round, no more tuning). The enum plus one business-of-sports yes/no question (`feed/category.py` `MONEY_QUESTION`, `decide`), the last re-run, the day's cost ($0.046755 over 93 Haiku calls) and the misfits left for later (no broadcasters or MLB/NWSL/WNBA/NCAA in the entities table; LeBron features answered yes): `docs/feed_checks/recategorize-2026-10-13-final/README.md`.
   - **Phase 1** (sources, ingest, dedupe, summaries, embeddings) **GREEN 2026-10-13** (owner): For you page one summarized (Home 30/30, Sports 29/30, the one a designed headline-only retirement), and worker RAM flat at ~130 MB at rest, ~155 MB ingest peak, returned after each ingest (readings in Current State, "Railway").
   - **AI SDK stays on the maintained v6 line** (`ai` 6.0.303, `@ai-sdk/anthropic` 3.0.129, `@ai-sdk/react` 3.0.306, pinned). v7 was latest on 2026-10-10; **upgrade in Chat 13 hardening**, never a major bump mid-phase (owner, 2026-10-10).
@@ -1272,6 +1274,15 @@ absent row as "I never looked."
   - **First scheduled brief, Sun 2026-10-11 (read via `db_inspect`):** brief 173 (the only row for the date, real), created 11:15:07 UTC (06:15 Chicago), `claude-sonnet-5-5`, 185 words, not fallback, voice `2026-10-10.2`; `ai_usage` 84 (1,167 in, 485 out, 1,442 cache written, $0.010789, critical). Delivery 45 → notification 134 `sent`, no error, 14:45:02 UTC (09:45 Chicago), `late = false`. `job_health`: `morning_brief` last ok 14:30:00, `morning_brief_push` last ok 14:45:02, both 0 failures, `alert_state` ok. The owner confirmed the push arrived.
 - **Server actions never throw an expected failure (2026-10-10).** Every action in `apps/web` returns `ActionResult` (`{ ok: true, … } | { ok: false, error }`) via `settle()` in `src/lib/action-result.ts`. Inside an action, say no with `throw new Refusal("…")`. Why: in a production build Next redacts a thrown message, so the page showed "Minified React error" (number 441) instead of the reason. Pages show `error` in their alert and revert; only a network failure can still throw on the client. `e2e/goals.spec.ts` forces a real server-side refusal and checks the readable message.
     - After sign-in, wait out "JWT issued at future" with a harmless read before any write.
+- **Tech Hub (Chat 4 Phase 1): GREEN 2026-10-14 (owner)**, except three open watch items that do not block Phase 2. Design and rules: `docs/tech_hub.md`; migrations db/045–db/048 (above).
+  - **Owner checks, 2026-10-14:**
+    - `e2e/tech.spec.ts`, phone: **7/7 pass**.
+    - Screenshot gate, phone and desktop, both themes: **approved**.
+    - Forced test push (`-m scripts.tech_test_push`): **arrived with the phone locked and opened the story**. Read via `db_inspect`: notification **353** (`tech_free_credits`, "Free credits (test): Update to OpenAI API Rate Limits", `/tech/story/8941`), `sent` 06:07:03 UTC, no error; `tech_credit_pushes` row 76 with `is_test = true`, so the day's real push room still read 3.
+  - **Open watch items (report each when it lands):**
+    1. Page-watcher latency on the first anthropic.com/news, claude.com/blog or openai.com/news post first seen after deploy (`-m scripts.tech_latency`). The feed path passed: 3 items at 12.7–24.4 min, 0 over the limit (06:10 UTC Oct 14).
+    2. Worker memory at rest against the ~130 MB baseline, read from the Railway log RSS lines; due after 08:50 UTC Oct 14.
+    3. The why-it-matters Haiku cost for one full Chicago day (`ai_usage`).
 - **Next:**
   - **Zero-attempt database invariant** (db/024, db/025, both applied): merged from branch `db-zero-attempt-invariant`. `tests/` 479 OK; `tests_live/` 181 OK, 0 skipped (2026-10-09).
   - **Chat 2 COMPLETE (2026-10-11).** Phase 5 closed on the first scheduled brief and push (above).
