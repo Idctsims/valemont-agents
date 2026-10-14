@@ -1,0 +1,184 @@
+{
+ "page": 1,
+ "results": [
+  {
+   "adult": false,
+   "backdrop_path": null,
+   "id": 29432,
+   "name": "The Greatest Gift",
+   "original_name": "The Greatest Gift",
+   "overview": "",
+   "poster_path": null,
+   "media_type": "tv",
+   "original_language": "en",
+   "genre_ids": [],
+   "popularity": 13.2557,
+   "first_air_date": "1954-08-30",
+   "softcore": false,
+   "vote_average": 0.0,
+   "vote_count": 0,
+   "origin_country": [
+    "US"
+   ]
+  },
+  {
+   "adult": false,
+   "backdrop_path": "/lrNKm3HNvGdZoAfiBKu7b04FLHN.jpg",
+   "id": 316029,
+   "title": "The Greatest Showman",
+   "original_title": "The Greatest Showman",
+   "overview": "The story of American showman P.T. Barnum, founder of the circus that became the famous traveling Ringling Bros. and Barnum & Bailey Circus.",
+   "poster_path": "/b9CeobiihCx1uG1tpw8hXmpi7nm.jpg",
+   "media_type": "movie",
+   "original_language": "en",
+   "genre_ids": [
+    18
+   ],
+   "popularity": 18.9365,
+   "release_date": "2017-12-20",
+   "softcore": false,
+   "video": false,
+   "vote_average": 7.852,
+   "vote_count": 10283
+  },
+  {
+   "adult": false,
+   "backdrop_path": "/5ASuXTfd6zfLmyYdIf7R4uk4h5d.jpg",
+   "id": 1909,
+   "name": "The Greatest American Hero",
+   "original_name": "The Greatest American Hero",
+   "overview": "The chronicles of  teacher Ralph Hinkley's adventures after a group of aliens gives him a red suit that gives him superhuman abilities. Unfortunately, Ralph, who hates wearing the suit, immediately loses its instruction booklet, and thus has to learn how to use its powers by trial and error, often with comical results.",
+   "poster_path": "/sViWrklUxxYw4ZYuGsrthnS63X2.jpg",
+   "media_type": "tv",
+   "original_language": "en",
+   "genre_ids": [
+    10759,
+    35,
+    80
+   ],
+   "popularity": 14.7042,
+   "first_air_date": "1981-03-18",
+   "softcore": false,
+   "vote_average": 7.2,
+   "vote_count": 121,
+   "origin_country": [
+    "US"
+   ]
+  },
+  {
+   "adult": false,
+   "backdrop_path": null,
+   "id": 120491,
+   "name": "The Greatest Love",
+   "original_name": "The Greatest Love",
+   "overview": "The Greatest Love (2016)\n\nThrough the years, Gloria (Sylvia Sanchez) has become a doting and selfless mother to Amanda (Dimples Romana), Andrei (Matt Evans), Paeng (Arron Villaflor), and Lizelle (Andi Eigenmann). However, a long-kept secret will shatter their once happy family, leading Gloria’s children.",
+   "poster_path": "/f5MVLa3SfthOe2cw9JA4my88Le7.jpg",
+   "media_type": "tv",
+   "original_language": "en",
+   "genre_ids": [
+    18
+   ],
+   "popularity": 5.7809,
+   "first_air_date": "2016-05-09",
+   "softcore": false,
+   "vote_average": 0.0,
+   "vote_count": 0,
+   "origin_country": [
+    "PH"
+   ]
+  },
+  {
+   "adult": false,
+   "backdrop_path": "/63YYVpCu8UgdjgwJdQzK6DqPtih.jpg",
+   "id": 228921,
+   "name": "The Greatest Teacher",
+   "original_name": "最高の教師 1年後、私は生徒に■された",
+   "overview": "Kujo Rina is a chemistry teacher and the homeroom teacher for the 3rd grade D class at Horai High School. She doesn't have a bond with her students. On the school's graduation day, Kujo Rina is pushed from the 4th floor and falls down. She is able to glimpse a school uniform sleeve on the person that pushed her. At that time, she wonders why she was pushed and that she does not want to die.",
+   "poster_path": "/daUMz1bInFX5FN2yEcJVv7NovqD.jpg",
+   "media_type": "tv",
+   "original_language": "ja",
+   "genre_ids": [
+    9648,
+    18,
+    80
+   ],
+   "popularity": 7.8766,
+   "first_air_date": "2023-07-15",
+   "softcore": false,
+   "vote_average": 7.889,
+   "vote_count": 18,
+   "origin_country": [
+    "JP"
+   ]
+  },
+  {
+   "adult": false,
+   "backdrop_path": "/vqfjeMy0QTwRLmw4mbMOfyk1WjK.jpg",
+   "id": 258989,
+   "name": "The Greatest",
+   "original_name": "The Greatest",
+   "overview": "An intimate exploration of the incomparable life of Muhammad Ali. The amazing victories and defeats that made Ali a legend, both in and out of the ring, have been well documented and while those landmark events will live in The Greatest, the heartbeat of the story is fueled by all the moments that took place outside of the spotlight. The world remembers an icon, but The Greatest is about a man, a husband, a father, a brother, and a son.",
+   "poster_path": "/y5pF7XCRpptZr3NMtCs5dAVdETQ.jpg",
+   "media_type": "tv",
+   "original_language": "en",
+   "genre_ids": [
+    18
+   ],
+   "popularity": 4.3522,
+   "first_air_date": "2026-11-04",
+   "softcore": false,
+   "vote_average": 0.0,
+   "vote_count": 0,
+   "origin_country": [
+    "US"
+   ]
+  },
+  {
+   "adult": false,
+   "backdrop_path": null,
+   "id": 7931,
+   "name": "The Greatest Show on Earth",
+   "original_name": "The Greatest Show on Earth",
+   "overview": "Johnny Slate successfully manages his circus as it moves from town to town.",
+   "poster_path": null,
+   "media_type": "tv",
+   "original_language": "en",
+   "genre_ids": [
+    18
+   ],
+   "popularity": 10.5025,
+   "first_air_date": "1963-09-17",
+   "softcore": false,
+   "vote_average": 7.5,
+   "vote_count": 2,
+   "origin_country": [
+    "US"
+   ]
+  },
+  {
+   "adult": false,
+   "backdrop_path": "/yIHbfIKg6udGn2amj3EJYupSjnA.jpg",
+   "id": 1011082,
+   "title": "The Greatest Hits",
+   "original_title": "The Greatest Hits",
+   "overview": "Harriet finds art imitating life when she discovers certain songs can transport her back in time – literally. While she relives the past through romantic memories of her former boyfriend, her time travelling collides with a burgeoning new love interest in the present. As she takes her journey through the hypnotic connection between music and memory, she wonders – even if she could change the past, should she?",
+   "poster_path": "/cve12HkI9psBUfmkx7FeBciaQN7.jpg",
+   "media_type": "movie",
+   "original_language": "en",
+   "genre_ids": [
+    18,
+    10402,
+    10749,
+    14
+   ],
+   "popularity": 12.0429,
+   "release_date": "2024-04-05",
+   "softcore": false,
+   "video": false,
+   "vote_average": 6.465,
+   "vote_count": 171
+  }
+ ],
+ "total_pages": 38,
+ "total_results": 756
+}

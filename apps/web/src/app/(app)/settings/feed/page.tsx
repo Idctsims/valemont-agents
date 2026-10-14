@@ -23,7 +23,7 @@ export const metadata: Metadata = { title: "Feed profile" };
 // and how the profile moved rebuild by rebuild. Reads only, through RLS; the
 // worker rebuilds at 04:00 Chicago (feed_profile).
 
-const PILLAR_LABEL: Record<Pillar, string> = { home: "Home", sports: "Sports", tech: "Tech" };
+const PILLAR_LABEL: Record<Pillar, string> = { home: "Home", sports: "Sports", tech: "Tech", screening: "Screening" };
 const TOP = 6;
 
 function top(weights: Record<string, number>, sign: 1 | -1): [string, number][] {

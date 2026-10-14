@@ -1,0 +1,71 @@
+{
+ "page": 1,
+ "results": [
+  {
+   "adult": false,
+   "backdrop_path": "/vb8ynrTs7xp7gaEIplf0zcjJZeh.jpg",
+   "id": 1381221,
+   "title": "Misty Green",
+   "original_title": "Misty Green",
+   "overview": "Years after her Hollywood breakthrough, a talented actress whose career has stalled fights for her second act.",
+   "poster_path": "/dUFtfnSfUK5IUfC5XMlMEY36EAp.jpg",
+   "media_type": "movie",
+   "original_language": "en",
+   "genre_ids": [
+    18,
+    35
+   ],
+   "popularity": 4.1192,
+   "release_date": "2026-10-09",
+   "softcore": false,
+   "video": false,
+   "vote_average": 0.0,
+   "vote_count": 0
+  },
+  {
+   "adult": false,
+   "backdrop_path": "/6wLiw4PQQ20oVv6XWNjJqPqlKMs.jpg",
+   "id": 499441,
+   "title": "The Misty Green Sky",
+   "original_title": "The Misty Green Sky",
+   "overview": "A young girl on a far off planet in another solar system discovers that all she has been told is not true, her search for truth and love is an adventurous and cautionary tale.",
+   "poster_path": "/dF6mS9vfaUDQcw8thzASdt6ukeM.jpg",
+   "media_type": "movie",
+   "original_language": "en",
+   "genre_ids": [
+    878,
+    16
+   ],
+   "popularity": 0.8787,
+   "release_date": "2016-01-18",
+   "softcore": false,
+   "video": false,
+   "vote_average": 1.8,
+   "vote_count": 6
+  },
+  {
+   "adult": false,
+   "backdrop_path": null,
+   "id": 320023,
+   "name": "A Touch of Green",
+   "original_name": "雾里青",
+   "overview": "Childhood sweethearts Chen Qingwu and Meng Qiran are expected to marry, but his fear of commitment leaves their relationship at a standstill. Meanwhile, Meng Qiran's older brother, Meng Fuyuan, quietly struggles with the forbidden feelings he has long harbored for Qingwu.",
+   "poster_path": "/9UdZizeIDcr4zcmxpmMEruvgiM4.jpg",
+   "media_type": "tv",
+   "original_language": "zh",
+   "genre_ids": [
+    18
+   ],
+   "popularity": 1.36,
+   "first_air_date": "",
+   "softcore": false,
+   "vote_average": 0.0,
+   "vote_count": 0,
+   "origin_country": [
+    "CN"
+   ]
+  }
+ ],
+ "total_pages": 1,
+ "total_results": 3
+}

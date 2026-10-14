@@ -1,0 +1,34 @@
+{
+ "page": 1,
+ "results": [
+  {
+   "adult": false,
+   "backdrop_path": "/w0lU7U89Fm4K8BQD4hJQpQthxu9.jpg",
+   "id": 105248,
+   "name": "Cyberpunk: Edgerunners",
+   "original_name": "Cyberpunk: Edgerunners",
+   "overview": "In a dystopia riddled with corruption and cybernetic implants, a talented but reckless street kid strives to become a mercenary outlaw — an edgerunner.",
+   "poster_path": "/v3JuB15WybKmxDeT1hWdK3j6eSJ.jpg",
+   "media_type": "tv",
+   "original_language": "ja",
+   "genre_ids": [
+    16,
+    10759,
+    10765,
+    80
+   ],
+   "popularity": 49.0021,
+   "first_air_date": "2022-09-13",
+   "softcore": false,
+   "vote_average": 8.5,
+   "vote_count": 2014,
+   "origin_country": [
+    "JP",
+    "PL",
+    "US"
+   ]
+  }
+ ],
+ "total_pages": 1,
+ "total_results": 1
+}

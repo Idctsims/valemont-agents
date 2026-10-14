@@ -1,0 +1,2703 @@
+{
+ "adult": false,
+ "backdrop_path": "/uvitbjFU4JqvMwIkMWHp69bmUzG.jpg",
+ "belongs_to_collection": null,
+ "budget": 3300000,
+ "genres": [
+  {
+   "id": 18,
+   "name": "Drama"
+  },
+  {
+   "id": 80,
+   "name": "Crime"
+  }
+ ],
+ "homepage": "http://cidadededeus.globo.com/",
+ "id": 598,
+ "imdb_id": "tt0317248",
+ "origin_country": [
+  "BR"
+ ],
+ "original_language": "pt",
+ "original_title": "Cidade de Deus",
+ "overview": "In the poverty-stricken favelas of Rio de Janeiro in the 1970s, two young men choose different paths. Rocket is a budding photographer who documents the increasing drug-related violence of his neighborhood, while José “Zé” Pequeno is an ambitious drug dealer diving into a dangerous life of crime.",
+ "popularity": 22.7594,
+ "poster_path": "/k7eYdWvhYQyRQoU2TB2A2Xu2TfD.jpg",
+ "production_companies": [
+  {
+   "id": 345,
+   "logo_path": "/hj2nqoG2F9COm16fqvM0YpY3jL4.png",
+   "name": "O2 Filmes",
+   "origin_country": "BR"
+  },
+  {
+   "id": 346,
+   "logo_path": "/ymwuRMQkrQojx55MeMO861Rdecz.png",
+   "name": "VideoFilmes",
+   "origin_country": "BR"
+  },
+  {
+   "id": 856,
+   "logo_path": "/3tfzS2CrX6Ntbu927XzHXEPDA6y.png",
+   "name": "Wild Bunch",
+   "origin_country": "FR"
+  },
+  {
+   "id": 11445,
+   "logo_path": null,
+   "name": "Hank Levine Film & Music",
+   "origin_country": "DE"
+  },
+  {
+   "id": 13969,
+   "logo_path": "/pFh6R6D4wpztG5aSblu14TtrR57.png",
+   "name": "Globo Filmes",
+   "origin_country": "BR"
+  },
+  {
+   "id": 274216,
+   "logo_path": "/ydSyng1Q80Hungi3p634pJRhDG6.png",
+   "name": "Lumière",
+   "origin_country": "BR"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "BR",
+   "name": "Brazil"
+  },
+  {
+   "iso_3166_1": "FR",
+   "name": "France"
+  },
+  {
+   "iso_3166_1": "DE",
+   "name": "Germany"
+  }
+ ],
+ "release_date": "2002-08-30",
+ "revenue": 30641770,
+ "runtime": 129,
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "Portuguese",
+   "iso_639_1": "pt",
+   "name": "Português"
+  }
+ ],
+ "status": "Released",
+ "tagline": "If you run, the beast catches you; if you stay, the beast eats you.",
+ "title": "City of God",
+ "video": false,
+ "vote_average": 8.4,
+ "vote_count": 8517,
+ "videos": {
+  "results": [
+   {
+    "iso_639_1": "en",
+    "iso_3166_1": "US",
+    "name": "Destiny",
+    "key": "UW9tYkh8Yrc",
+    "site": "YouTube",
+    "size": 1080,
+    "type": "Clip",
+    "official": true,
+    "id": "6597e19a5cc11d79097d4324",
+    "published_at": "2017-03-03T16:03:04.000Z"
+   },
+   {
+    "iso_639_1": "en",
+    "iso_3166_1": "US",
+    "name": "Looking for Paradise",
+    "key": "2dyC09Wd0JY",
+    "site": "YouTube",
+    "size": 1080,
+    "type": "Clip",
+    "official": true,
+    "id": "6597e1de60c51d6a94978885",
+    "published_at": "2017-03-03T16:03:04.000Z"
+   },
+   {
+    "iso_639_1": "en",
+    "iso_3166_1": "US",
+    "name": "Man Down",
+    "key": "YQ3Ll-Mx93k",
+    "site": "YouTube",
+    "size": 1080,
+    "type": "Clip",
+    "official": true,
+    "id": "6597e180726fb14c40ab284d",
+    "published_at": "2017-03-03T16:03:03.000Z"
+   },
+   {
+    "iso_639_1": "en",
+    "iso_3166_1": "US",
+    "name": "The Gangster Life",
+    "key": "kicDhAUEV_A",
+    "site": "YouTube",
+    "size": 1080,
+    "type": "Clip",
+    "official": true,
+    "id": "6597e1c5a698cf7afe43a058",
+    "published_at": "2017-03-03T16:03:02.000Z"
+   },
+   {
+    "iso_639_1": "en",
+    "iso_3166_1": "US",
+    "name": "Lesson Learned",
+    "key": "1m5gxQh5jeo",
+    "site": "YouTube",
+    "size": 1080,
+    "type": "Clip",
+    "official": true,
+    "id": "6597e167a698cf7b63439ffd",
+    "published_at": "2017-03-03T16:03:01.000Z"
+   },
+   {
+    "iso_639_1": "en",
+    "iso_3166_1": "US",
+    "name": "Getting Out",
+    "key": "AFk5Sa1lVaw",
+    "site": "YouTube",
+    "size": 1080,
+    "type": "Clip",
+    "official": true,
+    "id": "6597e1b560c51d6cf2978794",
+    "published_at": "2017-03-03T16:03:01.000Z"
+   },
+   {
+    "iso_639_1": "en",
+    "iso_3166_1": "US",
+    "name": "The Getaway",
+    "key": "dhiNaR1ELbY",
+    "site": "YouTube",
+    "size": 1080,
+    "type": "Clip",
+    "official": true,
+    "id": "6597e1a660c51d69fa9788b7",
+    "published_at": "2017-03-03T16:03:00.000Z"
+   },
+   {
+    "iso_639_1": "en",
+    "iso_3166_1": "US",
+    "name": "The Turf",
+    "key": "xGubnVYQUck",
+    "site": "YouTube",
+    "size": 1080,
+    "type": "Clip",
+    "official": true,
+    "id": "6597e174726fb1483dab2966",
+    "published_at": "2017-03-03T16:02:59.000Z"
+   },
+   {
+    "iso_639_1": "en",
+    "iso_3166_1": "US",
+    "name": "Official Trailer",
+    "key": "dcUOO4Itgmw",
+    "site": "YouTube",
+    "size": 1080,
+    "type": "Trailer",
+    "official": false,
+    "id": "66d7246203626e85509d36db",
+    "published_at": "2015-04-29T21:16:39.000Z"
+   },
+   {
+    "iso_639_1": "en",
+    "iso_3166_1": "US",
+    "name": "The Tender Trio",
+    "key": "49LSZHorN1o",
+    "site": "YouTube",
+    "size": 720,
+    "type": "Clip",
+    "official": true,
+    "id": "6597e18cd7a70a11c76adbd8",
+    "published_at": "2015-01-01T23:00:06.000Z"
+   },
+   {
+    "iso_639_1": "en",
+    "iso_3166_1": "US",
+    "name": "Man of the Year",
+    "key": "dFejvqigxc4",
+    "site": "YouTube",
+    "size": 1080,
+    "type": "Clip",
+    "official": true,
+    "id": "6597e1d0ea37e007ca4cbf74",
+    "published_at": "2015-01-01T20:00:11.000Z"
+   }
+  ]
+ },
+ "watch/providers": {
+  "results": {
+   "AR": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=AR",
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 47
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/zTJg0WVErBkcJv4S9FkQRUyXjnq.png",
+      "provider_id": 167,
+      "provider_name": "Claro video",
+      "display_priority": 8
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 47
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/kxUmV9TCZHfukpVOMuN90Jibbnm.png",
+      "provider_id": 339,
+      "provider_name": "MovistarTV",
+      "display_priority": 7
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 34
+     }
+    ]
+   },
+   "AT": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=AT",
+    "rent": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 6
+     },
+     {
+      "logo_path": "/nNkZ1JKe6vNhzti14KiKEUWHE6H.png",
+      "provider_id": 130,
+      "provider_name": "Sky Store",
+      "display_priority": 17
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 6
+     },
+     {
+      "logo_path": "/nNkZ1JKe6vNhzti14KiKEUWHE6H.png",
+      "provider_id": 130,
+      "provider_name": "Sky Store",
+      "display_priority": 17
+     }
+    ]
+   },
+   "AU": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=AU",
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 13
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 13
+     }
+    ]
+   },
+   "BE": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=BE",
+    "rent": [
+     {
+      "logo_path": "/gONX9BWf5xEK9UgXDtVWouq7eSu.png",
+      "provider_id": 310,
+      "provider_name": "LaCinetek",
+      "display_priority": 15
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/gd0zMEph8WdBDaRd7LTqfCG53vI.png",
+      "provider_id": 639,
+      "provider_name": "CineMember",
+      "display_priority": 25
+     }
+    ]
+   },
+   "BO": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=BO",
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 29
+     }
+    ]
+   },
+   "BR": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=BR",
+    "flatrate": [
+     {
+      "logo_path": "/rK1KljqmbvO9HQa1PBFLILWah72.png",
+      "provider_id": 8,
+      "provider_name": "Netflix",
+      "display_priority": 0
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 8
+     },
+     {
+      "logo_path": "/9A6Oxd3F7iXm7mds7CxYOBicojs.png",
+      "provider_id": 307,
+      "provider_name": "Globoplay",
+      "display_priority": 10
+     },
+     {
+      "logo_path": "/eGUwOOIxcazwEBxqJpSN5sWEu6V.png",
+      "provider_id": 1796,
+      "provider_name": "Netflix Standard with Ads",
+      "display_priority": 40
+     },
+     {
+      "logo_path": "/64fLWeSyZ1KQZhIdvTdy4QHeWty.png",
+      "provider_id": 1825,
+      "provider_name": "HBO Max Amazon Channel",
+      "display_priority": 47
+     }
+    ]
+   },
+   "BZ": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=BZ",
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     }
+    ]
+   },
+   "CA": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=CA",
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 6
+     },
+     {
+      "logo_path": "/fyUUKmDdzpJjSwsXPN4Rpi7jTu5.png",
+      "provider_id": 140,
+      "provider_name": "CosmoGo",
+      "display_priority": 11
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 6
+     },
+     {
+      "logo_path": "/fyUUKmDdzpJjSwsXPN4Rpi7jTu5.png",
+      "provider_id": 140,
+      "provider_name": "CosmoGo",
+      "display_priority": 11
+     }
+    ]
+   },
+   "CH": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=CH",
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 6
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 72
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 6
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 72
+     }
+    ]
+   },
+   "CL": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=CL",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 7
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 54
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 54
+     }
+    ]
+   },
+   "CO": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=CO",
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 55
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/zTJg0WVErBkcJv4S9FkQRUyXjnq.png",
+      "provider_id": 167,
+      "provider_name": "Claro video",
+      "display_priority": 9
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 55
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 6
+     },
+     {
+      "logo_path": "/64fLWeSyZ1KQZhIdvTdy4QHeWty.png",
+      "provider_id": 1825,
+      "provider_name": "HBO Max Amazon Channel",
+      "display_priority": 67
+     }
+    ]
+   },
+   "CR": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=CR",
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 6
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 5
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 6
+     }
+    ]
+   },
+   "CY": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=CY",
+    "flatrate": [
+     {
+      "logo_path": "/uLRNGzfMYnWAsEPbfi6plFW8ehc.png",
+      "provider_id": 2557,
+      "provider_name": "Cinobo",
+      "display_priority": 6
+     }
+    ]
+   },
+   "DE": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=DE",
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 7
+     },
+     {
+      "logo_path": "/nNkZ1JKe6vNhzti14KiKEUWHE6H.png",
+      "provider_id": 130,
+      "provider_name": "Sky Store",
+      "display_priority": 19
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 7
+     },
+     {
+      "logo_path": "/nNkZ1JKe6vNhzti14KiKEUWHE6H.png",
+      "provider_id": 130,
+      "provider_name": "Sky Store",
+      "display_priority": 19
+     }
+    ]
+   },
+   "DK": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=DK",
+    "flatrate": [
+     {
+      "logo_path": "/gMZdpavHmxFNnLpMHwVxfqeux2g.png",
+      "provider_id": 119,
+      "provider_name": "Amazon Prime Video",
+      "display_priority": 1
+     },
+     {
+      "logo_path": "/hPIVVR7yvR0PrTe7eHR2I5nAFis.png",
+      "provider_id": 1961,
+      "provider_name": "Allente",
+      "display_priority": 36
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 38
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/c1J9PGGowXwW5AxAaZaGipeFu7U.png",
+      "provider_id": 76,
+      "provider_name": "Viaplay",
+      "display_priority": 6
+     },
+     {
+      "logo_path": "/872dfVu1biZISJ8rO143CZZutPR.png",
+      "provider_id": 35,
+      "provider_name": "Rakuten TV",
+      "display_priority": 12
+     },
+     {
+      "logo_path": "/q8EUxAMcTw7qjdMKMcTPLl06gum.png",
+      "provider_id": 423,
+      "provider_name": "Blockbuster",
+      "display_priority": 14
+     },
+     {
+      "logo_path": "/fVuqy8kmzsULoJjc3ROOcurRH7S.png",
+      "provider_id": 426,
+      "provider_name": "SF Anytime",
+      "display_priority": 15
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/c1J9PGGowXwW5AxAaZaGipeFu7U.png",
+      "provider_id": 76,
+      "provider_name": "Viaplay",
+      "display_priority": 6
+     },
+     {
+      "logo_path": "/872dfVu1biZISJ8rO143CZZutPR.png",
+      "provider_id": 35,
+      "provider_name": "Rakuten TV",
+      "display_priority": 12
+     },
+     {
+      "logo_path": "/q8EUxAMcTw7qjdMKMcTPLl06gum.png",
+      "provider_id": 423,
+      "provider_name": "Blockbuster",
+      "display_priority": 14
+     },
+     {
+      "logo_path": "/fVuqy8kmzsULoJjc3ROOcurRH7S.png",
+      "provider_id": 426,
+      "provider_name": "SF Anytime",
+      "display_priority": 15
+     }
+    ],
+    "free": [
+     {
+      "logo_path": "/jIU4Hv5sJpHA4sJILaIW59waUtU.png",
+      "provider_id": 443,
+      "provider_name": "Filmstriben",
+      "display_priority": 13
+     }
+    ]
+   },
+   "DO": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=DO",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 30
+     }
+    ]
+   },
+   "EC": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=EC",
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 8
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 8
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/kxUmV9TCZHfukpVOMuN90Jibbnm.png",
+      "provider_id": 339,
+      "provider_name": "MovistarTV",
+      "display_priority": 6
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 7
+     }
+    ]
+   },
+   "ES": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=ES",
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 32
+     }
+    ],
+    "ads": [
+     {
+      "logo_path": "/erEYCN3EGN4yzcRvix2DunZLxHE.png",
+      "provider_id": 1875,
+      "provider_name": "Runtime",
+      "display_priority": 52
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/53JKjrhdG4z8DQ4pfdbHoAgPWeO.png",
+      "provider_id": 2241,
+      "provider_name": "Movistar Plus+",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/7OEtlOKTmjTXh40eHUES11Oc1i7.png",
+      "provider_id": 149,
+      "provider_name": "Movistar Plus+ Ficción Total ",
+      "display_priority": 7
+     },
+     {
+      "logo_path": "/hQCqvxkQeSN2wCujR0I6Rwj5E4D.png",
+      "provider_id": 1717,
+      "provider_name": "Acontra Plus",
+      "display_priority": 42
+     },
+     {
+      "logo_path": "/8tkBV84l8l5yLHzSIqGaUyYp0I1.png",
+      "provider_id": 1742,
+      "provider_name": "Acontra Plus Amazon Channel",
+      "display_priority": 46
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 32
+     },
+     {
+      "logo_path": "/hQCqvxkQeSN2wCujR0I6Rwj5E4D.png",
+      "provider_id": 1717,
+      "provider_name": "Acontra Plus",
+      "display_priority": 42
+     }
+    ]
+   },
+   "FI": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=FI",
+    "free": [
+     {
+      "logo_path": "/m7RLkfvAW0GwJLsfMMbc5Z4wB6q.png",
+      "provider_id": 496,
+      "provider_name": "Cineasterna",
+      "display_priority": 39
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/872dfVu1biZISJ8rO143CZZutPR.png",
+      "provider_id": 35,
+      "provider_name": "Rakuten TV",
+      "display_priority": 11
+     },
+     {
+      "logo_path": "/q8EUxAMcTw7qjdMKMcTPLl06gum.png",
+      "provider_id": 423,
+      "provider_name": "Blockbuster",
+      "display_priority": 12
+     },
+     {
+      "logo_path": "/fVuqy8kmzsULoJjc3ROOcurRH7S.png",
+      "provider_id": 426,
+      "provider_name": "SF Anytime",
+      "display_priority": 13
+     },
+     {
+      "logo_path": "/c1J9PGGowXwW5AxAaZaGipeFu7U.png",
+      "provider_id": 76,
+      "provider_name": "Viaplay",
+      "display_priority": 32
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/872dfVu1biZISJ8rO143CZZutPR.png",
+      "provider_id": 35,
+      "provider_name": "Rakuten TV",
+      "display_priority": 11
+     },
+     {
+      "logo_path": "/q8EUxAMcTw7qjdMKMcTPLl06gum.png",
+      "provider_id": 423,
+      "provider_name": "Blockbuster",
+      "display_priority": 12
+     },
+     {
+      "logo_path": "/fVuqy8kmzsULoJjc3ROOcurRH7S.png",
+      "provider_id": 426,
+      "provider_name": "SF Anytime",
+      "display_priority": 13
+     },
+     {
+      "logo_path": "/c1J9PGGowXwW5AxAaZaGipeFu7U.png",
+      "provider_id": 76,
+      "provider_name": "Viaplay",
+      "display_priority": 32
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/gMZdpavHmxFNnLpMHwVxfqeux2g.png",
+      "provider_id": 119,
+      "provider_name": "Amazon Prime Video",
+      "display_priority": 1
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 40
+     },
+     {
+      "logo_path": "/lWzSEjT62Ob0XIHXdN7G4OQWCAr.png",
+      "provider_id": 287,
+      "provider_name": "BFI Player Amazon Channel",
+      "display_priority": 50
+     }
+    ]
+   },
+   "FR": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=FR",
+    "rent": [
+     {
+      "logo_path": "/73lu1dtE9uJLWK1laXpeaAFh48j.png",
+      "provider_id": 61,
+      "provider_name": "Orange VOD",
+      "display_priority": 11
+     },
+     {
+      "logo_path": "/51fX3l4yElitnfui0IkbMUmfmgF.png",
+      "provider_id": 58,
+      "provider_name": "Canal VOD",
+      "display_priority": 16
+     },
+     {
+      "logo_path": "/a9ZXOebUSXGUFxTi3N36sA8wSSh.png",
+      "provider_id": 389,
+      "provider_name": "Sooner",
+      "display_priority": 20
+     },
+     {
+      "logo_path": "/uzTONLCUH92RRMSzs206OYtWVml.png",
+      "provider_id": 2286,
+      "provider_name": "VIVA by videofutur",
+      "display_priority": 75
+     },
+     {
+      "logo_path": "/yERf5EH3GjWMB0ZSWPaov1kCKrR.png",
+      "provider_id": 2307,
+      "provider_name": "Premiere Max",
+      "display_priority": 77
+     },
+     {
+      "logo_path": "/gONX9BWf5xEK9UgXDtVWouq7eSu.png",
+      "provider_id": 310,
+      "provider_name": "LaCinetek",
+      "display_priority": 82
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/gMZdpavHmxFNnLpMHwVxfqeux2g.png",
+      "provider_id": 119,
+      "provider_name": "Amazon Prime Video",
+      "display_priority": 2
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 71
+     },
+     {
+      "logo_path": "/tpwTT1FpWqLLhxUfAuDavIXDDfI.png",
+      "provider_id": 2100,
+      "provider_name": "Amazon Prime Video with Ads",
+      "display_priority": 83
+     },
+     {
+      "logo_path": "/64fLWeSyZ1KQZhIdvTdy4QHeWty.png",
+      "provider_id": 1825,
+      "provider_name": "HBO Max Amazon Channel",
+      "display_priority": 102
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/73lu1dtE9uJLWK1laXpeaAFh48j.png",
+      "provider_id": 61,
+      "provider_name": "Orange VOD",
+      "display_priority": 11
+     },
+     {
+      "logo_path": "/51fX3l4yElitnfui0IkbMUmfmgF.png",
+      "provider_id": 58,
+      "provider_name": "Canal VOD",
+      "display_priority": 16
+     },
+     {
+      "logo_path": "/a9ZXOebUSXGUFxTi3N36sA8wSSh.png",
+      "provider_id": 389,
+      "provider_name": "Sooner",
+      "display_priority": 20
+     },
+     {
+      "logo_path": "/uzTONLCUH92RRMSzs206OYtWVml.png",
+      "provider_id": 2286,
+      "provider_name": "VIVA by videofutur",
+      "display_priority": 75
+     },
+     {
+      "logo_path": "/yERf5EH3GjWMB0ZSWPaov1kCKrR.png",
+      "provider_id": 2307,
+      "provider_name": "Premiere Max",
+      "display_priority": 77
+     }
+    ]
+   },
+   "GB": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=GB",
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 8
+     },
+     {
+      "logo_path": "/nNkZ1JKe6vNhzti14KiKEUWHE6H.png",
+      "provider_id": 130,
+      "provider_name": "Sky Store",
+      "display_priority": 17
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 8
+     }
+    ]
+   },
+   "GG": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=GG",
+    "rent": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 81
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 81
+     }
+    ]
+   },
+   "GR": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=GR",
+    "flatrate": [
+     {
+      "logo_path": "/uLRNGzfMYnWAsEPbfi6plFW8ehc.png",
+      "provider_id": 2557,
+      "provider_name": "Cinobo",
+      "display_priority": 15
+     }
+    ]
+   },
+   "GT": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=GT",
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 7
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 5
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 7
+     }
+    ]
+   },
+   "HN": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=HN",
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 6
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 6
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 29
+     }
+    ]
+   },
+   "IE": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=IE",
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 6
+     },
+     {
+      "logo_path": "/nNkZ1JKe6vNhzti14KiKEUWHE6H.png",
+      "provider_id": 130,
+      "provider_name": "Sky Store",
+      "display_priority": 9
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 6
+     }
+    ]
+   },
+   "IL": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=IL",
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 24
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 24
+     }
+    ]
+   },
+   "IN": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=IN",
+    "buy": [
+     {
+      "logo_path": "/5Maob4o5w8oZnNeYpCDyVFD3M7X.png",
+      "provider_id": 192,
+      "provider_name": "YouTube",
+      "display_priority": 10
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/5Maob4o5w8oZnNeYpCDyVFD3M7X.png",
+      "provider_id": 192,
+      "provider_name": "YouTube",
+      "display_priority": 10
+     }
+    ]
+   },
+   "JP": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=JP",
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 7
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 7
+     }
+    ]
+   },
+   "MC": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=MC",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 25
+     }
+    ]
+   },
+   "MX": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=MX",
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 8
+     },
+     {
+      "logo_path": "/zTJg0WVErBkcJv4S9FkQRUyXjnq.png",
+      "provider_id": 167,
+      "provider_name": "Claro video",
+      "display_priority": 20
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 8
+     },
+     {
+      "logo_path": "/zTJg0WVErBkcJv4S9FkQRUyXjnq.png",
+      "provider_id": 167,
+      "provider_name": "Claro video",
+      "display_priority": 20
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 7
+     },
+     {
+      "logo_path": "/64fLWeSyZ1KQZhIdvTdy4QHeWty.png",
+      "provider_id": 1825,
+      "provider_name": "HBO Max Amazon Channel",
+      "display_priority": 15
+     }
+    ]
+   },
+   "NI": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=NI",
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 12
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     }
+    ]
+   },
+   "NL": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=NL",
+    "flatrate": [
+     {
+      "logo_path": "/3IdfSLRjSoDoo9lrpvX4oxZmnVi.png",
+      "provider_id": 72,
+      "provider_name": "Videoland",
+      "display_priority": 8
+     },
+     {
+      "logo_path": "/gd0zMEph8WdBDaRd7LTqfCG53vI.png",
+      "provider_id": 639,
+      "provider_name": "CineMember",
+      "display_priority": 35
+     }
+    ]
+   },
+   "NO": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=NO",
+    "buy": [
+     {
+      "logo_path": "/c1J9PGGowXwW5AxAaZaGipeFu7U.png",
+      "provider_id": 76,
+      "provider_name": "Viaplay",
+      "display_priority": 6
+     },
+     {
+      "logo_path": "/872dfVu1biZISJ8rO143CZZutPR.png",
+      "provider_id": 35,
+      "provider_name": "Rakuten TV",
+      "display_priority": 12
+     },
+     {
+      "logo_path": "/q8EUxAMcTw7qjdMKMcTPLl06gum.png",
+      "provider_id": 423,
+      "provider_name": "Blockbuster",
+      "display_priority": 14
+     },
+     {
+      "logo_path": "/fVuqy8kmzsULoJjc3ROOcurRH7S.png",
+      "provider_id": 426,
+      "provider_name": "SF Anytime",
+      "display_priority": 15
+     }
+    ],
+    "free": [
+     {
+      "logo_path": "/qlprzafQzz41Jvswl7dL8d0W4uY.png",
+      "provider_id": 560,
+      "provider_name": "Filmoteket",
+      "display_priority": 23
+     },
+     {
+      "logo_path": "/m7RLkfvAW0GwJLsfMMbc5Z4wB6q.png",
+      "provider_id": 496,
+      "provider_name": "Cineasterna",
+      "display_priority": 38
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/c1J9PGGowXwW5AxAaZaGipeFu7U.png",
+      "provider_id": 76,
+      "provider_name": "Viaplay",
+      "display_priority": 6
+     },
+     {
+      "logo_path": "/872dfVu1biZISJ8rO143CZZutPR.png",
+      "provider_id": 35,
+      "provider_name": "Rakuten TV",
+      "display_priority": 12
+     },
+     {
+      "logo_path": "/q8EUxAMcTw7qjdMKMcTPLl06gum.png",
+      "provider_id": 423,
+      "provider_name": "Blockbuster",
+      "display_priority": 14
+     },
+     {
+      "logo_path": "/fVuqy8kmzsULoJjc3ROOcurRH7S.png",
+      "provider_id": 426,
+      "provider_name": "SF Anytime",
+      "display_priority": 15
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/mlNPljPGzSDqNK2Fjr4SS0gTITj.png",
+      "provider_id": 578,
+      "provider_name": "Strim",
+      "display_priority": 27
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 39
+     }
+    ]
+   },
+   "NZ": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=NZ",
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 6
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 6
+     }
+    ]
+   },
+   "PA": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=PA",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 30
+     }
+    ]
+   },
+   "PE": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=PE",
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 41
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 7
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 41
+     }
+    ]
+   },
+   "PK": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=PK",
+    "flatrate": [
+     {
+      "logo_path": "/uQvhdtB8skccsGHmvKi3y5bqBsX.png",
+      "provider_id": 232,
+      "provider_name": "Zee5",
+      "display_priority": 2
+     }
+    ]
+   },
+   "PY": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=PY",
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 6
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 28
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 6
+     }
+    ]
+   },
+   "SE": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=SE",
+    "rent": [
+     {
+      "logo_path": "/c1J9PGGowXwW5AxAaZaGipeFu7U.png",
+      "provider_id": 76,
+      "provider_name": "Viaplay",
+      "display_priority": 7
+     },
+     {
+      "logo_path": "/872dfVu1biZISJ8rO143CZZutPR.png",
+      "provider_id": 35,
+      "provider_name": "Rakuten TV",
+      "display_priority": 13
+     },
+     {
+      "logo_path": "/q8EUxAMcTw7qjdMKMcTPLl06gum.png",
+      "provider_id": 423,
+      "provider_name": "Blockbuster",
+      "display_priority": 14
+     },
+     {
+      "logo_path": "/fVuqy8kmzsULoJjc3ROOcurRH7S.png",
+      "provider_id": 426,
+      "provider_name": "SF Anytime",
+      "display_priority": 15
+     },
+     {
+      "logo_path": "/dmt94TXdeHGnA211Lo1tBQO0fXH.png",
+      "provider_id": 517,
+      "provider_name": "TriArt Play",
+      "display_priority": 20
+     }
+    ],
+    "free": [
+     {
+      "logo_path": "/vMU9xqjyIsOplkdSCRveond8fxV.png",
+      "provider_id": 493,
+      "provider_name": "SVT Play",
+      "display_priority": 17
+     },
+     {
+      "logo_path": "/m7RLkfvAW0GwJLsfMMbc5Z4wB6q.png",
+      "provider_id": 496,
+      "provider_name": "Cineasterna",
+      "display_priority": 21
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/c1J9PGGowXwW5AxAaZaGipeFu7U.png",
+      "provider_id": 76,
+      "provider_name": "Viaplay",
+      "display_priority": 7
+     },
+     {
+      "logo_path": "/872dfVu1biZISJ8rO143CZZutPR.png",
+      "provider_id": 35,
+      "provider_name": "Rakuten TV",
+      "display_priority": 13
+     },
+     {
+      "logo_path": "/q8EUxAMcTw7qjdMKMcTPLl06gum.png",
+      "provider_id": 423,
+      "provider_name": "Blockbuster",
+      "display_priority": 14
+     },
+     {
+      "logo_path": "/fVuqy8kmzsULoJjc3ROOcurRH7S.png",
+      "provider_id": 426,
+      "provider_name": "SF Anytime",
+      "display_priority": 15
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/gMZdpavHmxFNnLpMHwVxfqeux2g.png",
+      "provider_id": 119,
+      "provider_name": "Amazon Prime Video",
+      "display_priority": 1
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 42
+     },
+     {
+      "logo_path": "/lWzSEjT62Ob0XIHXdN7G4OQWCAr.png",
+      "provider_id": 287,
+      "provider_name": "BFI Player Amazon Channel",
+      "display_priority": 55
+     },
+     {
+      "logo_path": "/64fLWeSyZ1KQZhIdvTdy4QHeWty.png",
+      "provider_id": 1825,
+      "provider_name": "HBO Max Amazon Channel",
+      "display_priority": 63
+     },
+     {
+      "logo_path": "/qfhOpCrVOhUBzS4FU0zz15VElKE.png",
+      "provider_id": 435,
+      "provider_name": "Draken Film",
+      "display_priority": 70
+     }
+    ]
+   },
+   "SK": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=SK",
+    "flatrate": [
+     {
+      "logo_path": "/a9wwsDni2ketNt6QzKGqEWQr4x3.png",
+      "provider_id": 628,
+      "provider_name": "Edisonline",
+      "display_priority": 25
+     }
+    ]
+   },
+   "SV": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=SV",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 30
+     }
+    ]
+   },
+   "US": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=US",
+    "rent": [
+     {
+      "logo_path": "/aJXLTvX11u4fBLMPRVJZVKkLYHP.png",
+      "provider_id": 2285,
+      "provider_name": "JustWatch TV",
+      "display_priority": 7
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 8
+     },
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 9
+     },
+     {
+      "logo_path": "/aZRENwYILujqs0RVOZutTh0BVGV.png",
+      "provider_id": 3,
+      "provider_name": "Google Play Movies",
+      "display_priority": 20
+     },
+     {
+      "logo_path": "/5Maob4o5w8oZnNeYpCDyVFD3M7X.png",
+      "provider_id": 192,
+      "provider_name": "YouTube",
+      "display_priority": 21
+     },
+     {
+      "logo_path": "/wpOt6x0dRxTrIzuBosto4LGd7E9.png",
+      "provider_id": 7,
+      "provider_name": "Fandango At Home",
+      "display_priority": 37
+     },
+     {
+      "logo_path": "/6qPtM96UZkt3Bu4ZFPsDeHFWUZ2.png",
+      "provider_id": 486,
+      "provider_name": "Spectrum On Demand",
+      "display_priority": 119
+     }
+    ],
+    "free": [
+     {
+      "logo_path": "/cltb8XKan9ierp23ItPmCOcVLRa.png",
+      "provider_id": 191,
+      "provider_name": "Kanopy",
+      "display_priority": 35
+     },
+     {
+      "logo_path": "/gtjNBzAoGgUtYzt0UKXmwG34WWL.png",
+      "provider_id": 212,
+      "provider_name": "Hoopla",
+      "display_priority": 36
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 8
+     },
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 9
+     },
+     {
+      "logo_path": "/aZRENwYILujqs0RVOZutTh0BVGV.png",
+      "provider_id": 3,
+      "provider_name": "Google Play Movies",
+      "display_priority": 20
+     },
+     {
+      "logo_path": "/5Maob4o5w8oZnNeYpCDyVFD3M7X.png",
+      "provider_id": 192,
+      "provider_name": "YouTube",
+      "display_priority": 21
+     },
+     {
+      "logo_path": "/wpOt6x0dRxTrIzuBosto4LGd7E9.png",
+      "provider_id": 7,
+      "provider_name": "Fandango At Home",
+      "display_priority": 37
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/uPWQPyF4nqwtfPNmGcFcenU57HG.png",
+      "provider_id": 2616,
+      "provider_name": "Paramount Plus Essential",
+      "display_priority": 15
+     }
+    ]
+   },
+   "UY": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=UY",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 5
+     }
+    ]
+   },
+   "VE": {
+    "link": "https://www.themoviedb.org/movie/598-cidade-de-deus/watch?locale=VE",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 26
+     }
+    ],
+    "rent": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     }
+    ]
+   }
+  }
+ },
+ "release_dates": {
+  "results": [
+   {
+    "iso_3166_1": "AE",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2008-07-06T00:00:00.000Z",
+      "type": 6
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "AR",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Mar del Plata Film Festival",
+      "release_date": "2003-03-06T00:00:00.000Z",
+      "type": 1
+     },
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-03-20T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "AT",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-05-09T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "AU",
+    "release_dates": [
+     {
+      "certification": "R 18+",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-03-13T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "BE",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-05-07T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "BR",
+    "release_dates": [
+     {
+      "certification": "16",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2002-08-30T00:00:00.000Z",
+      "type": 3
+     },
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Re-release",
+      "release_date": "2004-02-06T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "CA",
+    "release_dates": [
+     {
+      "certification": "18A",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Toronto International Film Festival",
+      "release_date": "2002-09-06T00:00:00.000Z",
+      "type": 1
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "CH",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "de",
+      "note": "",
+      "release_date": "2003-05-08T00:00:00.000Z",
+      "type": 3
+     },
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "fr",
+      "note": "",
+      "release_date": "2003-03-12T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "CN",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Beijing International Film Festival",
+      "release_date": "2015-04-18T00:00:00.000Z",
+      "type": 1
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "CO",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Cartagena Film Festival",
+      "release_date": "2003-02-01T00:00:00.000Z",
+      "type": 1
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "CU",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Havana Film Festival",
+      "release_date": "2002-12-01T00:00:00.000Z",
+      "type": 1
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "CZ",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Karlovy Vary International Film Festival",
+      "release_date": "2003-07-07T00:00:00.000Z",
+      "type": 1
+     },
+     {
+      "certification": "15+",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-07-10T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "DE",
+    "release_dates": [
+     {
+      "certification": "16",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-05-08T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "DK",
+    "release_dates": [
+     {
+      "certification": "15",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-07-11T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "ES",
+    "release_dates": [
+     {
+      "certification": "18",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-01-31T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "FI",
+    "release_dates": [
+     {
+      "certification": "K-18",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-09-12T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "FR",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Cannes Film Festival",
+      "release_date": "2002-05-18T00:00:00.000Z",
+      "type": 1
+     },
+     {
+      "certification": "16",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-03-12T00:00:00.000Z",
+      "type": 3
+     },
+     {
+      "certification": "16",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "VOD",
+      "release_date": "2009-10-14T00:00:00.000Z",
+      "type": 4
+     },
+     {
+      "certification": "18",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Prime Video",
+      "release_date": "2021-10-15T00:00:00.000Z",
+      "type": 4
+     },
+     {
+      "certification": "16",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "DVD",
+      "release_date": "2003-11-06T00:00:00.000Z",
+      "type": 5
+     },
+     {
+      "certification": "16",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Blu-Ray",
+      "release_date": "2009-10-14T00:00:00.000Z",
+      "type": 5
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "GB",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "BFI London Film Festival",
+      "release_date": "2002-11-08T00:00:00.000Z",
+      "type": 1
+     },
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "21st Anniversary Re-Release",
+      "release_date": "2024-02-23T00:00:00.000Z",
+      "type": 2
+     },
+     {
+      "certification": "18",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-01-03T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "GR",
+    "release_dates": [
+     {
+      "certification": "K18",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-01-31T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "HK",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Hong Kong International Film Festival",
+      "release_date": "2003-04-10T00:00:00.000Z",
+      "type": 1
+     },
+     {
+      "certification": "III",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-05-08T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "HR",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2004-02-05T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "HU",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-03-13T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "ID",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Blu-ray",
+      "release_date": "2021-01-31T00:00:00.000Z",
+      "type": 5
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "IE",
+    "release_dates": [
+     {
+      "certification": "18",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-01-03T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "IL",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-03-27T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "IN",
+    "release_dates": [
+     {
+      "certification": "A",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2007-01-18T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "IS",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-11-28T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "IT",
+    "release_dates": [
+     {
+      "certification": "18+",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-05-09T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "JP",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Tokyo International Film Festival",
+      "release_date": "2002-10-30T00:00:00.000Z",
+      "type": 1
+     },
+     {
+      "certification": "R15+",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-06-28T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "KR",
+    "release_dates": [
+     {
+      "certification": "18",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2005-11-03T00:00:00.000Z",
+      "type": 3
+     },
+     {
+      "certification": "18",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Re-release",
+      "release_date": "2020-07-09T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "LT",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2004-04-30T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "MA",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Marrakech International Film Festival",
+      "release_date": "2002-09-01T00:00:00.000Z",
+      "type": 1
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "MX",
+    "release_dates": [
+     {
+      "certification": "C",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Guadalajara International Film Festival",
+      "release_date": "2003-03-01T00:00:00.000Z",
+      "type": 1
+     },
+     {
+      "certification": "C",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-05-01T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "NL",
+    "release_dates": [
+     {
+      "certification": "16",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "International Film Festival Rotterdam",
+      "release_date": "2003-01-27T00:00:00.000Z",
+      "type": 1
+     },
+     {
+      "certification": "16",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-02-06T00:00:00.000Z",
+      "type": 3
+     },
+     {
+      "certification": "16",
+      "descriptors": [
+       "Violence"
+      ],
+      "iso_639_1": "",
+      "note": "21st Anniversary Event",
+      "release_date": "2024-05-16T00:00:00.000Z",
+      "type": 3
+     },
+     {
+      "certification": "16",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "DVD",
+      "release_date": "2008-04-10T00:00:00.000Z",
+      "type": 5
+     },
+     {
+      "certification": "16",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Nederland 2",
+      "release_date": "2008-05-09T00:00:00.000Z",
+      "type": 6
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "NO",
+    "release_dates": [
+     {
+      "certification": "15",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Filmquart Film Festival",
+      "release_date": "2003-07-04T00:00:00.000Z",
+      "type": 1
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "NZ",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Auckland International Film Festival",
+      "release_date": "2003-07-19T00:00:00.000Z",
+      "type": 1
+     },
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-08-14T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "PE",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Lima Latin American Film Festival",
+      "release_date": "2003-08-01T00:00:00.000Z",
+      "type": 1
+     },
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-08-14T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "PH",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Cinemanila International Film Festival",
+      "release_date": "2003-08-01T00:00:00.000Z",
+      "type": 1
+     },
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-10-08T00:00:00.000Z",
+      "type": 2
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "PL",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Latin America Film Festival",
+      "release_date": "2003-06-29T00:00:00.000Z",
+      "type": 1
+     },
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2004-01-09T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "PT",
+    "release_dates": [
+     {
+      "certification": "M/16",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-03-21T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "RO",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-07-18T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "RU",
+    "release_dates": [
+     {
+      "certification": "16+",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-02-05T00:00:00.000Z",
+      "type": 3
+     },
+     {
+      "certification": "18+",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Re-release",
+      "release_date": "2023-04-13T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "SE",
+    "release_dates": [
+     {
+      "certification": "15",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-10-17T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "SG",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-06-26T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "SI",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-03-20T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "SK",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-10-02T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "TR",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Istanbul Film Festival",
+      "release_date": "2003-04-13T00:00:00.000Z",
+      "type": 1
+     },
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-07-18T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "TW",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-04-04T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "US",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Telluride Film Festival",
+      "release_date": "2002-08-31T00:00:00.000Z",
+      "type": 1
+     },
+     {
+      "certification": "R",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-01-17T00:00:00.000Z",
+      "type": 2
+     },
+     {
+      "certification": "R",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2004-02-13T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   },
+   {
+    "iso_3166_1": "UY",
+    "release_dates": [
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "Uruguay International Film Festival",
+      "release_date": "2003-04-01T00:00:00.000Z",
+      "type": 1
+     },
+     {
+      "certification": "",
+      "descriptors": [],
+      "iso_639_1": "",
+      "note": "",
+      "release_date": "2003-04-12T00:00:00.000Z",
+      "type": 3
+     }
+    ]
+   }
+  ]
+ }
+}

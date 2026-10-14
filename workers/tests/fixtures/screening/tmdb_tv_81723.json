@@ -1,0 +1,1858 @@
+{
+ "adult": false,
+ "backdrop_path": "/jPcQlhoJ3LrOfKwCvGD58P8rC5b.jpg",
+ "created_by": [
+  {
+   "id": 10747,
+   "credit_id": "5b779194c3a36860df0067af",
+   "name": "Julian Fellowes",
+   "original_name": "Julian Fellowes",
+   "gender": 2,
+   "profile_path": "/hRWGCVNRkeu61lh3NRmfRym9yOp.jpg"
+  }
+ ],
+ "episode_run_time": [],
+ "first_air_date": "2022-01-24",
+ "genres": [
+  {
+   "id": 18,
+   "name": "Drama"
+  }
+ ],
+ "homepage": "https://www.hbo.com/the-gilded-age",
+ "id": 81723,
+ "in_production": true,
+ "languages": [
+  "en"
+ ],
+ "last_air_date": "2025-08-10",
+ "last_episode_to_air": {
+  "id": 6201381,
+  "name": "My Mind Is Made Up",
+  "overview": "Peggy reveals her truth to Dr. Kirkland, Marian struggles to move forward, and Bertha finally faces the fallout of her actions.",
+  "vote_average": 5.7,
+  "vote_count": 25,
+  "air_date": "2025-08-10",
+  "episode_number": 8,
+  "episode_type": "finale",
+  "production_code": "",
+  "runtime": 69,
+  "season_number": 3,
+  "show_id": 81723,
+  "still_path": "/mVwGNKIu2o3JHDT4klfkWVKeyuz.jpg"
+ },
+ "name": "The Gilded Age",
+ "next_episode_to_air": {
+  "id": 7726958,
+  "name": "Episode 1",
+  "overview": "",
+  "vote_average": 0.0,
+  "vote_count": 0,
+  "air_date": "2026-11-01",
+  "episode_number": 1,
+  "episode_type": "standard",
+  "production_code": "",
+  "runtime": null,
+  "season_number": 4,
+  "show_id": 81723,
+  "still_path": null
+ },
+ "networks": [
+  {
+   "id": 49,
+   "logo_path": "/tuomPhY2UtuPTqqFnKMVHvSb724.png",
+   "name": "HBO",
+   "origin_country": "US"
+  }
+ ],
+ "number_of_episodes": 33,
+ "number_of_seasons": 4,
+ "origin_country": [
+  "US"
+ ],
+ "original_language": "en",
+ "original_name": "The Gilded Age",
+ "overview": "It’s 1882 and the Gilded Age is in full swing when Marian Brook moves in with her rigidly conventional aunts in New York City. With the help of Peggy Scott, an African-American woman masquerading as her maid, Marian gets caught up in the dazzling lives of her rich neighbors as she struggles to decide between adhering to the rules or forging her own path.",
+ "popularity": 38.2522,
+ "poster_path": "/lBsDmxBI4ELLmgF5uhUCvjgpQxh.jpg",
+ "production_companies": [
+  {
+   "id": 26727,
+   "logo_path": "/jeTxdjXhzgKZyLr3l9MllkTn3fy.png",
+   "name": "Universal Television",
+   "origin_country": "US"
+  },
+  {
+   "id": 3268,
+   "logo_path": "/tuomPhY2UtuPTqqFnKMVHvSb724.png",
+   "name": "HBO",
+   "origin_country": "US"
+  },
+  {
+   "id": 168573,
+   "logo_path": null,
+   "name": "Neamo Film and Television",
+   "origin_country": "GB"
+  }
+ ],
+ "production_countries": [
+  {
+   "iso_3166_1": "US",
+   "name": "United States of America"
+  },
+  {
+   "iso_3166_1": "GB",
+   "name": "United Kingdom"
+  }
+ ],
+ "seasons": [
+  {
+   "air_date": "2022-03-05",
+   "episode_count": 16,
+   "id": 374240,
+   "name": "Specials",
+   "overview": "",
+   "poster_path": "/1coEH1AmCLdRVhL9f7maaj5WjOS.jpg",
+   "season_number": 0,
+   "vote_average": 0.0
+  },
+  {
+   "air_date": "2022-01-24",
+   "episode_count": 9,
+   "id": 108018,
+   "name": "Season 1",
+   "overview": "",
+   "poster_path": "/ynAJYVES5ignKInbQhKSOY1MhKT.jpg",
+   "season_number": 1,
+   "vote_average": 5.8
+  },
+  {
+   "air_date": "2023-10-29",
+   "episode_count": 8,
+   "id": 353912,
+   "name": "Season 2",
+   "overview": "",
+   "poster_path": "/6X8uo7DziCSL4K8GJ3h2jYElNS1.jpg",
+   "season_number": 2,
+   "vote_average": 5.7
+  },
+  {
+   "air_date": "2025-06-22",
+   "episode_count": 8,
+   "id": 405311,
+   "name": "Season 3",
+   "overview": "",
+   "poster_path": "/50NEJmsevt8TxMyhhIHWDuKkK5N.jpg",
+   "season_number": 3,
+   "vote_average": 5.6
+  },
+  {
+   "air_date": "2026-11-01",
+   "episode_count": 8,
+   "id": 523370,
+   "name": "Season 4",
+   "overview": "Bertha Russell changed Society at a cost. Now, her family must reckon with the consequences as Agnes van Rhijn seizes an opportunity to regain her position. Meanwhile, Marian forges a new path for herself, and Peggy works to be accepted by her future in-laws. In this new era, you must be careful what you wish for.",
+   "poster_path": "/qqKcas5CKhEMcXwb7QMdgZdTtLY.jpg",
+   "season_number": 4,
+   "vote_average": 0.0
+  }
+ ],
+ "softcore": false,
+ "spoken_languages": [
+  {
+   "english_name": "English",
+   "iso_639_1": "en",
+   "name": "English"
+  }
+ ],
+ "status": "Returning Series",
+ "tagline": "What's your family worth?",
+ "type": "Scripted",
+ "vote_average": 7.7,
+ "vote_count": 276,
+ "videos": {
+  "results": [
+   {
+    "iso_639_1": "en",
+    "iso_3166_1": "US",
+    "name": "Official Trailer",
+    "key": "wKj1cMz3yfI",
+    "site": "YouTube",
+    "size": 1080,
+    "type": "Trailer",
+    "official": true,
+    "id": "61b7ab64cb75d1001c06e740",
+    "published_at": "2021-12-13T16:00:06.000Z"
+   },
+   {
+    "iso_639_1": "en",
+    "iso_3166_1": "US",
+    "name": "Official Teaser",
+    "key": "ZYBuU32B8PI",
+    "site": "YouTube",
+    "size": 1080,
+    "type": "Teaser",
+    "official": true,
+    "id": "61969bc2fdf8b700612c0425",
+    "published_at": "2021-11-18T17:00:08.000Z"
+   }
+  ]
+ },
+ "watch/providers": {
+  "results": {
+   "AD": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=AD",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 25
+     }
+    ]
+   },
+   "AE": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=AE",
+    "flatrate": [
+     {
+      "logo_path": "/3Gfphgh5Uvcvb3IgbwUn79CT8Un.png",
+      "provider_id": 629,
+      "provider_name": "OSN+",
+      "display_priority": 8
+     }
+    ]
+   },
+   "AG": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=AG",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 11
+     }
+    ]
+   },
+   "AL": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=AL",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 35
+     }
+    ]
+   },
+   "AR": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=AR",
+    "flatrate": [
+     {
+      "logo_path": "/kxUmV9TCZHfukpVOMuN90Jibbnm.png",
+      "provider_id": 339,
+      "provider_name": "MovistarTV",
+      "display_priority": 7
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 34
+     }
+    ]
+   },
+   "AT": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=AT",
+    "flatrate": [
+     {
+      "logo_path": "/1Yvl9eP3pmktqChitnFhHJHcBtX.png",
+      "provider_id": 29,
+      "provider_name": "Sky Go",
+      "display_priority": 8
+     },
+     {
+      "logo_path": "/64fLWeSyZ1KQZhIdvTdy4QHeWty.png",
+      "provider_id": 1825,
+      "provider_name": "HBO Max Amazon Channel",
+      "display_priority": 148
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 149
+     },
+     {
+      "logo_path": "/2o26YwA7tXQ7I6CSrMvO9Rj4oNi.png",
+      "provider_id": 30,
+      "provider_name": "WOW",
+      "display_priority": 182
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/mjB4eyswPoC0XeJPUd1W1oitOlh.png",
+      "provider_id": 20,
+      "provider_name": "maxdome Store",
+      "display_priority": 13
+     }
+    ]
+   },
+   "AU": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=AU",
+    "flatrate": [
+     {
+      "logo_path": "/pkx3klJlwW5JdtaulvDx6hDNtch.png",
+      "provider_id": 531,
+      "provider_name": "Paramount Plus",
+      "display_priority": 8
+     },
+     {
+      "logo_path": "/bxX0YVOCY7bI85BKRlJAAQ2EjUR.png",
+      "provider_id": 582,
+      "provider_name": "Paramount+ Amazon Channel",
+      "display_priority": 9
+     },
+     {
+      "logo_path": "/xu4LyKTwasTbta1Z0qWtZG48yZ3.png",
+      "provider_id": 1853,
+      "provider_name": "Paramount Plus Apple TV channel",
+      "display_priority": 51
+     },
+     {
+      "logo_path": "/4N4BMd0Mm0kHAmF7RZgL5lW3cwc.png",
+      "provider_id": 2303,
+      "provider_name": "Paramount Plus Premium",
+      "display_priority": 79
+     },
+     {
+      "logo_path": "/ylBHMFuVsJqQ8JUzmfmPsEn97Ez.png",
+      "provider_id": 2304,
+      "provider_name": "Paramount Plus Basic with Ads",
+      "display_priority": 80
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 13
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 14
+     },
+     {
+      "logo_path": "/hFTUerTxMwrM9RIo9z48qxCsi7z.png",
+      "provider_id": 436,
+      "provider_name": "Fetch TV",
+      "display_priority": 30
+     }
+    ]
+   },
+   "BA": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=BA",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 28
+     }
+    ]
+   },
+   "BB": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=BB",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 23
+     }
+    ]
+   },
+   "BE": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=BE",
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 32
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 37
+     },
+     {
+      "logo_path": "/64fLWeSyZ1KQZhIdvTdy4QHeWty.png",
+      "provider_id": 1825,
+      "provider_name": "HBO Max Amazon Channel",
+      "display_priority": 60
+     }
+    ]
+   },
+   "BG": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=BG",
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 29
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 21
+     }
+    ]
+   },
+   "BH": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=BH",
+    "flatrate": [
+     {
+      "logo_path": "/3Gfphgh5Uvcvb3IgbwUn79CT8Un.png",
+      "provider_id": 629,
+      "provider_name": "OSN+",
+      "display_priority": 28
+     }
+    ]
+   },
+   "BO": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=BO",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 29
+     }
+    ]
+   },
+   "BR": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=BR",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 8
+     },
+     {
+      "logo_path": "/64fLWeSyZ1KQZhIdvTdy4QHeWty.png",
+      "provider_id": 1825,
+      "provider_name": "HBO Max Amazon Channel",
+      "display_priority": 47
+     }
+    ]
+   },
+   "BS": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=BS",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 24
+     }
+    ]
+   },
+   "BZ": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=BZ",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 8
+     }
+    ]
+   },
+   "CA": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=CA",
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 6
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 54
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/a2o4bE63LR71m8jHrkx9BnBucN0.png",
+      "provider_id": 230,
+      "provider_name": "Crave",
+      "display_priority": 13
+     },
+     {
+      "logo_path": "/6EuODonAziRYWv90wAtEmUjk78R.png",
+      "provider_id": 2604,
+      "provider_name": "Crave Amazon Channel",
+      "display_priority": 135
+     }
+    ]
+   },
+   "CH": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=CH",
+    "flatrate": [
+     {
+      "logo_path": "/9DoQOfCz9S9j4cif3Cqx3ebk3FP.png",
+      "provider_id": 210,
+      "provider_name": "Sky",
+      "display_priority": 7
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 74
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/nNkZ1JKe6vNhzti14KiKEUWHE6H.png",
+      "provider_id": 130,
+      "provider_name": "Sky Store",
+      "display_priority": 14
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 72
+     }
+    ]
+   },
+   "CL": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=CL",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 7
+     },
+     {
+      "logo_path": "/kxUmV9TCZHfukpVOMuN90Jibbnm.png",
+      "provider_id": 339,
+      "provider_name": "MovistarTV",
+      "display_priority": 8
+     }
+    ]
+   },
+   "CO": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=CO",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 6
+     },
+     {
+      "logo_path": "/kxUmV9TCZHfukpVOMuN90Jibbnm.png",
+      "provider_id": 339,
+      "provider_name": "MovistarTV",
+      "display_priority": 8
+     },
+     {
+      "logo_path": "/64fLWeSyZ1KQZhIdvTdy4QHeWty.png",
+      "provider_id": 1825,
+      "provider_name": "HBO Max Amazon Channel",
+      "display_priority": 67
+     }
+    ]
+   },
+   "CR": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=CR",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 5
+     }
+    ]
+   },
+   "CY": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=CY",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 17
+     }
+    ]
+   },
+   "CZ": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=CZ",
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 40
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/gzlCSbeTdiLJNxdZuMKNhW8X7cy.png",
+      "provider_id": 1939,
+      "provider_name": "Lepsi TV",
+      "display_priority": 25
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 29
+     }
+    ]
+   },
+   "DE": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=DE",
+    "flatrate": [
+     {
+      "logo_path": "/2o26YwA7tXQ7I6CSrMvO9Rj4oNi.png",
+      "provider_id": 30,
+      "provider_name": "WOW",
+      "display_priority": 11
+     },
+     {
+      "logo_path": "/1Yvl9eP3pmktqChitnFhHJHcBtX.png",
+      "provider_id": 29,
+      "provider_name": "Sky Go",
+      "display_priority": 12
+     },
+     {
+      "logo_path": "/mIR4wc2DLEIbn9TbtemvoX4zb26.png",
+      "provider_id": 2660,
+      "provider_name": "Wow Fiction Amazon Channel",
+      "display_priority": 214
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 215
+     },
+     {
+      "logo_path": "/64fLWeSyZ1KQZhIdvTdy4QHeWty.png",
+      "provider_id": 1825,
+      "provider_name": "HBO Max Amazon Channel",
+      "display_priority": 216
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 7
+     },
+     {
+      "logo_path": "/f1uWfExJA6DSAvuTL0YJ9Kyftfg.png",
+      "provider_id": 178,
+      "provider_name": "MagentaTV",
+      "display_priority": 14
+     },
+     {
+      "logo_path": "/mjB4eyswPoC0XeJPUd1W1oitOlh.png",
+      "provider_id": 20,
+      "provider_name": "maxdome Store",
+      "display_priority": 17
+     },
+     {
+      "logo_path": "/kWgg0b4wHDr4pwSyOXVK8nAsNKB.png",
+      "provider_id": 1993,
+      "provider_name": "Videoload",
+      "display_priority": 102
+     },
+     {
+      "logo_path": "/iUGee0WhY5ZSBZZuCunNt0K7au2.png",
+      "provider_id": 2209,
+      "provider_name": "Freenet meinVOD",
+      "display_priority": 125
+     }
+    ]
+   },
+   "DK": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=DK",
+    "flatrate": [
+     {
+      "logo_path": "/hPIVVR7yvR0PrTe7eHR2I5nAFis.png",
+      "provider_id": 1961,
+      "provider_name": "Allente",
+      "display_priority": 36
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 38
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 46
+     }
+    ]
+   },
+   "DO": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=DO",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 30
+     }
+    ]
+   },
+   "EC": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=EC",
+    "flatrate": [
+     {
+      "logo_path": "/kxUmV9TCZHfukpVOMuN90Jibbnm.png",
+      "provider_id": 339,
+      "provider_name": "MovistarTV",
+      "display_priority": 6
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 7
+     }
+    ]
+   },
+   "EE": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=EE",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 35
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 32
+     }
+    ]
+   },
+   "EG": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=EG",
+    "flatrate": [
+     {
+      "logo_path": "/3Gfphgh5Uvcvb3IgbwUn79CT8Un.png",
+      "provider_id": 629,
+      "provider_name": "OSN+",
+      "display_priority": 20
+     }
+    ]
+   },
+   "ES": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=ES",
+    "flatrate": [
+     {
+      "logo_path": "/7OEtlOKTmjTXh40eHUES11Oc1i7.png",
+      "provider_id": 149,
+      "provider_name": "Movistar Plus+ Ficción Total ",
+      "display_priority": 7
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 16
+     },
+     {
+      "logo_path": "/64fLWeSyZ1KQZhIdvTdy4QHeWty.png",
+      "provider_id": 1825,
+      "provider_name": "HBO Max Amazon Channel",
+      "display_priority": 85
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 32
+     }
+    ]
+   },
+   "FI": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=FI",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 40
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 51
+     }
+    ]
+   },
+   "FJ": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=FJ",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 20
+     }
+    ]
+   },
+   "FR": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=FR",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 71
+     },
+     {
+      "logo_path": "/64fLWeSyZ1KQZhIdvTdy4QHeWty.png",
+      "provider_id": 1825,
+      "provider_name": "HBO Max Amazon Channel",
+      "display_priority": 102
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 6
+     },
+     {
+      "logo_path": "/73lu1dtE9uJLWK1laXpeaAFh48j.png",
+      "provider_id": 61,
+      "provider_name": "Orange VOD",
+      "display_priority": 11
+     },
+     {
+      "logo_path": "/51fX3l4yElitnfui0IkbMUmfmgF.png",
+      "provider_id": 58,
+      "provider_name": "Canal VOD",
+      "display_priority": 16
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 35
+     }
+    ]
+   },
+   "GB": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=GB",
+    "flatrate": [
+     {
+      "logo_path": "/1Yvl9eP3pmktqChitnFhHJHcBtX.png",
+      "provider_id": 29,
+      "provider_name": "Sky Go",
+      "display_priority": 13
+     },
+     {
+      "logo_path": "/oFAnvlaEW2KT6J7XM0DXjlWqKu9.png",
+      "provider_id": 39,
+      "provider_name": "Now TV",
+      "display_priority": 43
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 8
+     },
+     {
+      "logo_path": "/nNkZ1JKe6vNhzti14KiKEUWHE6H.png",
+      "provider_id": 130,
+      "provider_name": "Sky Store",
+      "display_priority": 17
+     }
+    ]
+   },
+   "GG": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=GG",
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 81
+     }
+    ]
+   },
+   "GR": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=GR",
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 32
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 34
+     }
+    ]
+   },
+   "GT": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=GT",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 5
+     }
+    ]
+   },
+   "GY": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=GY",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 2
+     }
+    ]
+   },
+   "HK": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=HK",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 35
+     }
+    ]
+   },
+   "HN": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=HN",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 29
+     }
+    ]
+   },
+   "HR": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=HR",
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 41
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 32
+     }
+    ]
+   },
+   "HU": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=HU",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 27
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 36
+     }
+    ]
+   },
+   "ID": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=ID",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 36
+     }
+    ]
+   },
+   "IE": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=IE",
+    "buy": [
+     {
+      "logo_path": "/nNkZ1JKe6vNhzti14KiKEUWHE6H.png",
+      "provider_id": 130,
+      "provider_name": "Sky Store",
+      "display_priority": 9
+     },
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 41
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/1Yvl9eP3pmktqChitnFhHJHcBtX.png",
+      "provider_id": 29,
+      "provider_name": "Sky Go",
+      "display_priority": 8
+     },
+     {
+      "logo_path": "/oFAnvlaEW2KT6J7XM0DXjlWqKu9.png",
+      "provider_id": 39,
+      "provider_name": "Now TV",
+      "display_priority": 10
+     }
+    ]
+   },
+   "IL": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=IL",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 36
+     }
+    ]
+   },
+   "IN": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=IN",
+    "flatrate": [
+     {
+      "logo_path": "/ledoS6EgdjTNq8F1e6wubUQer18.png",
+      "provider_id": 2336,
+      "provider_name": "JioHotstar",
+      "display_priority": 3
+     }
+    ]
+   },
+   "IQ": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=IQ",
+    "flatrate": [
+     {
+      "logo_path": "/3Gfphgh5Uvcvb3IgbwUn79CT8Un.png",
+      "provider_id": 629,
+      "provider_name": "OSN+",
+      "display_priority": 8
+     }
+    ]
+   },
+   "IS": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=IS",
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 37
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 40
+     }
+    ]
+   },
+   "IT": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=IT",
+    "flatrate": [
+     {
+      "logo_path": "/1Yvl9eP3pmktqChitnFhHJHcBtX.png",
+      "provider_id": 29,
+      "provider_name": "Sky Go",
+      "display_priority": 6
+     },
+     {
+      "logo_path": "/oFAnvlaEW2KT6J7XM0DXjlWqKu9.png",
+      "provider_id": 39,
+      "provider_name": "Now TV",
+      "display_priority": 9
+     },
+     {
+      "logo_path": "/64fLWeSyZ1KQZhIdvTdy4QHeWty.png",
+      "provider_id": 1825,
+      "provider_name": "HBO Max Amazon Channel",
+      "display_priority": 83
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 84
+     }
+    ]
+   },
+   "JM": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=JM",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 23
+     }
+    ]
+   },
+   "JO": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=JO",
+    "flatrate": [
+     {
+      "logo_path": "/3Gfphgh5Uvcvb3IgbwUn79CT8Un.png",
+      "provider_id": 629,
+      "provider_name": "OSN+",
+      "display_priority": 30
+     }
+    ]
+   },
+   "JP": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=JP",
+    "flatrate": [
+     {
+      "logo_path": "/44uAnmSqvA4yBOdbPWN8YgQHjWm.png",
+      "provider_id": 15,
+      "provider_name": "Hulu",
+      "display_priority": 5
+     },
+     {
+      "logo_path": "/mrzVKXhM1vryerBWd65emU9TfUm.png",
+      "provider_id": 2284,
+      "provider_name": "HBO Max on U-Next",
+      "display_priority": 26
+     }
+    ]
+   },
+   "LB": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=LB",
+    "flatrate": [
+     {
+      "logo_path": "/3Gfphgh5Uvcvb3IgbwUn79CT8Un.png",
+      "provider_id": 629,
+      "provider_name": "OSN+",
+      "display_priority": 9
+     }
+    ]
+   },
+   "LC": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=LC",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 11
+     }
+    ]
+   },
+   "LI": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=LI",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 41
+     }
+    ]
+   },
+   "LT": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=LT",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 36
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 33
+     }
+    ]
+   },
+   "LU": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=LU",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 24
+     }
+    ]
+   },
+   "LV": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=LV",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 36
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 32
+     }
+    ]
+   },
+   "MC": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=MC",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 25
+     }
+    ]
+   },
+   "MD": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=MD",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 25
+     }
+    ]
+   },
+   "ME": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=ME",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 6
+     }
+    ]
+   },
+   "MK": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=MK",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 26
+     }
+    ]
+   },
+   "MT": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=MT",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 34
+     }
+    ]
+   },
+   "MX": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=MX",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 7
+     },
+     {
+      "logo_path": "/64fLWeSyZ1KQZhIdvTdy4QHeWty.png",
+      "provider_id": 1825,
+      "provider_name": "HBO Max Amazon Channel",
+      "display_priority": 15
+     }
+    ]
+   },
+   "MY": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=MY",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 29
+     }
+    ]
+   },
+   "NI": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=NI",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 12
+     }
+    ]
+   },
+   "NL": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=NL",
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 34
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 47
+     },
+     {
+      "logo_path": "/64fLWeSyZ1KQZhIdvTdy4QHeWty.png",
+      "provider_id": 1825,
+      "provider_name": "HBO Max Amazon Channel",
+      "display_priority": 73
+     }
+    ]
+   },
+   "NO": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=NO",
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 47
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/mlNPljPGzSDqNK2Fjr4SS0gTITj.png",
+      "provider_id": 578,
+      "provider_name": "Strim",
+      "display_priority": 27
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 39
+     }
+    ]
+   },
+   "NZ": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=NZ",
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 55
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/64fLWeSyZ1KQZhIdvTdy4QHeWty.png",
+      "provider_id": 1825,
+      "provider_name": "HBO Max Amazon Channel",
+      "display_priority": 8
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 67
+     }
+    ]
+   },
+   "OM": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=OM",
+    "flatrate": [
+     {
+      "logo_path": "/3Gfphgh5Uvcvb3IgbwUn79CT8Un.png",
+      "provider_id": 629,
+      "provider_name": "OSN+",
+      "display_priority": 30
+     }
+    ]
+   },
+   "PA": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=PA",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 30
+     }
+    ]
+   },
+   "PE": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=PE",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 7
+     }
+    ]
+   },
+   "PG": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=PG",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 12
+     }
+    ]
+   },
+   "PH": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=PH",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 30
+     }
+    ]
+   },
+   "PK": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=PK",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 17
+     }
+    ]
+   },
+   "PL": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=PL",
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 26
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 37
+     }
+    ]
+   },
+   "PT": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=PT",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 32
+     }
+    ]
+   },
+   "PY": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=PY",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 28
+     }
+    ]
+   },
+   "QA": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=QA",
+    "flatrate": [
+     {
+      "logo_path": "/3Gfphgh5Uvcvb3IgbwUn79CT8Un.png",
+      "provider_id": 629,
+      "provider_name": "OSN+",
+      "display_priority": 30
+     }
+    ]
+   },
+   "RO": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=RO",
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 34
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 24
+     }
+    ]
+   },
+   "RS": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=RS",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 28
+     }
+    ]
+   },
+   "RU": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=RU",
+    "flatrate": [
+     {
+      "logo_path": "/j5NFNAdVCTTRLL2fP2MvJcYZgKz.png",
+      "provider_id": 115,
+      "provider_name": "Okko",
+      "display_priority": 1
+     },
+     {
+      "logo_path": "/gXyDMdQjnxZ181kAZJJVy3rdFAf.png",
+      "provider_id": 116,
+      "provider_name": "Amediateka",
+      "display_priority": 2
+     }
+    ]
+   },
+   "SA": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=SA",
+    "flatrate": [
+     {
+      "logo_path": "/3Gfphgh5Uvcvb3IgbwUn79CT8Un.png",
+      "provider_id": 629,
+      "provider_name": "OSN+",
+      "display_priority": 20
+     }
+    ]
+   },
+   "SE": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=SE",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 42
+     },
+     {
+      "logo_path": "/64fLWeSyZ1KQZhIdvTdy4QHeWty.png",
+      "provider_id": 1825,
+      "provider_name": "HBO Max Amazon Channel",
+      "display_priority": 63
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 37
+     }
+    ]
+   },
+   "SG": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=SG",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 29
+     }
+    ]
+   },
+   "SI": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=SI",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 29
+     }
+    ]
+   },
+   "SK": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=SK",
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 45
+     }
+    ],
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 36
+     }
+    ]
+   },
+   "SV": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=SV",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 30
+     }
+    ]
+   },
+   "TC": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=TC",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 10
+     }
+    ]
+   },
+   "TH": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=TH",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 28
+     }
+    ]
+   },
+   "TR": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=TR",
+    "flatrate": [
+     {
+      "logo_path": "/ck9ropbn6okqSdtgxGkkvMMgtSe.png",
+      "provider_id": 1904,
+      "provider_name": "TV+",
+      "display_priority": 9
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 28
+     }
+    ]
+   },
+   "TT": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=TT",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 12
+     }
+    ]
+   },
+   "TW": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=TW",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 35
+     }
+    ]
+   },
+   "UA": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=UA",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 16
+     }
+    ]
+   },
+   "US": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=US",
+    "flatrate": [
+     {
+      "logo_path": "/64fLWeSyZ1KQZhIdvTdy4QHeWty.png",
+      "provider_id": 1825,
+      "provider_name": "HBO Max Amazon Channel",
+      "display_priority": 11
+     },
+     {
+      "logo_path": "/6qPtM96UZkt3Bu4ZFPsDeHFWUZ2.png",
+      "provider_id": 486,
+      "provider_name": "Spectrum On Demand",
+      "display_priority": 119
+     },
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 151
+     }
+    ],
+    "buy": [
+     {
+      "logo_path": "/jn6TLbtaTZntTRX9UYucHJvpQx1.png",
+      "provider_id": 10,
+      "provider_name": "Amazon Video",
+      "display_priority": 8
+     },
+     {
+      "logo_path": "/qdEGArH3lKfFnAtYXMkSYk5wxuG.png",
+      "provider_id": 2,
+      "provider_name": "Apple TV Store",
+      "display_priority": 9
+     },
+     {
+      "logo_path": "/aZRENwYILujqs0RVOZutTh0BVGV.png",
+      "provider_id": 3,
+      "provider_name": "Google Play Movies",
+      "display_priority": 20
+     },
+     {
+      "logo_path": "/wpOt6x0dRxTrIzuBosto4LGd7E9.png",
+      "provider_id": 7,
+      "provider_name": "Fandango At Home",
+      "display_priority": 37
+     }
+    ]
+   },
+   "UY": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=UY",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 5
+     }
+    ]
+   },
+   "VE": {
+    "link": "https://www.themoviedb.org/tv/81723-the-gilded-age/watch?locale=VE",
+    "flatrate": [
+     {
+      "logo_path": "/skypuy7SXuugIQeYg0IglmzoKaS.png",
+      "provider_id": 1899,
+      "provider_name": "HBO Max",
+      "display_priority": 26
+     }
+    ]
+   }
+  }
+ }
+}

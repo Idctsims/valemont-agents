@@ -1,0 +1,85 @@
+{
+ "page": 1,
+ "results": [
+  {
+   "adult": false,
+   "backdrop_path": "/jPcQlhoJ3LrOfKwCvGD58P8rC5b.jpg",
+   "id": 81723,
+   "name": "The Gilded Age",
+   "original_name": "The Gilded Age",
+   "overview": "It’s 1882 and the Gilded Age is in full swing when Marian Brook moves in with her rigidly conventional aunts in New York City. With the help of Peggy Scott, an African-American woman masquerading as her maid, Marian gets caught up in the dazzling lives of her rich neighbors as she struggles to decide between adhering to the rules or forging her own path.",
+   "poster_path": "/lBsDmxBI4ELLmgF5uhUCvjgpQxh.jpg",
+   "media_type": "tv",
+   "original_language": "en",
+   "genre_ids": [
+    18
+   ],
+   "popularity": 38.2522,
+   "first_air_date": "2022-01-24",
+   "softcore": false,
+   "vote_average": 7.7,
+   "vote_count": 276,
+   "origin_country": [
+    "US"
+   ]
+  },
+  {
+   "adult": false,
+   "backdrop_path": "/jlgg42K3duUsyREVxA9JQxFBkKW.jpg",
+   "id": 503845,
+   "title": "The Gilded Age",
+   "original_title": "The Gilded Age",
+   "overview": "In the closing decades of the nineteenth century, during what has become known as the Gilded Age, the population of the United States doubled in the span of a single generation. As national wealth expanded, two classes rose simultaneously, separated by a gulf of experience and circumstance that was unprecedented in American life. These disparities sparked passionate and violent debate over questions still being asked in our own times: How is wealth best distributed, and by what process? Does government exist to protect private property or provide balm to the inevitable casualties of a churning industrial system?  The outcome of these disputes was both uncertain and momentous, and marked by a passionate vitriol and level of violence that would shock the conscience of many Americans today.",
+   "poster_path": "/vcEu1OX4iM7rVr9CPs9fEQOFHjf.jpg",
+   "media_type": "movie",
+   "original_language": "en",
+   "genre_ids": [
+    99
+   ],
+   "popularity": 0.9975,
+   "release_date": "2018-02-06",
+   "softcore": false,
+   "video": false,
+   "vote_average": 8.0,
+   "vote_count": 2
+  },
+  {
+   "adult": false,
+   "backdrop_path": null,
+   "id": 1110554,
+   "title": "Belle Brezing and the Gilded Age of the Bluegrass",
+   "original_title": "Belle Brezing and the Gilded Age of the Bluegrass",
+   "overview": "The story of Belle Brezing, the Lexington Madam who ran a Victorian era brothel, is explored. The film details Brezing's journey from hardscrabble youth to the Baroness of the Brothel, while becoming the nearly undeniable inspiration for Belle Watling from \"Gone with the Wind.\"",
+   "poster_path": "/uafT387gIHuba5KjEZuCAIO3gIA.jpg",
+   "media_type": "movie",
+   "original_language": "en",
+   "genre_ids": [],
+   "popularity": 0.41,
+   "release_date": "",
+   "softcore": false,
+   "video": false,
+   "vote_average": 0.0,
+   "vote_count": 0
+  },
+  {
+   "adult": false,
+   "backdrop_path": null,
+   "id": 1485743,
+   "title": "Just the Facts: Emergence of Modern America - The Gilded Age",
+   "original_title": "Just the Facts: Emergence of Modern America - The Gilded Age",
+   "overview": "Just the Facts: The Emergence of Modern America uses fascinating historical footage to explore six decades that shaped modern America. The series examines the Gilded Age in the late 19th century, the Progressive Era of the early 20th century, the Roaring Twenties, and the Great Depression. In 1873, Mark Twain co-authored a satirical novel entitled The Gilded Age. The process of gilding involves applying a thin layer of gold to an object to make it appear more valuable. Historians adopted Twain s title to describe a period of American history characterized by prosperity and industrialization that thinly disguised blatant corruption in politics and business. This program explores many facets of the Gilded Age, including industrialization and the growth of big business, the urbanization of America, the grueling working conditions many endured, and the influence of Victorian culture on American society.",
+   "poster_path": null,
+   "media_type": "movie",
+   "original_language": "en",
+   "genre_ids": [],
+   "popularity": 0.4075,
+   "release_date": "",
+   "softcore": false,
+   "video": false,
+   "vote_average": 0.0,
+   "vote_count": 0
+  }
+ ],
+ "total_pages": 1,
+ "total_results": 4
+}

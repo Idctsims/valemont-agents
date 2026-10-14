@@ -1,0 +1,28 @@
+{
+ "page": 1,
+ "results": [
+  {
+   "adult": false,
+   "backdrop_path": null,
+   "id": 1551025,
+   "title": "Guarding Stars",
+   "original_title": "Guarding Stars",
+   "overview": "When a no-nonsense bodyguard is assigned to protect a charming action star over the holidays, sparks fly, secrets unravel, and Christmas gets a whole lot more complicated.",
+   "poster_path": null,
+   "media_type": "movie",
+   "original_language": "en",
+   "genre_ids": [
+    35,
+    10749
+   ],
+   "popularity": 2.1495,
+   "release_date": "2026-11-18",
+   "softcore": false,
+   "video": false,
+   "vote_average": 0.0,
+   "vote_count": 0
+  }
+ ],
+ "total_pages": 1,
+ "total_results": 1
+}

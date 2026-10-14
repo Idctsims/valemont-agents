@@ -18,8 +18,11 @@ export function buildCsp(nonce: string, opts: { dev: boolean; https: boolean }):
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${opts.dev ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    // TMDB posters and provider logos (Screening Room, db/051), loaded direct.
+    "img-src 'self' data: blob: https://image.tmdb.org",
     "font-src 'self'",
+    // The trailer embed on a title page, privacy-enhanced YouTube only.
+    "frame-src https://www.youtube-nocookie.com",
     `connect-src ${connect.join(" ")}`,
     "manifest-src 'self'",
     "worker-src 'self'",

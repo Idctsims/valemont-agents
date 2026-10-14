@@ -15,9 +15,10 @@ import { createClient } from "@/lib/supabase/server";
 // applies (owner_id defaults to auth.uid(); the policy checks it). Returns an
 // ActionResult and never throws an expected failure (src/lib/action-result.ts).
 
-// Tech (db/045): a tech reaction only on a tech story; the database's
-// feed_pillar_guard refuses a cross-line row, and the error reads plainly.
-const PILLARS: Pillar[] = ["home", "sports", "tech"];
+// Tech (db/045) and Screening (db/051): a reaction only on a story of its own
+// pillar; the database's feed_pillar_guard refuses a cross-line row, and the
+// error reads plainly.
+const PILLARS: Pillar[] = ["home", "sports", "tech", "screening"];
 
 export async function reactToStory(input: { storyId: number; pillar: Pillar; reaction: CardReaction }): Promise<ActionResult> {
   return settle(async () => {
