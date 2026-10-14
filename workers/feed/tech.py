@@ -57,12 +57,15 @@ PURPOSE = "feed_tech_summarize"
 GROUP_SIZE = 10
 RUN_CAP = 40
 
-#: stories.category for pillar tech (db/045). `repos` is Phase 2's (GitHub)
-#: and never the model's answer here; `other` is shared with Home.
+#: stories.category for pillar tech (db/045). `repos` is set when the repos
+#: job writes the story (db/049, feed/repos.py) and never the model's answer
+#: here: feed_save_summaries keeps a category already set, so a repo story
+#: (not official) stays `repos`, never `community`, and never pushes.
+#: `other` is shared with Home.
 CATEGORIES: tuple[str, ...] = ("models_features", "pricing_credits", "tooling", "agents", "stack", "community",
                                "other")
 CHIP_CATEGORIES: tuple[str, ...] = ("models_features", "pricing_credits", "tooling", "agents", "stack",
-                                    "community")
+                                    "community", "repos")
 LABELS: dict[str, str] = {
     "models_features": "Models & features",
     "pricing_credits": "Pricing & credits",
@@ -88,6 +91,8 @@ CREDITS_PROMPT = (f"claimable: true or false: {CREDITS_QUESTION} True only when 
                   "something the reader can sign up for or claim now; a price cut alone is false.")
 
 SYSTEM = f"""You summarize AI and developer-platform news for one reader's private dashboard. For each story you get its id, headline, outlet, whether the outlet is official (the company's own release notes, blog or changelog) and teaser. Return one result per story.
+
+A story whose outlet is GitHub is a code repository: its headline is owner/name and its teaser is the repository's description followed by the start of its README. Its summary says what the repository does and who would use it.
 
 summary
 - At most {MAX_SENTENCES} sentences and at most {MAX_WORDS} words. Plain and direct: what changed, and the one fact that makes it matter to a developer.

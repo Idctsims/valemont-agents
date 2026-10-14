@@ -370,12 +370,20 @@ class Registry(unittest.TestCase):
                                      "goals_rollover", "goals_monday_push", "capital_snapshot",
                           "morning_brief", "morning_brief_push",
                           "feed_ingest", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
-                          "feed_profile", "feed_prune"})
+                          "feed_repo_why", "feed_profile", "feed_prune", "tech_repos"})
         self.assertEqual(built["feed_ingest"].expected_interval_s, 1800)
         self.assertFalse(built["feed_tech_summarize"].scheduled)
         self.assertFalse(built["feed_summarize"].scheduled)
         self.assertFalse(built["feed_score"].scheduled)
         self.assertFalse(built["feed_why"].scheduled)
+        self.assertFalse(built["feed_repo_why"].scheduled)
+        # db/049: daily at 07:00 Chicago, and at boot (the job skips itself
+        # when today's run already succeeded).
+        self.assertTrue(built["tech_repos"].run_at_boot)
+        self.assertEqual(built["tech_repos"].expected_interval_s, 86400)
+        self.assertEqual((built["tech_repos"].trigger.fields[5].expressions[0].first,
+                          built["tech_repos"].trigger.fields[6].expressions[0].first,
+                          str(built["tech_repos"].trigger.timezone)), (7, 0, "America/Chicago"))
         self.assertTrue(built["feed_profile"].run_at_boot)
         self.assertEqual((built["feed_profile"].trigger.fields[5].expressions[0].first,
                           str(built["feed_profile"].trigger.timezone)), (4, "America/Chicago"))
@@ -413,11 +421,11 @@ class SystemOnlyBoot(SystemTestCase):
                                "system:goals_rollover", "system:goals_monday_push",
                                "system:capital_snapshot", "system:morning_brief",
                                "system:morning_brief_push", "system:feed_ingest",
-                               "system:feed_profile", "system:feed_prune"})
-        # feed_tech_summarize, feed_summarize, feed_score and feed_why are registered (job_health
-        # rows, watched) but never scheduled: feed_ingest runs them.
-        self.assertEqual(self.ledger.names().count("job_register"), 16)
-        for chained in ("feed_tech_summarize", "feed_summarize", "feed_score", "feed_why"):
+                               "system:feed_profile", "system:feed_prune", "system:tech_repos"})
+        # feed_tech_summarize, feed_summarize, feed_score, feed_why and feed_repo_why are registered
+        # (job_health rows, watched) but never scheduled: feed_ingest runs them.
+        self.assertEqual(self.ledger.names().count("job_register"), 18)
+        for chained in ("feed_tech_summarize", "feed_summarize", "feed_score", "feed_why", "feed_repo_why"):
             self.assertNotIn(f"system:{chained}", ids)
 
     def test_disabled_agents_plus_system_jobs_start_rather_than_refuse(self) -> None:
@@ -466,7 +474,7 @@ class SystemOnlyBoot(SystemTestCase):
                           "goals_rollover", "goals_monday_push", "capital_snapshot",
                           "morning_brief", "morning_brief_push",
                           "feed_ingest", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
-                          "feed_profile", "feed_prune"})
+                          "feed_repo_why", "feed_profile", "feed_prune", "tech_repos"})
 
 
 if __name__ == "__main__":

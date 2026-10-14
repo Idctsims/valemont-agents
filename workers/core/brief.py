@@ -367,13 +367,19 @@ def _feed_lines(f: Mapping[str, Any]) -> list[str]:
 
 def _tech_lines(t: Mapping[str, Any]) -> list[str]:
     """One line (db/045 ctx_tech_brief): the newest official item that landed
-    in the last 24 hours, and how many more."""
+    in the last 24 hours, and how many more; then today's top repo, which
+    db/049 includes ONLY when the owner loved a repo story in the last 14
+    days (otherwise repos stay out of the brief)."""
     items = t.get("official_24h") or []
-    if not items:
-        return []
-    first = items[0]
-    more = f" Plus {len(items) - 1} more." if len(items) > 1 else ""
-    return [f"Official: {first.get('title')} ({first.get('source')}).{more}"]
+    repo = (t.get("top_repo") or {}).get("repo")
+    parts = []
+    if items:
+        first = items[0]
+        more = f" Plus {len(items) - 1} more." if len(items) > 1 else ""
+        parts.append(f"Official: {first.get('title')} ({first.get('source')}).{more}")
+    if repo:
+        parts.append(f"Top repo: {repo}.")
+    return [" ".join(parts)] if parts else []
 
 
 #: Sections held to one line, however many the model wrote (owner,

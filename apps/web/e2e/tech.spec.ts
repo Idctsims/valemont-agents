@@ -59,7 +59,7 @@ test.describe("owner", () => {
   test("the chips keep their choice in the URL, through the tabs", async () => {
     await page.goto("/tech");
     await expect(page.getByTestId("category-chips").getByRole("link")).toHaveText([
-      "All", "Models & features", "Pricing & credits", "Tooling", "Agents", "Stack", "Community",
+      "All", "Models & features", "Pricing & credits", "Tooling", "Agents", "Stack", "Community", "Repos",
     ]);
     await expect(page.getByTestId("category-chip-all")).toHaveAttribute("aria-current", "page");
     await page.getByTestId("category-chip-pricing_credits").click();
@@ -74,7 +74,7 @@ test.describe("owner", () => {
     await expect(page.getByTestId("feed-tab-latest")).toHaveAttribute("aria-current", "page");
     await page.reload();
     await expect(page.getByTestId("category-chip-tooling")).toHaveAttribute("aria-current", "page");
-    // A Home category, or Phase 2's repos, is All here.
+    // A Home category is All here (Repos is a chip since Phase 2: e2e/repos.spec.ts).
     await page.goto("/tech?category=deals");
     await expect(page.getByTestId("category-chip-all")).toHaveAttribute("aria-current", "page");
   });

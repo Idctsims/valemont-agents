@@ -762,7 +762,9 @@ class Chain(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 system_jobs.feed_ingest_job()
         # db/045: Tech's summaries first (an official item in the cycle it was found).
-        self.assertEqual(order, ["ingest", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why"])
+        # db/049: the repo stories' line right after feed_why.
+        self.assertEqual(order, ["ingest", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
+                                 "feed_repo_why"])
 
     def test_a_chained_failure_does_not_fail_ingest_or_stop_the_chain(self) -> None:
         order = []
@@ -774,7 +776,7 @@ class Chain(unittest.TestCase):
         with mock.patch.object(ingest, "ingest_job", lambda: None), \
                 mock.patch.object(system_jobs, "run_tracked", failing):
             system_jobs.feed_ingest_job()
-        self.assertEqual(order, ["feed_tech_summarize", "feed_summarize", "feed_score", "feed_why"])
+        self.assertEqual(order, ["feed_tech_summarize", "feed_summarize", "feed_score", "feed_why", "feed_repo_why"])
 
     def test_why_runs_after_the_profile_job_even_when_it_is_skipped(self) -> None:
         order = []
@@ -783,7 +785,7 @@ class Chain(unittest.TestCase):
                 mock.patch.object(system_jobs, "run_tracked", lambda j: order.append(j.name)):
             with self.assertRaises(jobs.JobSkipped):
                 system_jobs.feed_profile_job()
-        self.assertEqual(order, ["feed_why"])
+        self.assertEqual(order, ["feed_why", "feed_repo_why"])
 
 
 # ======================================================================= embed

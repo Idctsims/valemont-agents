@@ -57,6 +57,15 @@
                              pillar's mean vector, profile and learned weights,
                              then rescores every kept story of the last 72 h.
                              Then runs feed_why.
+    feed_repo_why    chained after feed_why (both chains): the repo stories'
+                             line, a concrete use for one venture or the
+                             dashboard, else "General interest." (feed/why.py).
+    tech_repos       daily   07:00 America/Chicago, and at boot unless today's
+                             run already succeeded: GitHub trending + search,
+                             star snapshots, at most 8 repos surfaced as tech
+                             stories (feed/repos.py, db/049). Fails loudly on
+                             a missing or rejected GITHUB_PUBLIC_READ_TOKEN
+                             or a trending page that parses to 0 repos.
     feed_prune       daily   03:15 America/Chicago, never at boot: clears item
                              embeddings older than 72 h; deletes filtered
                              stories (with their items), seeded items and
@@ -83,6 +92,7 @@ from core import brief, ledger, push
 from core.jobs import SystemJob, describe, run_tracked
 from feed import ingest as feed_ingest
 from feed import profile as feed_profile_mod
+from feed import repos as feed_repos
 from feed import summarize as feed_summarize
 from feed import tech as feed_tech
 from feed import why as feed_why
@@ -424,6 +434,9 @@ FEED_SCORE = SystemJob("feed_score", FEED_INTERVAL_S, IntervalTrigger(seconds=FE
                        feed_profile_mod.score_new_job, scheduled=False)
 FEED_WHY = SystemJob("feed_why", FEED_INTERVAL_S, IntervalTrigger(seconds=FEED_INTERVAL_S),
                      feed_why.why_job, scheduled=False)
+#: Repo stories' why-it-matters (db/049), right after feed_why in both chains.
+FEED_REPO_WHY = SystemJob("feed_repo_why", FEED_INTERVAL_S, IntervalTrigger(seconds=FEED_INTERVAL_S),
+                          feed_why.repo_why_job, scheduled=False)
 
 
 def _chain(*jobs: SystemJob) -> None:
@@ -444,7 +457,7 @@ def feed_ingest_job() -> None:
     try:
         feed_ingest.ingest_job()
     finally:
-        _chain(FEED_TECH_SUMMARIZE, FEED_SUMMARIZE, FEED_SCORE, FEED_WHY)
+        _chain(FEED_TECH_SUMMARIZE, FEED_SUMMARIZE, FEED_SCORE, FEED_WHY, FEED_REPO_WHY)
 
 
 def feed_profile_job() -> None:
@@ -453,7 +466,7 @@ def feed_profile_job() -> None:
     try:
         feed_profile_mod.profile_job()
     finally:
-        _chain(FEED_WHY)
+        _chain(FEED_WHY, FEED_REPO_WHY)
 
 
 def feed_prune() -> dict[str, int]:
@@ -510,8 +523,13 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
         FEED_SUMMARIZE,
         FEED_SCORE,
         FEED_WHY,
+        FEED_REPO_WHY,
         SystemJob("feed_profile", 24 * 60 * 60, CronTrigger(hour=4, minute=0, timezone=OWNER_TZ),
                   feed_profile_job, misfire_grace=3600, start_delay_s=60),
+        # After feed_ingest's boot run has synced sources.toml (the
+        # github-repos source) and feed_profile's (the tech profile).
+        SystemJob(feed_repos.JOB_NAME, 24 * 60 * 60, CronTrigger(hour=7, minute=0, timezone=OWNER_TZ),
+                  feed_repos.repos_job, misfire_grace=3600, start_delay_s=180),
         SystemJob("feed_prune", 24 * 60 * 60, CronTrigger(hour=3, minute=15, timezone=OWNER_TZ),
                   feed_prune, misfire_grace=3600, run_at_boot=False),
     ]

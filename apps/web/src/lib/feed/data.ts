@@ -3,7 +3,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
-  PAGE_SIZE, hides, otherOutlets, type FeedCategory, type FeedStory, type Pillar, type PublishedPrecision, type Sport,
+  PAGE_SIZE, REPO_TOPICS_SHOWN, hides, otherOutlets, type FeedCategory, type FeedStory, type Pillar,
+  type PublishedPrecision, type RepoInfo, type Sport, type Stars7dSource,
 } from "./types";
 
 // Reads only: the worker writes the feed (db/032) and its scores (db/039);
@@ -102,6 +103,35 @@ async function outletsFor(
 type Base = Omit<FeedStory, "outlets" | "loved">;
 type Meta = { id: number; leadItemId: number; sourceName: string; itemCount: number };
 
+type RepoRowDb = {
+  story_id: number;
+  stars: number | null;
+  stars_7d: number | null;
+  stars_7d_source: Stars7dSource | null;
+  repo: { full_name: string; language: string | null; topics: string[] | null } | null;
+};
+
+/** The repo card's fields for this page's GitHub stories (db/049: one
+ * repo_surfacings row per repo story, what was shown when it surfaced). A
+ * story with no surfacing row is an ordinary card. Tech only. */
+async function reposFor(supabase: SupabaseClient, ids: number[]): Promise<Map<number, RepoInfo>> {
+  const out = new Map<number, RepoInfo>();
+  if (ids.length === 0) return out;
+  const { data, error } = await supabase
+    .from("repo_surfacings")
+    .select("story_id, stars, stars_7d, stars_7d_source, repo:repos(full_name, language, topics)")
+    .in("story_id", ids);
+  if (error) throw new Error(`Couldn't read the repos: ${error.message}`);
+  for (const r of (data ?? []) as unknown as RepoRowDb[]) {
+    if (!r.repo) continue;
+    out.set(r.story_id, {
+      fullName: r.repo.full_name, stars: r.stars, stars7d: r.stars_7d, stars7dSource: r.stars_7d_source,
+      language: r.repo.language, topics: (r.repo.topics ?? []).slice(0, REPO_TOPICS_SHOWN),
+    });
+  }
+  return out;
+}
+
 async function finish(
   supabase: SupabaseClient,
   pillar: Pillar,
@@ -111,11 +141,16 @@ async function finish(
 ): Promise<{ stories: FeedStory[]; hasMore: boolean }> {
   const hasMore = base.length > PAGE_SIZE;
   const page = base.slice(0, PAGE_SIZE);
-  const [outlets, love] = await Promise.all([
+  const ids = page.map((s) => s.id);
+  const [outlets, love, repos] = await Promise.all([
     outletsFor(supabase, meta.slice(0, PAGE_SIZE)),
-    loved ? Promise.resolve(loved) : lovedIds(supabase, pillar, page.map((s) => s.id)),
+    loved ? Promise.resolve(loved) : lovedIds(supabase, pillar, ids),
+    pillar === "tech" ? reposFor(supabase, ids) : Promise.resolve(new Map<number, RepoInfo>()),
   ]);
-  return { stories: page.map((s) => ({ ...s, outlets: outlets.get(s.id) ?? [], loved: love.has(s.id) })), hasMore };
+  return {
+    stories: page.map((s) => ({ ...s, outlets: outlets.get(s.id) ?? [], loved: love.has(s.id), repo: repos.get(s.id) ?? null })),
+    hasMore,
+  };
 }
 
 /** One page of a pillar's stories, newest first, minus the ones the owner

@@ -21,8 +21,11 @@ SOURCES_FILE = Path(__file__).with_name("sources.toml")
 GNEWS = "https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"
 PILLARS = frozenset({"home", "sports", "tech"})
 SPORTS = frozenset({"cfb", "nfl", "nba", "f1", "golf"})
-KINDS = frozenset({"rss", "gnews", "page", "hn"})
+KINDS = frozenset({"rss", "gnews", "page", "hn", "github"})
 HN_API = "https://hn.algolia.com/api/v1/"
+#: The repos source (db/049): tech only, never official, fetched by the daily
+#: repos job (feed/repos.py), never by the 30-minute ingest.
+GITHUB = "https://github.com/"
 _SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 
@@ -100,9 +103,13 @@ def _spec(raw: dict) -> SourceSpec:
             raise SourcesInvalid(f"{where}: an {kind} source has an https url and no query")
         if kind == "hn" and not url.startswith(HN_API):
             raise SourcesInvalid(f"{where}: an hn source queries {HN_API}")
+        if kind == "github" and not url.startswith(GITHUB):
+            raise SourcesInvalid(f"{where}: a github source is on {GITHUB}")
     official = raw.get("official", False)
     if not isinstance(official, bool) or (official and pillars != ("tech",)):
         raise SourcesInvalid(f"{where}: official is true or false, and only on a tech source")
+    if kind == "github" and (pillars != ("tech",) or official):
+        raise SourcesInvalid(f"{where}: a github source is tech only and never official (db/049)")
     cats = raw.get("include_categories")
     sport_from = raw.get("sport_from", "source")
     if sport_from not in SPORT_FROM:

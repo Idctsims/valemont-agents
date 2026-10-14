@@ -37,7 +37,48 @@ export type FeedStory = {
   /** How precise publishedAt is (db/045, db/048): 'date' when the source
    * states only a day (stored as 00:00 UTC of it), 'none' when undated. */
   publishedPrecision: PublishedPrecision;
+  /** A GitHub repo story (db/049 repo_surfacings): what the repo card shows. */
+  repo?: RepoInfo | null;
 };
+
+/** Where stars_7d came from (db/049; workers/feed/repos.py LABELS). Only
+ * `measured` is a measurement: today's snapshot minus ours from 7 days ago. */
+export type Stars7dSource = "measured" | "trending_weekly" | "trending_daily" | "since_created" | "age_average";
+
+/** The card's label per source, the worker's LABELS exactly (pinned by
+ * e2e/repos-unit.spec.ts). An estimate is never shown as measured. */
+export const STARS_7D_LABELS: Readonly<Record<Stars7dSource, string>> = {
+  measured: "7d",
+  trending_weekly: "trending est.",
+  trending_daily: "trending est.",
+  since_created: "since created",
+  age_average: "est.",
+};
+
+export type RepoInfo = {
+  fullName: string;
+  stars: number | null;
+  stars7d: number | null;
+  stars7dSource: Stars7dSource | null;
+  language: string | null;
+  /** At most 3 shown (the card's rule; the row keeps every topic). */
+  topics: string[];
+};
+
+/** At most this many topics on a repo card. */
+export const REPO_TOPICS_SHOWN = 3;
+
+/** "12,345": a star count in full, en-US. */
+export function starCount(n: number): string {
+  return new Intl.NumberFormat("en-US").format(n);
+}
+
+/** "+340 7d", "+340 trending est.", or null when there is no stars_7d. */
+export function stars7dText(repo: Pick<RepoInfo, "stars7d" | "stars7dSource">): string | null {
+  if (repo.stars7d === null || repo.stars7dSource === null) return null;
+  const sign = repo.stars7d >= 0 ? "+" : "−";
+  return `${sign}${starCount(Math.abs(repo.stars7d))} ${STARS_7D_LABELS[repo.stars7dSource]}`;
+}
 
 export type PublishedPrecision = "time" | "date" | "none";
 
@@ -87,8 +128,8 @@ export function categoryFromParam(raw: string | string[] | undefined): NewsCateg
 
 /** /tech category chips (stories.category for pillar tech, db/045;
  * workers/feed/tech.py CHIP_CATEGORIES, pinned by e2e/tech-unit.spec.ts).
- * `repos` arrives with GitHub in Phase 2; `other` shows under All only. */
-export type TechCategory = "models_features" | "pricing_credits" | "tooling" | "agents" | "stack" | "community";
+ * `repos` is GitHub's (Phase 2, db/049); `other` shows under All only. */
+export type TechCategory = "models_features" | "pricing_credits" | "tooling" | "agents" | "stack" | "community" | "repos";
 export const TECH_CHIPS: readonly { category: TechCategory | null; label: string }[] = [
   { category: null, label: "All" },
   { category: "models_features", label: "Models & features" },
@@ -97,6 +138,7 @@ export const TECH_CHIPS: readonly { category: TechCategory | null; label: string
   { category: "agents", label: "Agents" },
   { category: "stack", label: "Stack" },
   { category: "community", label: "Community" },
+  { category: "repos", label: "Repos" },
 ];
 
 /** `?category=` on /tech as a chip; anything else is All. */
