@@ -251,30 +251,16 @@ policies arrive in db/019+ before apps/web reads any table. db/019 (push_subscri
   types (`extensions.halfvec`), and compare vectors by their text form
   (`v::text`), not with `=` / `IS DISTINCT FROM`, which need pgvector's
   operators. That was db/034's bug (2026-10-11).
-- **Staging first (owner, 2026-10-13; set up in Chat 4, Step 0).** A second,
-  free Supabase project in the same account, `valemont-staging`, built from
-  the same `db/` files. Once it exists:
-  - **Every new migration is pasted on staging first.** Its self-test NOTICE
-    and its verify output must come out as the file says. Only then does the
-    owner paste it on production. A staging failure is fixed in the file
-    (same number, never pasted on production), and the fix is pasted on
-    staging again.
-  - Staging holds **no production data**: no copy, no dump, no sync. A
-    self-test inserts its own rows, so it runs the same on an empty schema.
-    A migration whose behaviour depends on production rows (a backfill, a
-    seed keyed to real entities) says so in its header, and its staging run
-    proves the SQL runs, not the outcome.
-  - Its connection strings live in the root `.env` as `DATABASE_URL_STAGING`
-    (Session pooler, port 5432), never in place of `DATABASE_URL`, never on
-    Railway or Vercel. No worker, script or test reads it until a session
-    adds that deliberately, by name.
-  - The staging-first rule does not change the paste rule: the owner pastes,
-    on both projects. The Supabase MCP is not used for staging either.
-  - The free tier pauses a project after 7 idle days, and staging has no
-    heartbeat: restore it from the dashboard before a dry run.
-  - Why: db/042's first paste failed in its own self-test on production
-    (2026-10-13; TRUNCATE checks foreign keys before triggers). Nothing was
-    applied, but production was the first database to run the file.
+- **No staging project: decided against, 2026-10-13 (owner, Chat 4
+  planning).** It reverses the same day's "staging first" decision, which
+  was never set up. Migrations stay paste-to-production. The guard is the
+  rolled-back self-test DO block above: a wrong result raises, the SQL
+  Editor's transaction rolls the whole file back, and nothing is applied.
+  - Keep db/042's lesson (2026-10-13): its first paste failed in its own
+    self-test on production and applied nothing, because TRUNCATE checks
+    foreign keys before any TRUNCATE trigger. **A TRUNCATE assertion on a
+    table that other tables reference must name every referencing table in
+    the same statement.**
 
 ---
 
@@ -985,7 +971,7 @@ absent row as "I never looked."
   - ~~**Tue 2026-10-13:** NFL props archive, week 5; also weeks 1–4, once~~ **Done 2026-10-13** (see RECURRING below). Next: week 6 on Tue 2026-10-20.
   - **Sun 2026-10-19:** the owner's one-week watch of Love effects on /settings/feed closes (Chat 3 Phase 2 learning item; MASTER_PLAN checklist, `docs/feed_ranking.md` decision 7). Same day: the shadow `drop` review (likely retire it) and the watch on Skins Game–style duplicate merges (MASTER_PLAN, Chat 3 close-out).
   - **Mon 2026-10-20:** design the NFL props archive's move to Supabase Storage (Step 0) **before** week 6 is archived: at week 5's ~34 MB, weeks 5–18 fill the 500 MB tier (RECURRING, Archive).
-  - **Decided 2026-10-13 (owner): a free Supabase staging project for migration dry runs.** The rule is in §5 ("Staging first"); the project is set up in Chat 4, Step 0 (MASTER_PLAN §6).
+  - ~~**Decided 2026-10-13 (owner): a free Supabase staging project for migration dry runs.**~~ **Reversed 2026-10-13 (owner, Chat 4 planning): no staging project**; migrations stay paste-to-production, guarded by the rolled-back self-test (§5).
   - ~~**~2026-10-18:** the Railway trial ends~~ **Closed 2026-10-13: Railway is on Hobby** (Current State, "Railway"); no lapse, no hand redeploy.
 
 - **Migrations:** **`db/001`–`db/012` and `db/014`–`db/018` applied.** 007–012 verified live by `workers/scripts/verify_migrations_007_012.sql` (20/20). 014–018 were pasted 2026-10-08 and verified by read-only SELECTs. `migration_log` (UTC): 015 04:41:03, 016 04:41:16, 017 04:41:30, 018 04:50:35. 014 predates the log; its tables and triggers are present.
