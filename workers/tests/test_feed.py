@@ -21,7 +21,7 @@ from unittest import mock
 
 from core import ai, embed, jobs, ledger, push, system_jobs
 from feed import cluster, ingest, summarize
-from feed.parse import ParseFailed, canonical_url, keeps_category, parse_feed, strip_html
+from feed.parse import ParseFailed, RawItem, canonical_url, keeps_category, parse_feed, strip_html
 from feed.rules import Rule, Rules, SeedPhrase, best_seed
 from feed.sources import SourcesInvalid, _spec, gnews_url, load_sources
 
@@ -1064,14 +1064,39 @@ class StoryPlacement(IngestCase):
 
 
 class FirstFetch(IngestCase):
-    def test_dated_items_older_than_72h_are_ignored_on_the_first_fetch_only(self) -> None:
+    def test_dated_items_older_than_72h_are_recorded_never_shown_on_the_first_fetch(self) -> None:
         s = source(1, "s", first=True)
         self.feeds[s.url] = rss(rss_item("Golf fresh", "https://a.invalid/1", guid="1", when=NOW - timedelta(hours=5)),
                                 rss_item("An old item", "https://a.invalid/2", guid="2", when=NOW - timedelta(hours=80)))
-        self.assertEqual(self.run_ingest().run_source(s).new_stories, 1)
+        stats = self.run_ingest().run_source(s)
+        self.assertEqual((stats.new_stories, stats.aged, stats.seeded), (1, 1, 1))
+        self.assertTrue(self.db.items[(1, "2")]["seeded"])  # recorded, so the next fetch knows it
+
+    def test_the_second_fetch_never_stores_what_the_first_was_too_old_for(self) -> None:
+        # The bug (2026-10-14): the first fetch dropped the old item unrecorded
+        # and the second stored it as new (341 Home/Sports, 326 tech items).
+        s = source(1, "s", first=True)
+        old = rss_item("An old item", "https://a.invalid/2", guid="2", when=NOW - timedelta(hours=80))
+        self.feeds[s.url] = rss(old)
+        self.run_ingest().run_source(s)
+        later = source(1, "s")
+        self.feeds[later.url] = rss(old)
+        again = self.run_ingest().run_source(later)
+        self.assertEqual((again.new_stories, again.joined, again.known), (0, 0, 1))
+        self.assertEqual(self.db.stories, {})
+
+    def test_an_old_item_new_to_a_later_fetch_is_recorded_never_shown(self) -> None:
+        # The 72 h rule on every fetch: an item first seen on a later fetch
+        # that was already 80 h old (a feed reordering, a long cache) is seen,
+        # never a story; a date-only item gets one more day.
         later = source(2, "t")
-        self.feeds[later.url] = rss(rss_item("An old item", "https://b.invalid/2", guid="2", when=NOW - timedelta(hours=80)))
-        self.assertEqual(self.run_ingest().run_source(later).new_stories, 1)
+        self.feeds[later.url] = rss(rss_item("An old item", "https://b.invalid/2", guid="2", when=NOW - timedelta(hours=80)),
+                                    rss_item("Golf fresh", "https://b.invalid/3", guid="3", when=NOW - timedelta(hours=2)))
+        stats = self.run_ingest().run_source(later)
+        self.assertEqual((stats.new_stories, stats.aged), (1, 1))
+        day = RawItem("x", "https://b.invalid/4", "x", None, NOW - timedelta(hours=90), (), "date")
+        self.assertFalse(ingest.Ingest.too_old(day, NOW))   # 90 h, date-only: within 96 h
+        self.assertTrue(ingest.Ingest.too_old(replace(day, precision="time"), NOW))
 
     def test_an_undated_feed_is_seeded_and_skipped_on_its_first_fetch(self) -> None:
         s = source(1, "formula1", first=True)

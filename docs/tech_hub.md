@@ -158,6 +158,27 @@ of first seen. `tech_push_eligible()` decides it; the push trigger refuses
 and `tech_credit_push_allowed()` answers false otherwise. The worker checks
 the same rule first (`feed/tech.py` `push_eligible`) and never asks.
 
+## 5b. Late items, and the latency check split (2026-10-14)
+
+**The bug.** A source's first fetch skipped items older than 72 h without
+recording them, so its next fetch stored them as new: 341 Home/Sports items
+(23 sources) since Chat 3, and 326 tech items (13 sources) in the 03:12 UTC
+cycle after the deploy, months-old releases with the Official tag. Fixed in
+the worker: on EVERY fetch an item already older than 72 h when first seen
+(96 h for a date-only item) is recorded as seen and never shown.
+**Cleanup, db/047:** the 579 stories made only of such items (318
+Home/Sports, 261 tech; 0 reacted to) are hidden as
+`stale:first_seen_after_72h`, not deleted; 20 mixed stories stay. As filtered
+stories they reach the existing 30-day filtered prune.
+
+**Latency, split (owner, 2026-10-14):**
+- Feed path (RSS / Atom): **GREEN** on claude-code v2.1.299 (first seen
+  24.4 min after publication) and openai-python v3.30.0 (12.7 min).
+- Page-watcher path: **PENDING** until an anthropic.com/news, claude.com/blog
+  or openai.com/news post is first seen after the deploy.
+  `scripts/tech_latency.py` reports both, and leaves out backfill, seeded and
+  db/047-hidden items.
+
 ## 6. The Home and Sports summary cap (investigated 2026-10-14, read-only)
 
 The cap counts STORIES whose `summarized_at` falls on or after Chicago

@@ -7,7 +7,9 @@ READ-ONLY: it connects as valemont_readonly through scripts/db_inspect.py's
 readonly_url() (CLAUDE.md §5), and rolls back.
 
 For every OFFICIAL tech item first seen after --since (default: the first
-non-backfill official item ever), not a first-fetch backfill:
+non-backfill official item ever), not a first-fetch backfill, not seeded and
+not LATE (stored more than 72 h, 96 h date-only, after publication: not new
+when first seen, so not a latency sample):
 
     first_seen_at   content_items.fetched_at (when the worker first saw it)
     published_at    as the source states it
@@ -35,21 +37,38 @@ from scripts.db_inspect import STATEMENT_TIMEOUT_MS, readonly_url
 
 LIMIT = timedelta(minutes=30)
 
+#: Not new when first seen: stored more than 72 h (date-only: 96 h) after it
+#: was published. The worker records such an item as seen and never shows it
+#: (2026-10-14 fix); the ones stored before the fix are late, not slow, so
+#: they are not latency samples (db/047 hid the stories made only of them).
+LATE = """i.fetched_at - i.published_at > CASE WHEN i.published_precision = 'date'
+                                              THEN interval '96 hours' ELSE interval '72 hours' END"""
+
+#: Official items first seen after `since`, not a first-fetch backfill, not
+#: recorded-as-seen (seeded: too old when first seen), and not late.
 ITEMS_SQL = """
-    SELECT s.slug, i.title, i.published_at, i.published_precision, i.fetched_at, st.summary IS NOT NULL
+    SELECT s.slug, i.title, i.published_at, i.published_precision, i.fetched_at, st.summary IS NOT NULL, s.kind
       FROM content_items i
       JOIN sources s ON s.id = i.source_id
       LEFT JOIN stories st ON st.id = i.story_id
      WHERE 'tech' = ANY (s.pillars) AND s.official AND NOT s.is_test
        AND NOT i.backfill AND NOT i.seeded
+       AND NOT (""" + LATE + """)
        AND i.fetched_at > %(since)s
-     ORDER BY i.fetched_at, i.id
+     ORDER BY s.kind, i.fetched_at, i.id
 """
+
+#: The owner's two done-when paths (2026-10-14).
+PATHS = {"rss": "Feed path (RSS / Atom)", "page": "Page-watcher path"}
+#: The page-watcher check needs a post from one of these.
+PAGE_CHECK = ("anthropic-news", "claude-blog", "openai-news")
 
 DEFAULT_SINCE_SQL = """
     SELECT min(i.fetched_at) - interval '1 second'
       FROM content_items i JOIN sources s ON s.id = i.source_id
+      LEFT JOIN stories st ON st.id = i.story_id
      WHERE 'tech' = ANY (s.pillars) AND s.official AND NOT s.is_test AND NOT i.backfill AND NOT i.seeded
+       AND NOT (""" + LATE + """)
 """
 
 SOURCES_SQL = """
@@ -98,12 +117,19 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 cur.execute(ITEMS_SQL, {"since": since})
                 rows = cur.fetchall()
-                for slug, title, pub, precision, seen, summarized in rows:
+                current = None
+                for slug, title, pub, precision, seen, summarized, kind in rows:
+                    if kind != current:
+                        current = kind
+                        print(f" {PATHS.get(kind, kind)}:")
                     ok, how = verdict(pub, precision, seen)
                     failed += not ok
                     print(f"  {'PASS' if ok else 'FAIL'}  {slug:22} {how:42} seen {seen:%Y-%m-%d %H:%M}Z  "
                           f"{'summary' if summarized else 'headline only'}  {title[:70]}")
                 print(f"  {len(rows)} item(s), {failed} over the limit")
+                page_hits = [r for r in rows if r[0] in PAGE_CHECK]
+                print("  Page-watcher check (anthropic.com/news, claude.com/blog, openai.com/news): "
+                      + (f"{len(page_hits)} item(s) above" if page_hits else "PENDING: none first seen yet"))
             print("\nOfficial and community tech sources:")
             cur.execute(SOURCES_SQL)
             for slug, active, ok_at, status, fails, last_item, items in cur.fetchall():
