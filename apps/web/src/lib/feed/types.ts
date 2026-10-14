@@ -34,7 +34,12 @@ export type FeedStory = {
   loved: boolean;
   /** From a first-party source (db/045 sources.official): the "Official" tag. */
   official: boolean;
+  /** How precise publishedAt is (db/045, db/048): 'date' when the source
+   * states only a day (stored as 00:00 UTC of it), 'none' when undated. */
+  publishedPrecision: PublishedPrecision;
 };
+
+export type PublishedPrecision = "time" | "date" | "none";
 
 /** Home's two orders: the learned ranking (db/039 feed_for_you) and newest first. */
 export type FeedTab = "for-you" | "latest";
@@ -161,6 +166,14 @@ export function relativeTime(iso: string, now: number): string {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "America/Chicago" }).format(
     new Date(iso),
   );
+}
+
+/** A card's time. A date-only item prints its stated day as the source gave
+ * it, in UTC ("Oct 6"): its 00:00 UTC timestamp would read as the evening
+ * before in Chicago (owner, 2026-10-14). Anything else: relativeTime. */
+export function cardWhen(iso: string, precision: PublishedPrecision, now: number): string {
+  if (precision !== "date") return relativeTime(iso, now);
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(iso));
 }
 
 /** "3h ago", "never": for the sources page. */

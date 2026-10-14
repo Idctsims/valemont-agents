@@ -146,12 +146,15 @@ def wants_push(category: str | None, claimable: object) -> bool:
 PUSH_FRESH = timedelta(hours=24)
 
 
-def push_eligible(backfill: bool, published_at: datetime | None, first_seen_at: datetime | None) -> bool:
+def push_eligible(backfill: bool, published_at: datetime | None, first_seen_at: datetime | None,
+                  precision: str = "time") -> bool:
     """Owner, 2026-10-14 (after notification 323 pushed a backfill item): only
     an item first seen on a cycle after its source's first successful fetch
-    (not a first-fetch backfill) AND published within 24 h of first seen.
-    The twin of db/046 tech_push_eligible, which the database enforces."""
-    if backfill or published_at is None or first_seen_at is None:
+    (not a first-fetch backfill) AND published within 24 h of first seen. An
+    UNDATED item ('none', db/048) never pushes: its published time is only
+    when we first saw it. The twin of db/048 tech_push_eligible, which the
+    database enforces."""
+    if backfill or precision == "none" or published_at is None or first_seen_at is None:
         return False
     return first_seen_at - published_at <= PUSH_FRESH
 
@@ -287,7 +290,7 @@ Send = Callable[[push.Message], Any]
 def maybe_push(out: ledger.SummaryOut, job: ledger.TechSummaryJob, run: TechRun, *, send: Send = push.send) -> None:
     if not wants_push(out.category, out.claimable):
         return
-    if not push_eligible(job.backfill, job.published_at, job.first_seen_at):
+    if not push_eligible(job.backfill, job.published_at, job.first_seen_at, job.precision):
         run.ineligible.append(job.story_id)
         log.info("feed tech: story %d is a free-credits story but not push-eligible (backfill or old)", job.story_id)
         return

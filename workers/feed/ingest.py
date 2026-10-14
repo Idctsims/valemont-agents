@@ -406,12 +406,15 @@ class Ingest:
     def _item(self, src: ledger.FeedSource, raw: RawItem, fetched_at: datetime, *,
               backfill: bool = False) -> ledger.FeedItemIn:
         published = min(raw.published_at, fetched_at) if raw.published_at else fetched_at
+        # An undated item is dated by when it was first seen, and says so
+        # (db/048): 'none' never pushes and is never a latency sample.
+        precision = raw.precision if raw.published_at else "none"
         if src.kind == "gnews":
             self.throttle.wait()
             decoded = self.decode(raw.link) if raw.link else None
             url = canonical_url(decoded)
             return ledger.FeedItemIn(raw.external_id, url, raw.link, raw.title, raw.teaser,
-                                     published, url is None)
+                                     published, url is None, precision, backfill)
         # A release-notes entry is page#heading: a page item keeps its fragment.
         url = canonical_url(raw.link, keep_fragment=src.kind == "page")
         if url is None:
@@ -419,7 +422,7 @@ class Ingest:
             # allows a NULL url only for a failed Google News decode: skipped.
             raise _NoLink()
         return ledger.FeedItemIn(raw.external_id, url, None, raw.title, raw.teaser, published, False,
-                                 raw.precision, backfill)
+                                 precision, backfill)
 
     def _place(self, src: ledger.FeedSource, it: ledger.FeedItemIn, vec: Sequence[float],
                title_vec: Sequence[float], stats: SourceStats) -> None:

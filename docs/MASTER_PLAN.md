@@ -341,7 +341,7 @@ Thirteen build chats after this one, each split into phases with a test you run 
 - Tech Hub ingests on the existing 30-minute feed cycle.
 - Tech Hub pushes only for free credits and promos, at most 3 per Chicago day.
 
-1. Tech Hub: official changelogs and Hacker News (Phase 1), GitHub trending with a "why this matters to you" line (Phase 2).
+1. Tech Hub: official changelogs and Hacker News (Phase 1), GitHub trending with a "why this matters to you" line (Phase 2; its repos migration takes the next free number, since db/045–048 went to Phase 1's fixes).
    - [ ] A new Claude or OpenAI release shows up within one ingest cycle
 2. Screening Room: TMDB search, watchlist, currently watching, release dates, trailers, where to stream.
    - [ ] Recommendations reflect the six seed shows on day one and shift after reactions

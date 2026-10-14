@@ -15,6 +15,7 @@ import logging
 import math
 import re
 import unittest
+from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -669,7 +670,8 @@ class TechFeedLedger(FakeFeedLedger):
         return made
 
 
-class TechIngest(IngestCase):
+class TechIngestCase(IngestCase):
+    """Ingest with a ledger that knows tech stories (no tests here)."""
     def setUp(self) -> None:
         super().setUp()
         self.db = TechFeedLedger()
@@ -680,6 +682,8 @@ class TechIngest(IngestCase):
         self.kwargs[url] = kw
         return super().get(url, headers)
 
+
+class TechIngest(TechIngestCase):
     def test_a_page_source_is_streamed_capped_and_parsed(self) -> None:
         cfg = {"mode": "sections", "heading": ["h3"], "max_bytes": 300000}
         s = tech_source(1, "claude-apps-notes", kind="page", config=cfg,
@@ -740,6 +744,54 @@ class TechIngest(IngestCase):
         self.assertEqual(len(self.db.stories), 2)
         self.assertEqual(self.db.joins, [])
         self.assertEqual(sorted(s["tech"] for s in self.db.stories.values()), [False, True])
+
+
+class UndatedItems(TechIngestCase):
+    """db/048 (owner, 2026-10-14): an undated item is 'none': it still shows,
+    never pushes, never counts for latency."""
+
+    def test_an_rss_item_that_drops_its_date_on_a_later_fetch(self) -> None:
+        s = tech_source(8, "vercel", first=True)
+        self.feeds[s.url] = rss(rss_item("Golf dated", "https://v.invalid/1", guid="1", when=NOW - timedelta(hours=2)))
+        self.run_ingest().run_source(s)
+        later = tech_source(8, "vercel")
+        self.feeds[later.url] = rss(rss_item("Golf dated", "https://v.invalid/1", guid="1", when=NOW - timedelta(hours=2)),
+                                    rss_item("Verstappen undated", "https://v.invalid/2", guid="2", when=None))
+        stats = self.run_ingest().run_source(later)
+        self.assertEqual((stats.new_stories + stats.joined, stats.known), (1, 1))
+        item = self.db.items[(8, "2")]["item"]
+        self.assertEqual((item.precision, item.published_at, item.backfill), ("none", NOW, False))  # shown
+        # It never pushes, though "published" == first seen.
+        self.assertFalse(tech.push_eligible(item.backfill, item.published_at, NOW, item.precision))
+        self.assertTrue(tech.push_eligible(False, NOW - timedelta(hours=1), NOW, "time"))
+
+    def test_an_undated_item_on_a_first_fetch_is_recorded_unshown(self) -> None:
+        s = tech_source(9, "mcp-blog", first=True)
+        self.feeds[s.url] = rss(rss_item("Undated", "https://m.invalid/1", guid="1", when=None))
+        stats = self.run_ingest().run_source(s)
+        self.assertEqual((stats.seeded, stats.new_stories), (1, 0))
+        self.assertTrue(self.db.items[(9, "1")]["seeded"])
+        self.assertEqual(self.db.seeded[0].precision, "none")
+
+    def test_the_job_never_asks_to_push_an_undated_story(self) -> None:
+        asked: list[int] = []
+        with mock.patch.object(ledger, "tech_credit_push", lambda sid, send: asked.append(sid) or 1):
+            run = tech.TechRun()
+            out = ledger.SummaryOut(3, "Summary.", category="pricing_credits", claimable=True)
+            undated = replace(job(3), precision="none")
+            tech.maybe_push(out, undated, run, send=lambda m: [])
+        self.assertEqual((asked, run.ineligible), ([], [3]))
+
+    def test_the_sql_and_the_report(self) -> None:
+        sql = (REPO_ROOT / "db" / "048_feed_dates.sql").read_text(encoding="utf-8")
+        self.assertIn("NOT i.backfill AND i.published_precision <> 'none'", sql)
+        self.assertIn("CHECK (published_precision IN ('time', 'date', 'none'))", sql)
+        # The backfill window counts from published (date-only: the end of its day).
+        self.assertIn("WHERE (CASE WHEN v.lead_backfill", sql)
+        self.assertIn("THEN interval '24 hours' ELSE interval '0' END", sql)
+        from scripts import tech_latency
+        self.assertIn("i.published_precision <> 'none'", tech_latency.ITEMS_SQL)
+        self.assertIn("i.published_precision", ledger.FEED_TECH_SUMMARY_QUEUE_SQL)
 
 
 class Fetcher(unittest.TestCase):

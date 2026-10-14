@@ -331,6 +331,48 @@ class HideLateItems(TechSqlCase):
             self.assertNotIn(ids[0], {r[0] for r in conn.execute("SELECT id FROM feed_for_you('tech', 100000, 0)")})
 
 
+class Dates048(TechSqlCase):
+    """db/048: undated never pushes; date-only precision reaches the web; a
+    backfill item's window counts from when it was published."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        with _rolled_back() as conn:
+            if conn.execute("SELECT count(*) FROM information_schema.columns WHERE table_name = 'v_feed_stories' "
+                            "AND column_name = 'lead_backfill'").fetchone()[0] == 0:
+                raise unittest.SkipTest("db/048 not pasted")
+
+    def item(self, conn, src, *, hours: float, precision: str, backfill: bool) -> int:
+        from datetime import datetime, timedelta, timezone
+        it = ledger.FeedItemIn(f"tl:{uuid.uuid4().hex}", f"https://tests-live.invalid/{uuid.uuid4().hex}", None,
+                               "TL dates", None, datetime.now(timezone.utc) - timedelta(hours=hours), False,
+                               precision, backfill)
+        v = [1.0] + [0.0] * 383
+        return ledger.feed_new_story(src, it, v, v, filtered_reason=None, seed=None, conn=conn)[0]
+
+    def test_undated_never_pushes_and_still_lists(self) -> None:
+        with _rolled_back() as conn:
+            src = self.tech_source(conn)
+            undated = self.item(conn, src, hours=0, precision="none", backfill=False)
+            self.assertFalse(conn.execute("SELECT tech_push_eligible(%s)", (undated,)).fetchone()[0])
+            self.assertIsNone(ledger.tech_credit_push(undated, lambda: None, conn=conn))
+            row = conn.execute("SELECT published_precision FROM feed_for_you('tech', 100000, 0) WHERE id = %s",
+                               (undated,)).fetchone()
+            self.assertEqual(row, ("none",))
+
+    def test_the_backfill_window_counts_from_published(self) -> None:
+        with _rolled_back() as conn:
+            src = self.tech_source(conn)
+            old = self.item(conn, src, hours=24 * 10, precision="time", backfill=True)
+            recent = self.item(conn, src, hours=24 * 2, precision="time", backfill=True)
+            fresh_old = self.item(conn, src, hours=24 * 10, precision="time", backfill=False)
+            ids = {r[0] for r in conn.execute("SELECT id FROM feed_for_you('tech', 100000, 0)")}
+            # A non-backfill story keeps the first-seen window (the worker never
+            # stores one this old now; here it proves the rule is backfill-only).
+            self.assertEqual((old in ids, recent in ids, fresh_old in ids), (False, True, True))
+
+
 class WorkerQueries(TechSqlCase):
     def test_the_tech_queue_puts_official_first_and_the_home_queue_leaves_tech_out(self) -> None:
         with _rolled_back() as conn:
