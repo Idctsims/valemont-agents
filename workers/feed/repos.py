@@ -25,8 +25,10 @@ Daily at 07:00 America/Chicago, and at boot if today's run has not happened
      trending's stars in its period ('trending_weekly', then
      'trending_daily'); for a search-only repo, every star when it is under
      7 days old ('since_created') or the age average ('age_average'). The
-     card says "trending est." / "est."; an estimate is never shown as
-     measured.
+     card says "trending est." / "since created" / "avg est."; an estimate
+     is never shown as measured. A trending count over half a 30-day-old
+     repo's total is flagged (trending_suspect), and one over its total is a
+     parse failure.
   5. SELECT, at most DAILY_MAX (8) a day. Hard filters (hard_filter):
      archived, fork, no README, not pushed in 90 days. Rank: the tech
      interest profile (feed/rank.score_story: embedding against the loves
@@ -242,6 +244,12 @@ def parse_trending(content: bytes | str, period: str) -> list[TrendingRepo]:
             raise TrendingParseFailed(
                 f"trending ({period}): card {i} has no owner/name, stars or stars-in-period "
                 f"(name {name!r}); the page markup changed")
+        # Impossible: more stars in the period than in total means the two
+        # numbers were read from the wrong places (owner, 2026-10-14).
+        if period_stars > stars:
+            raise TrendingParseFailed(
+                f"trending ({period}): card {i} ({name}) has {period_stars} stars in the period but {stars} "
+                f"in total; the page markup changed")
         out.append(TrendingRepo(name, t.get("description") or None, t.get("language") or None, stars,
                                 period_stars, period))
     return out
@@ -451,8 +459,27 @@ LABELS: dict[str, str] = {
     "trending_weekly": "trending est.",
     "trending_daily": "trending est.",
     "since_created": "since created",
-    "age_average": "est.",
+    # Owner, 2026-10-14: distinct from "trending est.", so the card says
+    # which guess it is (stars / age in days × 7).
+    "age_average": "avg est.",
 }
+
+#: A trending stars-in-period above this share of the total, on a repo older
+#: than SUSPECT_AGE_DAYS, is flagged (owner, 2026-10-14: morluto/rea showed
+#: 183,758 "stars this week" on 239,045 total at six months old). Flagged, not
+#: dropped: logged and counted in the job note.
+SUSPECT_SHARE = 0.5
+SUSPECT_AGE_DAYS = 30
+
+
+def trending_suspect(c: Candidate, now: datetime) -> bool:
+    """A trending period count over SUSPECT_SHARE of all the repo's stars,
+    on a repo older than SUSPECT_AGE_DAYS: real growth rarely looks like
+    that; bought or farmed stars do."""
+    if c.created_at is None or now - c.created_at <= timedelta(days=SUSPECT_AGE_DAYS) or c.stars <= 0:
+        return False
+    period = max(c.trending_weekly or 0, c.trending_daily or 0)
+    return period > SUSPECT_SHARE * c.stars
 
 
 def is_estimate(source: str | None) -> bool:
@@ -572,6 +599,8 @@ class RepoRun:
     tracked: int = 0
     surfaced: list[str] = field(default_factory=list)
     refused: list[str] = field(default_factory=list)
+    #: Trending counts over half the total on a 30-day-old repo (trending_suspect).
+    flagged: list[str] = field(default_factory=list)
     calls: dict[str, int] = field(default_factory=dict)
 
     @property
@@ -582,6 +611,7 @@ class RepoRun:
                 f"filtered: {f}; {self.snapshots} snapshots ({self.tracked} tracked); "
                 f"calls: search {self.calls.get('search', 0)}, core {self.calls.get('core', 0)}, "
                 f"trending {self.calls.get('trending', 0)}"
+                + (f"; flagged (trending > half the total): {', '.join(self.flagged)}" if self.flagged else "")
                 + (f"; refused by the database: {', '.join(self.refused)}" if self.refused else ""))
 
 
@@ -662,6 +692,11 @@ def repos_job(*, gh: GitHub | None = None, embed: Embed = embedder.embed, now: d
                 run.filtered[why] = run.filtered.get(why, 0) + 1
             else:
                 keep.append(c)
+                if trending_suspect(c, now):
+                    run.flagged.append(c.full_name)
+                    log.warning("repos: %s flagged: trending %s stars in period on %d total, created %s",
+                                c.full_name, max(c.trending_weekly or 0, c.trending_daily or 0), c.stars,
+                                c.created_at.date() if c.created_at else "?")
 
         # Snapshot every enriched candidate (filtered ones too: tracked is tracked).
         enriched = [c for c in cands.values() if c.enriched]

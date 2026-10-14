@@ -496,10 +496,22 @@ in.
 - **`scripts.feed_profile --rebuild`** does the same by hand and prints counts
   only (reactions per kind, stories scored, seed weights).
 - **`feed_why`**, after each rescore and whenever a new story enters Home's
-  top 8, for stories with `why_generated_at IS NULL`.
+  or Tech's For you page one, for stories with `why_generated_at IS NULL`.
   - Haiku via `core.ai.complete()`, non-critical, venture context from
     `ctx_ventures()`.
-  - Up to 8 stories per call, at most `WHY_DAILY_CALLS = 20` calls a day.
+  - Up to 8 stories per call, at most `why.DAILY_CALLS = 100` calls a day
+    (owner, 2026-10-14; it was 20).
+  - **Rank order, page one first** (owner, 2026-10-14, like the summaries):
+    the queue is each pillar's For you top 30 (`why.TOP`), asked position by
+    position across Home and Tech (position 1 of each, then 2; Home first at
+    a tie). It was Home's top 8, then Tech's top 8.
+  - **Why the change:** on Oct 14 the 20-call cap was spent by 14:55 Chicago
+    (19 of 20 used), so no story reaching the evening feed got a line.
+  - **Cost.** Measured on Oct 14 to 16:26 Chicago: 19 calls, $0.003811, about
+    $0.0002 a call (8 stories each). **Projected at the new cap: ~$0.02 a
+    day** (100 × $0.0002); a quiet day asks fewer, since each story is asked
+    once. Repo stories are asked by `feed_repo_why` under their own cap (4
+    calls a day; `docs/tech_hub.md` §7), not counted here.
   - The validator accepts the line only if it names a venture exactly as
     `ctx_ventures` spells it, is one sentence, and is at most 20 words.
     **Anything else is stored as NULL.** The prompt says null is the expected
