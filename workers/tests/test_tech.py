@@ -685,12 +685,29 @@ class TechIngest(IngestCase):
         s = tech_source(1, "claude-apps-notes", kind="page", config=cfg,
                         url="https://support.claude.com/en/articles/12138966-release-notes")
         self.feeds[s.url] = (FIX / "claude_apps_notes.html").read_bytes()
+        # A later fetch of a page whose entries are all days old: every entry
+        # is recorded as seen and none is shown (the 72 h rule on every fetch).
         stats = self.run_ingest().run_source(s)
         self.assertEqual(self.kwargs[s.url], {"max_bytes": 300000})
-        self.assertGreater(stats.new_stories, 0)
-        items = [v["item"] for v in self.db.items.values() if "item" in v]
-        self.assertTrue(all(i.precision == "date" and "#h_" in i.url for i in items))
-        self.assertFalse(any(i.backfill for i in items))  # not a first fetch
+        self.assertEqual(stats.new_stories, 0)
+        self.assertEqual(stats.aged, stats.seeded)
+        self.assertGreater(stats.aged, 0)
+
+    def test_a_first_fetch_backfills_five_and_records_the_rest_unshown(self) -> None:
+        cfg = {"mode": "sections", "heading": ["h3"]}
+        s = tech_source(7, "claude-apps-notes", kind="page", config=cfg, first=True,
+                        url="https://support.claude.com/en/articles/12138966-release-notes")
+        self.feeds[s.url] = (FIX / "claude_apps_notes.html").read_bytes()
+        entries = page("claude_apps_notes", s.url, **cfg)
+        first = self.run_ingest().run_source(s)
+        stored = [v["item"] for v in self.db.items.values() if "item" in v]
+        self.assertEqual(len(stored), min(ingest.BACKFILL, len(entries)))
+        self.assertTrue(all(i.backfill and i.precision == "date" and "#h_" in i.url for i in stored))
+        self.assertEqual(first.aged, len(entries) - len(stored))
+        # The second fetch stores nothing new: the rest were recorded.
+        again = self.run_ingest().run_source(tech_source(7, "claude-apps-notes", kind="page", config=cfg,
+                                                         url="https://support.claude.com/en/articles/12138966-release-notes"))
+        self.assertEqual((again.new_stories, again.joined, again.aged), (0, 0, 0))
 
     def test_a_tech_feed_is_read_head_first(self) -> None:
         s = tech_source(2, "vercel")

@@ -300,6 +300,37 @@ class CapsAndRetirement(TechSqlCase):
             self.assertEqual((len(tj.vec), bool(tj.source_slug)), (384, True))
 
 
+class HideLateItems(TechSqlCase):
+    """db/047: a story whose every item was stored > 72 h after publication
+    is hidden (filtered, never deleted); reacted, mixed and fresh ones stay."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        with _rolled_back() as conn:
+            if conn.execute("SELECT to_regprocedure('public.feed_hide_late_stories()')").fetchone()[0] is None:
+                raise unittest.SkipTest("db/047 not pasted")
+
+    def test_late_hidden_reacted_kept_nothing_deleted(self) -> None:
+        from datetime import datetime, timedelta, timezone
+        with _rolled_back() as conn:
+            src = self.tech_source(conn)
+            ids = []
+            for name, hours in (("late", 100), ("fresh", 1), ("late-reacted", 100)):
+                item = ledger.FeedItemIn(f"tl:{uuid.uuid4().hex}", f"https://tests-live.invalid/{uuid.uuid4().hex}",
+                                         None, f"TL {name}", None, datetime.now(timezone.utc) - timedelta(hours=hours),
+                                         False)
+                v = [1.0] + [0.0] * 383
+                ids.append(ledger.feed_new_story(src, item, v, v, filtered_reason=None, seed=None, conn=conn)[0])
+            self.react(conn, ids[2], "open")
+            conn.execute("SELECT feed_hide_late_stories()")
+            reasons = dict(conn.execute("SELECT id, filtered_reason FROM stories WHERE id = ANY(%s)", (ids,)).fetchall())
+            self.assertEqual([reasons[i] for i in ids], ["stale:first_seen_after_72h", None, None])
+            self.assertEqual(conn.execute("SELECT count(*) FROM content_items WHERE story_id = ANY(%s)",
+                                          (ids,)).fetchone()[0], 3)
+            self.assertNotIn(ids[0], {r[0] for r in conn.execute("SELECT id FROM feed_for_you('tech', 100000, 0)")})
+
+
 class WorkerQueries(TechSqlCase):
     def test_the_tech_queue_puts_official_first_and_the_home_queue_leaves_tech_out(self) -> None:
         with _rolled_back() as conn:

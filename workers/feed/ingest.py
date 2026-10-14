@@ -5,9 +5,11 @@ For each active source, lowest priority number first, completely before the next
   1. Conditional GET (ETag / If-Modified-Since), 15 s timeout, our
      User-Agent. 304 is a good fetch with nothing new.
   2. Parse (feed/parse.py), at most 50 items; keep include_categories.
-  3. First fetch (last_ok_at NULL): dated items older than 72 h are ignored
-     (no backfill flood); undated items are SEEDED, recorded as seen and
-     never shown, because "first seen" would date a back catalogue to now.
+  3. EVERY fetch (owner, 2026-10-14; it was the first fetch only): a dated
+     item already older than 72 h (date-only items: 96 h) when first seen is
+     SEEDED, recorded as seen and never shown, so no later fetch can store it
+     as new. First fetch (last_ok_at NULL): undated items are seeded too,
+     because "first seen" would date a back catalogue to now.
      Later fetches: an undated item's published_at is its first-seen time.
      Every published_at is capped at the fetch time (ESPN dates ahead).
      Google News items published more than gnews_window_days + STALE_GRACE
@@ -73,7 +75,10 @@ log = logging.getLogger("valemont.feed")
 
 USER_AGENT = "ValemontCommand/1.0 (+https://valemont-command.vercel.app/privacy)"
 TIMEOUT_S = 15.0
+#: Older than this when first seen: recorded as seen, never shown (every
+#: fetch; owner, 2026-10-14). The name is historical: it was first-fetch only.
 FIRST_FETCH_MAX_AGE = timedelta(hours=72)
+DATE_GRACE = timedelta(hours=24)
 #: A tech source's first fetch keeps this many newest items whatever their age.
 BACKFILL = 5
 #: The most a streamed tech feed is read before it is cut, in bytes.
@@ -184,6 +189,8 @@ class SourceStats:
     overflow: int = 0
     #: Google News items older than the source's window + STALE_GRACE.
     stale: int = 0
+    #: Items already older than 72 h when first seen: recorded, never shown.
+    aged: int = 0
     error: str | None = None
 
 
@@ -199,7 +206,8 @@ class RunStats:
         return (f"{len(self.sources)} sources, {self.total('new_stories')} new stories, "
                 f"{self.total('joined')} joins, {self.total('filtered')} filtered, "
                 f"{self.total('seeded')} seeded, {self.total('decode_failed')} decode failures, "
-                f"{self.total('overflow')} cap overflows, {self.total('stale')} stale"
+                f"{self.total('overflow')} cap overflows, {self.total('stale')} stale, "
+                f"{self.total('aged')} too old to show"
                 + (f"; failing: {', '.join(failed)}" if failed else ""))
 
 
@@ -313,6 +321,16 @@ class Ingest:
         return self.get(src.url, headers)
 
     @staticmethod
+    def too_old(raw: RawItem, fetched_at: datetime) -> bool:
+        """Published more than FIRST_FETCH_MAX_AGE (72 h) before this fetch. A
+        date-only item (stamped 00:00 UTC of its day) gets one more day: it may
+        have gone up at the end of that day."""
+        if raw.published_at is None:
+            return False
+        limit = FIRST_FETCH_MAX_AGE + (DATE_GRACE if raw.precision == "date" else timedelta(0))
+        return fetched_at - raw.published_at > limit
+
+    @staticmethod
     def _parse(src: ledger.FeedSource, content: bytes, fetched_at: datetime) -> list[RawItem]:
         if src.kind == "page":
             return watch.parse_page(content, src.url, watch.page_config(src.config or {}), fetched_at.date())
@@ -341,14 +359,19 @@ class Ingest:
                     and fetched_at - raw.published_at > stale_after):
                 stats.stale += 1
                 continue
-            if (first and raw.published_at is not None and fetched_at - raw.published_at > FIRST_FETCH_MAX_AGE
-                    and raw.external_id not in newest):
-                continue
+            # Too old on EVERY fetch, not only the first (owner, 2026-10-14):
+            # recorded as seen and never shown, so a later fetch knows it.
+            # Before, the first fetch dropped it unrecorded and the next one
+            # stored it as new (341 Home/Sports and 326 tech items).
+            aged = raw.published_at is not None and self.too_old(raw, fetched_at) and raw.external_id not in newest
             try:
                 item = self._item(src, raw, fetched_at, backfill=tech_first)
             except _NoLink:
                 continue
-            if first and raw.published_at is None:
+            if aged:
+                seeded.append(item)
+                stats.aged += 1
+            elif first and raw.published_at is None:
                 seeded.append(item)
             else:
                 keep.append(item)
