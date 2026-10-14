@@ -570,7 +570,7 @@ export async function addTestNewsStory(opts: {
 }
 
 /** A TEST tech story (db/045 add_test_tech_story): is_test, from the official
- * test source `_e2e_tech` (so its card carries the Official tag), pillar
+ * test source `_e2e-tech` (so its card carries the Official tag), pillar
  * tech, with a category for the /tech chips. Invisible to the real feed; a
  * marked request shows it. */
 export async function addTestTechStory(opts: {

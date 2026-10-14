@@ -31,7 +31,7 @@
 --   5. feed_pillar_guard  the no-cross-in rule at write time: a `tech` score
 --                    or reaction only on a tech story, and a home or sports
 --                    one never on a tech story.
---   6. the tech test source `_e2e_tech` (official, is_test, never active)
+--   6. the tech test source `_e2e-tech` (official, is_test, never active)
 --                    and add_test_tech_story() (verified e2e marker).
 --   7. seeds         seed_interests.feed.tech (owner's LOVE / NOT
 --                    INTERESTED), set once, only while empty.
@@ -181,7 +181,7 @@ CREATE TRIGGER feed_reactions_pillar_guard
 -- The tech test source and its e2e writer.
 
 INSERT INTO sources (slug, name, pillars, kind, url, priority, active, is_test, official, notes)
-VALUES ('_e2e_tech', 'Test official source', ARRAY['tech'], 'rss', 'https://e2e.invalid/tech-feed',
+VALUES ('_e2e-tech', 'Test official source', ARRAY['tech'], 'rss', 'https://e2e.invalid/tech-feed',
         1000, false, true, true, 'tests_live and add_test_tech_story() only')
 ON CONFLICT (slug) DO NOTHING;
 
@@ -215,7 +215,7 @@ BEGIN
                                                 'stack', 'community', 'other') THEN
         RAISE EXCEPTION 'add_test_tech_story: unknown category %', p_category;
     END IF;
-    SELECT id INTO v_source FROM public.sources WHERE slug = '_e2e_tech' AND is_test;
+    SELECT id INTO v_source FROM public.sources WHERE slug = '_e2e-tech' AND is_test;
     INSERT INTO public.stories (pillars, title, summary, summarized_at, category, is_test)
     VALUES (ARRAY['tech'], p_title, p_summary, CASE WHEN p_summary IS NOT NULL THEN now() END,
             p_category, true)
@@ -965,7 +965,7 @@ ON CONFLICT (name) DO NOTHING;
 --       brief_section true
 --   (e) seed_interests.feed.tech: love 8, not interested 4; home 10 / 7 and
 --       sports 8 / 2 unchanged
---   (f) _e2e_tech: inactive, is_test, official, pillars {tech}
+--   (f) _e2e-tech: inactive, is_test, official, pillars {tech}
 --   (g) tech_credit_push_room() = 3; ctx_tech_brief() IS NULL (no tech
 --       source has run yet)
 --   (h) the migration_log row (and the NOTICE "045 self-test passed")
@@ -1008,7 +1008,7 @@ SELECT jsonb_array_length(seed_interests #> '{feed,tech,love}') AS tech_love,
        jsonb_array_length(seed_interests #> '{feed,sports,not_interested}') AS sports_ni
   FROM app_settings;                                                                      -- (e)
 
-SELECT slug, active, is_test, official, pillars FROM sources WHERE slug = '_e2e_tech';    -- (f)
+SELECT slug, active, is_test, official, pillars FROM sources WHERE slug = '_e2e-tech';    -- (f)
 
 SELECT tech_credit_push_room() AS room, ctx_tech_brief() IS NULL AS brief_silent;         -- (g)
 
