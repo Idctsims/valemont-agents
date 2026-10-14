@@ -506,12 +506,111 @@ class RepoWhy(unittest.TestCase):
     def test_refusals_fall_back_with_a_reason(self) -> None:
         for item in ({"target": "dashboard", "why": "A nice library for apps."},
                      {"target": "Nobody Inc", "why": "Helps Nobody Inc."},
-                     {"target": "Sail Beach Club", "why": "This could help Sail Beach Club."},
+                     {"target": "Sail Beach Club", "why": "This might help Sail Beach Club."},
                      {"target": "dashboard", "why": "The dashboard " + "word " * 25}):
             with self.subTest(item=item["why"][:30]):
                 line, reason = why.check_repo(item, self.NAMES)
                 self.assertEqual(line, why.GENERAL)
                 self.assertTrue(reason)
+
+    # -- owner, 2026-10-14, after day one scored 0/8 --------------------------
+
+    def test_can_and_could_are_allowed_when_the_line_names_its_target(self) -> None:
+        for item in ({"target": "dashboard", "why": "The dashboard could adopt these reduced-motion React components."},
+                     {"target": "Sail Beach Club", "why": "Sail Beach Club can use it for booking reminders."},
+                     {"target": "dev workflow", "why": "Adds an MCP server for binary analysis to the dev workflow."},
+                     {"target": "client sites", "why": "Client sites could use these animated ASCII Next.js components."}):
+            with self.subTest(why=item["why"][:30]):
+                line, reason = why.check_repo(item, self.NAMES)
+                self.assertEqual((line, reason), (item["why"], None))
+
+    def test_may_and_might_stay_refused(self) -> None:
+        for word in ("may", "might", "possibly", "perhaps", "potentially"):
+            with self.subTest(word=word):
+                line, reason = why.check_repo({"target": "dashboard", "why": f"The dashboard {word} use it."},
+                                              self.NAMES)
+                self.assertEqual(line, why.GENERAL)
+                self.assertIn("hedges", reason)
+
+    def test_news_why_keeps_its_rules(self) -> None:
+        # "could" is still a hedge for news (why.check, not check_repo).
+        line, reason = why.check({"venture": "Sail Beach Club", "why": "This could matter to Sail Beach Club."},
+                                 self.NAMES)
+        self.assertIsNone(line)
+        self.assertIn("hedges", reason)
+
+    def test_the_two_new_targets(self) -> None:
+        self.assertIn("Tsims's dev workflow", why.REPO_TARGETS[why.WORKFLOW][0])
+        self.assertIn("Claude Code, Cursor and MCP", why.REPO_TARGETS[why.WORKFLOW][0])
+        self.assertIn("Next.js, Supabase and Tailwind", why.REPO_TARGETS[why.CLIENTS][0])
+        for t in (why.DASHBOARD, why.WORKFLOW, why.CLIENTS):
+            self.assertIn(f'"{t}"', why.REPO_SYSTEM)
+        msg = why.repo_user_message({}, [ledger.RepoWhyJob(1, "o/a", "S.", "GitHub", "D.", ("x",))])
+        self.assertIn("OTHER TARGETS", msg)
+        self.assertIn("freelance client sites".lower(), msg.lower())
+        # Each target must be named in the line.
+        for target, bad in ((why.WORKFLOW, "Speeds up builds."), (why.CLIENTS, "Good for websites.")):
+            with self.subTest(target=target):
+                line, reason = why.check_repo({"target": target, "why": bad}, self.NAMES)
+                self.assertEqual(line, why.GENERAL)
+                self.assertIn("does not name", reason)
+
+    def _fake_complete(self, payloads: list[dict]):
+        calls: list[str] = []
+
+        def complete(**kw):
+            calls.append(kw["messages"][0]["content"])
+            kw["on_recorded"](700 + len(calls), kw["model"], 0.0)
+            return SimpleNamespace(stop_reason=None, content=[SimpleNamespace(type="text",
+                                                                              text=json.dumps(payloads.pop(0)))])
+        return complete, calls
+
+    def test_one_same_run_retry_with_the_reason(self) -> None:
+        group = [ledger.RepoWhyJob(1, "o/a", "S.", "GitHub", None, ()),
+                 ledger.RepoWhyJob(2, "o/b", "S.", "GitHub", None, ())]
+        first = {"repos": [{"id": 1, "target": "dashboard", "why": "The dashboard might use it."},
+                           {"id": 2, "target": None, "why": None}]}
+        second = {"repos": [{"id": 1, "target": "dashboard", "why": "The dashboard can use it for feed charts."}]}
+        complete, calls = self._fake_complete([first, second])
+        saved: list[tuple[dict, int | None]] = []
+        with mock.patch.object(why.ai, "complete", complete), \
+                mock.patch.object(ledger, "feed_save_repo_why", lambda a, u, **_: saved.append((dict(a), u)) or len(a)):
+            out = why.ask_repo_group(group, {}, self.NAMES)
+        self.assertEqual(out, {1: "The dashboard can use it for feed charts.", 2: why.GENERAL})
+        self.assertEqual(len(calls), 2)
+        self.assertIn("your_last_answer_was_rejected_because", calls[1])
+        self.assertIn("hedges ('might')", calls[1])
+        self.assertNotIn('"id": 2', calls[1])  # the model's own null is not retried
+        # Each answer is saved with the call that produced it.
+        self.assertEqual(saved, [({2: why.GENERAL}, 701), ({1: "The dashboard can use it for feed charts."}, 702)])
+
+    def test_no_retry_when_nothing_was_refused_or_no_room(self) -> None:
+        group = [ledger.RepoWhyJob(1, "o/a", "S.", "GitHub", None, ())]
+        refused = {"repos": [{"id": 1, "target": "dashboard", "why": "The dashboard might use it."}]}
+        for payload, retry in (({"repos": [{"id": 1, "target": None, "why": None}]}, True), (refused, False)):
+            complete, calls = self._fake_complete([payload])
+            with self.subTest(retry=retry), mock.patch.object(why.ai, "complete", complete), \
+                    mock.patch.object(ledger, "feed_save_repo_why", lambda a, u, **_: len(a)):
+                self.assertEqual(why.ask_repo_group(group, {}, self.NAMES, retry=retry), {1: why.GENERAL})
+                self.assertEqual(len(calls), 1)
+
+    def test_the_job_never_passes_the_repo_cap(self) -> None:
+        queue = [ledger.RepoWhyJob(i, f"o/{i}", "S.", "GitHub", None, ()) for i in range(1, 17)]
+        used = [3]
+        flags: list[bool] = []
+
+        def ask(group, ctx, names, *, client=None, retry=True):
+            flags.append(retry)
+            used[0] += 1
+            return {j.story_id: why.GENERAL for j in group}
+
+        with mock.patch.object(ledger, "feed_repo_why_queue", lambda *a, **k: queue), \
+                mock.patch.object(ledger, "ai_calls_today", lambda p, **_: used[0]), \
+                mock.patch.object(ledger, "ctx_ventures", lambda **_: {}), \
+                mock.patch.object(why, "ask_repo_group", ask):
+            why.repo_why_job()
+        # 3 of 4 used: one group, and no retry (it would be the 5th call).
+        self.assertEqual(flags, [False])
 
     def test_every_repo_gets_a_line(self) -> None:
         jobs = [ledger.RepoWhyJob(1, "o/a", None, "GitHub", None, ()), ledger.RepoWhyJob(2, "o/b", None, "GitHub", None, ())]
