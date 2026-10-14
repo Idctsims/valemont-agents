@@ -133,6 +133,19 @@ class Stars7d(unittest.TestCase):
         for source in repos.LABELS:
             self.assertIn(f"'{source}'", sql)
 
+    def test_db050_the_resurface_baseline_is_measured(self) -> None:
+        """Owner, 2026-10-14: an estimate (or nothing) at the first surfacing
+        is never the baseline; the first MEASURED stars_7d is. Pinned on the
+        SQL text, which the trigger enforces (tests_live runs it)."""
+        sql = (Path(__file__).resolve().parents[2] / "db" / "050_repo_measured_baseline.sql").read_text(encoding="utf-8")
+        fn = sql[sql.index("CREATE OR REPLACE FUNCTION public.repo_may_surface"):sql.index("REVOKE ALL")]
+        self.assertIn("WHEN f.stars_7d_source = 'measured' THEN f.stars_7d", fn)
+        self.assertIn("w.snapped_on = t.snapped_on - 7", fn)
+        self.assertIn("ORDER BY t.snapped_on", fn)
+        self.assertIn("<= p_day - 14", fn)
+        self.assertIn("p_stars_7d >= 2 * greatest((SELECT b.stars_7d FROM baseline b), 1)", fn)
+        self.assertIn("RAISE NOTICE '050 self-test passed (rolled back)'", sql)
+
     def test_a_negative_measurement_is_floored(self) -> None:
         self.assertEqual(repos.stars_7d(cand(), -5, NOW), (0, "measured"))
 

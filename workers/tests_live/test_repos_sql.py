@@ -4,7 +4,8 @@
   anon nothing, readonly reads), the triggers, the functions' privileges,
   the `github` source kind and the `_e2e-repos` test source.
 * THE RULES IN SQL: a repo surfaces once; again only when its stars_7d at
-  least doubles its first-shown stars_7d AND 14 days have passed
+  least doubles its baseline (the first-shown stars_7d when measured, else,
+  since db/050, its first measured one) AND 14 days have passed
   (repo_may_surface asked about day + 13 and day + 14); at most 8 real
   surfacings a day (repo_surface_room, and the trigger through
   ledger.repo_surface, which returns None and writes nothing when refused).
@@ -167,12 +168,83 @@ class TheRulesInSql(RepoSqlCase):
             self.assertFalse(conn.execute(ask, (rid, 1000, FAR + timedelta(days=33))).fetchone()[0])
             self.assertTrue(conn.execute(ask, (rid, 20, FAR + timedelta(days=34))).fetchone()[0])
 
-    def test_no_first_stars_7d_means_no_resurfacing(self) -> None:
+    def test_no_first_stars_7d_and_no_measurement_means_no_resurfacing_yet(self) -> None:
         with _rolled_back() as conn:
             rid, _ = self.repo(conn)
             self.far_surfacing(conn, rid, FAR, None)
             self.assertFalse(conn.execute("SELECT repo_may_surface(%s, 100000, %s)",
                                           (rid, FAR + timedelta(days=60))).fetchone()[0])
+
+
+class MeasuredBaseline(RepoSqlCase):
+    """db/050 (owner, 2026-10-14): a repo that first surfaced without a
+    MEASURED stars_7d takes its first measured stars_7d (snapshots on D and
+    D - 7) as the baseline; doubling and the 14-day floor still apply."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        with _rolled_back() as conn:
+            src = conn.execute("SELECT prosrc FROM pg_proc WHERE proname = 'repo_may_surface'").fetchone()[0]
+            if "first_measured" not in src:
+                raise unittest.SkipTest("db/050 not pasted")
+
+    @staticmethod
+    def snapshots(conn: psycopg.Connection, rid: int, by_day: dict[date, int]) -> None:
+        """Snapshots on chosen days: a fixture, the snapshot guard (which
+        stamps today) off inside the rolled-back transaction."""
+        conn.execute("ALTER TABLE repo_star_snapshots DISABLE TRIGGER repo_star_snapshots_guard")
+        try:
+            for day, stars in by_day.items():
+                conn.execute("INSERT INTO repo_star_snapshots (repo_id, snapped_on, stars) VALUES (%s, %s, %s)",
+                             (rid, day, stars))
+        finally:
+            conn.execute("ALTER TABLE repo_star_snapshots ENABLE TRIGGER repo_star_snapshots_guard")
+
+    def ask(self, conn: psycopg.Connection, rid: int, stars_7d: int | None, day: date) -> bool:
+        return conn.execute("SELECT repo_may_surface(%s, %s, %s)", (rid, stars_7d, day)).fetchone()[0]
+
+    def estimate_surfacing(self, conn: psycopg.Connection, rid: int, stars_7d: int | None, source: str | None) -> None:
+        sid = conn.execute("INSERT INTO stories (pillars, title, category) VALUES (ARRAY['tech'], 'tl repo', 'repos') "
+                           "RETURNING id").fetchone()[0]
+        with self.guard_off(conn):
+            conn.execute("INSERT INTO repo_surfacings (repo_id, story_id, surfaced_on, stars, stars_7d, stars_7d_source) "
+                         "VALUES (%s, %s, %s, 100, %s, %s)", (rid, sid, FAR, stars_7d, source))
+
+    def test_an_estimate_is_never_the_baseline_until_measured(self) -> None:
+        with _rolled_back() as conn:
+            rid, _ = self.repo(conn)
+            self.estimate_surfacing(conn, rid, 500, "trending_weekly")
+            self.snapshots(conn, rid, {FAR + timedelta(days=i): 100 + i for i in range(7)})
+            self.assertFalse(self.ask(conn, rid, 1_000_000, FAR + timedelta(days=30)))
+            # Day 7: first measured = 130 - 100 = 30; day 8's 99 is not the first.
+            self.snapshots(conn, rid, {FAR + timedelta(days=7): 130, FAR + timedelta(days=8): 200})
+            self.assertTrue(self.ask(conn, rid, 60, FAR + timedelta(days=14)))
+            self.assertFalse(self.ask(conn, rid, 59, FAR + timedelta(days=14)))
+            self.assertFalse(self.ask(conn, rid, 1000, FAR + timedelta(days=13)))
+
+    def test_a_null_first_stars_7d_takes_the_measured_baseline(self) -> None:
+        with _rolled_back() as conn:
+            rid, _ = self.repo(conn)
+            self.estimate_surfacing(conn, rid, None, None)
+            self.snapshots(conn, rid, {FAR - timedelta(days=3): 50, FAR + timedelta(days=4): 90})  # 40
+            self.assertTrue(self.ask(conn, rid, 80, FAR + timedelta(days=14)))
+            self.assertFalse(self.ask(conn, rid, 79, FAR + timedelta(days=14)))
+
+    def test_a_measured_first_surfacing_keeps_its_own_value(self) -> None:
+        with _rolled_back() as conn:
+            rid, _ = self.repo(conn)
+            self.far_surfacing(conn, rid, FAR, 10)
+            # A bigger later measurement does not move the baseline off the first shown (10).
+            self.snapshots(conn, rid, {FAR: 100, FAR + timedelta(days=7): 900})
+            self.assertTrue(self.ask(conn, rid, 20, FAR + timedelta(days=14)))
+
+    def test_a_measured_zero_counts_as_one(self) -> None:
+        with _rolled_back() as conn:
+            rid, _ = self.repo(conn)
+            self.far_surfacing(conn, rid, FAR, 0)
+            self.assertFalse(self.ask(conn, rid, 1, FAR + timedelta(days=14)))
+            self.assertTrue(self.ask(conn, rid, 2, FAR + timedelta(days=14)))
 
     def test_the_guard_refuses_the_same_repo_again_today(self) -> None:
         with _rolled_back() as conn:

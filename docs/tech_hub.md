@@ -353,8 +353,13 @@ and in the root `.env`; absent on Vercel; `GITHUB_TOKEN` set nowhere.
    bas3line/ascii, rehan-remade/universal-modder, zai-org/ZCode,
    kuratlielia/arc-library, cathrynlavery/diagram-design, juliobsz/skills,
    Louis-CFM/coucou. The "half I'd use" check is the owner's.
-3. **A repo with no first-shown stars_7d (or 0) never resurfaces**: there is
-   no baseline to double.
+3. ~~A repo with no first-shown stars_7d (or 0) never resurfaces.~~
+   **Changed by the owner, 2026-10-14 (db/050):** the baseline is MEASURED.
+   It is the first surfacing's stars_7d when that was measured; otherwise
+   the repo's first measured stars_7d from our snapshots (the earliest day D
+   with snapshots on D and D − 7). Until that exists the repo does not
+   resurface yet. An estimate is never a baseline. Doubling and the 14-day
+   floor still apply; a measured baseline of 0 counts as 1.
 4. **"Today's run happened"** is the job's own success today, not today's
    snapshots, so a run that failed after snapshotting runs again.
 5. **Search hits reuse the search result's REST object** instead of a second
@@ -362,12 +367,51 @@ and in the root `.env`; absent on Vercel; `GITHUB_TOKEN` set nowhere.
 6. **A repo URL another item already holds** (a Hacker News link to the same
    repo) gets `#surfaced-<day>` so the unique URL index never drops a pick.
 
+### 7.2a Day-one baseline (approved by the owner, 2026-10-14)
+
+The owner approved `repo_surfacings`, the GUID log lines and **the ranking
+weights as shipped. No further tuning until the owner has reacted through
+2–3 daily runs.** This is the baseline any later change is measured against:
+
+| Term | Value (`workers/feed/repos.py`) |
+|---|---|
+| Tech profile | `rank.score_story` (embedding vs loves and not-interesteds, seeds included; learned topic and source weights), as is |
+| Velocity | `W_VELOCITY` 0.35 × log10(1 + stars_7d) |
+| Interest match | `W_INTEREST` +0.4 when the repo came from one of the 9 interest searches |
+| Low traction | `W_LOW_TRACTION` −0.5 under `LOW_TRACTION` 50 stars in 7 days |
+| Cap | `DAILY_MAX` 8 a day (the database's) |
+
+The dry run of 2026-10-14 (real GitHub, the real embedder, the real tech
+profile read as `valemont_readonly`, every ledger write faked; nothing
+written). 103 candidates (trending 12 daily and 12 weekly, search 90), 1
+filtered (no README); calls: search 9, core 125, trending 2. Its 8, in rank
+order:
+
+| # | Score | Repo | stars_7d (source) | What it is |
+|---|---|---|---|---|
+| 1 | 2.31 | morluto/rea | 183,758 (trending_weekly) | Reverse engineer anything with agents |
+| 2 | 2.28 | bas3line/ascii | 783 (age_average) | Animated ASCII art for web pages (React, Next.js, Astro) |
+| 3 | 2.12 | rehan-remade/universal-modder | 3,639 (age_average) | Skills and an MCP that let Claude mod games |
+| 4 | 2.09 | zai-org/ZCode | 2,247 (age_average) | Z.ai's coding agent harness |
+| 5 | 2.08 | kuratlielia/arc-library | 263 (age_average) | Open source React components with motion |
+| 6 | 2.07 | cathrynlavery/diagram-design | 9,867 (trending_weekly) | Editorial diagram design for Claude Code, Codex, Cursor |
+| 7 | 2.05 | juliobsz/skills | 335 (since_created) | An agent skill that builds websites from one line |
+| 8 | 2.05 | Louis-CFM/coucou | 2,144 (age_average) | A Mac notch / iPhone companion that watches your agents |
+
+Next below the line: mhtsec/ARTEX 2.03, boykopovar/AnyPS5 2.02,
+yetone/magpie 1.99, cosscom/shipyard 1.95. The deploy's first real run will
+differ (a later day's trending and searches); its 8 are recorded separately.
+
 ### 7.3 Order of operations
 
 1. Owner pastes `db/049_repos.sql` on production. Expect the NOTICE
    `049 self-test passed (rolled back)`; the verify SELECTs are at the end of
    the file. **The paste must land before the merge**: the worker reads the
    new tables and the github kind, and /tech reads `repo_surfacings`.
+   **Done 2026-10-14 21:07:08 UTC**, verified (a)–(g). Then
+   `db/050_repo_measured_baseline.sql` (NOTICE `050 self-test passed (rolled
+   back)`): only `repo_may_surface` changes, same signature, so the worker
+   needs nothing new from it; the owner asked for it before the merge.
 2. Record it (`migration_log.applied_at`) in CLAUDE.md and MASTER_PLAN the
    same session.
 3. `tests_live -v` on this branch (its db/049 classes skip by name until
