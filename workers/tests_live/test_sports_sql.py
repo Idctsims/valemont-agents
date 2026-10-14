@@ -326,6 +326,15 @@ class Categories(SportsSqlCase):
             self.assertEqual(mine, {rows["sport_other"]: ("nfl", "other"),
                                     rows["nosport_sb"]: (None, "sports_business")})
 
+    def test_jobs_by_id_are_the_named_categorized_home_stories(self) -> None:
+        with _rolled_back() as conn:
+            src = self.source(conn)
+            a, b, c = (self.story(conn, src, title=f"TL by id {n}") for n in "abc")
+            conn.execute("UPDATE stories SET category = 'film_music', sport = 'nfl' WHERE id = %s", (a,))
+            conn.execute("UPDATE stories SET category = 'other' WHERE id = %s", (b,))
+            got = {j.story_id: (j.sport, cur) for j, cur in ledger.feed_category_jobs_by_id([a, b, c], conn=conn)}
+            self.assertEqual(got, {a: ("nfl", "film_music"), b: (None, "other")})  # c: no category yet
+
     def test_the_sports_entity_names(self) -> None:
         """Leagues, teams, programs and tours, by name and alias, lowercased;
         never a person or a test entity (final categories round)."""
@@ -339,6 +348,11 @@ class Categories(SportsSqlCase):
             self.assertNotIn(tname.lower(), names)
             self.assertNotIn(pname.lower(), names)
             self.assertNotIn("lebron james", names)
+            # db/044: broadcasters and the added leagues.
+            if conn.execute("SELECT 1 FROM migration_log WHERE name = '044_sports_business_entities'").fetchone():
+                for real in ("espn", "nbc", "prime video", "netflix", "mlb", "nwsl", "wnba", "ncaa"):
+                    self.assertIn(real, names)
+            self.assertNotIn("kalshi", names)  # a company, not a sports entity
 
     def test_a_summary_sets_a_category_once(self) -> None:
         with _rolled_back() as conn:

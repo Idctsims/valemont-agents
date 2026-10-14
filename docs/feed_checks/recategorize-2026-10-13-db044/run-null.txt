@@ -1,0 +1,49 @@
+asked 46 of 46 in 2 call(s); wrote 46; cost $0.001051 (ai_usage, purpose feed_categorize)
+
+## Deals & Capital (deals): 8
+  6038	Big Take Asia: How India’s Options Market Imploded (Podcast)
+  6040	Stock Movers: Bumble, Microsoft, Six Flags (Podcast)
+  6045	Volta’s $5 billion debt deal is a pulse check on the AI-financing boom
+  6639	Stock Movers: Bank of America, Bumble, Microsoft (Podcast)
+  6640	Bloomberg Businessweek Daily: AI’s Giant Money Loop (Podcast)
+  6882	Wall Street Equities Desks Take Lead: Evening Briefing Americas
+  6883	Bond Traders Eclipsed by Equities in a Wall Street Reversal
+  6884	Bloomberg Businessweek Daily: Big Bank Earnings Begin (Podcast)
+
+## Hospitality & Real Estate (hospitality): 3
+  6656	Compson scores city approval for apartments at Boca office complex
+  6891	MRK secures $67M construction financing for Fort Lauderdale housing project amid affordable housing 
+  7319	49ers Legend Jerry Rice’s Former Bay Area Estate Lists for $35 Million
+
+## Sports Business (sports_business): 1
+  7307	ESPN Exec Mike Foss: Pat McAfee ‘Might Be a Journalist At Heart’
+
+## Film/TV & Music (film_music): 20
+  6052	‘Yellowjackets’ Enlists MTV News for Final Season’s Rescue Reveal
+  6054	Battle of the Booths: Paramount Brings its Iconic Arch to Cannes as Eye-Catching Mipcom Stands Refle
+  6055	The Black List Names 2026 Writers Lab Participants
+  6650	Broadway Box Office: Star-Studded ‘Other Desert Cities,’ ‘A Few Good Men,’ ‘860’ Draw Crowds
+  6651	Drake Bell Blasts SAG-AFTRA After Losing Health Insurance: ‘Do Not Become an Actor. Do Not Join SAG’
+  6652	Black Bear Acquires Love Triangle Comedy Spec From Writing Duo Cassidy Alla and Read Masino (EXCLUSI
+  6654	‘A Few Good Men’, ‘Other Desert Cities’ Sell Out; ‘Hamilton’ Grosses Huge $3M – Broadway Box Office
+  6674	Can YouTube’s €8.4 billion economic contribution get it a better deal in Europe?
+  6890	Callan Farris, Lexi Minetree & Josh Macqueen Round Out Cast Of Sony Comedy ‘Narcs’
+  7305	Chris O’Donnell Launches Lone Cypress Entertainment With First Project ‘Kilkenny’ Set
+
+## Luxury & Marine (luxury_marine): 2
+  6673	Appleton Estate’s New 26-Year-Old Hearts Collection Is the Best Rum of the Year So Far
+  6906	Nike 24.7 Recovery Boot 2026 Release Date
+
+## Betting & Markets (betting): 0
+
+## Other (other): 12
+  6039	Pope Leo XIV Diagnosed with Lung Cancer
+  6647	Helix Carbon says it can make iron cheaper by recycling blast furnace pollution
+  6648	FBI arrests OpenAI employee accused of planting hidden recording device in conference room
+  6655	LPGA Commissioner: Good Good Driver Ad ‘Brutal’ Situation
+  6885	Merryn Talks Money: The Portfolio Reset Episode 1 (Podcast)
+  7294	Chrystia Freeland Flays Allies’ ‘Quisling Behavior’ In Trade War With Trump
+  7295	Fed's Williams Rate Outlook, Pope Leo Diagnosed with Lung Cancer
+  7306	Pablo Torre: More Coming on Clippers, Life Surge … and LeBron?
+  7308	Elle Duncan: WNBA Culture Wars Are ‘Open Season’ on Black Women
+  7320	Rockstar Games Partners With Miami’s Wynwood Walls Museum for Free Admission Ahead of ‘GTA VI’

@@ -81,7 +81,7 @@ flowchart TB
 
 One Supabase Postgres database, `public` schema, migrations continuing at `db/018`. The existing ledger tables stay the single source of truth for anything that wins or loses: generated parlays, played slips, bot trades and 15-minute BTC calls are all `commitments` with `legs` and `resolutions`. Everything else is ordinary app data.
 
-**(as built) Migration numbering.** Applied: `db/001`–`012` and `db/014`–`020`. `db/013` (production roster, go-live) is deliberately unpasted. Chat 1 used: `018` read-only inspection role, `019` push tables, `020` shared tables plus ledger read policies, the TRUNCATE guard and grant lockdown. **Since then (from `migration_log`, 2026-10-12):** `db/021`–`041` are all applied: `040` venture taglines at 05:36:53 UTC and `041` the film/TV seed split at 21:59:10 UTC, both on Oct 12; `042` Sports News at 20:26:05 UTC on Oct 13 (second paste; the first failed in its self-test and applied nothing); `043` drop rules and the cross-in cap at 21:53:59 UTC on Oct 13. The per-file record is CLAUDE.md, Current State, "Migrations". **Next new file: `db/044`.**
+**(as built) Migration numbering.** Applied: `db/001`–`012` and `db/014`–`020`. `db/013` (production roster, go-live) is deliberately unpasted. Chat 1 used: `018` read-only inspection role, `019` push tables, `020` shared tables plus ledger read policies, the TRUNCATE guard and grant lockdown. **Since then (from `migration_log`, 2026-10-12):** `db/021`–`041` are all applied: `040` venture taglines at 05:36:53 UTC and `041` the film/TV seed split at 21:59:10 UTC, both on Oct 12; `042` Sports News at 20:26:05 UTC on Oct 13 (second paste; the first failed in its self-test and applied nothing); `043` drop rules and the cross-in cap at 21:53:59 UTC on Oct 13; `044` broadcaster and league entities at 22:27:30 UTC on Oct 13. The per-file record is CLAUDE.md, Current State, "Migrations". **Next new file: `db/045`.**
 
 **Paper vs live, from day one.** Every money table carries `mode text not null check (mode in ('paper','live'))` with default `'paper'`, alongside the existing `is_test`. Capital Tracker, model stats and bot stats always group by `mode`, so live money never mixes with paper numbers and flipping a bot to live needs no schema change. **(as built)** `commitments` gained `mode` (default `'paper'`) and `origin` (default `'agent'`) in db/020; every existing row reads paper/agent.
 
@@ -299,7 +299,7 @@ Thirteen build chats after this one, each split into phases with a test you run 
 - Railway trial ends about Oct 18; redeploy the worker by hand on Free.
 - ~~The silent-proposals before/after token comparison~~ **Done Oct 11:** message 260 has a model-written sentence before its proposal and no reasoning part, 254 output tokens against message 188's 544 with no text.
 
-### Chat 3 — Learning engine, Home feed, Sports News ← next
+### Chat 3 — Learning engine, Home feed, Sports News ✓ (closed Oct 13; carried items below)
 
 **Set up in this chat:** nothing new; RSS needs no keys.
 
@@ -314,11 +314,34 @@ Thirteen build chats after this one, each split into phases with a test you run 
      3. **⏰ Owner watch, due Sun Oct 19:** one week of Love effects on /settings/feed. Open until then.
    - Also Oct 12: db/041 split the film/TV love seed. Hollywood and US dealmaking and the major festivals are loves; international and regional TV/film markets are not interested.
 3. Sports News for CFB, NFL, NBA, F1 and Golf on the same engine.
-   - [ ] Filter chips by sport; reactions train the sports profile separately
+   - [x] Filter chips by sport; reactions train the sports profile separately. **GREEN Oct 13 (owner, 17:08 Chicago):**
+     - `e2e/sports.spec.ts` (owner, phone): the chips keep their choice in the URL through the tabs; a chip shows only its sport; **a Love on /sports writes pillar `sports` only, never `home`** (`storyReactions` reads back `[{pillar: sports, reaction: love}]`); a confirmed move updates the player's current team; a test move is invisible without the e2e marker. Owner: GREEN.
+     - Owner screenshot review of /sports (All, golf), /settings/feed (a proposed move), /news (All, deals) and Home's short feed, both themes, phone and desktop: approved (after the 16:39 fixes).
+     - The read path: db/042 (sport chips filter before ranking, event boosts, the per-follow entity cap on Sports page one, move proposals; applied Oct 13 20:26:05 UTC) and db/043 (the cross-in cap: /news is Home's pillar only, Home's top 10 at most 2 tier-1 sports stories; applied 21:53:59 UTC). `tests_live -v` on the merge: 318 OK, 0 skipped.
+     - **Scope addition, /news with category chips** (owner, Oct 12): `e2e/news.spec.ts` 4/4 (owner, before the cross-in cap); categories shipped as recorded in `docs/feed_checks/recategorize-2026-10-13-final/README.md` (93 Haiku calls, $0.046755 for the day).
+     - **Merged:** PR #27, merge `922e22d`. Live Oct 13: Railway deployment of `922e22d` (worker boot 22:22:05 UTC; `feed_ingest`, `feed_summarize`, `feed_score`, `feed_why` ok, 0 failures); Vercel production `valemont-agents-6uvmhe1s9` Ready 22:20:56 UTC on `valemont-command.vercel.app`. Logged out, /, /news, /sports and /settings/feed redirect to sign-in; the pages' reads on production data (db_inspect): Home 31 rows with 2 cross-ins in its top 10, /news 0 cross-ins at any position, /sports and its golf chip a full page.
+
+**Chat 3 close-out (Oct 13).** Every checklist item above is GREEN with its evidence. Migrations this chat: `db/032`–`db/043`, all applied and recorded (CLAUDE.md, Current State); `db/044` (broadcaster and league entities) is the close-out follow-up. Carried items, with dates:
+
+- **Sun Oct 19:**
+  - the owner's one-week watch of Love effects on /settings/feed (Phase 2, owner decision 7);
+  - the shadow `drop` review: the Oct 12 report found ~17% of non-none labels wrong, 3 of them a love (yachts); likely retire the shadow classifier rather than turn it on;
+  - a watch on duplicate merges of the Skins Game kind (one event, several stories).
+- **Mon Oct 20:** the NFL props archive moves to Supabase Storage: design it (Step 0) before week 6 is archived. Week 5's candles and prints took ~34 MB; weeks 5–18 at that rate are ~470 MB, the whole 500 MB tier (CLAUDE.md, RECURRING).
+- **Owner decision, made Oct 13:** a free Supabase staging project for migration dry runs. The rule is CLAUDE.md §5, "Staging first" (every migration pasted on staging first); the project is set up in Chat 4, Step 0. db/042's first paste, which failed in its self-test on production, is the case for it.
 
 ### Chat 4 — Tech Hub and Screening Room
 
-**Set up in this chat:** Reddit script app, GitHub fine-grained token (public read only), TMDB API key.
+**Set up in this chat:** the Supabase staging project (Step 0, below), Reddit script app, GitHub fine-grained token (public read only), TMDB API key.
+
+0. **Step 0: the Supabase staging project** (owner decision Oct 13; the rule is CLAUDE.md §5, "Staging first"). Before any Chat 4 migration:
+   1. The owner creates a second free project in the same Supabase account, `valemont-staging`, in the production project's region (us-east-1). It is not connected to any MCP.
+   2. The owner pastes every applied migration on it, in order: `db/001`–`db/012`, then `db/014` onward to the latest applied (`db/013`, the production roster, stays unpasted there too). Two need care:
+      - `db/018` creates `valemont_readonly`: set its own password on staging, never production's.
+      - `db/020` keeps the `__OWNER_USER_ID__` placeholder in the committed file: on staging, use a throwaway UUID (no real user exists there).
+   3. Each paste's self-test NOTICE and verify output are checked as on production. Any difference from production is recorded in CLAUDE.md, Current State, before the next step.
+   4. The connection string goes into the root `.env` as `DATABASE_URL_STAGING` (Session pooler, port 5432); `.env.example` documents the name. It is printed nowhere and set nowhere else.
+   5. Done when: staging's `migration_log` lists the same files as production's (minus `db/013`, and minus any row older than `db/015`, which created the log), and the first Chat 4 migration has been pasted on staging before production.
 
 1. Tech Hub: official changelogs, Hacker News, the three subreddits, GitHub trending with a "why this matters to you" line.
    - [ ] A new Claude or OpenAI release shows up within one ingest cycle

@@ -22,6 +22,8 @@ r"""The one-off categorize pass, by hand (feed/categorize.py; after db/042).
            in sports_business, and those in film_music or other whose
            entities include a sports league, team, program or tour; betting
            is left out (categorize.money_set).
+--ids I,J  the same re-run over exactly these Home stories (the shipped
+           README's misfits, after db/044).
 
 Writes real rows, as the worker would.
 """
@@ -45,12 +47,24 @@ def main(argv: list[str] | None = None) -> int:
                         help="re-run the stories now in these categories (comma-separated)")
     parser.add_argument("--money", action="store_true",
                         help="re-run the stories the money question decides (with a sport, or sports_business)")
+    parser.add_argument("--ids", metavar="ID,ID",
+                        help="re-run exactly these Home stories (comma-separated ids)")
     args = parser.parse_args(argv)
-    if args.money and args.recategorize:
-        parser.error("--money and --recategorize are separate re-runs")
+    if sum(bool(x) for x in (args.money, args.recategorize, args.ids)) > 1:
+        parser.error("--money, --recategorize and --ids are separate re-runs")
     load_env()
     current: dict[int, str] | None = None
-    if args.money:
+    if args.ids:
+        try:
+            wanted = [int(x) for x in args.ids.split(",") if x.strip()]
+        except ValueError:
+            parser.error("--ids takes comma-separated story ids")
+        pairs = ledger.feed_category_jobs_by_id(wanted)
+        jobs = [j for j, _ in pairs]
+        current = {j.story_id: cur for j, cur in pairs}
+        missing = sorted(set(wanted) - set(current))
+        what = f"named Home stories ({len(wanted)} asked{'; not found or not eligible: ' + ','.join(map(str, missing)) if missing else ''})"
+    elif args.money:
         pairs = categorize.money_set(ledger.feed_money_jobs(), ledger.feed_sports_entity_names())
         jobs = [j for j, _ in pairs]
         current = {j.story_id: cur for j, cur in pairs}

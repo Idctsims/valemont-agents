@@ -2269,15 +2269,15 @@ def feed_uncategorized_home_stories(*, conn: psycopg.Connection | None = None) -
                 for r in c.execute(FEED_UNCATEGORIZED_SQL).fetchall()]
 
 
-#: Every real sports league, team, program and tour, by name and alias,
-#: lowercased: what category.sports_entity matches a story's entities to
-#: (owner, 2026-10-13, final categories round). People and companies are out.
+#: Every real sports league, team, program, tour and broadcaster (db/044),
+#: by name and alias, lowercased: what category.sports_entity matches a
+#: story's entities to (owner, 2026-10-13). People and companies are out.
 FEED_SPORTS_ENTITY_NAMES_SQL: Final = """
     SELECT lower(e.name) FROM entities e
-     WHERE NOT e.is_test AND e.kind IN ('league', 'team', 'program', 'tour')
+     WHERE NOT e.is_test AND e.kind IN ('league', 'team', 'program', 'tour', 'broadcaster')
     UNION
     SELECT a FROM entities e, unnest(e.aliases) AS a
-     WHERE NOT e.is_test AND e.kind IN ('league', 'team', 'program', 'tour')
+     WHERE NOT e.is_test AND e.kind IN ('league', 'team', 'program', 'tour', 'broadcaster')
 """
 
 
@@ -2336,6 +2336,27 @@ FEED_MONEY_SET_SQL: Final = """
        AND 'home' = ANY (st.pillars)
      ORDER BY st.id
 """
+
+
+#: A re-run over named stories (owner, 2026-10-13: the shipped README's
+#: misfits): kept, real, categorized Home stories with these ids.
+FEED_JOBS_BY_ID_SQL: Final = """
+    SELECT st.id, st.title, st.summary, s.name, st.sport, st.entities, st.category
+      FROM stories st
+      JOIN content_items i ON i.id = st.lead_item_id
+      JOIN sources s ON s.id = i.source_id
+     WHERE NOT st.is_test AND st.filtered_reason IS NULL AND st.category IS NOT NULL
+       AND 'home' = ANY (st.pillars) AND st.id = ANY (%s)
+     ORDER BY st.id
+"""
+
+
+def feed_category_jobs_by_id(ids: Sequence[int], *, conn: psycopg.Connection | None = None
+                             ) -> list[tuple[CategorizeJob, str]]:
+    """(job, its category now) for each named story that qualifies."""
+    with _brief_conn(conn) as c:
+        return [(CategorizeJob(int(r[0]), r[1], r[2], r[3], r[4], tuple(r[5] or ())), r[6])
+                for r in c.execute(FEED_JOBS_BY_ID_SQL, (list(ids),)).fetchall()]
 
 
 def feed_money_jobs(*, conn: psycopg.Connection | None = None) -> list[tuple[CategorizeJob, str]]:

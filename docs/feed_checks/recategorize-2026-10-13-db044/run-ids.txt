@@ -1,0 +1,15 @@
+asked 14 of 14 in 1 call(s); wrote 12; cost $0.000416 (ai_usage, purpose feed_recategorize)
+
+12 moved, 2 unchanged
+  1309	film_music -> sports_business	Pat McAfee Joins ESPN’s In-Game Super Bowl LXI Coverage & Expands MNF Role
+  1339	film_music -> sports_business	Sports Is Key to Skydance Becoming ‘Leading Content Engine’
+  2524	film_music -> sports_business	Could Pat McAfee’s Super Bowl Alt-Cast Be a Monday Night Football Tryout?
+  2733	other -> sports_business	Dodgers Spend More on Players Than Rest of MLB’s Final Four Combined
+  2816	sports_business -> other	From Cursed to Contenders: LeBron James Picks the Sixers for Final Run
+  2818	sports_business -> other	LeBron James Is on a Mission to Change Golf
+  2820	sports_business -> other	LeBron James Calls Jay-Z His ‘Big Brother’ and a Major Influence on His Career
+  2821	sports_business -> other	LeBron James Opens Up on Free Agency, Jay-Z, Bronny & His NBA Legacy
+  2920	film_music -> sports_business	Disney Stacks Super Bowl LXI Lineup With Even More Alt-Casts
+  5064	other -> sports_business	Nielsen: Post–World Cup Soccer Audiences Surge Among Young Viewers
+  5214	film_music -> sports_business	Tirico Defends NBC’s Michael Jordan Interview: ‘Completely Worth It’
+  5687	other -> sports_business	Court Skeptical of College Athletes’ Eligibility in Wisne-NCAA Case
