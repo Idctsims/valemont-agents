@@ -368,7 +368,7 @@ class PillarSeparation(unittest.TestCase):
                 mock.patch.object(ledger, "feed_reaction_signals", signals), \
                 mock.patch.object(ledger, "feed_insert_profile", insert):
             feed_profile.build_profiles(embed=lambda texts: [])
-        self.assertEqual(asked, ["home", "sports"])
+        self.assertEqual(asked, ["home", "sports", "tech"])  # db/045: tech is a pillar of its own
         self.assertEqual((built["sports"].love_count, built["home"].love_count), (1, 0))
         self.assertIsNone(built["home"].love)
         self.assertIsNotNone(built["sports"].love)

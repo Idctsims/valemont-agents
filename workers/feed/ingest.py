@@ -35,6 +35,21 @@ One source failing never fails the run: its failure is recorded on its row
 /settings/sources, re-armed by its next success. The run itself fails only
 on what is not one source's fault: the embed function or the database. That
 is recorded in job_health and pushed by the health monitor.
+
+Tech Hub (Chat 4 Phase 1, db/045):
+  * kinds: "page" (feed/watch.py parses the listing container, reading at
+    most the source's config.max_bytes of a streamed response) and "hn"
+    (Hacker News via Algolia; the points threshold is checked on every hit).
+    A tech RSS feed is streamed and cut after its MAX_ITEMS-th entry
+    (parse.head_items): Vercel's Atom is 3.7 MB, OpenAI's RSS 785 KB.
+  * a tech item joins only a tech story and any other item never one
+    (cluster candidates are split by world), so no story is ever in two.
+  * a tech source's first fetch keeps its BACKFILL newest items whatever
+    their age (so every source shows something), all marked backfill: first
+    seen at deploy, never counted in the latency report.
+  * a page item's link keeps its fragment (a release-notes entry is
+    page#heading), and an item states its published precision ('date' for a
+    listing or a midnight-stamped feed).
 """
 
 from __future__ import annotations
@@ -49,8 +64,8 @@ from typing import Any, Callable, Sequence
 from core import embed as embedder
 from core import ledger, memory, push
 from core.jobs import describe
-from feed import cluster
-from feed.parse import RawItem, ParseFailed, canonical_url, keeps_category, parse_feed
+from feed import cluster, watch
+from feed.parse import MAX_ITEMS, RawItem, ParseFailed, canonical_url, head_items, keeps_category, parse_feed
 from feed.rules import Rule, Rules, SeedPhrase, best_seed
 from feed.sources import load_sources
 
@@ -59,6 +74,11 @@ log = logging.getLogger("valemont.feed")
 USER_AGENT = "ValemontCommand/1.0 (+https://valemont-command.vercel.app/privacy)"
 TIMEOUT_S = 15.0
 FIRST_FETCH_MAX_AGE = timedelta(hours=72)
+#: A tech source's first fetch keeps this many newest items whatever their age.
+BACKFILL = 5
+#: The most a streamed tech feed is read before it is cut, in bytes.
+TECH_FEED_MAX_BYTES = 4_000_000
+CHUNK = 64 * 1024
 #: Days past a Google News source's query window before an item is stale.
 STALE_GRACE = timedelta(days=2)
 DECODES_PER_SECOND = 2
@@ -74,8 +94,9 @@ class Response:
     last_modified: str | None
 
 
-#: (url, headers) -> Response. Injected by tests; production uses httpx.
-Get = Callable[[str, dict], Response]
+#: (url, headers) -> Response, or with keyword `max_bytes` / `head` for a
+#: streamed read (tech sources). Injected by tests; production uses httpx.
+Get = Callable[..., Response]
 #: google news url -> publisher url, or None when it cannot be decoded.
 Decode = Callable[[str], str | None]
 Embed = Callable[[Sequence[str]], list[list[float]]]
@@ -92,9 +113,30 @@ class Fetcher:
         self.client = httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT_S,
                                    follow_redirects=True)
 
-    def __call__(self, url: str, headers: dict) -> Response:
-        r = self.client.get(url, headers=headers)
-        return Response(r.status_code, r.content, r.headers.get("etag"), r.headers.get("last-modified"))
+    def __call__(self, url: str, headers: dict, *, max_bytes: int | None = None,
+                 head: int | None = None) -> Response:
+        """A whole GET; or, with `max_bytes`, a streamed one that stops reading
+        at that many bytes, and with `head`, stops once the feed holds `head`
+        entries (cut and closed by parse.head_items). The stream is closed
+        before returning, so the rest of a large response is never held."""
+        if max_bytes is None and head is None:
+            r = self.client.get(url, headers=headers)
+            return Response(r.status_code, r.content, r.headers.get("etag"), r.headers.get("last-modified"))
+        limit = max_bytes or TECH_FEED_MAX_BYTES
+        with self.client.stream("GET", url, headers=headers) as r:
+            buf = bytearray()
+            if r.status_code == 200:
+                for chunk in r.iter_bytes(CHUNK):
+                    buf += chunk
+                    if head is not None:
+                        cut = head_items(bytes(buf), head)
+                        if cut is not None:
+                            buf = bytearray(cut)
+                            break
+                    if len(buf) >= limit:
+                        del buf[limit:]
+                        break
+            return Response(r.status_code, bytes(buf), r.headers.get("etag"), r.headers.get("last-modified"))
 
     def close(self) -> None:
         self.client.close()
@@ -166,6 +208,8 @@ class _Candidate:
     story_id: int
     count: int
     members: list[cluster.Member]
+    #: A tech story: only tech items are compared with it (db/045).
+    tech: bool = False
 
     @property
     def item_count(self) -> int:
@@ -198,7 +242,8 @@ class Ingest:
                 seed_cache[(r.id, r.pattern)] = tuple(v)
         self.seeds = [SeedPhrase(r.id, r.pattern, seed_cache[(r.id, r.pattern)])
                       for r in self.rules.seed_rules]
-        self.candidates = [_Candidate(c.story_id, c.item_count, [cluster.Member(t, v) for t, v in c.members])
+        self.candidates = [_Candidate(c.story_id, c.item_count, [cluster.Member(t, v) for t, v in c.members],
+                                      c.tech)
                            for c in ledger.feed_candidates(cluster.CANDIDATE_HOURS)]
 
     # -- one source ----------------------------------------------------------
@@ -227,7 +272,7 @@ class Ingest:
         if src.last_modified:
             headers["If-Modified-Since"] = src.last_modified
         try:
-            resp = self.get(src.url, headers)
+            resp = self._fetch(src, headers)
             if resp.status == 304:
                 ledger.feed_source_ok(src.id, status="not_modified", etag=src.etag,
                                       last_modified=src.last_modified)
@@ -235,9 +280,11 @@ class Ingest:
                 return stats
             if resp.status != 200:
                 raise FetchFailed(f"HTTP {resp.status}")
-            items = [i for i in parse_feed(resp.content, gnews=src.kind == "gnews")
+            items = [i for i in self._parse(src, resp.content, fetched_at)
                      if keeps_category(i, src.include_categories)]
-        except (FetchFailed, ParseFailed) as exc:
+            # The body is done with: only the validators are kept (memory).
+            resp = Response(resp.status, b"", resp.etag, resp.last_modified)
+        except (FetchFailed, ParseFailed, watch.ConfigInvalid) as exc:
             self._fail(src, stats, exc)
             return stats
         except Exception as exc:  # network, timeout, TLS: the source's problem
@@ -256,12 +303,35 @@ class Ingest:
         ledger.feed_source_ok(src.id, status="ok", etag=resp.etag, last_modified=resp.last_modified)
         return stats
 
+    def _fetch(self, src: ledger.FeedSource, headers: dict) -> Response:
+        """A tech page or feed is read streamed and capped; everything else as
+        before (one whole GET)."""
+        if src.kind == "page":
+            return self.get(src.url, headers, max_bytes=watch.page_config(src.config or {}).max_bytes)
+        if "tech" in src.pillars and src.kind == "rss":
+            return self.get(src.url, headers, max_bytes=TECH_FEED_MAX_BYTES, head=MAX_ITEMS)
+        return self.get(src.url, headers)
+
+    @staticmethod
+    def _parse(src: ledger.FeedSource, content: bytes, fetched_at: datetime) -> list[RawItem]:
+        if src.kind == "page":
+            return watch.parse_page(content, src.url, watch.page_config(src.config or {}), fetched_at.date())
+        if src.kind == "hn":
+            return watch.parse_hn(content, watch.hn_config(src.config or {}))
+        return parse_feed(content, gnews=src.kind == "gnews")
+
     def _store(self, src: ledger.FeedSource, items: Sequence[RawItem], fetched_at: datetime,
                stats: SourceStats) -> None:
         first = src.last_ok_at is None
         known_ext, _ = ledger.feed_known(src.id, [i.external_id for i in items], [])
         fresh = [i for i in items if i.external_id not in known_ext]
         stats.known = len(items) - len(fresh)
+        # A tech source's first fetch: its BACKFILL newest dated items are
+        # kept whatever their age, every first-fetch item marked backfill.
+        tech_first = first and "tech" in src.pillars
+        newest = {i.external_id for i in sorted((i for i in fresh if i.published_at is not None),
+                                                key=lambda i: i.published_at, reverse=True)[:BACKFILL]
+                  } if tech_first else set()
 
         stale_after = timedelta(days=src.gnews_window_days) + STALE_GRACE
         seeded: list[ledger.FeedItemIn] = []
@@ -271,10 +341,11 @@ class Ingest:
                     and fetched_at - raw.published_at > stale_after):
                 stats.stale += 1
                 continue
-            if first and raw.published_at is not None and fetched_at - raw.published_at > FIRST_FETCH_MAX_AGE:
+            if (first and raw.published_at is not None and fetched_at - raw.published_at > FIRST_FETCH_MAX_AGE
+                    and raw.external_id not in newest):
                 continue
             try:
-                item = self._item(src, raw, fetched_at)
+                item = self._item(src, raw, fetched_at, backfill=tech_first)
             except _NoLink:
                 continue
             if first and raw.published_at is None:
@@ -309,7 +380,8 @@ class Ingest:
             stats.decode_failed += int(it.decode_failed)
             self._place(src, it, vec, tvec, stats)
 
-    def _item(self, src: ledger.FeedSource, raw: RawItem, fetched_at: datetime) -> ledger.FeedItemIn:
+    def _item(self, src: ledger.FeedSource, raw: RawItem, fetched_at: datetime, *,
+              backfill: bool = False) -> ledger.FeedItemIn:
         published = min(raw.published_at, fetched_at) if raw.published_at else fetched_at
         if src.kind == "gnews":
             self.throttle.wait()
@@ -317,16 +389,22 @@ class Ingest:
             url = canonical_url(decoded)
             return ledger.FeedItemIn(raw.external_id, url, raw.link, raw.title, raw.teaser,
                                      published, url is None)
-        url = canonical_url(raw.link)
+        # A release-notes entry is page#heading: a page item keeps its fragment.
+        url = canonical_url(raw.link, keep_fragment=src.kind == "page")
         if url is None:
             # An RSS item without a usable link has nothing to open, and db/032
             # allows a NULL url only for a failed Google News decode: skipped.
             raise _NoLink()
-        return ledger.FeedItemIn(raw.external_id, url, None, raw.title, raw.teaser, published, False)
+        return ledger.FeedItemIn(raw.external_id, url, None, raw.title, raw.teaser, published, False,
+                                 raw.precision, backfill)
 
     def _place(self, src: ledger.FeedSource, it: ledger.FeedItemIn, vec: Sequence[float],
                title_vec: Sequence[float], stats: SourceStats) -> None:
-        decision = cluster.assign(title_vec, it.title, self.candidates)  # type: ignore[arg-type]
+        # Same world only: a tech item never joins a Home or Sports story, nor
+        # the reverse, so a join can never make a story cross the tech line.
+        tech = "tech" in src.pillars
+        decision = cluster.assign(title_vec, it.title,
+                                  [c for c in self.candidates if c.tech == tech])  # type: ignore[arg-type]
         seed = best_seed(vec, self.seeds)
         logged = [ledger.SimilarityRow(s.story_id, "near_miss", s.cosine, s.fuzz) for s in decision.near_misses]
         for s in decision.near_misses:
@@ -362,7 +440,7 @@ class Ingest:
             return
         stats.new_stories += 1
         stats.filtered += int(reason is not None)
-        self.candidates.insert(0, _Candidate(made[0], 1, [member]))
+        self.candidates.insert(0, _Candidate(made[0], 1, [member], tech))
 
 
 class FetchFailed(RuntimeError):

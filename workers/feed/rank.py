@@ -15,9 +15,9 @@ tests/test_feed_rank.py drives them with stubbed vectors.
                 (at read time, db/042 feed_for_you; order_for_you below is
                 its twin). boost_h comes from the active boost_windows.
 
-The constants of the read path (HALF_LIFE_H, WINDOW_H, FLOOR_*, CROSS_CAP,
-PAGE_SIZE, ENTITY_CAP*) are literals in db/042's feed_for_you as well; a test
-pins the SQL text to these values.
+The constants of the read path (HALF_LIFE_H, WINDOW_H, TECH_WINDOW_H,
+FLOOR_*, CROSS_CAP, PAGE_SIZE, ENTITY_CAP*) are literals in db/045's
+feed_for_you as well; a test pins the SQL text to these values.
 
 The LIV term (docs/sports_news.md §3, owner decision 9): a LIV story that
 involves no top player (a golf person with a follow: Scheffler, Koepka, the
@@ -33,8 +33,12 @@ from dataclasses import dataclass
 from typing import Callable, Iterable, Literal, Mapping, Sequence
 
 Vec = tuple[float, ...]
-Pillar = Literal["home", "sports"]
-PILLARS: tuple[Pillar, ...] = ("home", "sports")
+Pillar = Literal["home", "sports", "tech"]
+PILLARS: tuple[Pillar, ...] = ("home", "sports", "tech")
+#: The pillars tier-1 cross-ins move between (owner decision 1). Tech is
+#: never one: tech stories live only in Tech, and nothing crosses into it
+#: (db/045, the no-cross-in rule).
+CROSS_PILLARS: tuple[Pillar, ...] = ("home", "sports")
 
 # ---------------------------------------------------------------- the weights
 K_SEED = 12
@@ -54,6 +58,8 @@ MEAN_WINDOW_D = 7
 # ------------------------------------------- the read path (db/039 literals)
 HALF_LIFE_H = 18.0
 WINDOW_H = 72
+#: Tech's For you window (db/045): official changelogs move slower than news.
+TECH_WINDOW_H = 168
 FLOOR_MAX = 3
 FLOOR_POSITION = 6
 FLOOR_MAX_AGE_H = 48.0
@@ -171,8 +177,10 @@ class FollowMatch:
 def match_follows(pillar: Pillar, follows: Iterable[Follow], title: str, entities: Sequence[str],
                   sport: str | None) -> FollowMatch:
     """The follows of this pillar (or of both) the story matches: the best
-    tier (lowest number), whether any is a floor follow, and their names."""
-    hits = [f for f in follows if (f.pillar is None or f.pillar == pillar)
+    tier (lowest number), whether any is a floor follow, and their names. A
+    follow with no pillar means Home and Sports, never Tech (db/045)."""
+    hits = [f for f in follows
+            if (f.pillar == pillar or (f.pillar is None and pillar in CROSS_PILLARS))
             and follow_matches(f, title, entities, sport)]
     if not hits:
         return FollowMatch(None, False, ())
@@ -215,9 +223,14 @@ class StoryIn:
 def placements(story: StoryIn, follows: Sequence[Follow]) -> list[tuple[Pillar, bool]]:
     """(pillar, cross_pillar) pairs to score the story in: every pillar it
     belongs to, plus any other pillar where it matches a tier-1 follow
-    (owner decision 1: tier-1 sports stories on Home)."""
+    (owner decision 1: tier-1 sports stories on Home). Cross-ins move only
+    between Home and Sports: a tech story is scored in Tech alone, and no
+    story is ever scored into Tech from outside (db/045, enforced again by
+    the database's feed_pillar_guard)."""
     out: list[tuple[Pillar, bool]] = [(p, False) for p in PILLARS if p in story.pillars]
-    for p in PILLARS:
+    if "tech" in story.pillars:
+        return out
+    for p in CROSS_PILLARS:
         if p not in story.pillars and match_follows(p, follows, story.title, story.entities, story.sport).tier == 1:
             out.append((p, True))
     return out

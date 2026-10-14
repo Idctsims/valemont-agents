@@ -1,0 +1,58 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0">
+  <channel>
+    <title>Anthropic News</title>
+    <link>https://www.anthropic.com/news</link>
+    <description>Latest updates from Anthropic's newsroom</description>
+    <atom:link href="https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_news.xml" rel="self"/>
+    <docs>http://www.rssboard.org/rss-specification</docs>
+    <generator>python-feedgen</generator>
+    <image>
+      <url>https://www.anthropic.com/images/icons/apple-touch-icon.png</url>
+      <title>Anthropic News</title>
+      <link>https://www.anthropic.com/news</link>
+    </image>
+    <language>en</language>
+    <lastBuildDate>Thu, 08 Oct 2026 19:40:27 +0000</lastBuildDate>
+    <item>
+      <title>Building on our commitment to American scientific discovery</title>
+      <link>https://www.anthropic.com/news/genesis-mission-commitment</link>
+      <description>Building on our commitment to American scientific discovery</description>
+      <guid isPermaLink="false">https://www.anthropic.com/news/genesis-mission-commitment</guid>
+      <category>Announcements</category>
+      <pubDate>Thu, 08 Oct 2026 00:00:00 +0000</pubDate>
+    </item>
+    <item>
+      <title>Introducing the Anthropic Cyber Mission</title>
+      <link>https://www.anthropic.com/news/anthropic-cyber-mission</link>
+      <description>Introducing the Anthropic Cyber Mission</description>
+      <guid isPermaLink="false">https://www.anthropic.com/news/anthropic-cyber-mission</guid>
+      <category>Announcements</category>
+      <pubDate>Thu, 08 Oct 2026 00:00:00 +0000</pubDate>
+    </item>
+    <item>
+      <title>2026 Usage Policy update</title>
+      <link>https://www.anthropic.com/news/2026-usage-policy-update</link>
+      <description>2026 Usage Policy update</description>
+      <guid isPermaLink="false">https://www.anthropic.com/news/2026-usage-policy-update</guid>
+      <category>Announcements</category>
+      <pubDate>Thu, 08 Oct 2026 00:00:00 +0000</pubDate>
+    </item>
+    <item>
+      <title>Expanding the Cyber Verification Program</title>
+      <link>https://www.anthropic.com/news/cyber-verification-program</link>
+      <description>Expanding the Cyber Verification Program</description>
+      <guid isPermaLink="false">https://www.anthropic.com/news/cyber-verification-program</guid>
+      <category>Announcements</category>
+      <pubDate>Tue, 06 Oct 2026 00:00:00 +0000</pubDate>
+    </item>
+    <item>
+      <title>Anthropic invests $100 million to train 10,000 engineers and tackle the enterprise AI talent gap</title>
+      <link>https://www.anthropic.com/news/claude-frontier-academy</link>
+      <description>Anthropic invests $100 million to train 10,000 engineers and tackle the enterprise AI talent gap</description>
+      <guid isPermaLink="false">https://www.anthropic.com/news/claude-frontier-academy</guid>
+      <category>Announcements</category>
+      <pubDate>Fri, 02 Oct 2026 00:00:00 +0000</pubDate>
+    </item>
+</channel>
+</rss>

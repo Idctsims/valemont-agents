@@ -1,5 +1,10 @@
 """workers/feed/sources.toml, loaded and checked. The worker syncs it into the
-`sources` table at boot (ledger.feed_sync_sources)."""
+`sources` table at boot (ledger.feed_sync_sources).
+
+Tech Hub (db/045): pillar "tech" is exclusive (a tech source is tech only);
+kind "page" is a listing-page watcher and kind "hn" a Hacker News query, both
+with a `config` table checked here by feed/watch.py; `official` marks the
+first-party sources (the "Official" tag, summarized first)."""
 
 from __future__ import annotations
 
@@ -7,12 +12,17 @@ import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote_plus
+
+from feed import watch
 
 SOURCES_FILE = Path(__file__).with_name("sources.toml")
 GNEWS = "https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"
-PILLARS = frozenset({"home", "sports"})
+PILLARS = frozenset({"home", "sports", "tech"})
 SPORTS = frozenset({"cfb", "nfl", "nba", "f1", "golf"})
+KINDS = frozenset({"rss", "gnews", "page", "hn"})
+HN_API = "https://hn.algolia.com/api/v1/"
 _SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 
@@ -38,6 +48,10 @@ class SourceSpec:
     #: sport wins and the source's is the fallback when it says none (owner
     #: D8, 2026-10-12).
     sport_from: str = "source"
+    #: A first-party source (db/045): the "Official" tag, summarized first.
+    official: bool = False
+    #: A page or hn source's checked config (feed/watch.py), else None.
+    config: dict[str, Any] | None = None
 
 
 SPORT_FROM = frozenset({"source", "model"})
@@ -55,23 +69,40 @@ def _spec(raw: dict) -> SourceSpec:
     pillars = tuple(raw.get("pillars") or ())
     if not pillars or not set(pillars) <= PILLARS:
         raise SourcesInvalid(f"{where}: pillars must be a non-empty subset of {sorted(PILLARS)}")
+    if "tech" in pillars and pillars != ("tech",):
+        raise SourcesInvalid(f"{where}: a tech source is tech only (db/045: no cross-in)")
     sport = raw.get("sport")
     if sport is not None and sport not in SPORTS:
         raise SourcesInvalid(f"{where}: unknown sport {sport!r}")
     kind = raw.get("kind")
+    if kind not in KINDS:
+        raise SourcesInvalid(f"{where}: kind must be one of {', '.join(sorted(KINDS))}")
     window = int(raw.get("window_days", 2))
     if not 1 <= window <= 30:
         raise SourcesInvalid(f"{where}: window_days must be 1-30")
-    if kind == "rss":
-        url = raw.get("url", "")
-        if not url.startswith("https://") or "query" in raw:
-            raise SourcesInvalid(f"{where}: an rss source has an https url and no query")
-    elif kind == "gnews":
+    config = raw.get("config")
+    if kind in ("page", "hn"):
+        if not isinstance(config, dict):
+            raise SourcesInvalid(f"{where}: a {kind} source needs a config table")
+        try:
+            watch.page_config(config) if kind == "page" else watch.hn_config(config)
+        except watch.ConfigInvalid as exc:
+            raise SourcesInvalid(f"{where}: config: {exc}") from exc
+    elif config is not None:
+        raise SourcesInvalid(f"{where}: only page and hn sources take a config")
+    if kind == "gnews":
         if not raw.get("query") or "url" in raw:
             raise SourcesInvalid(f"{where}: a gnews source has a query and no url")
         url = gnews_url(raw["query"], window)
     else:
-        raise SourcesInvalid(f"{where}: kind must be rss or gnews")
+        url = raw.get("url", "")
+        if not url.startswith("https://") or "query" in raw:
+            raise SourcesInvalid(f"{where}: an {kind} source has an https url and no query")
+        if kind == "hn" and not url.startswith(HN_API):
+            raise SourcesInvalid(f"{where}: an hn source queries {HN_API}")
+    official = raw.get("official", False)
+    if not isinstance(official, bool) or (official and pillars != ("tech",)):
+        raise SourcesInvalid(f"{where}: official is true or false, and only on a tech source")
     cats = raw.get("include_categories")
     sport_from = raw.get("sport_from", "source")
     if sport_from not in SPORT_FROM:
@@ -80,7 +111,8 @@ def _spec(raw: dict) -> SourceSpec:
         slug=slug, name=str(raw.get("name") or ""), pillars=pillars, sport=sport, kind=kind,
         url=url, priority=int(raw.get("priority", 100)), active=bool(raw.get("active", True)),
         include_categories=tuple(cats) if cats else None, window_days=window,
-        notes=raw.get("notes"), sport_from=sport_from,
+        notes=raw.get("notes"), sport_from=sport_from, official=official,
+        config=dict(config) if config is not None else None,
     )
 
 

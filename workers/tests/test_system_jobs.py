@@ -369,9 +369,10 @@ class Registry(unittest.TestCase):
         self.assertEqual(set(built), {"heartbeat", "health_monitor", "db_size", "job_queue",
                                      "goals_rollover", "goals_monday_push", "capital_snapshot",
                           "morning_brief", "morning_brief_push",
-                          "feed_ingest", "feed_summarize", "feed_score", "feed_why",
+                          "feed_ingest", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
                           "feed_profile", "feed_prune"})
         self.assertEqual(built["feed_ingest"].expected_interval_s, 1800)
+        self.assertFalse(built["feed_tech_summarize"].scheduled)
         self.assertFalse(built["feed_summarize"].scheduled)
         self.assertFalse(built["feed_score"].scheduled)
         self.assertFalse(built["feed_why"].scheduled)
@@ -413,10 +414,10 @@ class SystemOnlyBoot(SystemTestCase):
                                "system:capital_snapshot", "system:morning_brief",
                                "system:morning_brief_push", "system:feed_ingest",
                                "system:feed_profile", "system:feed_prune"})
-        # feed_summarize, feed_score and feed_why are registered (job_health
+        # feed_tech_summarize, feed_summarize, feed_score and feed_why are registered (job_health
         # rows, watched) but never scheduled: feed_ingest runs them.
-        self.assertEqual(self.ledger.names().count("job_register"), 15)
-        for chained in ("feed_summarize", "feed_score", "feed_why"):
+        self.assertEqual(self.ledger.names().count("job_register"), 16)
+        for chained in ("feed_tech_summarize", "feed_summarize", "feed_score", "feed_why"):
             self.assertNotIn(f"system:{chained}", ids)
 
     def test_disabled_agents_plus_system_jobs_start_rather_than_refuse(self) -> None:
@@ -464,7 +465,7 @@ class SystemOnlyBoot(SystemTestCase):
                          {"heartbeat", "health_monitor", "db_size", "job_queue",
                           "goals_rollover", "goals_monday_push", "capital_snapshot",
                           "morning_brief", "morning_brief_push",
-                          "feed_ingest", "feed_summarize", "feed_score", "feed_why",
+                          "feed_ingest", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
                           "feed_profile", "feed_prune"})
 
 

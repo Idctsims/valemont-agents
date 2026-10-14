@@ -41,6 +41,9 @@ class RawItem:
     #: As the feed states it, UTC; None for an undated item.
     published_at: datetime | None
     categories: tuple[str, ...]
+    #: 'date' when the source states only a day (a listing page, or a feed
+    #: stamping every entry at midnight), else 'time' (db/045).
+    precision: str = "time"
 
 
 def strip_html(text: str | None, limit: int) -> str | None:
@@ -52,10 +55,12 @@ def strip_html(text: str | None, limit: int) -> str | None:
     return out if len(out) <= limit else out[: limit - 1].rstrip() + "…"
 
 
-def canonical_url(url: str | None) -> str | None:
+def canonical_url(url: str | None, *, keep_fragment: bool = False) -> str | None:
     """utm_*/fbclid (and kin) stripped, fragment dropped, scheme and host
     lowercased, default port and trailing host dot removed. The path and the
-    remaining query are kept as they are: they can be case-sensitive."""
+    remaining query are kept as they are: they can be case-sensitive.
+    `keep_fragment`: a release-notes page's entries differ only by fragment
+    (feed/watch.py sections and blocks), so a page source keeps it."""
     if not url:
         return None
     try:
@@ -70,7 +75,28 @@ def canonical_url(url: str | None) -> str | None:
     netloc = host if port is None or (scheme, port) in (("http", 80), ("https", 443)) else f"{host}:{port}"
     query = urlencode([(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
                        if not _TRACKING.match(k)])
-    return urlunsplit((scheme, netloc, parts.path or "/", query, ""))
+    return urlunsplit((scheme, netloc, parts.path or "/", query, parts.fragment if keep_fragment else ""))
+
+
+_CLOSE_ITEM = re.compile(rb"</(?:item|entry)\s*>", re.I)
+_ATOM = re.compile(rb"<feed[\s>]", re.I)
+
+
+def head_items(content: bytes, n: int = MAX_ITEMS) -> bytes | None:
+    """The feed cut after its n-th entry and closed again, or None when it
+    has fewer: a huge feed (Vercel's Atom is 3.7 MB) is read only as far as
+    the ingest keeps (parse_feed takes the first MAX_ITEMS anyway)."""
+    ends = 0
+    for m in _CLOSE_ITEM.finditer(content):
+        ends += 1
+        if ends == n:
+            tail = b"\n</feed>\n" if _ATOM.search(content[:4096]) else b"\n</channel>\n</rss>\n"
+            return content[:m.end()] + tail
+    return None
+
+
+#: A feed that stamps entries at midnight states a day, not a time.
+_MIDNIGHT = re.compile(r"(T|\s)00:00(:00(\.0+)?)?(\s|Z|[+-]\d|$)")
 
 
 def _when(entry: dict) -> datetime | None:
@@ -112,7 +138,9 @@ def parse_feed(content: bytes, *, gnews: bool = False) -> list[RawItem]:
         # A Google News description is only the title and the outlet again.
         teaser = None if gnews else strip_html(e.get("summary") or e.get("description"), TEASER_MAX)
         cats = tuple(t.get("term", "").strip() for t in e.get("tags", []) or [] if t.get("term"))
-        out.append(RawItem(ext[:2000], link, title, teaser, _when(e), cats))
+        stamp = str(e.get("published") or e.get("updated") or "")
+        out.append(RawItem(ext[:2000], link, title, teaser, _when(e), cats,
+                           "date" if stamp and _MIDNIGHT.search(stamp) else "time"))
         if len(out) >= MAX_ITEMS:
             break
     return out

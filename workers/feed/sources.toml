@@ -465,3 +465,194 @@ url = "https://feeds.megaphone.fm/nolayingup"
 priority = 45
 active = false
 notes = "Podcast feed only (episodes, not articles); inactive by owner decision 2026-10-11."
+
+# ------------------------------------------------------------------ TECH
+# Tech Hub (Chat 4 Phase 1, db/045). Every URL fetched and parsed on
+# 2026-10-13 (docs/tech_hub.md, "Sources"). Tech sources are tech only.
+#   kind = "page"   a listing-page watcher: config says how to read it
+#                   (feed/watch.py: links | sections | blocks).
+#   kind = "hn"     a Hacker News Algolia query; config.min_points is the
+#                   threshold, checked again on every hit.
+#   official        first-party: the "Official" tag, summarized first.
+
+[[source]]
+slug = "anthropic-news"
+name = "Anthropic"
+pillars = ["tech"]
+kind = "page"
+url = "https://www.anthropic.com/news"
+priority = 10
+official = true
+notes = "No native feed (anthropic.com/rss.xml and /news/rss.xml are 404, 2026-10-13): watched."
+config = { mode = "links", href = "^/news/[a-z0-9-]+$", max_bytes = 800000 }
+
+[[source]]
+slug = "anthropic-news-feed"
+name = "Anthropic (feed mirror)"
+pillars = ["tech"]
+kind = "rss"
+url = "https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_news.xml"
+priority = 60
+official = true
+notes = "Olshansk/rss-feeds, a community-built feed of anthropic.com/news: the watcher's lower-weight fallback, deduped by URL."
+
+[[source]]
+slug = "claude-blog"
+name = "Claude blog"
+pillars = ["tech"]
+kind = "page"
+url = "https://claude.com/blog"
+priority = 12
+official = true
+notes = "Redirects to claude.com/resources/articles (2026-10-13); no feed."
+config = { mode = "links", href = "^/(blog|resources/articles)/[a-z0-9-]+$", skip = ["article"], max_bytes = 800000 }
+
+[[source]]
+slug = "claude-api-notes"
+name = "Claude Platform release notes"
+pillars = ["tech"]
+kind = "page"
+url = "https://platform.claude.com/docs/en/release-notes/overview"
+priority = 10
+official = true
+notes = "One item per dated heading (docs.claude.com redirects here, 2026-10-13); no feed."
+config = { mode = "sections", heading = ["h3"], max_bytes = 900000 }
+
+[[source]]
+slug = "claude-apps-notes"
+name = "Claude apps release notes"
+pillars = ["tech"]
+kind = "page"
+url = "https://support.claude.com/en/articles/12138966-release-notes"
+priority = 10
+official = true
+notes = "One item per dated heading; no feed."
+config = { mode = "sections", heading = ["h3"], max_bytes = 600000 }
+
+[[source]]
+slug = "claude-code"
+name = "Claude Code releases"
+pillars = ["tech"]
+kind = "rss"
+url = "https://github.com/anthropics/claude-code/releases.atom"
+priority = 15
+official = true
+
+[[source]]
+slug = "openai-news"
+name = "OpenAI"
+pillars = ["tech"]
+kind = "rss"
+url = "https://openai.com/news/rss.xml"
+priority = 10
+official = true
+notes = "Native RSS, every post since 2015 (785 KB): read up to its first 50 entries."
+
+[[source]]
+slug = "openai-api-changelog"
+name = "OpenAI API changelog"
+pillars = ["tech"]
+kind = "page"
+url = "https://developers.openai.com/api/docs/changelog"
+priority = 10
+official = true
+notes = "platform.openai.com/docs/changelog redirects here (2026-10-13); no feed. Dates have no year."
+config = { mode = "blocks", block_class = "grid-cols-[3rem_1fr]", content_class = "_ChangelogMarkdown", max_bytes = 900000 }
+
+[[source]]
+slug = "chatgpt-release-notes"
+name = "ChatGPT release notes"
+pillars = ["tech"]
+kind = "page"
+url = "https://help.openai.com/en/articles/6825453-chatgpt-release-notes"
+priority = 10
+official = true
+active = false
+notes = "Cloudflare challenge (403, cf-mitigated: challenge) to our fetcher, 2026-10-13. Not bypassed; inactive pending the owner's decision."
+config = { mode = "sections", heading = ["h2", "h3"] }
+
+[[source]]
+slug = "cursor-changelog"
+name = "Cursor"
+pillars = ["tech"]
+kind = "rss"
+url = "https://cursor.com/changelog/rss.xml"
+priority = 15
+official = true
+
+[[source]]
+slug = "nextjs-blog"
+name = "Next.js"
+pillars = ["tech"]
+kind = "rss"
+url = "https://nextjs.org/feed.xml"
+priority = 20
+official = true
+
+[[source]]
+slug = "vercel"
+name = "Vercel"
+pillars = ["tech"]
+kind = "rss"
+url = "https://vercel.com/atom"
+priority = 20
+official = true
+notes = "Changelog and blog in one Atom feed (3.7 MB, 1,656 entries, 2026-10-13): read up to its first 50 entries."
+
+[[source]]
+slug = "supabase-blog"
+name = "Supabase blog"
+pillars = ["tech"]
+kind = "rss"
+url = "https://supabase.com/rss.xml"
+priority = 20
+official = true
+
+[[source]]
+slug = "supabase-changelog"
+name = "Supabase changelog"
+pillars = ["tech"]
+kind = "page"
+url = "https://supabase.com/changelog"
+priority = 20
+official = true
+notes = "No feed (changelog/rss.xml is 404, 2026-10-13); the date follows each entry's link."
+config = { mode = "links", href = "^/changelog/[a-z0-9-]+$", date_after = 3, max_bytes = 600000 }
+
+[[source]]
+slug = "mcp-blog"
+name = "Model Context Protocol blog"
+pillars = ["tech"]
+kind = "rss"
+url = "https://blog.modelcontextprotocol.io/index.xml"
+priority = 20
+official = true
+
+[[source]]
+slug = "mcp-spec-releases"
+name = "MCP specification releases"
+pillars = ["tech"]
+kind = "rss"
+url = "https://github.com/modelcontextprotocol/modelcontextprotocol/releases.atom"
+priority = 20
+official = true
+
+[[source]]
+slug = "hn-front"
+name = "Hacker News"
+pillars = ["tech"]
+kind = "hn"
+url = "https://hn.algolia.com/api/v1/search?tags=front_page&numericFilters=points%3E%3D100&hitsPerPage=50"
+priority = 80
+notes = "Front page stories at 100 points or more (owner, 2026-10-13)."
+config = { min_points = 100 }
+
+[[source]]
+slug = "hn-show"
+name = "Show HN"
+pillars = ["tech"]
+kind = "hn"
+url = "https://hn.algolia.com/api/v1/search_by_date?tags=show_hn&numericFilters=points%3E%3D50&hitsPerPage=50"
+priority = 80
+notes = "Show HN posts at 50 points or more (owner, 2026-10-13)."
+config = { min_points = 50 }

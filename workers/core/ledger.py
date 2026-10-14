@@ -1777,11 +1777,15 @@ class FeedSource:
     #: A Google News query's `when:` window (db/032 default 2); the ingest
     #: drops items older than this plus 2 days.
     gnews_window_days: int = 2
+    #: First-party (db/045): the "Official" tag; summarized first.
+    official: bool = False
+    #: A page or hn source's config (feed/watch.py), else None.
+    config: dict[str, Any] | None = None
 
 
 _FEED_SOURCE_COLS = """
     id, slug, name, pillars, sport, kind, url, priority, include_categories, etag, last_modified,
-    last_ok_at, consecutive_failures, alerted_at IS NOT NULL, is_test, gnews_window_days
+    last_ok_at, consecutive_failures, alerted_at IS NOT NULL, is_test, gnews_window_days, official, config
 """
 
 
@@ -1802,14 +1806,15 @@ def feed_sync_sources(specs: Sequence[Any], *, conn: psycopg.Connection | None =
             c.execute(
                 """
                 INSERT INTO sources (slug, name, pillars, sport, kind, url, priority, active,
-                                     include_categories, gnews_window_days, notes)
+                                     include_categories, gnews_window_days, notes, official, config)
                 VALUES (%(slug)s, %(name)s, %(pillars)s, %(sport)s, %(kind)s, %(url)s, %(priority)s,
-                        %(active)s, %(cats)s, %(window)s, %(notes)s)
+                        %(active)s, %(cats)s, %(window)s, %(notes)s, %(official)s, %(config)s)
                 ON CONFLICT (slug) DO UPDATE SET
                     name = EXCLUDED.name, pillars = EXCLUDED.pillars, sport = EXCLUDED.sport,
                     kind = EXCLUDED.kind, priority = EXCLUDED.priority, active = EXCLUDED.active,
                     include_categories = EXCLUDED.include_categories,
                     gnews_window_days = EXCLUDED.gnews_window_days, notes = EXCLUDED.notes,
+                    official = EXCLUDED.official, config = EXCLUDED.config,
                     etag = CASE WHEN sources.url = EXCLUDED.url THEN sources.etag END,
                     last_modified = CASE WHEN sources.url = EXCLUDED.url THEN sources.last_modified END,
                     url = EXCLUDED.url
@@ -1818,7 +1823,9 @@ def feed_sync_sources(specs: Sequence[Any], *, conn: psycopg.Connection | None =
                 {"slug": s.slug, "name": s.name, "pillars": list(s.pillars), "sport": s.sport,
                  "kind": s.kind, "url": s.url, "priority": s.priority, "active": s.active,
                  "cats": list(s.include_categories) if s.include_categories else None,
-                 "window": s.window_days, "notes": s.notes},
+                 "window": s.window_days, "notes": s.notes,
+                 "official": bool(getattr(s, "official", False)),
+                 "config": Jsonb(s.config) if getattr(s, "config", None) is not None else None},
             )
         gone = c.execute(
             "UPDATE sources SET active = false WHERE active AND NOT is_test AND NOT (slug = ANY(%s))",
@@ -1911,6 +1918,11 @@ class FeedItemIn:
     teaser: str | None
     published_at: datetime
     decode_failed: bool
+    #: 'date' when the source states only a day (db/045).
+    precision: str = "time"
+    #: Kept by a tech source's first fetch whatever its age (db/045): first
+    #: seen at deploy, so never counted in the latency report.
+    backfill: bool = False
 
 
 def feed_insert_seeded(source: FeedSource, items: Sequence[FeedItemIn], *,
@@ -1923,14 +1935,15 @@ def feed_insert_seeded(source: FeedSource, items: Sequence[FeedItemIn], *,
             written += c.execute(
                 """
                 INSERT INTO content_items (source_id, external_id, url, google_url, title, teaser,
-                                           published_at, fetched_at, seeded, decode_failed, is_test)
+                                           published_at, fetched_at, seeded, decode_failed, is_test,
+                                           published_precision, backfill)
                 -- LEAST: the worker's clock can run ahead of the database's
                 -- now(), and db/032 refuses published_at > fetched_at.
-                VALUES (%s, %s, %s, %s, %s, %s, LEAST(%s, now()), now(), true, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, LEAST(%s, now()), now(), true, %s, %s, %s, %s)
                 ON CONFLICT DO NOTHING
                 """,
                 (source.id, it.external_id, it.url, it.google_url, it.title, it.teaser,
-                 it.published_at, it.decode_failed, source.is_test),
+                 it.published_at, it.decode_failed, source.is_test, it.precision, it.backfill),
             ).rowcount
     return written
 
@@ -1938,10 +1951,12 @@ def feed_insert_seeded(source: FeedSource, items: Sequence[FeedItemIn], *,
 #: The story candidates an item is compared with, one row per MEMBER: stories
 #: of the same world (real or test) FIRST seen within `hours` (feed/cluster.py:
 #: a story stops absorbing items 48 h after it began, however recently its
-#: last item came), each member's title and title-only embedding.
+#: last item came), each member's title and title-only embedding, and whether
+#: the story is a tech story (db/045: a tech item joins only tech stories, any
+#: other item never one, so a join can never put a story in two worlds).
 #: tests_live/test_feed_ledger.py runs this exact text.
 FEED_CANDIDATES_SQL: Final = """
-    SELECT st.id, st.item_count, i.title, i.title_embedding::text
+    SELECT st.id, st.item_count, i.title, i.title_embedding::text, 'tech' = ANY (st.pillars)
       FROM stories st
       JOIN content_items i ON i.story_id = st.id
      WHERE st.is_test = %(is_test)s
@@ -1957,6 +1972,8 @@ class CandidateStory:
     item_count: int
     #: (title, title-only embedding as float32) per member.
     members: tuple[tuple[str, "array[float]"], ...]
+    #: A tech story (db/045): only tech items may join it.
+    tech: bool = False
 
 
 def feed_candidates(hours: int, *, is_test: bool = False,
@@ -1964,12 +1981,12 @@ def feed_candidates(hours: int, *, is_test: bool = False,
     """Rows are read one at a time (no fetchall), each vector parsed straight
     into float32, so the text rows and the parsed vectors are never all held
     at once in Python objects."""
-    stories: dict[int, tuple[int, list[tuple[str, array[float]]]]] = {}
+    stories: dict[int, tuple[int, bool, list[tuple[str, array[float]]]]] = {}
     with _brief_conn(conn) as c, c.cursor() as cur:
         cur.execute(FEED_CANDIDATES_SQL, {"is_test": is_test, "hours": hours})
-        for sid, count, title, vec in cur:
-            stories.setdefault(sid, (count, []))[1].append((title, _vec_array(vec)))
-    return [CandidateStory(sid, count, tuple(members)) for sid, (count, members) in stories.items()]
+        for sid, count, title, vec, tech in cur:
+            stories.setdefault(sid, (count, bool(tech), []))[2].append((title, _vec_array(vec)))
+    return [CandidateStory(sid, count, tuple(members), tech) for sid, (count, tech, members) in stories.items()]
 
 
 @dataclass(frozen=True)
@@ -1998,14 +2015,15 @@ def _insert_item(c: psycopg.Connection, source: FeedSource, it: FeedItemIn, stor
         """
         INSERT INTO content_items (source_id, external_id, url, google_url, title, teaser,
                                    published_at, fetched_at, story_id, embedding, title_embedding,
-                                   decode_failed, is_test)
+                                   decode_failed, is_test, published_precision, backfill)
         VALUES (%s, %s, %s, %s, %s, %s, LEAST(%s, now()), now(), %s, %s::extensions.halfvec,
-                %s::extensions.halfvec, %s, %s)
+                %s::extensions.halfvec, %s, %s, %s, %s)
         ON CONFLICT DO NOTHING
         RETURNING id
         """,
         (source.id, it.external_id, it.url, it.google_url, it.title, it.teaser, it.published_at,
-         story_id, _vec_text(vector), _vec_text(title_vector), it.decode_failed, source.is_test),
+         story_id, _vec_text(vector), _vec_text(title_vector), it.decode_failed, source.is_test,
+         it.precision, it.backfill),
     ).fetchone()
     return int(row[0]) if row else None
 
@@ -2138,9 +2156,43 @@ FEED_SUMMARY_QUEUE_SQL: Final = """
       JOIN sources s ON s.id = i.source_id
      WHERE st.summary IS NULL AND st.filtered_reason IS NULL AND NOT st.is_test
        AND st.summary_attempts < %(max_attempts)s
+       AND NOT ('tech' = ANY (st.pillars))
      ORDER BY coalesce(lower(st.title) ~ %(priority)s::text, false) DESC, i.published_at DESC, st.id DESC
      LIMIT %(limit)s
 """
+
+#: The TECH summary queue (db/045; feed/tech.py): kept, real, linkable tech
+#: stories not yet summarized, with a try left. OFFICIAL FIRST (the owner's
+#: speed rule: an official item is summarized in the cycle it was found),
+#: then newest published. The Home/Sports queue above leaves tech out.
+FEED_TECH_SUMMARY_QUEUE_SQL: Final = """
+    SELECT st.id, st.title, i.teaser, s.name, s.official, st.summary_attempts
+      FROM stories st
+      JOIN content_items i ON i.id = st.lead_item_id
+      JOIN sources s ON s.id = i.source_id
+     WHERE st.summary IS NULL AND st.filtered_reason IS NULL AND NOT st.is_test
+       AND st.summary_attempts < %(max_attempts)s
+       AND 'tech' = ANY (st.pillars)
+     ORDER BY s.official DESC, i.published_at DESC, st.id DESC
+     LIMIT %(limit)s
+"""
+
+
+@dataclass(frozen=True)
+class TechSummaryJob:
+    story_id: int
+    title: str
+    teaser: str | None
+    source_name: str
+    official: bool
+    attempts: int
+
+
+def feed_tech_summary_queue(limit: int, max_attempts: int, *,
+                            conn: psycopg.Connection | None = None) -> list[TechSummaryJob]:
+    with _brief_conn(conn) as c:
+        rows = c.execute(FEED_TECH_SUMMARY_QUEUE_SQL, {"limit": limit, "max_attempts": max_attempts}).fetchall()
+    return [TechSummaryJob(int(r[0]), r[1], r[2], r[3], bool(r[4]), int(r[5])) for r in rows]
 
 _LOCAL_DAY_START = """
     (date_trunc('day', now() AT TIME ZONE coalesce((SELECT timezone FROM app_settings), 'America/Chicago'))
@@ -2203,6 +2255,9 @@ class SummaryOut:
     sport_from_model: bool = False
     #: The /news category (feed/category.py, db/042). Kept if already set.
     category: str | None = None
+    #: Tech only (feed/tech.py, db/045): the answer to the free-credits
+    #: question. Kept if already set.
+    claimable: bool | None = None
 
 
 def feed_save_summaries(results: Sequence[SummaryOut], ai_usage_id: int | None, *,
@@ -2226,14 +2281,74 @@ def feed_save_summaries(results: Sequence[SummaryOut], ai_usage_id: int | None, 
                    SET summary = %s, entities = %s, topics = %s,
                        sport = CASE WHEN %s THEN coalesce(%s, sport) ELSE coalesce(sport, %s) END,
                        category = coalesce(category, %s),
+                       claimable_offer = coalesce(claimable_offer, %s),
                        drop_category = %s, filtered_reason = coalesce(filtered_reason, %s),
                        summary_attempts = least(summary_attempts + %s, 5), summarized_at = now(),
                        ai_usage_id = %s
                  WHERE id = %s
                 """,
                 (r.summary, list(r.entities), list(r.topics), r.sport_from_model, r.sport, r.sport,
-                 r.category, r.drop, r.filtered_reason, r.attempts, ai_usage_id, r.story_id),
+                 r.category, r.claimable, r.drop, r.filtered_reason, r.attempts, ai_usage_id, r.story_id),
             )
+
+
+# ---------------------------------------------------------------------------
+# The free-credits push (db/045 tech_credit_pushes; feed/tech.py). The cap
+# (3 a Chicago day) and the never-twice rule are the database's: its trigger
+# refuses a 4th and a repeat. The worker asks first, under the trigger's own
+# advisory lock, then pushes and records in the same transaction, so a push
+# that raises records nothing and a refused one is never sent.
+# ---------------------------------------------------------------------------
+
+_TECH_PUSH_LOCK = "SELECT pg_advisory_xact_lock(hashtext('tech_credit_pushes'))"
+
+
+def tech_credit_push(story_id: int, send: Callable[[], int | None], *,
+                     conn: psycopg.Connection | None = None) -> int | None:
+    """One real free-credits push for a story, or None when the cap is
+    reached or the story was pushed already. `send()` pushes and returns the
+    notification id; it runs only once the database has said yes."""
+    with _brief_conn(conn) as c, c.transaction():
+        c.execute(_TECH_PUSH_LOCK)
+        if not c.execute("SELECT tech_credit_push_allowed(%s)", (story_id,)).fetchone()[0]:
+            return None
+        notification_id = send()
+        return int(c.execute(
+            "INSERT INTO tech_credit_pushes (story_id, notification_id) VALUES (%s, %s) RETURNING id",
+            (story_id, notification_id)).fetchone()[0])
+
+
+def tech_credit_test_push(story_id: int, send: Callable[[], int | None], *,
+                          conn: psycopg.Connection | None = None) -> int:
+    """A forced TEST push (scripts/tech_test_push.py): recorded is_test, never
+    counted toward the cap, may repeat."""
+    with _brief_conn(conn) as c, c.transaction():
+        c.execute(_TECH_PUSH_LOCK)
+        notification_id = send()
+        return int(c.execute(
+            "INSERT INTO tech_credit_pushes (story_id, notification_id, is_test) VALUES (%s, %s, true) RETURNING id",
+            (story_id, notification_id)).fetchone()[0])
+
+
+def tech_credit_push_room(*, conn: psycopg.Connection | None = None) -> int:
+    with _brief_conn(conn) as c:
+        return int(c.execute("SELECT tech_credit_push_room()").fetchone()[0])
+
+
+def tech_story_for_test_push(story_id: int | None = None, *,
+                             conn: psycopg.Connection | None = None) -> tuple[int, str, str | None] | None:
+    """(id, title, summary) of a real, kept, linkable tech story: `story_id`
+    if it is one, else the newest summarized one, pricing_credits first."""
+    with _brief_conn(conn) as c:
+        row = c.execute(
+            """
+            SELECT v.id, v.title, v.summary FROM v_feed_stories v
+             WHERE 'tech' = ANY (v.pillars) AND (%(id)s::bigint IS NULL OR v.id = %(id)s::bigint)
+               AND (%(id)s::bigint IS NOT NULL OR v.summary IS NOT NULL)
+             ORDER BY (v.category = 'pricing_credits') DESC NULLS LAST, v.first_seen_at DESC, v.id DESC
+             LIMIT 1
+            """, {"id": story_id}).fetchone()
+    return (int(row[0]), row[1], row[2]) if row else None
 
 
 #: The one-off categorize pass (db/042; feed/categorize.py, owner
@@ -2379,10 +2494,11 @@ def feed_recategorize(moves: Sequence[tuple[int, str, str]], *, conn: psycopg.Co
 
 
 #: The nightly prune, in order; tests_live runs these texts. A story with ANY
-#: reaction, or named by a move proposal, is never deleted (db/039, db/042:
-#: feed_reactions.story_id and entity_link_proposals.story_id are ON DELETE
-#: RESTRICT, so a delete that reached one would fail the whole prune; every
-#: story delete here excludes them first).
+#: reaction, named by a move proposal, or given a free-credits push is never
+#: deleted (db/039, db/042, db/045: feed_reactions.story_id,
+#: entity_link_proposals.story_id and tech_credit_pushes.story_id are ON
+#: DELETE RESTRICT, so a delete that reached one would fail the whole prune;
+#: every story delete here excludes them first).
 FEED_PRUNE_SQL: Final = {
     "embeddings_cleared": """
         UPDATE content_items SET embedding = NULL, title_embedding = NULL
@@ -2394,6 +2510,7 @@ FEED_PRUNE_SQL: Final = {
          WHERE st.filtered_reason IS NOT NULL AND st.last_seen_at < now() - interval '30 days'
            AND NOT EXISTS (SELECT 1 FROM feed_reactions r WHERE r.story_id = st.id)
            AND NOT EXISTS (SELECT 1 FROM entity_link_proposals p WHERE p.story_id = st.id)
+           AND NOT EXISTS (SELECT 1 FROM tech_credit_pushes t WHERE t.story_id = st.id)
     """,
     # Kept stories, 90 days after they were last seen, unless reacted to or
     # named by a move proposal.
@@ -2402,6 +2519,7 @@ FEED_PRUNE_SQL: Final = {
          WHERE st.filtered_reason IS NULL AND st.last_seen_at < now() - interval '90 days'
            AND NOT EXISTS (SELECT 1 FROM feed_reactions r WHERE r.story_id = st.id)
            AND NOT EXISTS (SELECT 1 FROM entity_link_proposals p WHERE p.story_id = st.id)
+           AND NOT EXISTS (SELECT 1 FROM tech_credit_pushes t WHERE t.story_id = st.id)
     """,
     # Superseded scores (a newer row exists for the story and pillar) after 7 days.
     "story_scores_superseded_deleted": """
@@ -2810,13 +2928,19 @@ class WhyJob:
     source_name: str
 
 
-#: Home's top `top` stories in For you that were never asked "why it matters".
+#: Home's and Tech's top `top` stories in For you that were never asked "why
+#: it matters" (Tech since db/045: the why-it-matters engine is shared).
+#: Home first, then Tech, each in For you order.
 FEED_WHY_QUEUE_SQL: Final = """
-    SELECT f.id, f.title, f.summary, f.source_name
-      FROM feed_for_you('home', %(top)s, 0) f
-      JOIN stories st ON st.id = f.id
+    SELECT x.id, x.title, x.summary, x.source_name
+      FROM (SELECT f.id, f.title, f.summary, f.source_name, 0 AS feed, f.pos
+              FROM feed_for_you('home', %(top)s, 0) f
+            UNION ALL
+            SELECT f.id, f.title, f.summary, f.source_name, 1 AS feed, f.pos
+              FROM feed_for_you('tech', %(top)s, 0) f) x
+      JOIN stories st ON st.id = x.id
      WHERE st.why_generated_at IS NULL
-     ORDER BY f.pos
+     ORDER BY x.feed, x.pos
 """
 
 
