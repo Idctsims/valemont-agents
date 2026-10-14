@@ -3,7 +3,10 @@ import { join } from "node:path";
 
 import { expect, test } from "@playwright/test";
 
-import { REPO_TOPICS_SHOWN, STARS_7D_LABELS, stars7dText, starCount, type Stars7dSource } from "../src/lib/feed/types";
+import {
+  REPO_TOPICS_SHOWN, STARS_7D_LABELS, SURGE_AGE_DAYS, SURGE_LABEL, SURGE_SHARE, starSurge, stars7dText, starCount,
+  type Stars7dSource,
+} from "../src/lib/feed/types";
 
 // The repo card's pure helpers (Chat 4 Phase 2; db/049, workers/feed/repos.py).
 // No page, no server.
@@ -39,6 +42,27 @@ test.describe("stars_7d labels", () => {
   test("no stars_7d, no text", () => {
     expect(stars7dText({ stars7d: null, stars7dSource: null })).toBeNull();
     expect(stars7dText({ stars7d: 5, stars7dSource: null })).toBeNull();
+  });
+
+  test("star surge: rea's real numbers say 'star surge — unverified'", () => {
+    // Production, 2026-10-14: 183,758 trending weekly on 239,045, created 2026-04-14.
+    const rea = { stars: 239045, stars7d: 183758, stars7dSource: "trending_weekly" as const,
+                  createdAt: "2026-04-14T00:51:32Z", surfacedAt: "2026-10-14T21:29:10Z" };
+    expect(starSurge(rea)).toBe(true);
+    expect(SURGE_LABEL).toBe("star surge — unverified");
+    // Half or less, or a repo 30 days old or younger, or a measured/other source: no label.
+    expect(starSurge({ ...rea, stars7d: 119522 })).toBe(false);
+    expect(starSurge({ ...rea, createdAt: "2026-09-15T00:00:00Z" })).toBe(false);
+    expect(starSurge({ ...rea, stars7dSource: "measured" })).toBe(false);
+    expect(starSurge({ ...rea, stars7dSource: "age_average" })).toBe(false);
+    expect(starSurge({ ...rea, createdAt: null })).toBe(false);
+    expect(starSurge({ ...rea, stars7dSource: "trending_daily", stars7d: 130000 })).toBe(true);
+  });
+
+  test("the surge rule is the worker's trending_suspect", () => {
+    const py = readFileSync(join(repoRoot, "workers", "feed", "repos.py"), "utf8");
+    expect(Number(/^SUSPECT_SHARE = ([\d.]+)$/m.exec(py)?.[1])).toBe(SURGE_SHARE);
+    expect(Number(/^SUSPECT_AGE_DAYS = (\d+)$/m.exec(py)?.[1])).toBe(SURGE_AGE_DAYS);
   });
 
   test("counts and topics", () => {
