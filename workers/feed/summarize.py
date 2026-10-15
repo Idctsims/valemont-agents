@@ -530,11 +530,21 @@ def order_by_rank(jobs: Sequence[ledger.SummaryJob], profiles: dict[str, rank.Pr
 
 
 #: The candidate pool a run ranks (newest first); a backlog bigger than this
-#: is ranked over its newest POOL.
-POOL = 2000
+#: is ranked over its newest POOL. 200, not 2,000 (egress fix 3, 2026-10-15):
+#: a run takes at most RUN_CAP, and a story waits at most STALE_AFTER_H.
+POOL = 200
 #: A story waiting longer than this without a summary retires as headline-only
 #: (owner, 2026-10-14; the same retirement as running out of attempts).
 STALE_AFTER_H = 48
+
+
+def with_centroids(jobs: Sequence[Any]) -> list[Any]:
+    """The jobs with their stories' centroids (binary, by id), for the rank
+    order when there is more work than room (egress fix 3)."""
+    from array import array
+    from dataclasses import replace
+    vecs = ledger.feed_story_centroids([j.story_id for j in jobs])
+    return [replace(j, vec=vecs.get(j.story_id, array("f"))) for j in jobs]
 
 
 def latest_profiles() -> dict[str, rank.Profile]:
@@ -559,8 +569,14 @@ def summarize_job(*, client: Any = None, now: Any = None) -> SummaryRun:
     follows = [rank.Follow(r.name, r.tier, r.pillar, r.floor, r.aliases, r.sport, r.sport_wide, r.kind)  # type: ignore[arg-type]
                for r in ledger.feed_follows()]
     pool = ledger.feed_summary_queue(POOL, MAX_ATTEMPTS, rank.priority_pattern(follows))
-    queue = order_by_rank(pool, latest_profiles() if pool else {}, follows,
-                          now or datetime.now(timezone.utc))[:room]
+    # The rank order decides only which stories this run takes: with room
+    # for the whole pool it is the pool's order (followed first, then newest),
+    # and no vector or profile is read (egress fix 3).
+    profiles: dict[str, rank.Profile] = {}
+    if len(pool) > room:
+        pool = with_centroids(pool)
+        profiles = latest_profiles()
+    queue = order_by_rank(pool, profiles, follows, now or datetime.now(timezone.utc))[:room]
     del pool
     model_sport = sources.model_sport_slugs()
     sports_names = ledger.feed_sports_entity_names() if queue else frozenset()

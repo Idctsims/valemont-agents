@@ -455,6 +455,8 @@ class TechJobCase(unittest.TestCase):
         for name, fn in {
             "feed_tech_summary_queue": lambda limit, max_attempts: list(self.queue),
             "feed_retire_stale": lambda hours, max_attempts, **kw: 0,
+            # Egress fix 3: centroids by id, only when there is more work than room.
+            "feed_story_centroids": lambda ids, **kw: {j.story_id: j.vec for j in self.queue if j.story_id in ids},
             "feed_tech_community_summarized_today": lambda **kw: self.community_today,
             "feed_latest_profiles": lambda **kw: {},
             "feed_save_summaries": lambda results, uid: self.saved.append((list(results), uid)),

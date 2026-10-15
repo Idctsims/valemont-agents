@@ -69,18 +69,18 @@ class Notes(unittest.TestCase):
 
     def test_every_success_logs_rss(self) -> None:
         self.run_job(lambda: None)
-        self.assertEqual(self.recorded, [("ok", "rss 84 MB, job peak 131 MB")])
+        self.assertEqual(self.recorded, [("ok", "rss 84 MB, job peak 131 MB · ~0 KB read")])
 
     def test_a_job_note_comes_first(self) -> None:
         self.run_job(lambda: summarize.SummaryRun(capped=True, sent_today=2000))
         self.assertEqual(self.recorded[0][1],
-                         "capped: the daily cap of 2000 is reached (2000 sent today) · rss 84 MB, job peak 131 MB")
+                         "capped: the daily cap of 2000 is reached (2000 sent today) · rss 84 MB, job peak 131 MB · ~0 KB read")
 
     def test_a_skip_keeps_its_reason_and_adds_rss(self) -> None:
         def skipped():
             raise jobs.JobSkipped("AI budget spent")
         self.run_job(skipped)
-        self.assertEqual(self.recorded, [("ok", "skipped: AI budget spent · rss 84 MB, job peak 131 MB")])
+        self.assertEqual(self.recorded, [("ok", "skipped: AI budget spent · rss 84 MB, job peak 131 MB · ~0 KB read")])
 
     def logging_on(self) -> None:
         # tests/__init__ silences logging package-wide; these tests read it.
@@ -92,7 +92,7 @@ class Notes(unittest.TestCase):
         self.logging_on()
         with self.assertLogs("valemont.jobs", "INFO") as logs:
             self.run_job(lambda: None)
-        self.assertEqual(logs.output, ["INFO:valemont.jobs:probe_job rss 84 MB, job peak 131 MB"])
+        self.assertEqual(logs.output, ["INFO:valemont.jobs:probe_job rss 84 MB, job peak 131 MB · ~0 KB read"])
 
     def test_the_log_line_matches_the_recorded_note(self) -> None:
         self.logging_on()

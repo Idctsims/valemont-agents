@@ -302,11 +302,19 @@ class CapsAndRetirement(TechSqlCase):
     def test_the_pools_carry_what_the_rank_order_needs(self) -> None:
         with _rolled_back() as conn:
             sid = self.story(conn, self.source(conn, ("home",)), done=False)
+            # Egress fix 3: the pool carries no vector unless asked; the rank
+            # order fetches them by id (binary, fix 2) only when it must.
             job = next(j for j in ledger.feed_summary_queue(100000, 2, conn=conn) if j.story_id == sid)
-            self.assertEqual((job.pillars, len(job.vec), job.published_at is not None), (("home",), 384, True))
+            self.assertEqual((job.pillars, len(job.vec), job.published_at is not None), (("home",), 0, True))
+            job = next(j for j in ledger.feed_summary_queue(100000, 2, vectors=True, conn=conn) if j.story_id == sid)
+            self.assertEqual(len(job.vec), 384)
             tid = self.tech_story(conn, done=False)
             tj = next(j for j in ledger.feed_tech_summary_queue(100000, 2, conn=conn) if j.story_id == tid)
-            self.assertEqual((len(tj.vec), bool(tj.source_slug)), (384, True))
+            self.assertEqual((len(tj.vec), bool(tj.source_slug)), (0, True))
+            tj = next(j for j in ledger.feed_tech_summary_queue(100000, 2, vectors=True, conn=conn) if j.story_id == tid)
+            self.assertEqual(len(tj.vec), 384)
+            vecs = ledger.feed_story_centroids([sid, tid], conn=conn)
+            self.assertEqual({k: (len(v), v.typecode) for k, v in vecs.items()}, {sid: (384, "f"), tid: (384, "f")})
 
 
 class HideLateItems(TechSqlCase):
