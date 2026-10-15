@@ -196,8 +196,13 @@ class WorkerQueries(ScreeningSqlCase):
             self.assertEqual(conn.execute("SELECT name, next_episode_date, providers -> 'flatrate' -> 0 ->> 'id', "
                                           "providers_refreshed_at IS NOT NULL FROM titles WHERE id = %s", (tid,)).fetchone(),
                              ("Renamed", None, "8", True))
+            # A movie has no next episode: the ledger never writes one, and the
+            # database refuses it from any writer (titles_next_episode_tv).
+            movie = self.title(conn, kind="movie", next=date(2099, 1, 1))
+            self.assertIsNone(conn.execute("SELECT next_episode_date FROM titles WHERE id = %s", (movie,)).fetchone()[0])
             with self.assertRaises(psycopg.errors.CheckViolation), conn.transaction():
-                self.title(conn, kind="movie", next=date(2099, 1, 1))
+                conn.execute("INSERT INTO titles (tmdb_id, kind, name, next_episode_date) VALUES (%s, 'movie', 'x', '2099-01-01')",
+                             (811111111,))
 
     def test_unmatched_queue_and_record(self) -> None:
         with _rolled_back() as conn:
