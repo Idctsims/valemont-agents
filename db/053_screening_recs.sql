@@ -1224,6 +1224,8 @@ BEGIN
         INSERT INTO public.content_items (source_id, external_id, url, title, published_at, story_id)
         VALUES (v_src, 'yt:video:SelfTest053', 'https://www.youtube.com/watch?v=SelfTest053', 'x', now(), v_story)
         RETURNING id INTO v_item;
+        -- The lead, as the worker sets it: every read path joins items through it.
+        UPDATE public.stories SET lead_item_id = v_item WHERE id = v_story;
         IF (SELECT youtube_key FROM public.content_items WHERE id = v_item) <> 'SelfTest053' THEN
             RAISE EXCEPTION 'SELFTEST FAILED: youtube_key from the watch URL';
         END IF;
