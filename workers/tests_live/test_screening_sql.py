@@ -77,6 +77,13 @@ class Objects(ScreeningSqlCase):
                         "has_table_privilege('valemont_readonly', oid, 'SELECT') "
                         "FROM pg_class c WHERE oid = %s::regclass", (f"public.{table}",)).fetchone()
                     self.assertEqual(row, (True, policies, False, s, i, u, d, True))
+            # Every public view is read-only for the owner (db/052 fixed v_watch_current).
+            writable = [r[0] for r in conn.execute(
+                "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+                "WHERE n.nspname = 'public' AND c.relkind = 'v' "
+                "AND has_table_privilege('authenticated', c.oid, 'INSERT,UPDATE,DELETE')")]
+            fixed = conn.execute("SELECT 1 FROM migration_log WHERE name = '052_watch_current_grants'").fetchone()
+            self.assertEqual(writable, [] if fixed else ["v_watch_current"])
             self.assertEqual({r[0] for r in conn.execute(
                 "SELECT tgname FROM pg_trigger WHERE tgrelid = 'watch_status'::regclass AND NOT tgisinternal")},
                 {"watch_status_stamp", "watch_status_immutable", "watch_status_no_truncate"})
