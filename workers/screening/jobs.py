@@ -9,7 +9,10 @@
     screening_refresh  daily 05:30 America/Chicago, and at boot unless
                        today's run already succeeded: every title on a shelf
                        gets its details again (US providers, the US release
-                       date, the next episode for TV, the trailer key).
+                       date, the next episode for TV, the trailer key). A
+                       Want or Watching title newly on one of the owner's
+                       services is logged as an arrival (db/053), for the
+                       08:30 release push.
 
 Both fail loudly on a missing or rejected TMDB_READ_TOKEN. Memory-lean: the
 TMDB client is closed and memory released when each job ends.
@@ -20,11 +23,11 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Callable, Mapping
+from typing import Callable, Mapping, Sequence
 
 from core import ledger, memory
 from core.jobs import JobSkipped
-from screening import tmdb, trailers
+from screening import services, tmdb, trailers
 
 log = logging.getLogger("valemont.screening")
 
@@ -90,10 +93,22 @@ class RefreshRun:
     refreshed: int = 0
     gone: int = 0
     calls: int = 0
+    arrivals: int = 0
 
     @property
     def job_note(self) -> str:
-        return f"{self.refreshed} title(s) refreshed, {self.gone} gone from TMDB; {self.calls} TMDB calls"
+        return (f"{self.refreshed} title(s) refreshed, {self.gone} gone from TMDB, {self.arrivals} arrival(s); "
+                f"{self.calls} TMDB calls")
+
+
+def arrivals(s: ledger.ShelfTitle, tonight_now: Sequence[str]) -> list[str]:
+    """The owner's services a Want or Watching title streams on now and did
+    not at its previous read (db/053 title_provider_arrivals). Nothing for a
+    title TMDB was never read for (no baseline), or one off those shelves."""
+    if s.status not in ("want", "watching") or s.providers is None:
+        return []
+    before = {r["service"] for r in services.split(s.providers)["tonight"]}
+    return sorted(set(tonight_now) - before)
 
 
 def refresh_job(*, client: tmdb.Tmdb | None = None, env: Mapping[str, str] = os.environ) -> RefreshRun:
@@ -113,8 +128,13 @@ def refresh_job(*, client: tmdb.Tmdb | None = None, env: Mapping[str, str] = os.
                 run.gone += 1
                 log.warning("screening: %s/%d is gone from TMDB (on the %s shelf)", s.kind, s.tmdb_id, s.status)
                 continue
-            ledger.titles_upsert(tmdb.title_from(s.kind, details))
+            title = tmdb.title_from(s.kind, details)
+            ledger.titles_upsert(title)
             run.refreshed += 1
+            new = arrivals(s, title.tonight)
+            if new:
+                run.arrivals += ledger.title_arrivals_add(s.id, new)
+                log.info("screening: %s/%d now on %s", s.kind, s.tmdb_id, ", ".join(new))
     finally:
         run.calls = t.calls
         if close is not None:

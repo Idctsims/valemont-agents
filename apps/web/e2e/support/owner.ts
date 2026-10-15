@@ -644,6 +644,50 @@ export async function addTestTrailer(opts: { title: string; url: string; titleId
   });
 }
 
+/** A TEST recommendation (db/053 add_test_rec): a test title scored at the
+ * top of For you, "because" a second test title named `because`. Shown only
+ * with the marker. Returns the recommended title's id. */
+export async function addTestRec(opts: { kind: "movie" | "tv"; name: string; because: string }): Promise<number> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.rpc("add_test_rec", {
+      p_marker: e2eMarker(), p_kind: opts.kind, p_name: opts.name, p_because: opts.because,
+    });
+    if (error) throw new Error(`test rec failed: ${error.message}`);
+    return data as number;
+  });
+}
+
+/** A TEST seen-it pass title (db/053 add_test_seen_title): first in the pass
+ * and recommended until answered. Returns its id. */
+export async function addTestSeenTitle(opts: { kind: "movie" | "tv"; name: string }): Promise<number> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.rpc("add_test_seen_title", { p_marker: e2eMarker(), p_kind: opts.kind, p_name: opts.name });
+    if (error) throw new Error(`test seen title failed: ${error.message}`);
+    return data as number;
+  });
+}
+
+/** A title's title_reactions rows (db/053), oldest first. */
+export async function titleReactions(titleId: number): Promise<{ reaction: string; seen: boolean; origin: string }[]> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.from("title_reactions").select("reaction, seen, origin").eq("title_id", titleId).order("id");
+    if (error) throw new Error(`title reaction read failed: ${error.message}`);
+    return data as { reaction: string; seen: boolean; origin: string }[];
+  });
+}
+
+/** Retire a spec's test recommendation: Not interested, so it leaves For you
+ * for every later run (test rows are permanent and all score 49). */
+export async function retireTestRec(titleId: number): Promise<void> {
+  return asOwner(async (supabase) => {
+    const { data: me } = await supabase.auth.getUser();
+    const { error } = await supabase.from("title_reactions").insert({
+      owner_id: me.user!.id, title_id: titleId, reaction: "not_interested", origin: "card",
+    });
+    if (error) throw new Error(`retire test rec failed: ${error.message}`);
+  });
+}
+
 /** A title's history (watch_status), oldest first: what the spec checks. */
 export async function watchHistory(titleId: number): Promise<{ status: string; finished_at: string | null }[]> {
   return asOwner(async (supabase) => {

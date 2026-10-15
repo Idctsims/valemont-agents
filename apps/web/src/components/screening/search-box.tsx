@@ -102,16 +102,18 @@ export function SearchBox() {
 }
 
 /** A TMDB poster, or a blank tile of the same size. */
-export function Poster({ path, name, small = false, large = false }: { path: string | null; name: string; small?: boolean; large?: boolean }) {
-  const src = tmdbImage(path, large ? "w342" : small ? "w92" : "w185");
-  const size = large ? "w-40 lg:w-56" : small ? "w-10" : "w-16";
+export function Poster({ path, name, small = false, large = false, fill = false }: {
+  path: string | null; name: string; small?: boolean; large?: boolean; fill?: boolean;
+}) {
+  const src = tmdbImage(path, large || fill ? "w342" : small ? "w92" : "w185");
+  const size = fill ? "w-full" : large ? "w-40 lg:w-56" : small ? "w-10" : "w-16";
   if (!src) return <div aria-hidden className={`${size} aspect-poster shrink-0 rounded-inner bg-surface-2`} />;
   return (
     <Image
       src={src}
       alt={`${name} poster`}
-      width={large ? 342 : small ? 92 : 185}
-      height={large ? 513 : small ? 138 : 278}
+      width={large || fill ? 342 : small ? 92 : 185}
+      height={large || fill ? 513 : small ? 138 : 278}
       unoptimized
       className={`${size} aspect-poster shrink-0 rounded-inner object-cover`}
     />

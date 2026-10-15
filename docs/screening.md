@@ -163,3 +163,157 @@ like any other source. A non-YouTube failure is never held.
 5. Merge (merge commit) and deploy.
 6. Phone checks, `e2e/screening.spec.ts`, the screenshot gate
    (`e2e/screens-screening.spec.ts`), RAM against Phase 2's reading.
+
+## 7. Phase 4: recommendations (owner's brief, 2026-10-15)
+
+Migration `db/053_screening_recs.sql`; the math in
+`workers/screening/recs.py` (pure, tested in `tests/test_screening_recs.py`);
+the jobs in `workers/screening/rec_jobs.py`; the web in
+`src/lib/screening/recs.ts`, the For you, seen-it, banner and title-reaction
+components under `components/screening/`, and `/screening/seen`.
+
+### 7.0 Baseline (2026-10-15 02:20-02:33 UTC, before any Phase 4 code)
+
+`tests/` 902 OK; `tests_live -v` 369 OK, 0 skipped (703 s). Branch
+`chat4-phase4-recs` from `main` at `b8f3cfc`.
+
+### 7.1 Seeds and the profile
+
+- **Seeds** (`screening_seeds`, TMDB ids verified live on 2026-10-15): TV
+  Succession, Billions, Ozark, Yellowstone, The Gentlemen, Tulsa King; film
+  The Wolf of Wall Street, Margin Call, Michael Clayton, Heat, The Godfather,
+  Uncut Gems; rom-com Hitch, Crazy Rich Asians, Love & Basketball. Each is a
+  `title_reactions` row (love, seen, origin `seed`): it shapes the profile and
+  is never recommended.
+- **Taste notes** are love phrases in `app_settings.seed_interests`
+  (`feed.screening`): "power, money and dynasty dramas", "crime and business
+  thrillers", "romantic comedies". The fourth, "movies as much as TV", is a
+  rule, not a topic: For you keeps the best 4 of each kind (`recs.balance`;
+  the same rule in SQL, `screening_for_you`).
+- **Vectors:** one gte-small embedding per title of its genres, TMDB keywords
+  and overview (`recs.embed_text`), stored on `titles.embedding`, embedded
+  once.
+- **Signals** (`recs.signal_of`): seed 1.0, Love 1.0, "Seen, loved" 1.0,
+  Finished 0.5, **Finished and loved 1.5 (the strongest)**, a trailer Love
+  0.5; Not interested 1.0, "Seen, not for me" 1.0, a trailer Not interested
+  0.5; Neutral 0. The feed engine's blend: the notes weigh `6 / (6 + loves)`,
+  fading as real loves arrive.
+
+### 7.2 Candidates, ranking, "because"
+
+- **Pool** (`screening_candidates`): TMDB recommendations and similar for
+  every seed and loved title (up to 40), discover by the top genres and
+  keywords, and trending (week, movie and TV). At most 450 titles fetched and
+  embedded a run.
+- **Quality floor (tunable, recorded):** `vote_average >= 6.8` and
+  `vote_count >= 200` (`recs.QUALITY_MIN_AVG`, `QUALITY_MIN_COUNT`; the same
+  numbers in `screening_for_you`).
+- **Excluded**, by the worker and again live by the database at read time:
+  seen (seed, the seen-it pass, finished), on any shelf, or reacted to (Love,
+  Neutral, Not interested). A tap removes a card before the re-rank.
+- **Score** = 4.0 x similarity + 0.4 when it streams tonight on one of the
+  owner's services + 0.3 x freshness (out, or a new season, in the last year,
+  fading to 0 at two; trending adds 0.5). Similarity = 0.5 x the cosine to the
+  love profile + 0.5 x the cosine to the NEAREST loved title, minus the cosine
+  to the not-interested profile, all on mean-centered vectors. The
+  nearest-title half is there because fifteen seeds across three moods
+  average to none of them.
+- **"Because you loved X"** is the loved title nearest by embedding (ties:
+  the lower id). No Claude call.
+- **Re-rank:** a title reaction, a shelf move or a screening trailer reaction
+  queues ONE `screening_rerank` (60 s debounce, by trigger; test titles never
+  queue). It re-scores the stored pool and fetches at most 3 new titles; no
+  TMDB lists.
+- **Schedule:** `screening_recs` daily 04:30 Chicago, and at boot unless
+  today's run succeeded. Each run appends a `screening_rec_runs` row with its
+  profile counts and its top 12: the record behind "the next refresh shifts
+  toward the Loves".
+
+### 7.3 The seen-it pass
+
+About 30 titles near the seeds (10 each of tv, film and rom-com, popular
+enough to have been seen), written once by the first run
+(`screening_seen_pass`). One at a time on the phone: "Seen, loved" (love +
+seen), "Seen, not for me" (not interested + seen), "Haven't seen" (nothing
+learned), or Skip. Resumable; re-openable from Settings, Feed profile ("Go
+through it again"). Seen is sticky.
+
+### 7.4 Trailer source #2 (TMDB videos)
+
+The recommendations run reads TMDB videos (Trailer or Teaser, YouTube,
+official) for the best 15 upcoming, now-playing and on-the-air titles by the
+profile (similarity at least 0.10) and every Want and Watching title, at most
+2 per title. They are items of the `tmdb-videos` source (kind `tmdb`,
+screening only, never fetched by the 30-minute ingest) with the YouTube watch
+URL. `content_items.youtube_key` (generated) is UNIQUE, so a trailer from
+either path lands once and the other insert is a no-op. Trailers For you
+ranks the last 60 days' trailers by their title's score, then the unmatched
+ones newest first; Latest is unchanged.
+
+**YouTube RSS, read 2026-10-15 19:25 UTC:** the outage that began ~23:50 UTC
+Oct 14 did not reach 24 h. All 15 channel feeds answer (last ok 19:20 UTC);
+36 trailers ingested since 05:20 UTC Oct 15, 23 matched to a title.
+
+### 7.5 Release alerts, the brief, Wags
+
+- **At most one push a day, at 08:30 Chicago** (`screening_release_push`; at
+  boot until 20:00 if today's has not gone), only when a Want or Watching
+  title is out today (a movie), has an episode today, or newly streams on one
+  of the owner's services (`title_provider_arrivals`, logged by the 05:30
+  refresh). "Tonight: <title> on <service>", any others in the body; the tap
+  opens the title. `release_pushes` holds one real push per day (trigger) and
+  `release_alerts` never repeats a title and event (unique index).
+- **Test push:** `-m scripts.screening_test_push` arms one for the next 08:30
+  (`--now` sends at once). Recorded is_test, exempt from both rules.
+- **Brief:** `ctx_screening_brief` speaks when there is a release today or a
+  For you pick, held to one line (`ONE_LINE_SECTIONS`); NULL (silent)
+  otherwise.
+- **Wags:** `ctx_screening` adds `for_you_top5`, `today`, `recent_loves` and
+  each shelf title's `tonight`, with the instruction to answer "what should I
+  watch tonight" from the owner's services first.
+
+### 7.6 "In the news"
+
+A Want or Watching title gets an entity of kind `title` (by trigger;
+`entities.title_id`). `title_news` lists up to 3 Home stories of the last 30
+days that name it: a one-word title only through a story entity equal to it
+("Heat" in a weather headline never counts), a longer one also as whole words
+in the headline or summary (regex metacharacters escaped; accents and
+punctuation tested in `tests_live`). Title entities have no follows and every
+other entity reader filters by kind, so Home's feed is unchanged
+(`tests_live` `NoLeaks`).
+
+### 7.7 Day one (dry run, 2026-10-15 02:52 UTC, nothing written)
+
+`-m scripts.screening_recs --dry-run`: pool 610, 258 at the floor, 342 TMDB
+calls. For you, in order, with the "because" and tonight's service: Too Big
+to Fail (Margin Call; HBO Max), The Big Short (Margin Call), 1923
+(Yellowstone; Paramount+), Wall Street (Margin Call), Relay (Michael Clayton;
+Netflix), Dutton Ranch (Yellowstone; Paramount+), Law & Order (Michael
+Clayton; Netflix), American Psycho (Margin Call; Prime Video), Black Rabbit
+(Succession; Netflix), 1883 (Yellowstone; Paramount+), The Wedding Date
+(Hitch; Starz), BMF (Ozark; Prime Video). The real first run, after the
+paste, records its own list in `screening_rec_runs`; the owner grades that
+one.
+
+### 7.8 Decisions made while building, for the owner
+
+1. **Any reaction on a For you card removes it** (Love too: the loved title
+   feeds the profile), with Undo.
+2. **"Movies as much as TV" is a rule** (4 of each in the 12), not a phrase.
+3. **The Screening brief section is one line**, like Tech.
+4. **"In the news" links out** to the article: Home has no story page.
+
+### 7.9 Order of operations
+
+1. Owner pastes `db/053_screening_recs.sql`. Expect the NOTICE `053
+   self-test passed (rolled back)`; verify SELECTs (a)-(g) at the end.
+   **Before the merge**: the worker and the web read the new schema (the
+   05:30 refresh's `titles_upsert` writes the new columns).
+2. Record it the same session (CLAUDE.md, MASTER_PLAN).
+3. `tests_live -v` (the db/053 classes skip by name until step 1).
+4. Merge (merge commit) and deploy; the worker's boot run makes day one and
+   the seen-it pass.
+5. Phone checks (the done-when list), `e2e/screening-recs.spec.ts`, the
+   screenshot gate (`e2e/screens-screening-recs.spec.ts`), RAM at rest
+   against Phase 3's reading.

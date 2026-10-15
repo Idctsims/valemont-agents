@@ -1838,10 +1838,11 @@ def feed_sync_sources(specs: Sequence[Any], *, conn: psycopg.Connection | None =
 def feed_active_sources(*, conn: psycopg.Connection | None = None) -> list[FeedSource]:
     """Active real sources the 30-minute ingest fetches, lowest priority
     number first. Not the `github` source: the daily repos job owns it
-    (db/049, feed/repos.py)."""
+    (db/049, feed/repos.py); nor the `tmdb` one: the recommendations job
+    owns it (db/053, screening/rec_jobs.py)."""
     with _brief_conn(conn) as c:
         rows = c.execute(f"SELECT {_FEED_SOURCE_COLS} FROM sources WHERE active AND NOT is_test "
-                         "AND kind <> 'github' ORDER BY priority, slug").fetchall()
+                         "AND kind NOT IN ('github', 'tmdb') ORDER BY priority, slug").fetchall()
     return [_feed_source(r) for r in rows]
 
 
@@ -3370,18 +3371,31 @@ def titles_upsert(t: Any, *, conn: psycopg.Connection | None = None) -> int:
     """One REAL title (screening/tmdb.py TitleIn) by tmdb_id + kind: inserted,
     or refreshed in place (every TMDB field, providers_refreshed_at,
     refreshed_at). Returns its id."""
+    tonight = sorted(set(getattr(t, "tonight", ()) or ()))
+    keywords = list(getattr(t, "keywords", ()) or ())[:30]
+    vote_average = getattr(t, "vote_average", None)
+    vote_count = getattr(t, "vote_count", None)
+    popularity = getattr(t, "popularity", None)
+    language = getattr(t, "original_language", None)
     with _brief_conn(conn) as c, c.transaction():
         row = c.execute(
             """
             INSERT INTO titles (tmdb_id, kind, name, release_date, poster_path, overview, genres, providers,
-                                providers_refreshed_at, trailer_key, next_episode_date, status, refreshed_at)
+                                providers_refreshed_at, trailer_key, next_episode_date, status, refreshed_at,
+                                keywords, vote_average, vote_count, popularity, original_language,
+                                last_episode_date, tonight)
             VALUES (%(tmdb_id)s, %(kind)s, %(name)s, %(release)s, %(poster)s, %(overview)s, %(genres)s, %(providers)s,
-                    now(), %(trailer)s, %(next)s, %(status)s, now())
+                    now(), %(trailer)s, %(next)s, %(status)s, now(), %(keywords)s, %(vote_average)s, %(vote_count)s,
+                    %(popularity)s, %(language)s, %(last)s, %(tonight)s)
             ON CONFLICT (tmdb_id, kind) DO UPDATE SET
                 name = EXCLUDED.name, release_date = EXCLUDED.release_date, poster_path = EXCLUDED.poster_path,
                 overview = EXCLUDED.overview, genres = EXCLUDED.genres, providers = EXCLUDED.providers,
                 providers_refreshed_at = now(), trailer_key = coalesce(EXCLUDED.trailer_key, titles.trailer_key),
-                next_episode_date = EXCLUDED.next_episode_date, status = EXCLUDED.status, refreshed_at = now()
+                next_episode_date = EXCLUDED.next_episode_date, status = EXCLUDED.status, refreshed_at = now(),
+                keywords = EXCLUDED.keywords, vote_average = EXCLUDED.vote_average,
+                vote_count = EXCLUDED.vote_count, popularity = EXCLUDED.popularity,
+                original_language = EXCLUDED.original_language, last_episode_date = EXCLUDED.last_episode_date,
+                tonight = EXCLUDED.tonight
              WHERE NOT titles.is_test
             RETURNING id
             """,
@@ -3389,7 +3403,13 @@ def titles_upsert(t: Any, *, conn: psycopg.Connection | None = None) -> int:
              "poster": t.poster_path if t.poster_path and re.fullmatch(r"/[A-Za-z0-9_.-]+", t.poster_path) else None,
              "overview": t.overview, "genres": list(t.genres), "providers": Jsonb(t.providers),
              "trailer": t.trailer_key if t.trailer_key and re.fullmatch(r"[A-Za-z0-9_-]{6,20}", t.trailer_key) else None,
-             "next": t.next_episode_date if t.kind == "tv" else None, "status": t.status},
+             "next": t.next_episode_date if t.kind == "tv" else None, "status": t.status,
+             "keywords": keywords,
+             "vote_average": min(10.0, max(0.0, float(vote_average))) if vote_average is not None else None,
+             "vote_count": max(0, int(vote_count)) if vote_count is not None else None,
+             "popularity": max(0.0, float(popularity)) if popularity is not None else None,
+             "language": language[:8] if language else None,
+             "last": getattr(t, "last_episode_date", None) if t.kind == "tv" else None, "tonight": tonight},
         ).fetchone()
     if row is None:
         raise LedgerError(f"title {t.kind}/{t.tmdb_id} collides with a test title")
@@ -3438,16 +3458,386 @@ class ShelfTitle:
     tmdb_id: int
     kind: str
     status: str
+    #: titles.providers before this refresh, or None when TMDB was never read
+    #: for it: what an arrival (db/053) is measured against. Not titles.tonight,
+    #: which is empty on every title shelved before db/053 until its refresh.
+    providers: Mapping[str, Any] | None = None
 
 
 def screening_shelf_titles(*, conn: psycopg.Connection | None = None) -> list[ShelfTitle]:
     """Every REAL title on a shelf (its latest move), for the daily refresh."""
     with _brief_conn(conn) as c:
-        return [ShelfTitle(int(r[0]), int(r[1]), r[2], r[3]) for r in c.execute(
+        return [ShelfTitle(int(r[0]), int(r[1]), r[2], r[3], r[4] if r[5] is not None else None) for r in c.execute(
             """
-            SELECT t.id, t.tmdb_id, t.kind, c.status FROM v_watch_current c JOIN titles t ON t.id = c.title_id
+            SELECT t.id, t.tmdb_id, t.kind, c.status, t.providers, t.providers_refreshed_at
+              FROM v_watch_current c JOIN titles t ON t.id = c.title_id
              WHERE NOT t.is_test ORDER BY c.status, t.id
             """).fetchall()]
+
+
+def screening_known_youtube_keys(keys: Sequence[str], *, conn: psycopg.Connection | None = None) -> set[str]:
+    """Which of these YouTube keys a real item already has (either trailer
+    source): the TMDB path skips them before embedding anything."""
+    keys = [k for k in dict.fromkeys(keys) if k]
+    if not keys:
+        return set()
+    with _brief_conn(conn) as c:
+        return {r[0] for r in c.execute(
+            "SELECT youtube_key FROM content_items WHERE youtube_key = ANY (%s) AND NOT is_test", (keys,)).fetchall()}
+
+
+# ---------------------------------------------------------------------------
+# Screening recommendations (db/053; screening/recs.py, screening/rec_jobs.py).
+# The worker writes the titles' inputs and embeddings, the pool, the scores,
+# the runs, the seen-it pass, arrivals and release pushes; the owner writes
+# title_reactions (the web). Every read here is of REAL rows only.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class TitleRecord:
+    """One title in the owner's record (v_title_state), with its TMDB key."""
+    title_id: int
+    tmdb_id: int
+    kind: str
+    name: str
+    reaction: str | None
+    reacted_at: datetime | None
+    seen: bool
+    seen_pass: str | None
+    seed: bool
+    seed_group: str | None
+    shelf: str | None
+    finished: bool
+    trailer_reaction: str | None
+    embedded: bool
+
+
+#: Every real title with a record. tests_live runs this text.
+SCREENING_RECORD_SQL: Final = """
+    SELECT s.title_id, t.tmdb_id, t.kind, t.name, s.reaction, s.reacted_at, s.seen, s.seen_pass, s.seed,
+           s.seed_group, s.shelf, s.finished, s.trailer_reaction, t.embedding IS NOT NULL
+      FROM v_title_state s JOIN titles t ON t.id = s.title_id
+     WHERE NOT s.is_test
+     ORDER BY s.title_id
+"""
+
+
+def screening_records(*, conn: psycopg.Connection | None = None) -> list[TitleRecord]:
+    with _brief_conn(conn) as c:
+        return [TitleRecord(int(r[0]), int(r[1]), r[2], r[3], r[4], r[5], bool(r[6]), r[7], bool(r[8]), r[9],
+                            r[10], bool(r[11]), r[12], bool(r[13]))
+                for r in c.execute(SCREENING_RECORD_SQL).fetchall()]
+
+
+def screening_note_phrases(*, conn: psycopg.Connection | None = None) -> list[str]:
+    """The owner's taste notes (db/053: seed_interests.feed.screening.love)."""
+    return feed_seed_phrases(conn=conn).get("screening", {}).get("love", [])
+
+
+@dataclass(frozen=True)
+class TitleRef:
+    id: int
+    tmdb_id: int
+    kind: str
+    embedded: bool
+    is_test: bool
+
+
+def screening_titles_by_key(keys: Sequence[tuple[int, str]], *,
+                            conn: psycopg.Connection | None = None) -> dict[tuple[int, str], TitleRef]:
+    """Titles already in the database for these (tmdb_id, kind) keys."""
+    if not keys:
+        return {}
+    with _brief_conn(conn) as c:
+        rows = c.execute(
+            """
+            SELECT t.id, t.tmdb_id, t.kind, t.embedding IS NOT NULL, t.is_test
+              FROM titles t JOIN unnest(%s::int[], %s::text[]) AS k(tmdb_id, kind)
+                ON t.tmdb_id = k.tmdb_id AND t.kind = k.kind
+            """, ([k[0] for k in keys], [k[1] for k in keys])).fetchall()
+    return {(int(r[1]), r[2]): TitleRef(int(r[0]), int(r[1]), r[2], bool(r[3]), bool(r[4])) for r in rows}
+
+
+def titles_set_embedding(title_id: int, vector: Sequence[float], *, conn: psycopg.Connection | None = None) -> None:
+    """A real title's embedding, once: a re-embed would quietly move every
+    score computed against the old vector."""
+    with _brief_conn(conn) as c:
+        c.execute(
+            "UPDATE titles SET embedding = %s::extensions.halfvec, embedded_at = now() "
+            "WHERE id = %s AND embedding IS NULL AND NOT is_test",
+            (_vec_text(vector), title_id))
+
+
+def screening_title_vectors(ids: Sequence[int], *,
+                            conn: psycopg.Connection | None = None) -> "dict[int, array[float]]":
+    """id -> embedding (float32), read one row at a time."""
+    out: dict[int, array[float]] = {}
+    if not ids:
+        return out
+    with _brief_conn(conn) as c, c.cursor() as cur:
+        cur.execute("SELECT id, embedding::text FROM titles WHERE id = ANY (%s) AND embedding IS NOT NULL",
+                    (list(ids),))
+        for tid, vec in cur:
+            out[int(tid)] = _vec_array(vec)
+    return out
+
+
+def screening_candidates_upsert(rows: Sequence[tuple[int, Sequence[str], Sequence[int]]], *,
+                                conn: psycopg.Connection | None = None) -> int:
+    """(title_id, lanes, via_title_ids) per candidate of a full run: last
+    seen now, with this run's lanes and via (the pool is what the latest runs
+    found). One transaction."""
+    if not rows:
+        return 0
+    with _brief_conn(conn) as c, c.transaction(), c.cursor() as cur:
+        cur.executemany(
+            """
+            INSERT INTO screening_candidates (title_id, lanes, via_title_ids)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (title_id) DO UPDATE SET lanes = EXCLUDED.lanes, via_title_ids = EXCLUDED.via_title_ids,
+                                                 last_seen_at = now()
+            """, [(tid, sorted(set(lanes)), sorted(set(via))[:60]) for tid, lanes, via in rows])
+    return len(rows)
+
+
+@dataclass(frozen=True)
+class PoolTitle:
+    id: int
+    kind: str
+    name: str
+    vote_average: float | None
+    vote_count: int | None
+    tonight: tuple[str, ...]
+    release_date: date | None
+    last_episode_date: date | None
+    trending: bool
+
+
+#: The pool a re-rank scores: real, embedded candidates a full run saw in the
+#: last 3 days (screening_for_you's window). tests_live runs this text.
+SCREENING_POOL_SQL: Final = """
+    SELECT t.id, t.kind, t.name, t.vote_average, t.vote_count, t.tonight, t.release_date, t.last_episode_date,
+           'trending' = ANY (c.lanes)
+      FROM screening_candidates c JOIN titles t ON t.id = c.title_id
+     WHERE NOT t.is_test AND t.embedding IS NOT NULL AND c.last_seen_at > now() - interval '3 days'
+     ORDER BY t.id
+"""
+
+
+def screening_pool(*, conn: psycopg.Connection | None = None) -> list[PoolTitle]:
+    with _brief_conn(conn) as c:
+        return [PoolTitle(int(r[0]), r[1], r[2], float(r[3]) if r[3] is not None else None,
+                          int(r[4]) if r[4] is not None else None, tuple(r[5] or ()), r[6], r[7], bool(r[8]))
+                for r in c.execute(SCREENING_POOL_SQL).fetchall()]
+
+
+#: Embedded real titles outside the pool that still want a score: shelved,
+#: or matched to a trailer (Trailers For you ranks by it).
+SCREENING_EXTRA_SQL: Final = """
+    SELECT t.id, t.kind, t.name, t.vote_average, t.vote_count, t.tonight, t.release_date, t.last_episode_date, false
+      FROM titles t
+     WHERE NOT t.is_test AND t.embedding IS NOT NULL
+       AND (EXISTS (SELECT 1 FROM title_trailers tt WHERE tt.title_id = t.id AND tt.status = 'matched')
+            OR EXISTS (SELECT 1 FROM watch_status w WHERE w.title_id = t.id))
+     ORDER BY t.id
+"""
+
+
+def screening_extra_titles(*, conn: psycopg.Connection | None = None) -> list[PoolTitle]:
+    with _brief_conn(conn) as c:
+        return [PoolTitle(int(r[0]), r[1], r[2], float(r[3]) if r[3] is not None else None,
+                          int(r[4]) if r[4] is not None else None, tuple(r[5] or ()), r[6], r[7], bool(r[8]))
+                for r in c.execute(SCREENING_EXTRA_SQL).fetchall()]
+
+
+def screening_unembedded(limit: int, *, conn: psycopg.Connection | None = None) -> list[TitleRef]:
+    """Real titles the recommendations need a vector for and lack: seeds,
+    titles with a reaction, shelved titles, titles matched to a trailer.
+    Oldest first."""
+    with _brief_conn(conn) as c:
+        return [TitleRef(int(r[0]), int(r[1]), r[2], False, False) for r in c.execute(
+            """
+            SELECT t.id, t.tmdb_id, t.kind FROM titles t
+             WHERE NOT t.is_test AND t.embedding IS NULL
+               AND (EXISTS (SELECT 1 FROM screening_seeds s WHERE s.title_id = t.id)
+                    OR EXISTS (SELECT 1 FROM title_reactions r WHERE r.title_id = t.id)
+                    OR EXISTS (SELECT 1 FROM watch_status w WHERE w.title_id = t.id)
+                    OR EXISTS (SELECT 1 FROM title_trailers tt WHERE tt.title_id = t.id AND tt.status = 'matched'))
+             ORDER BY t.id
+             LIMIT %s
+            """, (limit,)).fetchall()]
+
+
+def screening_insert_run(p: Any, *, reason: str, pool_n: int, eligible_n: int, scored_n: int, tmdb_calls: int,
+                         top: Sequence[Mapping[str, Any]], is_test: bool = False,
+                         conn: psycopg.Connection | None = None) -> int:
+    """`p` is a screening.recs.Profile. Append-only (db/053)."""
+    with _brief_conn(conn) as c:
+        return int(c.execute(
+            """
+            INSERT INTO screening_rec_runs (reason, mean_vec, love_vec, ni_vec, love_count, ni_count, neutral_count,
+                                            seed_count, notes_weight, pool_n, eligible_n, scored_n, tmdb_calls,
+                                            top, is_test)
+            VALUES (%s, %s::extensions.halfvec, %s::extensions.halfvec, %s::extensions.halfvec, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (reason, _vec_text(p.mean) if p.mean else None, _vec_text(p.love) if p.love is not None else None,
+             _vec_text(p.ni) if p.ni is not None else None, p.love_count, p.ni_count, p.neutral_count,
+             p.seed_count, p.notes_weight, pool_n, eligible_n, scored_n, tmdb_calls, Jsonb(list(top)), is_test),
+        ).fetchone()[0])
+
+
+def title_scores_upsert(scores: Sequence[Any], run_id: int, *, conn: psycopg.Connection | None = None) -> int:
+    """`scores` are screening.recs.Scored: one row per title, replaced in
+    place. One transaction: a run's scores land whole or not at all."""
+    if not scores:
+        return 0
+    with _brief_conn(conn) as c, c.transaction(), c.cursor() as cur:
+        cur.executemany(
+            """
+            INSERT INTO title_scores (title_id, score, because_title_id, components, run_id, scored_at)
+            VALUES (%s, %s, %s, %s, %s, now())
+            ON CONFLICT (title_id) DO UPDATE SET score = EXCLUDED.score, because_title_id = EXCLUDED.because_title_id,
+                                                 components = EXCLUDED.components, run_id = EXCLUDED.run_id,
+                                                 scored_at = now()
+            """,
+            [(s.title_id, max(-50.0, min(50.0, float(s.score))),
+              s.because if s.because != s.title_id else None, Jsonb(dict(s.components)), run_id) for s in scores])
+    return len(scores)
+
+
+def screening_seen_pass_count(*, conn: psycopg.Connection | None = None) -> int:
+    with _brief_conn(conn) as c:
+        return int(c.execute("SELECT count(*) FROM screening_seen_pass WHERE NOT is_test").fetchone()[0])
+
+
+def screening_seen_pass_write(rows: Sequence[tuple[int, str]], *, conn: psycopg.Connection | None = None) -> int:
+    """The seen-it pass, once: (title_id, group) in order. Written only while
+    no real row exists (one transaction, locked), so it is never topped up
+    or rewritten."""
+    if not rows:
+        return 0
+    with _brief_conn(conn) as c, c.transaction():
+        c.execute("SELECT pg_advisory_xact_lock(hashtext('screening_seen_pass'))")
+        if c.execute("SELECT EXISTS (SELECT 1 FROM screening_seen_pass WHERE NOT is_test)").fetchone()[0]:
+            return 0
+        with c.cursor() as cur:
+            cur.executemany("INSERT INTO screening_seen_pass (title_id, grp, pos) VALUES (%s, %s, %s) "
+                            "ON CONFLICT (title_id) DO NOTHING",
+                            [(tid, grp, i) for i, (tid, grp) in enumerate(rows)])
+    return len(rows)
+
+
+def screening_top(limit: int, *, conn: psycopg.Connection | None = None) -> list[dict[str, Any]]:
+    """screening_for_you as the web reads it (real rows), for a run's record."""
+    with _brief_conn(conn) as c:
+        return [{"title_id": int(r[0]), "name": r[1], "kind": r[2], "score": float(r[3]), "because": r[4]}
+                for r in c.execute(
+                    "SELECT title_id, name, kind, score, because_name FROM screening_for_you(%s, false) ORDER BY pos",
+                    (limit,)).fetchall()]
+
+
+def title_arrivals_add(title_id: int, services: Sequence[str], *, conn: psycopg.Connection | None = None) -> int:
+    """Log a shelf title newly streaming on these services (once a day each;
+    db/053 sets the day)."""
+    if not services:
+        return 0
+    n = 0
+    with _brief_conn(conn) as c, c.transaction():
+        for svc in services:
+            n += c.execute("INSERT INTO title_provider_arrivals (title_id, service, detected_on) "
+                           "VALUES (%s, %s, CURRENT_DATE) ON CONFLICT DO NOTHING", (title_id, svc)).rowcount
+    return n
+
+
+@dataclass(frozen=True)
+class ReleaseEvent:
+    title_id: int
+    tmdb_id: int
+    kind: str
+    name: str
+    #: release, episode or arrival.
+    what: str
+    event_key: str
+    service: str | None
+    alerted: bool
+
+
+def screening_events(day: date | None = None, *, conn: psycopg.Connection | None = None) -> list[ReleaseEvent]:
+    """db/053 screening_events_on: the day's (today's, by default) events for
+    the owner's Want and Watching titles."""
+    with _brief_conn(conn) as c:
+        return [ReleaseEvent(int(r[0]), int(r[1]), r[2], r[3], r[4], r[5], r[6], bool(r[7])) for r in c.execute(
+            "SELECT title_id, tmdb_id, kind, name, what, event_key, service, alerted "
+            "FROM screening_events_on(%s::date)", (day,)).fetchall()]
+
+
+_RELEASE_PUSH_LOCK: Final = "SELECT pg_advisory_xact_lock(hashtext('release_pushes'))"
+
+
+def release_push(events: Sequence[ReleaseEvent], send: Callable[[Sequence[ReleaseEvent]], int | None], *,
+                 test: bool = False, conn: psycopg.Connection | None = None) -> int | None:
+    """One release push, recorded with every event it announced, in one
+    transaction. A REAL push re-checks under the lock: no real push today
+    yet, and only events never alerted (db/053 refuses a second push a day
+    and an event twice anyway). `send(events)` pushes what is left and
+    returns the notification id; it runs only once the database has said
+    yes. Returns the release_pushes id, or None when nothing is left to say.
+    A TEST push (`test`) is exempt from both rules."""
+    with _brief_conn(conn) as c, c.transaction():
+        c.execute(_RELEASE_PUSH_LOCK)
+        todo = list(events)
+        if not test:
+            if c.execute("SELECT EXISTS (SELECT 1 FROM release_pushes WHERE local_day = owner_today() "
+                         "AND NOT is_test)").fetchone()[0]:
+                return None
+            done = {(int(r[0]), r[1]) for r in c.execute(
+                "SELECT title_id, event_key FROM release_alerts WHERE NOT is_test AND title_id = ANY (%s)",
+                ([e.title_id for e in todo],)).fetchall()}
+            todo = [e for e in todo if (e.title_id, e.event_key) not in done]
+            if not todo:
+                return None
+        notification_id = send(todo)
+        push_id = int(c.execute(
+            "INSERT INTO release_pushes (notification_id, local_day, is_test) VALUES (%s, CURRENT_DATE, %s) "
+            "RETURNING id", (notification_id, test)).fetchone()[0])
+        with c.cursor() as cur:
+            cur.executemany("INSERT INTO release_alerts (push_id, title_id, event_key, service) VALUES (%s, %s, %s, %s)",
+                            [(push_id, e.title_id, e.event_key, e.service) for e in todo])
+    return push_id
+
+
+def screening_test_push_title(title_id: int | None = None, *,
+                              conn: psycopg.Connection | None = None) -> ReleaseEvent | None:
+    """What a TEST release push announces: `title_id` if it is a real title,
+    else the newest Want or Watching title (one with a tonight service
+    first), shaped as today's release or episode."""
+    with _brief_conn(conn) as c:
+        r = c.execute(
+            """
+            SELECT t.id, t.tmdb_id, t.kind, t.name, t.tonight[1]
+              FROM titles t LEFT JOIN v_watch_current c ON c.title_id = t.id
+             WHERE NOT t.is_test
+               AND (CASE WHEN %(id)s::bigint IS NULL THEN c.status IN ('want', 'watching')
+                         ELSE t.id = %(id)s::bigint END)
+             ORDER BY (cardinality(t.tonight) = 0), c.moved_at DESC NULLS LAST, t.id DESC
+             LIMIT 1
+            """, {"id": title_id}).fetchone()
+    if r is None:
+        return None
+    what = "episode" if r[2] == "tv" else "release"
+    return ReleaseEvent(int(r[0]), int(r[1]), r[2], r[3], what, f"{what}:{date.today().isoformat()}", r[4], False)
+
+
+def queue_enqueue(kind: str, payload: Mapping[str, Any], run_after: datetime, *,
+                  conn: psycopg.Connection | None = None) -> int:
+    """Queue one job for the worker's poller (job_queue, db/020)."""
+    if run_after.tzinfo is None:
+        raise LedgerError("run_after must be timezone-aware.")
+    with _brief_conn(conn) as c:
+        return int(c.execute("INSERT INTO job_queue (kind, payload, run_after) VALUES (%s, %s, %s) RETURNING id",
+                             (kind, Jsonb(dict(payload)), run_after)).fetchone()[0])
 
 
 # ---------------------------------------------------------------------------

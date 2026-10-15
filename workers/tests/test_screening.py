@@ -412,12 +412,23 @@ class Jobs(unittest.TestCase):
 
 class SourcesFile(unittest.TestCase):
     def test_the_15_trailer_channels(self) -> None:
-        s = {x.slug: x for x in load_sources() if "screening" in x.pillars}
+        s = {x.slug: x for x in load_sources() if "screening" in x.pillars and x.kind == "rss"}
         self.assertEqual(len(s), 15)
         self.assertTrue(all(x.slug.startswith("yt-") and x.active and not x.official and x.pillars == ("screening",)
                             for x in s.values()))
         self.assertEqual(s["yt-hbomax"].url, "https://www.youtube.com/feeds/videos.xml?channel_id=UCx-KWLTKlB83hDI6UKECtJQ")
         self.assertEqual(len({x.url for x in s.values()}), 15)
+
+    def test_the_tmdb_videos_source(self) -> None:
+        # Trailer source #2 (db/053): screening only, never official, the one non-YouTube screening source.
+        s = [x for x in load_sources() if x.kind == "tmdb"]
+        self.assertEqual([(x.slug, x.pillars, x.official, x.url) for x in s],
+                         [("tmdb-videos", ("screening",), False, "https://api.themoviedb.org/3")])
+        bad = {"slug": "tmdb-x", "name": "X", "pillars": ["home"], "kind": "tmdb", "url": "https://api.themoviedb.org/3"}
+        with self.assertRaises(SourcesInvalid):
+            _spec(bad)
+        with self.assertRaises(SourcesInvalid):
+            _spec({**bad, "pillars": ["screening"], "url": "https://example.com/3"})
 
     def test_rules(self) -> None:
         good = {"slug": "yt-x", "name": "X", "pillars": ["screening"], "kind": "rss",

@@ -187,6 +187,49 @@ async function finish(
   };
 }
 
+/** Stories by id, in the order given (Trailers For you: db/053 ranks them,
+ * and drops the Neutral and Not interested ones itself). `ids` may hold one
+ * extra id past a page: hasMore says so. A test story is read only with the
+ * verified e2e marker. */
+export async function storiesInOrder(
+  supabase: SupabaseClient,
+  opts: { pillar: Pillar; ids: number[]; withTests?: boolean },
+): Promise<{ stories: FeedStory[]; hasMore: boolean }> {
+  if (opts.ids.length === 0) return { stories: [], hasMore: false };
+  const order = new Map(opts.ids.map((id, i) => [id, i]));
+  const byOrder = <T extends { id: number }>(rows: T[]) => rows.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+  let base: Base[];
+  let meta: Meta[];
+  if (opts.withTests) {
+    const { data, error } = await supabase
+      .from("stories")
+      .select("id, title, summary, why_it_matters, item_count, is_test, lead_item_id, lead:content_items!stories_lead_item_fk(url, published_at, published_precision, source:sources(name, official))")
+      .in("id", opts.ids)
+      .contains("pillars", [opts.pillar])
+      .is("filtered_reason", null);
+    if (error) throw new Error(`Couldn't read the feed: ${error.message}`);
+    const rows = byOrder(((data ?? []) as unknown as TestRow[]).filter((r) => r.lead?.url));
+    base = rows.map((r) => ({
+      id: r.id, title: r.title, summary: r.summary, sourceName: r.lead!.source?.name ?? "Unknown",
+      url: r.lead!.url!, publishedAt: r.lead!.published_at, itemCount: r.item_count, isTest: r.is_test,
+      whyItMatters: r.why_it_matters, official: !!r.lead!.source?.official,
+      publishedPrecision: r.lead!.published_precision ?? "time",
+    }));
+    meta = rows.map((r) => ({ id: r.id, leadItemId: r.lead_item_id, sourceName: r.lead!.source?.name ?? "Unknown", itemCount: r.item_count }));
+  } else {
+    const { data, error } = await supabase
+      .from("v_feed_stories")
+      .select("id, title, summary, why_it_matters, item_count, lead_item_id, lead_url, lead_published_at, source_name, source_official, lead_published_precision")
+      .in("id", opts.ids)
+      .contains("pillars", [opts.pillar]);
+    if (error) throw new Error(`Couldn't read the feed: ${error.message}`);
+    const rows = byOrder((data ?? []) as ViewRow[]);
+    base = rows.map(viewStory);
+    meta = rows.map(viewMeta);
+  }
+  return finish(supabase, opts.pillar, base, meta);
+}
+
 /** One page of a pillar's stories, newest first, minus the ones the owner
  * dismissed (neutral, not interested). `hasMore` when another page exists. */
 export async function latestStories(

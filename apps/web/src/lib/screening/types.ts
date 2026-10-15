@@ -59,3 +59,10 @@ export function screeningTabFromParam(raw: string | string[] | undefined): Scree
 export function isKind(v: string): v is "movie" | "tv" {
   return v === "movie" || v === "tv";
 }
+
+/** `?view=` on the Trailers tab (Phase 4): For you (default, ranked by the
+ * screening profile) or Latest (newest first). */
+export type TrailerView = "for_you" | "latest";
+export function trailerViewFromParam(raw: string | string[] | undefined): TrailerView {
+  return (Array.isArray(raw) ? raw[0] : raw) === "latest" ? "latest" : "for_you";
+}
