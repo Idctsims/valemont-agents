@@ -269,6 +269,27 @@ REPO_TARGETS: dict[str, tuple[str, re.Pattern[str]]] = {
               "clients.",
               re.compile(r"\b(client|clients|freelance)\b", re.IGNORECASE)),
 }
+#: What the model may send as a target and which one it means (2026-10-15:
+#: told to speak in the second person, it sent "your dev workflow" and "your
+#: Claude Code", and the bare-key lookup refused all 7 good lines).
+TARGET_ALIASES: dict[str, str] = {
+    "dashboard": DASHBOARD, "valemont command": DASHBOARD,
+    "dev workflow": WORKFLOW, "workflow": WORKFLOW, "claude code": WORKFLOW, "cursor": WORKFLOW, "mcp": WORKFLOW,
+    "claude code setup": WORKFLOW, "agent workflow": WORKFLOW,
+    "client sites": CLIENTS, "client site": CLIENTS, "freelance client sites": CLIENTS, "client builds": CLIENTS,
+}
+
+
+def target_key(target: Any) -> str:
+    """The target the model named, as a REPO_TARGETS key when it is one:
+    case and a leading "your" / "the" / "my" ignored, and the dev workflow's
+    tools (Claude Code, Cursor, MCP) mean the dev workflow. Anything else is
+    returned as given (lowercased): a venture's name."""
+    t = " ".join(str(target or "").split()).lower().rstrip(".")
+    t = re.sub(r"^(your|the|my)\s+", "", t)
+    return TARGET_ALIASES.get(t, t)
+
+
 #: The repo hedge rule: "can"/"could" are allowed (the target is named).
 REPO_HEDGE = re.compile(r"\b(may|might|potentially|possibly|perhaps)\b", re.IGNORECASE)
 #: Owner, 2026-10-14: a repo line speaks to the reader ("your Claude Code",
@@ -309,7 +330,7 @@ def check_repo(item: dict[str, Any], names: Sequence[str]) -> tuple[str, str | N
     target = item.get("target")
     if not why or not target:
         return GENERAL, None
-    key = str(target).strip().lower()
+    key = target_key(target)
     if key in REPO_TARGETS:
         if not REPO_TARGETS[key][1].search(why):
             return GENERAL, f"does not name the {key} in the line"

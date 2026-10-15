@@ -555,6 +555,31 @@ class RepoWhy(unittest.TestCase):
                 self.assertEqual(line, why.GENERAL)
                 self.assertIn("does not name", reason)
 
+    def test_the_models_second_person_targets_resolve(self) -> None:
+        """Production, 2026-10-15 02:16 UTC: the second-person prompt made the
+        model send "your dev workflow" / "your Claude Code" as the TARGET, and
+        the bare-key lookup refused 7 of 8 good lines. These are its real
+        answers; every one must be kept."""
+        real = [
+            ("your Claude Code", "Your Claude Code could use this MCP server to reverse engineer unknown binaries and app behavior inside your agent workflow."),
+            ("your dev workflow", "Your dev workflow could adopt these Claude Code skills and fal MCP setup as a pattern for agent-driven tooling."),
+            ("your dev workflow", "Lets your Claude Code generate a full award-style Astro website from one prompt and verify it in a real browser."),
+            ("your dev workflow", "Lets you monitor and approve permissions from your Claude Code, Codex and Cursor sessions from your Mac notch or iPhone."),
+            ("your client sites", "Your client sites could use these Next.js React components with reduced-motion support, installed via the shadcn CLI."),
+        ]
+        for target, line in real:
+            with self.subTest(line=line[:40]):
+                kept, reason = why.check_repo({"target": target, "why": line}, self.NAMES)
+                self.assertIsNone(reason)
+                self.assertEqual(kept, line)
+        for raw, key in (("your dev workflow", why.WORKFLOW), ("Your Claude Code", why.WORKFLOW), ("the dashboard", why.DASHBOARD),
+                         ("your freelance client sites", why.CLIENTS), ("Cursor", why.WORKFLOW), ("dev workflow", why.WORKFLOW),
+                         ("Sail Beach Club", "sail beach club")):
+            self.assertEqual(why.target_key(raw), key)
+        # A named venture still resolves through its own rule.
+        self.assertEqual(why.check_repo({"target": "Sail Beach Club", "why": "Sail Beach Club can use it for bookings."},
+                                        self.NAMES)[1], None)
+
     def test_second_person_only(self) -> None:
         """Owner, 2026-10-14: "your Claude Code", "your client sites", never
         "Tsims's"; the prompt the model copies from says "your" too."""
