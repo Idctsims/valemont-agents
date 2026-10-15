@@ -8,7 +8,7 @@ export const MAX_PAGE = 20;
 
 export type Outlet = { name: string; url: string };
 
-export type Pillar = "home" | "sports" | "tech";
+export type Pillar = "home" | "sports" | "tech" | "screening";
 
 /** What a card's buttons and swipes write (db/039 feed_reactions); 'open'
  * comes only from the beacon (/api/feed/open). */
@@ -39,7 +39,14 @@ export type FeedStory = {
   publishedPrecision: PublishedPrecision;
   /** A GitHub repo story (db/049 repo_surfacings): what the repo card shows. */
   repo?: RepoInfo | null;
+  /** A trailer (db/051 title_trailers): the TMDB title it was matched to, or
+   * `unmatched` (still shown, flagged). Absent on every other pillar. */
+  trailer?: TrailerMatch | null;
 };
+
+export type TrailerMatch =
+  | { status: "matched"; kind: "movie" | "tv"; tmdbId: number; name: string }
+  | { status: "unmatched" };
 
 /** Where stars_7d came from (db/049; workers/feed/repos.py LABELS). Only
  * `measured` is a measurement: today's snapshot minus ours from 7 days ago. */

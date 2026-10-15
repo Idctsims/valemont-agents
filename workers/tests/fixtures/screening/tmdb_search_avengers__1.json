@@ -1,0 +1,75 @@
+{
+ "page": 1,
+ "results": [
+  {
+   "adult": false,
+   "backdrop_path": "/9BBTo63ANSmhC4e6r62OJFuK2GL.jpg",
+   "id": 24428,
+   "title": "The Avengers",
+   "original_title": "The Avengers",
+   "overview": "When an unexpected enemy emerges and threatens global safety and security, Nick Fury, director of the international peacekeeping agency known as S.H.I.E.L.D., finds himself in need of a team to pull the world back from the brink of disaster. Spanning the globe, a daring recruitment effort begins!",
+   "poster_path": "/RYMX2wcKCBAr24UyPD7xwmjaTn.jpg",
+   "media_type": "movie",
+   "original_language": "en",
+   "genre_ids": [
+    878,
+    28,
+    12
+   ],
+   "popularity": 76.3893,
+   "release_date": "2012-05-04",
+   "softcore": false,
+   "video": false,
+   "vote_average": 8.08,
+   "vote_count": 40029
+  },
+  {
+   "adult": false,
+   "backdrop_path": "/lJRGgbi4Slsz171vcJ0Ctgiea6v.jpg",
+   "id": 14609,
+   "title": "Ultimate Avengers: The Movie",
+   "original_title": "Ultimate Avengers: The Movie",
+   "overview": "When a nuclear missile was fired at Washington in 1945, Captain America managed to detonate it in the upper atmosphere. But then he fell miles into the icy depths of the North Atlantic, where he remained lost for over sixty years. But now, with the world facing the very same evil, Captain America must rise again as our last hope for survival.",
+   "poster_path": "/iMCkGHVrYRdqKROPRPmVaJVSlg3.jpg",
+   "media_type": "movie",
+   "original_language": "en",
+   "genre_ids": [
+    28,
+    16,
+    10751,
+    12,
+    878
+   ],
+   "popularity": 4.3456,
+   "release_date": "2006-02-21",
+   "softcore": false,
+   "video": false,
+   "vote_average": 6.884,
+   "vote_count": 415
+  },
+  {
+   "adult": false,
+   "backdrop_path": "/mDfJG3LC3Dqb67AZ52x3Z0jU0uB.jpg",
+   "id": 299536,
+   "title": "Avengers: Infinity War",
+   "original_title": "Avengers: Infinity War",
+   "overview": "As the Avengers and their allies have continued to protect the world from threats too large for any one hero to handle, a new danger has emerged from the cosmic shadows: Thanos. A despot of intergalactic infamy, his goal is to collect all six Infinity Stones, artifacts of unimaginable power, and use them to inflict his twisted will on all of reality. Everything the Avengers have fought for has led up to this moment - the fate of Earth and existence itself has never been more uncertain.",
+   "poster_path": "/7WsyChQLEftFiDOVTGkv3hFpyyt.jpg",
+   "media_type": "movie",
+   "original_language": "en",
+   "genre_ids": [
+    12,
+    28,
+    878
+   ],
+   "popularity": 96.2886,
+   "release_date": "2018-04-27",
+   "softcore": false,
+   "video": false,
+   "vote_average": 8.245,
+   "vote_count": 33147
+  }
+ ],
+ "total_pages": 1,
+ "total_results": 3
+}

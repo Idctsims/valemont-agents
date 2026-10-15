@@ -698,3 +698,141 @@ kind = "github"
 url = "https://github.com/trending"
 priority = 90
 notes = "GitHub trending (daily, weekly) and Search API repos; 8 a day at most (owner, 2026-10-14)."
+
+# Screening Room trailers (Chat 4 Phase 3, db/051): YouTube channel feeds, no key. Each channel id was
+# resolved from its handle and its feed verified live on 2026-10-14 (docs/screening.md). Trailers and
+# teasers only (screening/trailers.py); never official, never a push.
+[[source]]
+slug = "yt-netflix"
+name = "Netflix"
+pillars = ["screening"]
+kind = "rss"
+url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCWOA1ZGywLbqmigxE4Qlvuw"
+priority = 70
+notes = "YouTube @Netflix, trailers and teasers only (owner, 2026-10-14)."
+
+[[source]]
+slug = "yt-hbomax"
+name = "HBO Max"
+pillars = ["screening"]
+kind = "rss"
+url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCx-KWLTKlB83hDI6UKECtJQ"
+priority = 70
+notes = "YouTube @hbomax, trailers and teasers only (owner, 2026-10-14)."
+
+[[source]]
+slug = "yt-primevideo"
+name = "Prime Video"
+pillars = ["screening"]
+kind = "rss"
+url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCQJWtTnAHhEG5w4uN0udnUQ"
+priority = 70
+notes = "YouTube @PrimeVideo, trailers and teasers only (owner, 2026-10-14)."
+
+[[source]]
+slug = "yt-paramountplus"
+name = "Paramount+"
+pillars = ["screening"]
+kind = "rss"
+url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCrRttZIypNTA1Mrfwo745Sg"
+priority = 70
+notes = "YouTube @ParamountPlus, trailers and teasers only (owner, 2026-10-14)."
+
+[[source]]
+slug = "yt-starz"
+name = "STARZ"
+pillars = ["screening"]
+kind = "rss"
+url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCXVxMuWK6l_pCyxEk07EIRw"
+priority = 70
+notes = "YouTube @STARZ, trailers and teasers only (owner, 2026-10-14)."
+
+[[source]]
+slug = "yt-showtime"
+name = "SHOWTIME"
+pillars = ["screening"]
+kind = "rss"
+url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCtwMWJr2BFPkuJTnSvCESSQ"
+priority = 70
+notes = "YouTube @Showtime, trailers and teasers only (owner, 2026-10-14)."
+
+[[source]]
+slug = "yt-warnerbros"
+name = "Warner Bros."
+pillars = ["screening"]
+kind = "rss"
+url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCjmJDM5pRKbUlVIzDYYWb6g"
+priority = 70
+notes = "YouTube @warnerbros, trailers and teasers only (owner, 2026-10-14)."
+
+[[source]]
+slug = "yt-universal"
+name = "Universal Pictures"
+pillars = ["screening"]
+kind = "rss"
+url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCq0OueAsdxH6b8nyAspwViw"
+priority = 70
+notes = "YouTube @UniversalPictures, trailers and teasers only (owner, 2026-10-14)."
+
+[[source]]
+slug = "yt-sony"
+name = "Sony Pictures"
+pillars = ["screening"]
+kind = "rss"
+url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCz97F7dMxBNOfGYu3rx8aCw"
+priority = 70
+notes = "YouTube @SonyPictures, trailers and teasers only (owner, 2026-10-14)."
+
+[[source]]
+slug = "yt-paramountpictures"
+name = "Paramount Pictures"
+pillars = ["screening"]
+kind = "rss"
+url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCF9imwPMSGz4Vq1NiTWCC7g"
+priority = 70
+notes = "YouTube @ParamountPictures, trailers and teasers only (owner, 2026-10-14)."
+
+[[source]]
+slug = "yt-lionsgate"
+name = "Lionsgate"
+pillars = ["screening"]
+kind = "rss"
+url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCJ6nMHaJPZvsJ-HmUmj1SeA"
+priority = 70
+notes = "YouTube @Lionsgate, trailers and teasers only (owner, 2026-10-14)."
+
+[[source]]
+slug = "yt-a24"
+name = "A24"
+pillars = ["screening"]
+kind = "rss"
+url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCuPivVjnfNo4mb3Oog_frZg"
+priority = 70
+notes = "YouTube @A24, trailers and teasers only (owner, 2026-10-14)."
+
+[[source]]
+slug = "yt-20thcentury"
+name = "20th Century Studios"
+pillars = ["screening"]
+kind = "rss"
+url = "https://www.youtube.com/feeds/videos.xml?channel_id=UC2-BeLxzUBSs0uSrmzWhJuQ"
+priority = 70
+notes = "YouTube @20thCenturyStudios, trailers and teasers only (owner, 2026-10-14)."
+
+[[source]]
+slug = "yt-disney"
+name = "Disney"
+pillars = ["screening"]
+kind = "rss"
+url = "https://www.youtube.com/feeds/videos.xml?channel_id=UC_5niPa-d35gg88HaS7RrIw"
+priority = 70
+notes = "YouTube @Disney, trailers and teasers only (owner, 2026-10-14)."
+
+[[source]]
+slug = "yt-marvel"
+name = "Marvel Entertainment"
+pillars = ["screening"]
+kind = "rss"
+url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCvC4D8onUfXzvjTOM-dBfEA"
+priority = 70
+notes = "YouTube @marvel, trailers and teasers only (owner, 2026-10-14)."

@@ -148,8 +148,8 @@ class Canonicalization(unittest.TestCase):
 class SourcesFile(unittest.TestCase):
     def test_the_real_file_loads_with_46_active_of_50(self) -> None:
         # Home and Sports: 46 active of 50 (Chat 3). Tech (db/045) is pinned
-        # in tests/test_tech.py.
-        specs = [s for s in load_sources() if "tech" not in s.pillars]
+        # in tests/test_tech.py, Screening (db/051) in tests/test_screening.py.
+        specs = [s for s in load_sources() if "tech" not in s.pillars and "screening" not in s.pillars]
         self.assertEqual(len(specs), 50)
         self.assertEqual(sum(s.active for s in specs), 46)
         by = {s.slug: s for s in specs}
@@ -763,8 +763,9 @@ class Chain(unittest.TestCase):
                 system_jobs.feed_ingest_job()
         # db/045: Tech's summaries first (an official item in the cycle it was found).
         # db/049: the repo stories' line right after feed_why.
-        self.assertEqual(order, ["ingest", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
-                                 "feed_repo_why"])
+        # db/051: trailers are matched to TMDB titles first.
+        self.assertEqual(order, ["ingest", "screening_match", "feed_tech_summarize", "feed_summarize", "feed_score",
+                                 "feed_why", "feed_repo_why"])
 
     def test_a_chained_failure_does_not_fail_ingest_or_stop_the_chain(self) -> None:
         order = []
@@ -776,7 +777,8 @@ class Chain(unittest.TestCase):
         with mock.patch.object(ingest, "ingest_job", lambda: None), \
                 mock.patch.object(system_jobs, "run_tracked", failing):
             system_jobs.feed_ingest_job()
-        self.assertEqual(order, ["feed_tech_summarize", "feed_summarize", "feed_score", "feed_why", "feed_repo_why"])
+        self.assertEqual(order, ["screening_match", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
+                                 "feed_repo_why"])
 
     def test_why_runs_after_the_profile_job_even_when_it_is_skipped(self) -> None:
         order = []

@@ -393,6 +393,11 @@
   border-color: color-mix(in oklab, var(--vm-wood) 55%, transparent);
 }
 
+/* A film or TV poster's shape (TMDB posters are 2:3), Screening Room. */
+@utility aspect-poster {
+  aspect-ratio: 2 / 3;
+}
+
 /* ----------------------------------------------------------------- base */
 
 @layer base {

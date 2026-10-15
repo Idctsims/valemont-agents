@@ -618,6 +618,41 @@ export async function addTestRepo(opts: {
   });
 }
 
+/** A TEST title (db/051 add_test_title): is_test, a tmdb_id from 900000000
+ * up (never a real one), released 10 days from today, on no shelf. Shown only
+ * with the verified e2e marker. Rows are permanent; names carry the run prefix. */
+export async function addTestTitle(opts: { kind: "movie" | "tv"; name: string }): Promise<{ id: number; tmdbId: number }> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.rpc("add_test_title", { p_marker: e2eMarker(), p_kind: opts.kind, p_name: opts.name });
+    if (error) throw new Error(`test title failed: ${error.message}`);
+    const t = await supabase.from("titles").select("tmdb_id").eq("id", data as number).single();
+    if (t.error) throw new Error(`test title read failed: ${t.error.message}`);
+    return { id: data as number, tmdbId: (t.data as { tmdb_id: number }).tmdb_id };
+  });
+}
+
+/** A TEST trailer story (db/051 add_test_trailer, pillar screening) from the
+ * `_e2e-screening` source with a .invalid link, matched to a test title or
+ * unmatched. */
+export async function addTestTrailer(opts: { title: string; url: string; titleId: number | null }): Promise<number> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.rpc("add_test_trailer", {
+      p_marker: e2eMarker(), p_title: opts.title, p_url: opts.url, p_title_id: opts.titleId,
+    });
+    if (error) throw new Error(`test trailer failed: ${error.message}`);
+    return data as number;
+  });
+}
+
+/** A title's history (watch_status), oldest first: what the spec checks. */
+export async function watchHistory(titleId: number): Promise<{ status: string; finished_at: string | null }[]> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.from("watch_status").select("status, finished_at").eq("title_id", titleId).order("id");
+    if (error) throw new Error(`watch history read failed: ${error.message}`);
+    return (data ?? []) as { status: string; finished_at: string | null }[];
+  });
+}
+
 /** A TEST move (db/042 add_test_move_proposal): "Test Player <s>" on "Test
  * Team A <s>" and an open trade to "Test Team B <s>", all is_test. Shown on
  * /settings/feed with a `test` tag; never a real entity. Rows are permanent,

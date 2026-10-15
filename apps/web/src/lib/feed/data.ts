@@ -4,7 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   PAGE_SIZE, REPO_TOPICS_SHOWN, hides, otherOutlets, starSurge, type FeedCategory, type FeedStory, type Pillar,
-  type PublishedPrecision, type RepoInfo, type Sport, type Stars7dSource,
+  type PublishedPrecision, type RepoInfo, type Sport, type Stars7dSource, type TrailerMatch,
 } from "./types";
 
 // Reads only: the worker writes the feed (db/032) and its scores (db/039);
@@ -135,6 +135,33 @@ async function reposFor(supabase: SupabaseClient, ids: number[]): Promise<Map<nu
   return out;
 }
 
+type TrailerRowDb = {
+  item_id: number;
+  status: "matched" | "unmatched";
+  title: { tmdb_id: number; kind: "movie" | "tv"; name: string } | null;
+};
+
+/** Each trailer's match (db/051 title_trailers), by its story's lead item.
+ * A trailer the worker has not looked up yet has no row: no tag. */
+async function trailersFor(supabase: SupabaseClient, meta: Meta[]): Promise<Map<number, TrailerMatch>> {
+  const out = new Map<number, TrailerMatch>();
+  if (meta.length === 0) return out;
+  const { data, error } = await supabase
+    .from("title_trailers")
+    .select("item_id, status, title:titles(tmdb_id, kind, name)")
+    .in("item_id", meta.map((m) => m.leadItemId));
+  if (error) throw new Error(`Couldn't read the trailer matches: ${error.message}`);
+  const byItem = new Map(((data ?? []) as unknown as TrailerRowDb[]).map((r) => [r.item_id, r]));
+  for (const m of meta) {
+    const r = byItem.get(m.leadItemId);
+    if (!r) continue;
+    out.set(m.id, r.status === "matched" && r.title
+      ? { status: "matched", kind: r.title.kind, tmdbId: r.title.tmdb_id, name: r.title.name }
+      : { status: "unmatched" });
+  }
+  return out;
+}
+
 async function finish(
   supabase: SupabaseClient,
   pillar: Pillar,
@@ -145,13 +172,17 @@ async function finish(
   const hasMore = base.length > PAGE_SIZE;
   const page = base.slice(0, PAGE_SIZE);
   const ids = page.map((s) => s.id);
-  const [outlets, love, repos] = await Promise.all([
+  const [outlets, love, repos, trailers] = await Promise.all([
     outletsFor(supabase, meta.slice(0, PAGE_SIZE)),
     loved ? Promise.resolve(loved) : lovedIds(supabase, pillar, ids),
     pillar === "tech" ? reposFor(supabase, ids) : Promise.resolve(new Map<number, RepoInfo>()),
+    pillar === "screening" ? trailersFor(supabase, meta.slice(0, PAGE_SIZE)) : Promise.resolve(new Map<number, TrailerMatch>()),
   ]);
   return {
-    stories: page.map((s) => ({ ...s, outlets: outlets.get(s.id) ?? [], loved: love.has(s.id), repo: repos.get(s.id) ?? null })),
+    stories: page.map((s) => ({
+      ...s, outlets: outlets.get(s.id) ?? [], loved: love.has(s.id), repo: repos.get(s.id) ?? null,
+      trailer: trailers.get(s.id) ?? null,
+    })),
     hasMore,
   };
 }

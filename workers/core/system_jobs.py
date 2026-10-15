@@ -66,6 +66,13 @@
                              stories (feed/repos.py, db/049). Fails loudly on
                              a missing or rejected GITHUB_PUBLIC_READ_TOKEN
                              or a trending page that parses to 0 repos.
+    screening_match  chained FIRST after feed_ingest: each new trailer matched
+                             to a TMDB title, or recorded unmatched (db/051).
+    screening_refresh daily  05:30 America/Chicago, and at boot unless today's
+                             run already succeeded: every shelf title's US
+                             providers, release date, next episode
+                             (screening/jobs.py). TMDB_READ_TOKEN missing or
+                             401 fails loudly.
     feed_prune       daily   03:15 America/Chicago, never at boot: clears item
                              embeddings older than 72 h; deletes filtered
                              stories (with their items), seeded items and
@@ -96,6 +103,7 @@ from feed import repos as feed_repos
 from feed import summarize as feed_summarize
 from feed import tech as feed_tech
 from feed import why as feed_why
+from screening import jobs as screening_jobs
 
 log = logging.getLogger("valemont.system")
 
@@ -434,6 +442,9 @@ FEED_SCORE = SystemJob("feed_score", FEED_INTERVAL_S, IntervalTrigger(seconds=FE
                        feed_profile_mod.score_new_job, scheduled=False)
 FEED_WHY = SystemJob("feed_why", FEED_INTERVAL_S, IntervalTrigger(seconds=FEED_INTERVAL_S),
                      feed_why.why_job, scheduled=False)
+#: Trailers (db/051): each new one matched to a TMDB title, first after ingest.
+SCREENING_MATCH = SystemJob(screening_jobs.MATCH_JOB, FEED_INTERVAL_S, IntervalTrigger(seconds=FEED_INTERVAL_S),
+                            screening_jobs.match_job, scheduled=False)
 #: Repo stories' why-it-matters (db/049), right after feed_why in both chains.
 FEED_REPO_WHY = SystemJob("feed_repo_why", FEED_INTERVAL_S, IntervalTrigger(seconds=FEED_INTERVAL_S),
                           feed_why.repo_why_job, scheduled=False)
@@ -457,7 +468,7 @@ def feed_ingest_job() -> None:
     try:
         feed_ingest.ingest_job()
     finally:
-        _chain(FEED_TECH_SUMMARIZE, FEED_SUMMARIZE, FEED_SCORE, FEED_WHY, FEED_REPO_WHY)
+        _chain(SCREENING_MATCH, FEED_TECH_SUMMARIZE, FEED_SUMMARIZE, FEED_SCORE, FEED_WHY, FEED_REPO_WHY)
 
 
 def feed_profile_job() -> None:
@@ -522,6 +533,7 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
         FEED_TECH_SUMMARIZE,
         FEED_SUMMARIZE,
         FEED_SCORE,
+        SCREENING_MATCH,
         FEED_WHY,
         FEED_REPO_WHY,
         SystemJob("feed_profile", 24 * 60 * 60, CronTrigger(hour=4, minute=0, timezone=OWNER_TZ),
@@ -530,6 +542,8 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
         # github-repos source) and feed_profile's (the tech profile).
         SystemJob(feed_repos.JOB_NAME, 24 * 60 * 60, CronTrigger(hour=7, minute=0, timezone=OWNER_TZ),
                   feed_repos.repos_job, misfire_grace=3600, start_delay_s=180),
+        SystemJob(screening_jobs.REFRESH_JOB, 24 * 60 * 60, CronTrigger(hour=5, minute=30, timezone=OWNER_TZ),
+                  screening_jobs.refresh_job, misfire_grace=3600, start_delay_s=240),
         SystemJob("feed_prune", 24 * 60 * 60, CronTrigger(hour=3, minute=15, timezone=OWNER_TZ),
                   feed_prune, misfire_grace=3600, run_at_boot=False),
     ]

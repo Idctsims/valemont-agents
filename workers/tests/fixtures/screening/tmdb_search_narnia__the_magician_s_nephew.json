@@ -1,0 +1,29 @@
+{
+ "page": 1,
+ "results": [
+  {
+   "adult": false,
+   "backdrop_path": "/xfSMUdnYplhEtLZDFPsOiSBOpU5.jpg",
+   "id": 1147572,
+   "title": "Narnia: The Magician's Nephew",
+   "original_title": "Narnia: The Magician's Nephew",
+   "overview": "Two children discover a wood full of pools leading to other worlds. One takes them to a dead city beneath a dying sun, where they wake a queen who exterminated its population and accidentally bring her back to London.",
+   "poster_path": "/yrqR0qquy4JOfqZCsFJV7vJoOSh.jpg",
+   "media_type": "movie",
+   "original_language": "en",
+   "genre_ids": [
+    14,
+    12,
+    10751
+   ],
+   "popularity": 19.1579,
+   "release_date": "2027-02-12",
+   "softcore": false,
+   "video": false,
+   "vote_average": 0.0,
+   "vote_count": 0
+  }
+ ],
+ "total_pages": 1,
+ "total_results": 1
+}

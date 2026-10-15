@@ -1,10 +1,12 @@
 "use client";
 
 import { ArrowUpRight, CaretDown, EyeSlash, Heart, Minus, Star } from "@phosphor-icons/react";
+import Link from "next/link";
 import { useId, useRef, useState } from "react";
 
 import {
   REPO_TOPICS_SHOWN, SURGE_LABEL, SWIPE_COMMIT_PX, starCount, stars7dText, swipeReaction, type FeedStory, type Pillar, type RepoInfo,
+  type TrailerMatch,
 } from "@/lib/feed/types";
 
 // One story in a feed list: a hairline row, not a boxed card (ledger
@@ -182,6 +184,7 @@ export function FeedCard({
           </p>
         )}
         {story.repo && <RepoFacts repo={story.repo} />}
+        {story.trailer && <TrailerTitle trailer={story.trailer} />}
         {story.whyItMatters && (
           <p data-testid="feed-why" className="mt-3 border-l-2 border-accent pl-3 text-sm text-text text-pretty">
             <span className="label-mono mr-2 text-accent">Why it matters</span>
@@ -269,6 +272,33 @@ function RepoFacts({ repo }: { repo: RepoInfo }) {
         </ul>
       )}
     </div>
+  );
+}
+
+/** A trailer's TMDB title (db/051): a link to its title page, above the row's
+ * own link, or a plain "Not matched to a title" when the worker found none. */
+function TrailerTitle({ trailer }: { trailer: TrailerMatch }) {
+  if (trailer.status === "unmatched") {
+    return (
+      <p data-testid="trailer-unmatched" className="label-mono mt-2 text-text-muted">
+        <span className="rounded-pill border border-text-muted px-2 normal-case tracking-normal text-text">unmatched</span>
+        <span className="ml-2 normal-case tracking-normal">Not matched to a title</span>
+      </p>
+    );
+  }
+  return (
+    <p className="relative z-10 mt-2">
+      <Link
+        href={`/screening/title/${trailer.kind}/${trailer.tmdbId}`}
+        data-testid="trailer-title"
+        data-no-swipe
+        className="tap -ml-1 inline-flex items-center gap-1.5 px-1 text-sm text-accent transition-colors hover:text-text"
+      >
+        {trailer.name}
+        <span className="label-mono text-text-muted">{trailer.kind === "tv" ? "Series" : "Film"}</span>
+        <ArrowUpRight size={14} aria-hidden />
+      </Link>
+    </p>
   );
 }
 

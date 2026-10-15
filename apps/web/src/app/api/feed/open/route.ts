@@ -18,7 +18,7 @@ import { createClient } from "@/lib/supabase/server";
 
 const RATE_LIMIT = 60;
 const DEDUPE_MIN = 10;
-const PILLARS = new Set(["home", "sports", "tech"]);
+const PILLARS = new Set(["home", "sports", "tech", "screening"]);
 
 const answer = (status: number, message?: string) =>
   new Response(message ?? null, { status, headers: message ? { "content-type": "text/plain; charset=utf-8" } : {} });

@@ -75,6 +75,7 @@ from feed import cluster, watch
 from feed.parse import MAX_ITEMS, RawItem, ParseFailed, canonical_url, head_items, keeps_category, parse_feed
 from feed.rules import Rule, Rules, SeedPhrase, best_seed
 from feed.sources import load_sources
+from screening import trailers
 
 log = logging.getLogger("valemont.feed")
 
@@ -196,18 +197,28 @@ class SourceStats:
     stale: int = 0
     #: Items already older than 72 h when first seen: recorded, never shown.
     aged: int = 0
+    #: Screening: feed entries that are not trailers (Shorts, clips...), dropped.
+    not_trailers: int = 0
     error: str | None = None
 
 
 @dataclass
 class RunStats:
     sources: list[SourceStats] = field(default_factory=list)
+    #: Every YouTube feed failed this run: one degraded state (settle_youtube).
+    youtube_outage: bool = False
 
     def total(self, attr: str) -> int:
         return sum(getattr(s, attr) for s in self.sources)
 
     def line(self) -> str:
         failed = [s.slug for s in self.sources if s.status == "error"]
+        if self.youtube_outage:
+            return ("YouTube OUTAGE (all its feeds failed; counted once); "
+                    + self._line([s for s in failed if not s.startswith("yt-")]))
+        return self._line(failed)
+
+    def _line(self, failed: list[str]) -> str:
         return (f"{len(self.sources)} sources, {self.total('new_stories')} new stories, "
                 f"{self.total('joined')} joins, {self.total('filtered')} filtered, "
                 f"{self.total('seeded')} seeded, {self.total('decode_failed')} decode failures, "
@@ -221,8 +232,9 @@ class _Candidate:
     story_id: int
     count: int
     members: list[cluster.Member]
-    #: A tech story: only tech items are compared with it (db/045).
-    tech: bool = False
+    #: Its world: 'tech', 'screening' or 'main'. Only an item of the same
+    #: world is compared with it (db/045, db/051).
+    world: str = "main"
 
     @property
     def item_count(self) -> int:
@@ -243,6 +255,26 @@ class Ingest:
         self.rules: Rules | None = None
         self.seeds: list[SeedPhrase] = []
         self.candidates: list[_Candidate] = []
+        #: YouTube failures of this run, recorded only once outage() has decided.
+        self.deferred: list[tuple[ledger.FeedSource, SourceStats]] = []
+
+    # -- YouTube as one source of trouble -------------------------------------
+
+    def settle_youtube(self, stats: Sequence[SourceStats], youtube_slugs: Sequence[str]) -> bool:
+        """After every source has run: when EVERY YouTube source failed this
+        run (and there are at least YT_MIN_SOURCES), it is a YouTube outage
+        (its feed server 404s them all for hours): ONE degraded state, no
+        per-source failure counted, no per-source alert (owner, 2026-10-14).
+        Otherwise each failed YouTube source is recorded like any other.
+        Returns whether this run was an outage."""
+        yt = [s for s in stats if s.slug in set(youtube_slugs)]
+        outage = len(yt) >= YT_MIN_SOURCES and all(s.status == "error" for s in yt)
+        if not outage:
+            for src, st in self.deferred:
+                self._record_fail(src, st)
+        self.deferred = []
+        YOUTUBE.observe(outage, len(yt), self.send)
+        return outage
 
     # -- setup ---------------------------------------------------------------
 
@@ -256,13 +288,21 @@ class Ingest:
         self.seeds = [SeedPhrase(r.id, r.pattern, seed_cache[(r.id, r.pattern)])
                       for r in self.rules.seed_rules]
         self.candidates = [_Candidate(c.story_id, c.item_count, [cluster.Member(t, v) for t, v in c.members],
-                                      c.tech)
+                                      c.world)
                            for c in ledger.feed_candidates(cluster.CANDIDATE_HOURS)]
 
     # -- one source ----------------------------------------------------------
 
     def _fail(self, src: ledger.FeedSource, stats: SourceStats, exc: BaseException) -> None:
         stats.status, stats.error = "error", describe(exc)
+        if is_youtube(src):
+            # Held until every YouTube source of the run is known (outage()).
+            self.deferred.append((src, stats))
+            return
+        self._record_fail(src, stats)
+
+    def _record_fail(self, src: ledger.FeedSource, stats: SourceStats) -> None:
+        assert stats.error is not None
         failures, alerted = ledger.feed_source_failed(src.id, stats.error)
         log.warning("feed %s failed (%d in a row): %s", src.slug, failures, stats.error)
         if failures >= FAILURES_TO_ALERT and not alerted:
@@ -296,6 +336,12 @@ class Ingest:
                 raise FetchFailed(f"HTTP {resp.status}")
             items = [i for i in self._parse(src, resp.content, fetched_at)
                      if keeps_category(i, src.include_categories)]
+            if "screening" in src.pillars:
+                # Trailers and teasers only (owner, 2026-10-14): no Shorts,
+                # clips, featurettes or reactions (screening/trailers.py).
+                kept = [i for i in items if trailers.is_trailer(i.title, i.link)]
+                stats.not_trailers = len(items) - len(kept)
+                items = kept
             # The body is done with: only the validators are kept (memory).
             resp = Response(resp.status, b"", resp.etag, resp.last_modified)
         except (FetchFailed, ParseFailed, watch.ConfigInvalid) as exc:
@@ -353,9 +399,10 @@ class Ingest:
         known_ext, _ = ledger.feed_known(src.id, [i.external_id for i in items], [])
         fresh = [i for i in items if i.external_id not in known_ext]
         stats.known = len(items) - len(fresh)
-        # A tech source's first fetch: its BACKFILL newest dated items are
-        # kept whatever their age, every first-fetch item marked backfill.
-        tech_first = first and "tech" in src.pillars
+        # A tech or screening source's first fetch: its BACKFILL newest dated
+        # items are kept whatever their age, every first-fetch item marked
+        # backfill.
+        tech_first = first and world_of(src.pillars) in BACKFILL_WORLDS
         newest = {i.external_id for i in sorted((i for i in fresh if i.published_at is not None),
                                                 key=lambda i: i.published_at, reverse=True)[:BACKFILL]
                   } if tech_first else set()
@@ -435,11 +482,12 @@ class Ingest:
 
     def _place(self, src: ledger.FeedSource, it: ledger.FeedItemIn, vec: Sequence[float],
                title_vec: Sequence[float], stats: SourceStats) -> None:
-        # Same world only: a tech item never joins a Home or Sports story, nor
-        # the reverse, so a join can never make a story cross the tech line.
-        tech = "tech" in src.pillars
+        # Same world only: a tech or screening item never joins another
+        # world's story, nor the reverse, so a join can never make a story
+        # cross the line.
+        world = world_of(src.pillars)
         decision = cluster.assign(title_vec, it.title,
-                                  [c for c in self.candidates if c.tech == tech])  # type: ignore[arg-type]
+                                  [c for c in self.candidates if c.world == world])  # type: ignore[arg-type]
         seed = best_seed(vec, self.seeds)
         logged = [ledger.SimilarityRow(s.story_id, "near_miss", s.cosine, s.fuzz) for s in decision.near_misses]
         for s in decision.near_misses:
@@ -475,7 +523,7 @@ class Ingest:
             return
         stats.new_stories += 1
         stats.filtered += int(reason is not None)
-        self.candidates.insert(0, _Candidate(made[0], 1, [member], tech))
+        self.candidates.insert(0, _Candidate(made[0], 1, [member], world))
 
 
 #: How many GUIDs a fetch's log line carries, and how much of each.
@@ -492,6 +540,69 @@ def newest_guids(items: Sequence[RawItem], n: int = LOG_GUIDS, width: int = LOG_
                                                      if items[i].published_at else 0.0, i))
     ids = [items[i].external_id[:width] for i in order[:n]]
     return " | ".join(ids) if ids else "none"
+
+
+def world_of(pillars: Sequence[str]) -> str:
+    """'tech', 'screening' or 'main' (Home and Sports): the exclusive pillars
+    (db/045, db/051) are worlds of their own."""
+    if "tech" in pillars:
+        return "tech"
+    if "screening" in pillars:
+        return "screening"
+    return "main"
+
+
+YOUTUBE_FEEDS = "https://www.youtube.com/feeds/videos.xml"
+#: An outage needs at least this many YouTube sources to all fail at once.
+YT_MIN_SOURCES = 3
+#: Consecutive outage runs before ONE push (6 runs of 30 min = 3 hours).
+YT_ALERT_RUNS = 6
+YT_OUTAGE_KIND = "feed_youtube_outage"
+YT_REALERT_HOURS = 24
+
+
+def is_youtube(src: ledger.FeedSource) -> bool:
+    return src.url.startswith(YOUTUBE_FEEDS)
+
+
+class YoutubeOutage:
+    """The whole-YouTube degraded state, across runs, in this process. One
+    push when it has lasted YT_ALERT_RUNS runs; re-armed when a run sees
+    YouTube answer again. After a restart, a push sent in the last
+    YT_REALERT_HOURS is adopted, not repeated."""
+
+    def __init__(self) -> None:
+        self.runs = 0
+        self.alerted: bool | None = None
+
+    def observe(self, outage: bool, sources: int, send: Callable[[push.Message], Any]) -> None:
+        if not outage:
+            if self.runs:
+                log.info("feed: YouTube answers again after %d outage run(s)", self.runs)
+            self.runs, self.alerted = 0, False
+            return
+        self.runs += 1
+        log.warning("feed: YouTube outage: all %d YouTube feeds failed this run (%d run(s) in a row); "
+                    "no per-source failures counted", sources, self.runs)
+        if self.alerted is None:
+            self.alerted = ledger.notification_sent_since(YT_OUTAGE_KIND, YT_REALERT_HOURS)
+        if self.runs >= YT_ALERT_RUNS and not self.alerted:
+            try:
+                send(push.Message(kind=YT_OUTAGE_KIND, title="YouTube feeds are down",
+                                  body=f"All {sources} trailer feeds have failed for {self.runs} runs in a row. "
+                                       "Trailers resume when YouTube answers again.",
+                                  deep_link=SOURCES_LINK, tag="feed-youtube"))
+                self.alerted = True
+            except push.PushError as exc:
+                log.error("feed: YouTube outage alert not sent: %s", exc)
+
+
+YOUTUBE = YoutubeOutage()
+
+
+#: First fetch keeps BACKFILL newest dated items whatever their age (db/045):
+#: Tech's rule, and Screening's (owner, 2026-10-14: "the Phase 1 rules apply").
+BACKFILL_WORLDS = frozenset({"tech", "screening"})
 
 
 class FetchFailed(RuntimeError):
@@ -526,8 +637,10 @@ def ingest_job(*, ingest: Ingest | None = None) -> RunStats:
     try:
         run.prepare(_SEED_CACHE)
         stats = RunStats()
-        for src in ledger.feed_active_sources():
+        sources = ledger.feed_active_sources()
+        for src in sources:
             stats.sources.append(run.run_source(src))
+        stats.youtube_outage = run.settle_youtube(stats.sources, [s.slug for s in sources if is_youtube(s)])
         log.info("feed ingest: %s", stats.line())
         return stats
     finally:

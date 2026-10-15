@@ -27,6 +27,7 @@ from array import array
 from contextlib import contextmanager
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -1958,7 +1959,9 @@ def feed_insert_seeded(source: FeedSource, items: Sequence[FeedItemIn], *,
 #: other item never one, so a join can never put a story in two worlds).
 #: tests_live/test_feed_ledger.py runs this exact text.
 FEED_CANDIDATES_SQL: Final = """
-    SELECT st.id, st.item_count, i.title, i.title_embedding::text, 'tech' = ANY (st.pillars)
+    SELECT st.id, st.item_count, i.title, i.title_embedding::text,
+           CASE WHEN 'tech' = ANY (st.pillars) THEN 'tech'
+                WHEN 'screening' = ANY (st.pillars) THEN 'screening' ELSE 'main' END
       FROM stories st
       JOIN content_items i ON i.story_id = st.id
      WHERE st.is_test = %(is_test)s
@@ -1974,8 +1977,13 @@ class CandidateStory:
     item_count: int
     #: (title, title-only embedding as float32) per member.
     members: tuple[tuple[str, "array[float]"], ...]
-    #: A tech story (db/045): only tech items may join it.
-    tech: bool = False
+    #: Its world (db/045, db/051): 'tech', 'screening' or 'main' (Home and
+    #: Sports). Only an item of the same world may join it.
+    world: str = "main"
+
+    @property
+    def tech(self) -> bool:
+        return self.world == "tech"
 
 
 def feed_candidates(hours: int, *, is_test: bool = False,
@@ -1983,12 +1991,12 @@ def feed_candidates(hours: int, *, is_test: bool = False,
     """Rows are read one at a time (no fetchall), each vector parsed straight
     into float32, so the text rows and the parsed vectors are never all held
     at once in Python objects."""
-    stories: dict[int, tuple[int, bool, list[tuple[str, array[float]]]]] = {}
+    stories: dict[int, tuple[int, str, list[tuple[str, array[float]]]]] = {}
     with _brief_conn(conn) as c, c.cursor() as cur:
         cur.execute(FEED_CANDIDATES_SQL, {"is_test": is_test, "hours": hours})
-        for sid, count, title, vec, tech in cur:
-            stories.setdefault(sid, (count, bool(tech), []))[2].append((title, _vec_array(vec)))
-    return [CandidateStory(sid, count, tuple(members), tech) for sid, (count, tech, members) in stories.items()]
+        for sid, count, title, vec, world in cur:
+            stories.setdefault(sid, (count, str(world), []))[2].append((title, _vec_array(vec)))
+    return [CandidateStory(sid, count, tuple(members), world) for sid, (count, world, members) in stories.items()]
 
 
 @dataclass(frozen=True)
@@ -2169,7 +2177,7 @@ FEED_SUMMARY_QUEUE_SQL: Final = """
       JOIN sources s ON s.id = i.source_id
      WHERE st.summary IS NULL AND st.filtered_reason IS NULL AND NOT st.is_test
        AND st.summary_attempts < %(max_attempts)s
-       AND NOT ('tech' = ANY (st.pillars))
+       AND NOT ('tech' = ANY (st.pillars)) AND NOT ('screening' = ANY (st.pillars))
      ORDER BY coalesce(lower(st.title) ~ %(priority)s::text, false) DESC, i.published_at DESC, st.id DESC
      LIMIT %(limit)s
 """
@@ -2231,6 +2239,7 @@ FEED_RETIRE_STALE_SQL: Final = """
        AND summary_attempts < %(max_attempts)s AND lead_item_id IS NOT NULL
        AND first_seen_at <= now() - make_interval(hours => %(hours)s)
        AND ('tech' = ANY (pillars)) = %(tech)s
+       AND NOT ('screening' = ANY (pillars))
 """
 
 
@@ -2259,12 +2268,14 @@ def feed_summary_queue(limit: int, max_attempts: int, priority: str | None = Non
 
 #: The summary backlog the health monitor watches (owner, 2026-10-12): kept,
 #: real stories still waiting for a summary (a try left) that were first seen
-#: more than `min_age_h` hours ago.
+#: more than `min_age_h` hours ago. Trailers (db/051) are never summarized,
+#: so they are never a backlog.
 FEED_SUMMARY_BACKLOG_SQL: Final = """
     SELECT count(*) FROM stories
      WHERE summary IS NULL AND filtered_reason IS NULL AND NOT is_test
        AND summary_attempts < %(max_attempts)s
        AND first_seen_at < now() - make_interval(hours => %(min_age_h)s)
+       AND NOT ('screening' = ANY (pillars))
 """
 
 
@@ -3347,6 +3358,96 @@ def feed_save_repo_why(answers: Mapping[int, str], ai_usage_id: int | None, *,
                 written += 1
                 cur.execute("UPDATE repos SET why_it_matters = %s WHERE story_id = %s", (line, story_id))
     return written
+
+
+# ---------------------------------------------------------------------------
+# The Screening Room (db/051; screening/). `titles` is an app table both the
+# web (owner session) and the worker write; `title_trailers` is the worker's;
+# watch_status is append-only and the web's (the worker only reads it).
+# ---------------------------------------------------------------------------
+
+def titles_upsert(t: Any, *, conn: psycopg.Connection | None = None) -> int:
+    """One REAL title (screening/tmdb.py TitleIn) by tmdb_id + kind: inserted,
+    or refreshed in place (every TMDB field, providers_refreshed_at,
+    refreshed_at). Returns its id."""
+    with _brief_conn(conn) as c, c.transaction():
+        row = c.execute(
+            """
+            INSERT INTO titles (tmdb_id, kind, name, release_date, poster_path, overview, genres, providers,
+                                providers_refreshed_at, trailer_key, next_episode_date, status, refreshed_at)
+            VALUES (%(tmdb_id)s, %(kind)s, %(name)s, %(release)s, %(poster)s, %(overview)s, %(genres)s, %(providers)s,
+                    now(), %(trailer)s, %(next)s, %(status)s, now())
+            ON CONFLICT (tmdb_id, kind) DO UPDATE SET
+                name = EXCLUDED.name, release_date = EXCLUDED.release_date, poster_path = EXCLUDED.poster_path,
+                overview = EXCLUDED.overview, genres = EXCLUDED.genres, providers = EXCLUDED.providers,
+                providers_refreshed_at = now(), trailer_key = coalesce(EXCLUDED.trailer_key, titles.trailer_key),
+                next_episode_date = EXCLUDED.next_episode_date, status = EXCLUDED.status, refreshed_at = now()
+             WHERE NOT titles.is_test
+            RETURNING id
+            """,
+            {"tmdb_id": t.tmdb_id, "kind": t.kind, "name": t.name, "release": t.release_date,
+             "poster": t.poster_path if t.poster_path and re.fullmatch(r"/[A-Za-z0-9_.-]+", t.poster_path) else None,
+             "overview": t.overview, "genres": list(t.genres), "providers": Jsonb(t.providers),
+             "trailer": t.trailer_key if t.trailer_key and re.fullmatch(r"[A-Za-z0-9_-]{6,20}", t.trailer_key) else None,
+             "next": t.next_episode_date if t.kind == "tv" else None, "status": t.status},
+        ).fetchone()
+    if row is None:
+        raise LedgerError(f"title {t.kind}/{t.tmdb_id} collides with a test title")
+    return int(row[0])
+
+
+@dataclass(frozen=True)
+class TrailerItem:
+    item_id: int
+    title: str
+    published_at: datetime
+
+
+#: Real, kept screening stories whose lead item has no title_trailers row yet
+#: (newest first): the trailers the match job still has to look up.
+SCREENING_UNMATCHED_SQL: Final = """
+    SELECT i.id, i.title, i.published_at
+      FROM stories st
+      JOIN content_items i ON i.id = st.lead_item_id
+     WHERE 'screening' = ANY (st.pillars) AND NOT st.is_test AND st.filtered_reason IS NULL
+       AND NOT EXISTS (SELECT 1 FROM title_trailers tt WHERE tt.item_id = i.id)
+     ORDER BY i.fetched_at DESC, i.id DESC
+     LIMIT %(limit)s
+"""
+
+
+def screening_unmatched(limit: int, *, conn: psycopg.Connection | None = None) -> list[TrailerItem]:
+    with _brief_conn(conn) as c:
+        return [TrailerItem(int(r[0]), r[1], r[2])
+                for r in c.execute(SCREENING_UNMATCHED_SQL, {"limit": limit}).fetchall()]
+
+
+def title_trailer_record(item_id: int, title_id: int | None, query: str, *,
+                         conn: psycopg.Connection | None = None) -> bool:
+    """A trailer's match (or `unmatched`), once. Returns whether it was new."""
+    with _brief_conn(conn) as c:
+        return c.execute(
+            "INSERT INTO title_trailers (item_id, title_id, status, query) VALUES (%s, %s, %s, left(%s, 300)) "
+            "ON CONFLICT (item_id) DO NOTHING",
+            (item_id, title_id, "matched" if title_id is not None else "unmatched", query)).rowcount == 1
+
+
+@dataclass(frozen=True)
+class ShelfTitle:
+    id: int
+    tmdb_id: int
+    kind: str
+    status: str
+
+
+def screening_shelf_titles(*, conn: psycopg.Connection | None = None) -> list[ShelfTitle]:
+    """Every REAL title on a shelf (its latest move), for the daily refresh."""
+    with _brief_conn(conn) as c:
+        return [ShelfTitle(int(r[0]), int(r[1]), r[2], r[3]) for r in c.execute(
+            """
+            SELECT t.id, t.tmdb_id, t.kind, c.status FROM v_watch_current c JOIN titles t ON t.id = c.title_id
+             WHERE NOT t.is_test ORDER BY c.status, t.id
+            """).fetchall()]
 
 
 # ---------------------------------------------------------------------------

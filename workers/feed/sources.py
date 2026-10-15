@@ -19,7 +19,11 @@ from feed import watch
 
 SOURCES_FILE = Path(__file__).with_name("sources.toml")
 GNEWS = "https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"
-PILLARS = frozenset({"home", "sports", "tech"})
+PILLARS = frozenset({"home", "sports", "tech", "screening"})
+#: Exclusive pillars (db/045, db/051): a source in one is in nothing else.
+EXCLUSIVE = ("tech", "screening")
+#: A YouTube channel feed (db/051 trailers): no key, one channel id.
+YOUTUBE_FEED = re.compile(r"^https://www\.youtube\.com/feeds/videos\.xml\?channel_id=UC[\w-]{22}$")
 SPORTS = frozenset({"cfb", "nfl", "nba", "f1", "golf"})
 KINDS = frozenset({"rss", "gnews", "page", "hn", "github"})
 HN_API = "https://hn.algolia.com/api/v1/"
@@ -74,6 +78,11 @@ def _spec(raw: dict) -> SourceSpec:
         raise SourcesInvalid(f"{where}: pillars must be a non-empty subset of {sorted(PILLARS)}")
     if "tech" in pillars and pillars != ("tech",):
         raise SourcesInvalid(f"{where}: a tech source is tech only (db/045: no cross-in)")
+    if "screening" in pillars and pillars != ("screening",):
+        raise SourcesInvalid(f"{where}: a screening source is screening only (db/051: no cross-in)")
+    if "screening" in pillars and (raw.get("kind") != "rss" or not YOUTUBE_FEED.match(str(raw.get("url", "")))
+                                   or not slug.startswith("yt-")):
+        raise SourcesInvalid(f"{where}: a screening source is a YouTube channel feed (kind rss, slug yt-...)")
     sport = raw.get("sport")
     if sport is not None and sport not in SPORTS:
         raise SourcesInvalid(f"{where}: unknown sport {sport!r}")
