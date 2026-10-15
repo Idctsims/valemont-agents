@@ -350,14 +350,17 @@ Thirteen build chats after this one, each split into phases with a test you run 
        2. **CLOSED (owner, Oct 14). New baseline for Phase 2: 138 MB at rest.** Worker memory at rest against ~130 MB, from the Railway log RSS lines; due after 08:50 UTC Oct 14. **Read 20:25 UTC Oct 14** (deployment `4fce67ec`, boot 06:22:38 UTC; all 6,902 `valemont.jobs` RSS lines since boot, 843 heartbeats, one a minute, none missing): 75 MB at boot; at rest 126–129 MB from 07Z to 14Z, then two steps, +5 MB at the 14:45 `morning_brief_push` and +4 MB at the 15:25 ingest, to 136–138 MB; 134 MB before the 20:22 ingest. Ingest peak 146–156 MB to 14:54, then 154–168 MB, highest **168 MB at 15:55**, back to 134–139 MB after every run. Slope (OLS on heartbeats): +1.06 MB/h from 07Z, which is the two steps; **−0.19 MB/h since 15:30Z**, flat. Against the baseline: at rest +4 to +8 MB, peak +13 MB. The owner's reading: flat, returns after ingest; the +5/+4 MB steps are one-time loads.
        3. **PENDING:** the why-it-matters Haiku cost for one full Chicago day. Oct 14 Chicago ends 05:00 UTC Oct 15; not read yet.
      - Migrations: db/045–db/048, all applied and recorded (CLAUDE.md, Current State). PRs #29–#34.
-   - **Phase 2, GitHub repos: built on `chat4-phase2-repos`, PENDING** (2026-10-14). Design, decisions and order: `docs/tech_hub.md` §7. `db/049_repos.sql` **applied 21:07:08 UTC Oct 14** (verified, CLAUDE.md Current State); `db/050` (the measured resurface baseline, owner's change) **applied 21:12:56 UTC Oct 14** (verified). `tests_live -v`: 358 OK, 0 skipped. Nothing on the phone checklist is verified yet:
-     - [ ] The Repos chip shows today's surfaced repos (8 max), each with stars, stars_7d or a labelled estimate, why-it-matters and the link
-     - [ ] At least half of day one's repos are something the owner would plausibly use (owner's judgment, on screen)
-     - [ ] A Not interested on a repo topic visibly drops that kind of repo over the next two daily runs
-     - [ ] No repo appears twice outside the resurface rule
-     - [ ] Wags answers "any repos worth using this week?" from real rows
-     - [ ] The token is only in Railway and the root .env; search calls stay under the limit (the per-run call count)
-     - [ ] Worker RAM at rest within ~15 MB of 138 MB
+   - **Phase 2, GitHub repos: GREEN Oct 14 (owner)**, with two watch items that do not block Phase 3 (below). PRs #36–#39. Design, decisions, the day-one baseline and grade: `docs/tech_hub.md` §7. `db/049_repos.sql` **applied 21:07:08 UTC Oct 14** and `db/050` (the measured resurface baseline, owner's change) **applied 21:12:56 UTC Oct 14**, both verified (CLAUDE.md Current State). `tests_live -v` on #39: 360 OK, 0 skipped.
+     - [x] The Repos chip shows today's surfaced repos (8 max), each with stars, stars_7d or a labelled estimate, why-it-matters and the link. **Screenshot gate approved by the owner, phone and desktop, both themes (Oct 14).**
+     - [x] At least half of day one's repos are something the owner would plausibly use: **owner's grade: repos fine; why lines 7/8 concrete** after the repo-why fix (#39; the 8 lines are in `docs/tech_hub.md` §7.2b).
+     - [ ] A Not interested on a repo topic visibly drops that kind of repo over the next two daily runs: **watch item, Oct 15–16 runs.**
+     - [ ] No repo appears twice outside the resurface rule: **watch item, Oct 15–16 runs** (the database enforces it: db/049–050's trigger).
+     - [x] Wags answers "any repos worth using this week?" from real rows: **green (owner, Oct 14).**
+     - [x] The token is only in Railway and the root .env (checked by name: absent on Vercel, `GITHUB_TOKEN` nowhere); search calls stay under the limit: **9 search, 125 core, 2 trending per run** (the boot run's job note, 21:29 UTC Oct 14).
+     - [x] Worker RAM at rest within ~15 MB of 138 MB: 130–140 MB through the first repo run and the redeploys (job notes and Railway RSS lines, Oct 14).
+     - **Watch items (do not block Phase 3), report each on the Oct 15–16 runs:**
+       1. A Not interested on a repo topic drops that kind of repo in the next two daily runs.
+       2. No repo surfaces twice outside the resurface rule.
 2. Screening Room: TMDB search, watchlist, currently watching, release dates, trailers, where to stream.
    - [ ] Recommendations reflect the six seed shows on day one and shift after reactions
 
