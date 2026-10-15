@@ -113,9 +113,13 @@ class Candidates(FeedLedgerCase):
             self.assertIn(fresh, test_ids)
             self.assertIn(edge, test_ids)
             self.assertNotIn(old, test_ids)
-            # The real world never sees test stories.
-            real_ids = {c.story_id for c in ledger.feed_candidates(48, is_test=False, conn=conn)}
-            self.assertFalse(real_ids & {fresh, edge, old})
+            # The real world never sees test stories. Counted in the database
+            # with the exact query text: reading the real window would pull
+            # ~17 MB of vectors (egress fix 1, 2026-10-15).
+            seen = conn.execute(
+                f"SELECT count(*) FROM ({ledger.FEED_CANDIDATES_SQL}) x(id, n, t, v, w, i) WHERE x.id = ANY (%(ids)s)",
+                {"is_test": False, "hours": 48, "since": None, "skip": [], "ids": [fresh, edge, old]}).fetchone()[0]
+            self.assertEqual(seen, 0)
 
     def test_members_come_back_with_their_title_embeddings(self) -> None:
         with _rolled_back() as conn:
@@ -132,6 +136,51 @@ class Candidates(FeedLedgerCase):
             self.assertEqual(len(cand.members[0][1]), 384)
             # Chat 3 Phase 1 hotfix: float32 arrays, not tuples of Python floats.
             self.assertEqual(cand.members[0][1].typecode, "f")
+
+    def test_the_cache_matches_a_fresh_load_after_new_items_and_a_delete(self) -> None:
+        """Egress fix 1 (feed/candidates.py) on the real SQL, test world: a
+        refreshed cache equals a fresh full load, reads only the new members,
+        and drops a deleted story at the next run. A filtered (hidden) story
+        stays a candidate, as it always has: a later duplicate joins it
+        instead of resurfacing."""
+        from array import array
+        from feed import candidates as cmod
+        from feed import cluster
+
+        def shape(cache: cmod.CandidateCache) -> list:
+            return [(c.story_id, c.count, c.world, [(m.title, list(m.vector)) for m in c.members], c.item_ids)
+                    for c in cache.candidates()]
+
+        with _rolled_back() as conn:
+            src = self.make_source(conn)
+            a, _ = ledger.feed_new_story(src, _item(title="Cache A"), unit(0), unit(0), filtered_reason=None,
+                                         seed=None, conn=conn)
+            gone, _ = ledger.feed_new_story(src, _item(title="Cache gone"), unit(1), unit(1), filtered_reason=None,
+                                            seed=None, conn=conn)
+            hidden, _ = ledger.feed_new_story(src, _item(title="Cache hidden"), unit(2), unit(2),
+                                              filtered_reason=None, seed=None, conn=conn)
+            cache = cmod.CandidateCache(is_test=True, conn=conn)
+            first = cache.refresh()
+            self.assertEqual(first.kind, "full")
+            self.assertTrue({a, gone, hidden} <= set(cache.stories))
+            # Another writer joins A and founds B; the run joins A once itself.
+            ledger.feed_join_story(src, _item(title="Cache A two"), unit(3), unit(3), a, seed=None, logged=[], conn=conn)
+            b, _ = ledger.feed_new_story(src, _item(title="Cache B"), unit(4), unit(4), filtered_reason=None,
+                                         seed=None, conn=conn)
+            own = ledger.feed_join_story(src, _item(title="Cache A own"), unit(5), unit(5), a, seed=None, logged=[],
+                                         conn=conn)
+            cache.joined(a, own, cluster.Member("Cache A own", array("f", unit(5))))
+            conn.execute("DELETE FROM stories WHERE id = %s", (gone,))
+            conn.execute("UPDATE stories SET filtered_reason = 'tl-hidden' WHERE id = %s", (hidden,))
+            inc = cache.refresh()
+            self.assertEqual((inc.kind, inc.added, inc.dropped), ("incremental", 2, 1))
+            self.assertNotIn(gone, cache.stories)
+            self.assertIn(hidden, cache.stories)
+            self.assertIn(b, cache.stories)
+            fresh = cmod.CandidateCache(is_test=True, conn=conn)
+            fresh.full()
+            self.assertEqual(shape(cache), shape(fresh))
+            self.assertLess(inc.bytes_read, first.bytes_read)
 
     def test_the_query_text_is_the_one_ledger_runs(self) -> None:
         self.assertIn("st.first_seen_at > now() - make_interval(hours => %(hours)s)", ledger.FEED_CANDIDATES_SQL)

@@ -33,6 +33,15 @@ from screening import tmdb
 from tests_live.test_feed_rank_sql import RankSqlCase, _act_as, _rolled_back
 
 
+
+def candidate_worlds(conn, ids, *, hours: int = 48, is_test: bool = False) -> dict:
+    """Each of `ids`' world as FEED_CANDIDATES_SQL gives it, decided in the
+    database: reading the whole real window would pull ~17-25 MB of vectors
+    (egress fix 1, 2026-10-15)."""
+    return dict(conn.execute(
+        f"SELECT DISTINCT x.id, x.w FROM ({ledger.FEED_CANDIDATES_SQL}) x(id, n, t, v, w, i) WHERE x.id = ANY (%(ids)s)",
+        {"is_test": is_test, "hours": hours, "since": None, "skip": [], "ids": list(ids)}).fetchall())
+
 class ScreeningSqlCase(RankSqlCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -134,7 +143,7 @@ class NoCrossIn(ScreeningSqlCase):
             conn.execute("UPDATE stories SET pillars = ARRAY['home'] WHERE id = %s", (trailer,))
             self.assertEqual(ledger.feed_summary_backlog(24, 2, conn=conn), before + 1)  # the same row counts as Home
             conn.execute("UPDATE stories SET pillars = ARRAY['screening'] WHERE id = %s", (trailer,))
-            worlds = {c.story_id: c.world for c in ledger.feed_candidates(72, conn=conn)}
+            worlds = candidate_worlds(conn, [trailer], hours=72)
             self.assertEqual(worlds.get(trailer), "screening")
 
 

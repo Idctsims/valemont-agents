@@ -1961,13 +1961,29 @@ def feed_insert_seeded(source: FeedSource, items: Sequence[FeedItemIn], *,
 FEED_CANDIDATES_SQL: Final = """
     SELECT st.id, st.item_count, i.title, i.title_embedding::text,
            CASE WHEN 'tech' = ANY (st.pillars) THEN 'tech'
-                WHEN 'screening' = ANY (st.pillars) THEN 'screening' ELSE 'main' END
+                WHEN 'screening' = ANY (st.pillars) THEN 'screening' ELSE 'main' END,
+           i.id
       FROM stories st
       JOIN content_items i ON i.story_id = st.id
      WHERE st.is_test = %(is_test)s
        AND st.first_seen_at > now() - make_interval(hours => %(hours)s)
        AND i.title_embedding IS NOT NULL
+       AND (%(since)s::timestamptz IS NULL OR i.fetched_at > %(since)s::timestamptz)
+       AND i.id <> ALL (%(skip)s::bigint[])
      ORDER BY st.id, i.id
+"""
+
+#: The candidate window without a vector (feed/candidates.py, every ingest
+#: run; egress fix 1, 2026-10-15): each story of the window's id, item count
+#: and world. A few dozen bytes a story, against
+#: ~4.8 KB a member for FEED_CANDIDATES_SQL.
+FEED_CANDIDATE_WINDOW_SQL: Final = """
+    SELECT st.id, st.item_count,
+           CASE WHEN 'tech' = ANY (st.pillars) THEN 'tech'
+                WHEN 'screening' = ANY (st.pillars) THEN 'screening' ELSE 'main' END
+      FROM stories st
+     WHERE st.is_test = %(is_test)s
+       AND st.first_seen_at > now() - make_interval(hours => %(hours)s)
 """
 
 
@@ -1980,23 +1996,67 @@ class CandidateStory:
     #: Its world (db/045, db/051): 'tech', 'screening' or 'main' (Home and
     #: Sports). Only an item of the same world may join it.
     world: str = "main"
+    #: Each member's content_items.id, in the order of `members` (the
+    #: in-memory cache keys on them; empty from a stub).
+    item_ids: tuple[int, ...] = ()
 
     @property
     def tech(self) -> bool:
         return self.world == "tech"
 
 
-def feed_candidates(hours: int, *, is_test: bool = False,
+def feed_candidates(hours: int, *, is_test: bool = False, since: datetime | None = None,
+                    skip: Sequence[int] = (), meter: list[int] | None = None,
                     conn: psycopg.Connection | None = None) -> list[CandidateStory]:
     """Rows are read one at a time (no fetchall), each vector parsed straight
     into float32, so the text rows and the parsed vectors are never all held
-    at once in Python objects."""
-    stories: dict[int, tuple[int, str, list[tuple[str, array[float]]]]] = {}
+    at once in Python objects. `since` (database time) keeps only members
+    fetched after it, `skip` leaves out item ids the caller already holds:
+    the cache's incremental read (feed/candidates.py). `meter`, when given,
+    gets the approximate bytes read added to its first element (the text of
+    every fetched value)."""
+    stories: dict[int, tuple[int, str, list[tuple[str, array[float]]], list[int]]] = {}
+    read = 0
     with _brief_conn(conn) as c, c.cursor() as cur:
-        cur.execute(FEED_CANDIDATES_SQL, {"is_test": is_test, "hours": hours})
-        for sid, count, title, vec, world in cur:
-            stories.setdefault(sid, (count, str(world), []))[2].append((title, _vec_array(vec)))
-    return [CandidateStory(sid, count, tuple(members), world) for sid, (count, world, members) in stories.items()]
+        cur.execute(FEED_CANDIDATES_SQL, {"is_test": is_test, "hours": hours, "since": since, "skip": list(skip)})
+        for sid, count, title, vec, world, item_id in cur:
+            read += _row_bytes((sid, count, title, vec, world, item_id))
+            s = stories.setdefault(sid, (count, str(world), [], []))
+            s[2].append((title, _vec_array(vec)))
+            s[3].append(int(item_id))
+    if meter is not None:
+        meter[0] += read
+    return [CandidateStory(sid, count, tuple(members), world, tuple(ids))
+            for sid, (count, world, members, ids) in stories.items()]
+
+
+@dataclass(frozen=True)
+class CandidateWindow:
+    #: The database's clock when the window was read.
+    db_now: datetime
+    #: story id -> (item count, world) for every story first seen in the window.
+    stories: dict[int, tuple[int, str]]
+
+
+def feed_candidate_window(hours: int, *, is_test: bool = False, meter: list[int] | None = None,
+                          conn: psycopg.Connection | None = None) -> CandidateWindow:
+    """FEED_CANDIDATE_WINDOW_SQL: the window's stories, no vectors."""
+    out: dict[int, tuple[int, str]] = {}
+    read = 0
+    with _brief_conn(conn) as c, c.cursor() as cur:
+        db_now = c.execute("SELECT now()").fetchone()[0]
+        cur.execute(FEED_CANDIDATE_WINDOW_SQL, {"is_test": is_test, "hours": hours})
+        for sid, count, world in cur:
+            read += _row_bytes((sid, count, world))
+            out[int(sid)] = (int(count), str(world))
+    if meter is not None:
+        meter[0] += read
+    return CandidateWindow(db_now, out)
+
+
+def _row_bytes(values: Sequence[Any]) -> int:
+    """Approximate wire bytes of a fetched row: each value's text length."""
+    return sum(len(str(v)) for v in values if v is not None)
 
 
 @dataclass(frozen=True)
