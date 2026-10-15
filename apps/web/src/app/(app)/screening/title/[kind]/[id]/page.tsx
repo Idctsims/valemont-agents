@@ -8,11 +8,13 @@ import { notFound } from "next/navigation";
 import { JustWatchAttribution, TmdbAttribution } from "@/components/screening/attribution";
 import { Poster } from "@/components/screening/search-box";
 import { ShelfButtons } from "@/components/screening/shelf-buttons";
+import { TitleReactions } from "@/components/screening/title-reactions";
 import { Fold } from "@/components/ui/fold";
 import { requireOwner } from "@/lib/auth";
 import { MARKER_HEADER, decideMarker } from "@/lib/capital/marker";
 import { titleOnShelf } from "@/lib/screening/data";
-import { isKind, longDate, yearOf } from "@/lib/screening/types";
+import { titleNews, titleReaction } from "@/lib/screening/recs";
+import { isKind, longDate, shortDate, yearOf } from "@/lib/screening/types";
 import { createClient } from "@/lib/supabase/server";
 import { titleDetails, type TitleDetails } from "@/lib/tmdb/client";
 import { splitProviders, tmdbImage, type ProviderRow, type Providers } from "@/lib/tmdb/services";
@@ -25,6 +27,8 @@ export const metadata: Metadata = { title: "Screening Room" };
 // streaming offer on one of the owner's services), then the other streaming
 // offers, rent and buy, folded. A test title (not on TMDB) renders from its
 // database row, and only with the verified e2e marker.
+// Phase 4 (db/053): Love / Neutral / Not interested, and "In the news" (up
+// to 3 recent Home stories that mention it) for a title on Want or Watching.
 
 export default async function TitlePage({ params }: { params: Promise<{ kind: string; id: string }> }) {
   await requireOwner();
@@ -40,6 +44,10 @@ export default async function TitlePage({ params }: { params: Promise<{ kind: st
     nextEpisodeDate: shelf.title.next_episode_date, status: null,
   } : null);
   if (!t) notFound();
+  const onList = shelf?.status === "want" || shelf?.status === "watching";
+  const [reaction, news] = shelf
+    ? await Promise.all([titleReaction(supabase, shelf.title.id), onList ? titleNews(supabase, shelf.title.id, { withTests }) : []])
+    : [null, []];
   const where = splitProviders(t.providers);
   const elsewhere = where.otherStream.length + where.rent.length + where.buy.length;
 
@@ -63,8 +71,9 @@ export default async function TitlePage({ params }: { params: Promise<{ kind: st
               : t.releaseDate ? `US release ${longDate(t.releaseDate)}` : "No US release date yet"}
           </p>
           {t.overview && <p data-testid="title-overview" className="mt-4 text-base text-text-muted text-pretty">{t.overview}</p>}
-          <div className="mt-5">
+          <div className="mt-5 flex flex-col gap-3">
             <ShelfButtons target={shelf ? { titleId: shelf.title.id } : { kind: t.kind, tmdbId: t.tmdbId }} current={shelf?.status ?? null} />
+            <TitleReactions target={shelf ? { titleId: shelf.title.id } : { kind: t.kind, tmdbId: t.tmdbId }} current={reaction} />
           </div>
         </div>
       </div>
@@ -80,6 +89,23 @@ export default async function TitlePage({ params }: { params: Promise<{ kind: st
             referrerPolicy="strict-origin-when-cross-origin"
             className="aspect-video w-full rounded-inner border border-border bg-surface-2"
           />
+        </section>
+      )}
+
+      {news.length > 0 && (
+        <section aria-label="In the news" data-testid="title-news" className="mt-8">
+          <h2 className="font-display text-2xl text-text">In the news</h2>
+          <ul className="mt-3 border-t border-border">
+            {news.map((n) => (
+              <li key={n.storyId} data-testid="title-news-item" className="border-b border-border py-3">
+                <a href={n.url} target="_blank" rel="noopener noreferrer" className="group block">
+                  <p className="font-display text-lg leading-snug text-text group-hover:text-accent">{n.title}</p>
+                  {n.summary && <p className="mt-1 line-clamp-2 text-sm text-text-muted">{n.summary}</p>}
+                  <p className="label-mono mt-1 text-text-muted">{n.sourceName} · {shortDate(n.firstSeenAt.slice(0, 10))}</p>
+                </a>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

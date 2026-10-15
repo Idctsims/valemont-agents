@@ -73,6 +73,12 @@ export function splitProviders(p: Providers | null | undefined): {
   return { tonight, otherStream, rent: [...(p?.rent ?? [])], buy: [...(p?.buy ?? [])] };
 }
 
+/** titles.tonight (db/053): the owner's services a title streams on tonight,
+ * sorted, once each. The worker's twin is tmdb.title_from's `tonight`. */
+export function tonightServices(p: Providers | null | undefined): string[] {
+  return [...new Set(splitProviders(p).tonight.map((t) => t.service))].sort();
+}
+
 /** A TMDB image URL (posters, provider logos). */
 export function tmdbImage(path: string | null | undefined, size: "w92" | "w185" | "w342" | "w45" = "w185"): string | null {
   return path && /^\/[A-Za-z0-9_.-]+$/.test(path) ? `https://image.tmdb.org/t/p/${size}${path}` : null;

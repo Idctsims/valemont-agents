@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { headers } from "next/headers";
+import Link from "next/link";
 
 import { MoveProposals } from "@/components/feed/move-proposals";
 import { StatusChip, type LegStatus } from "@/components/ui/badges";
@@ -13,6 +14,7 @@ import {
   type BoostNow, type FollowSummary, type ProfileSummary, type TechSourceRow,
 } from "@/lib/feed/data";
 import { ago, type Pillar } from "@/lib/feed/types";
+import { seenPassProgress } from "@/lib/screening/recs";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Feed profile" };
@@ -199,6 +201,30 @@ function TechSources({ rows, now }: { rows: TechSourceRow[]; now: number }) {
 
 const CHICAGO_DAY = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
+function SeenPass({ total, answered }: { total: number; answered: number }) {
+  // The seen-it pass (Chat 4 Phase 4): one time, re-openable here.
+  return (
+    <section data-testid="profile-seen-pass" className="border-t border-border pt-5 pb-8">
+      <h2 className="font-display text-2xl text-text">Screening: seen it?</h2>
+      <p className="mt-1 text-sm text-text-muted text-pretty">
+        {total === 0
+          ? "The pass is made with the first recommendations run."
+          : `${answered} of ${total} answered. What you've seen never comes up as a pick; seen and loved shapes them.`}
+      </p>
+      {total > 0 && (
+        <div className="mt-2 -ml-3 flex flex-wrap gap-1">
+          {answered < total && (
+            <Link href="/screening/seen" data-testid="seen-resume"
+                  className="tap inline-flex items-center rounded-pill px-3 text-sm text-accent hover:bg-surface-2">Resume</Link>
+          )}
+          <Link href="/screening/seen?again=1" data-testid="seen-again"
+                className="tap inline-flex items-center rounded-pill px-3 text-sm text-text hover:bg-surface-2">Go through it again</Link>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function Boosts({ boosts }: { boosts: BoostNow[] }) {
   return (
     <section data-testid="profile-boosts" className="border-t border-border pt-5 pb-8">
@@ -230,11 +256,12 @@ export default async function FeedProfilePage() {
   const now = Date.now();
   // Test proposals only for a verified e2e request (the rule for test stories).
   const withTests = decideMarker((await headers()).get(MARKER_HEADER), process.env).kind === "test";
-  const [{ latest, history, follows, pendingReactions }, proposals, boosts, techSources] = await Promise.all([
+  const [{ latest, history, follows, pendingReactions }, proposals, boosts, techSources, pass] = await Promise.all([
     feedProfile(supabase),
     moveProposals(supabase, { withTests }),
     boostsNow(supabase, new Date(now).toISOString()),
     techSourcesHealth(supabase),
+    seenPassProgress(supabase, { withTests }),
   ]);
   const pillars = (["home", "sports", "tech"] as const).filter((p) => latest[p]);
 
@@ -267,6 +294,8 @@ export default async function FeedProfilePage() {
         <Boosts boosts={boosts} />
 
         <TechSources rows={techSources} now={now} />
+
+        <SeenPass total={pass.total} answered={pass.answered} />
 
         {history.length > 0 && (
           <Fold label="Rebuilds" count={history.length} testId="profile-history">

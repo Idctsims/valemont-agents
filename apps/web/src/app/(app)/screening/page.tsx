@@ -5,31 +5,38 @@ import Link from "next/link";
 
 import { FeedList } from "@/components/feed/feed-list";
 import { TmdbAttribution } from "@/components/screening/attribution";
+import { ForYouRow } from "@/components/screening/for-you";
 import { Poster, SearchBox } from "@/components/screening/search-box";
+import { SeenBanner } from "@/components/screening/seen-banner";
 import { ShelfButtons } from "@/components/screening/shelf-buttons";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireOwner } from "@/lib/auth";
 import { MARKER_HEADER, decideMarker } from "@/lib/capital/marker";
-import { latestStories } from "@/lib/feed/data";
-import { pageFromParam } from "@/lib/feed/types";
+import { latestStories, storiesInOrder } from "@/lib/feed/data";
+import { PAGE_SIZE, pageFromParam } from "@/lib/feed/types";
 import { shelves, upcoming } from "@/lib/screening/data";
+import { forYou, seenPassProgress, trailersForYouIds } from "@/lib/screening/recs";
 import {
-  FINISHED_SHOWN, UPCOMING_DAYS, screeningTabFromParam, shortDate, yearOf, type ScreeningTab, type ShelfTitle,
+  FINISHED_SHOWN, UPCOMING_DAYS, screeningTabFromParam, shortDate, trailerViewFromParam, yearOf, type ScreeningTab,
+  type ShelfTitle, type TrailerView,
 } from "@/lib/screening/types";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Screening Room" };
 
-// The Screening Room (Chat 4 Phase 3; docs/screening.md, db/051).
-//   Shelves   search (TMDB, server side), Upcoming (a release or next episode
-//             in the next 30 days on Want or Watching), then Watching, Want
-//             and Finished (the last 20). One tap moves a title.
-//   Trailers  the screening pillar's trailers, newest first; Love / Neutral /
-//             Not interested write pillar screening only (feed_pillar_guard).
+// The Screening Room (Chat 4 Phases 3-4; docs/screening.md, db/051, db/053).
+//   Shelves   For you (12 picks from your taste, each with the loved title it
+//             is like and where it streams tonight; the seen-it pass banner
+//             while it has titles left), search (TMDB, server side),
+//             Upcoming (a release or next episode in the next 30 days on Want
+//             or Watching), then Watching, Want and Finished (the last 20).
+//   Trailers  For you (ranked by the screening profile; db/053) or Latest
+//             (newest first). Love / Neutral / Not interested write pillar
+//             screening only (feed_pillar_guard).
 // A test title or trailer shows only to a request with the verified e2e
 // marker. TMDB's attribution closes the page.
 
-type Params = { tab?: string | string[]; page?: string | string[] };
+type Params = { tab?: string | string[]; page?: string | string[]; view?: string | string[] };
 
 export default async function ScreeningPage({ searchParams }: { searchParams: Promise<Params> }) {
   await requireOwner();
@@ -46,7 +53,8 @@ export default async function ScreeningPage({ searchParams }: { searchParams: Pr
       <PageHeader label="Screening" title="Screening Room" summary="What you're watching, what you want to, where it streams tonight, and new trailers." />
       <Tabs tab={tab} />
       {tab === "trailers" ? (
-        <Trailers page={pageFromParam(params.page)} withTests={withTests} now={now} supabase={supabase} />
+        <Trailers page={pageFromParam(params.page)} view={trailerViewFromParam(params.view)} withTests={withTests} now={now}
+                  supabase={supabase} />
       ) : (
         <Shelves withTests={withTests} supabase={supabase} />
       )}
@@ -75,10 +83,20 @@ function Tabs({ tab }: { tab: ScreeningTab }) {
 }
 
 async function Shelves({ withTests, supabase }: { withTests: boolean; supabase: Awaited<ReturnType<typeof createClient>> }) {
-  const s = await shelves(supabase, { withTests });
+  const [s, recs, pass] = await Promise.all([
+    shelves(supabase, { withTests }), forYou(supabase, { withTests }), seenPassProgress(supabase, { withTests }),
+  ]);
   const soon = upcoming(s.all);
   return (
     <>
+      <SeenBanner left={pass.total - pass.answered} total={pass.total} />
+      <section aria-label="For you" data-testid="for-you" className="mb-10">
+        <div className="flex items-baseline justify-between gap-3 lg:max-w-3xl">
+          <h2 className="font-display text-2xl text-text">For you</h2>
+          <span className="label-mono text-text-muted">from what you love</span>
+        </div>
+        <ForYouRow recs={recs} />
+      </section>
       <SearchBox />
       <section aria-label="Upcoming" data-testid="upcoming" className="mt-10 lg:max-w-3xl">
         <h2 className="label-mono text-text-muted">Upcoming · next {UPCOMING_DAYS} days</h2>
@@ -140,29 +158,55 @@ function ShelfSection({ name, shelf, rows, empty }: { name: string; shelf: strin
   );
 }
 
-async function Trailers({ page, withTests, now, supabase }: {
-  page: number; withTests: boolean; now: number; supabase: Awaited<ReturnType<typeof createClient>>;
+async function Trailers({ page, view, withTests, now, supabase }: {
+  page: number; view: TrailerView; withTests: boolean; now: number; supabase: Awaited<ReturnType<typeof createClient>>;
 }) {
-  const feed = await latestStories(supabase, { pillar: "screening", page, withTests });
+  const feed = view === "latest"
+    ? await latestStories(supabase, { pillar: "screening", page, withTests })
+    : await storiesInOrder(supabase, {
+      pillar: "screening", ids: await trailersForYouIds(supabase, page, PAGE_SIZE, { withTests }), withTests,
+    });
+  const base = `/screening?tab=trailers${view === "latest" ? "&view=latest" : ""}`;
+  const views: { view: TrailerView; label: string; href: string }[] = [
+    { view: "for_you", label: "For you", href: "/screening?tab=trailers" },
+    { view: "latest", label: "Latest", href: "/screening?tab=trailers&view=latest" },
+  ];
   return (
-    <section aria-label="Trailers" data-testid="trailers" className="lg:max-w-3xl">
-      <p className="label-mono text-text-muted">Newest first · from your services and the studios</p>
+    <section aria-label="Trailers" data-testid="trailers" data-view={view} className="lg:max-w-3xl">
+      <nav aria-label="Trailer order" data-testid="trailer-views" className="-ml-3 mb-2 flex items-center gap-1">
+        {views.map((v) => (
+          <Link key={v.view} href={v.href} data-testid={`trailer-view-${v.view}`} aria-current={v.view === view ? "page" : undefined}
+                className={`tap inline-flex items-center rounded-pill px-3 text-sm transition-colors ${
+                  v.view === view ? "text-text underline decoration-accent decoration-2 underline-offset-8" : "text-text-muted hover:text-text"
+                }`}>
+            {v.label}
+          </Link>
+        ))}
+      </nav>
+      <p className="label-mono text-text-muted">
+        {view === "latest" ? "Newest first · from your services, the studios and TMDB" : "Ranked by your taste · the last 60 days"}
+      </p>
       {feed.stories.length === 0 ? (
         <p data-testid="feed-empty" className="mt-3 border-t border-border pt-4 text-base text-text-muted">
-          {page > 1 ? "Nothing older." : "No trailers yet. They arrive with the worker's next feed run."}
+          {page > 1 ? "Nothing more." : "No trailers yet. They arrive with the feed runs and the nightly recommendations run."}
         </p>
       ) : (
-        <FeedList key={`trailers-${page}`} stories={feed.stories} pillar="screening" now={now} testId="feed-latest" />
+        <FeedList key={`trailers-${view}-${page}`} stories={feed.stories} pillar="screening" now={now}
+                  testId={view === "latest" ? "feed-latest" : "trailers-for-you"} />
       )}
       {(page > 1 || feed.hasMore) && (
         <nav aria-label="Trailer pages" className="mt-4 -ml-3 flex items-center gap-1">
           {page > 1 && (
-            <Link href={`/screening?tab=trailers${page > 2 ? `&page=${page - 1}` : ""}`}
-                  className="tap inline-flex items-center rounded-pill px-3 text-sm text-text transition-colors hover:bg-surface-2">Newer</Link>
+            <Link href={`${base}${page > 2 ? `&page=${page - 1}` : ""}`}
+                  className="tap inline-flex items-center rounded-pill px-3 text-sm text-text transition-colors hover:bg-surface-2">
+              {view === "latest" ? "Newer" : "Back"}
+            </Link>
           )}
           {feed.hasMore && (
-            <Link href={`/screening?tab=trailers&page=${page + 1}`} data-testid="feed-older"
-                  className="tap inline-flex items-center rounded-pill px-3 text-sm text-text transition-colors hover:bg-surface-2">Older trailers</Link>
+            <Link href={`${base}&page=${page + 1}`} data-testid="feed-older"
+                  className="tap inline-flex items-center rounded-pill px-3 text-sm text-text transition-colors hover:bg-surface-2">
+              {view === "latest" ? "Older trailers" : "More trailers"}
+            </Link>
           )}
         </nav>
       )}
