@@ -540,7 +540,7 @@ class RepoWhy(unittest.TestCase):
         self.assertIn("hedges", reason)
 
     def test_the_two_new_targets(self) -> None:
-        self.assertIn("Tsims's dev workflow", why.REPO_TARGETS[why.WORKFLOW][0])
+        self.assertIn("Your dev workflow", why.REPO_TARGETS[why.WORKFLOW][0])
         self.assertIn("Claude Code, Cursor and MCP", why.REPO_TARGETS[why.WORKFLOW][0])
         self.assertIn("Next.js, Supabase and Tailwind", why.REPO_TARGETS[why.CLIENTS][0])
         for t in (why.DASHBOARD, why.WORKFLOW, why.CLIENTS):
@@ -554,6 +554,27 @@ class RepoWhy(unittest.TestCase):
                 line, reason = why.check_repo({"target": target, "why": bad}, self.NAMES)
                 self.assertEqual(line, why.GENERAL)
                 self.assertIn("does not name", reason)
+
+    def test_second_person_only(self) -> None:
+        """Owner, 2026-10-14: "your Claude Code", "your client sites", never
+        "Tsims's"; the prompt the model copies from says "your" too."""
+        ok = {"target": "dev workflow", "why": "Can add a reverse-engineering MCP server to your Claude Code."}
+        self.assertEqual(why.check_repo(ok, self.NAMES), (ok["why"], None))
+        for bad in ("Can monitor Tsims's Claude Code sessions from the notch.",
+                    "Gives the reader's client sites animated ASCII components.",
+                    "Can give the owner's dashboard a feed chart."):
+            with self.subTest(why=bad[:30]):
+                line, reason = why.check_repo({"target": "dev workflow" if "Claude" in bad else
+                                               ("client sites" if "client" in bad else "dashboard"), "why": bad},
+                                              self.NAMES)
+                self.assertEqual(line, why.GENERAL)
+                self.assertIn("names the reader", reason)
+        text = why.REPO_SYSTEM + "".join(v[0] for v in why.REPO_TARGETS.values())
+        self.assertNotIn("Tsims", text)
+        self.assertIn('"your Claude Code"', why.REPO_SYSTEM)
+        self.assertIn('"your client sites"', why.REPO_SYSTEM)
+        # The rule is the repo why's alone; news why does not check it.
+        self.assertNotIn("THIRD_PERSON", why.check.__code__.co_names)
 
     def _fake_complete(self, payloads: list[dict]):
         calls: list[str] = []

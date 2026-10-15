@@ -3,7 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
-  PAGE_SIZE, REPO_TOPICS_SHOWN, hides, otherOutlets, type FeedCategory, type FeedStory, type Pillar,
+  PAGE_SIZE, REPO_TOPICS_SHOWN, hides, otherOutlets, starSurge, type FeedCategory, type FeedStory, type Pillar,
   type PublishedPrecision, type RepoInfo, type Sport, type Stars7dSource, type TrailerMatch,
 } from "./types";
 
@@ -108,7 +108,8 @@ type RepoRowDb = {
   stars: number | null;
   stars_7d: number | null;
   stars_7d_source: Stars7dSource | null;
-  repo: { full_name: string; language: string | null; topics: string[] | null } | null;
+  created_at: string;
+  repo: { full_name: string; language: string | null; topics: string[] | null; gh_created_at: string | null } | null;
 };
 
 /** The repo card's fields for this page's GitHub stories (db/049: one
@@ -119,7 +120,7 @@ async function reposFor(supabase: SupabaseClient, ids: number[]): Promise<Map<nu
   if (ids.length === 0) return out;
   const { data, error } = await supabase
     .from("repo_surfacings")
-    .select("story_id, stars, stars_7d, stars_7d_source, repo:repos(full_name, language, topics)")
+    .select("story_id, stars, stars_7d, stars_7d_source, created_at, repo:repos(full_name, language, topics, gh_created_at)")
     .in("story_id", ids);
   if (error) throw new Error(`Couldn't read the repos: ${error.message}`);
   for (const r of (data ?? []) as unknown as RepoRowDb[]) {
@@ -127,6 +128,8 @@ async function reposFor(supabase: SupabaseClient, ids: number[]): Promise<Map<nu
     out.set(r.story_id, {
       fullName: r.repo.full_name, stars: r.stars, stars7d: r.stars_7d, stars7dSource: r.stars_7d_source,
       language: r.repo.language, topics: (r.repo.topics ?? []).slice(0, REPO_TOPICS_SHOWN),
+      surge: starSurge({ stars: r.stars, stars7d: r.stars_7d, stars7dSource: r.stars_7d_source,
+                         createdAt: r.repo.gh_created_at, surfacedAt: r.created_at }),
     });
   }
   return out;

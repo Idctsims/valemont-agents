@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useId, useRef, useState } from "react";
 
 import {
-  REPO_TOPICS_SHOWN, SWIPE_COMMIT_PX, starCount, stars7dText, swipeReaction, type FeedStory, type Pillar, type RepoInfo,
+  REPO_TOPICS_SHOWN, SURGE_LABEL, SWIPE_COMMIT_PX, starCount, stars7dText, swipeReaction, type FeedStory, type Pillar, type RepoInfo,
   type TrailerMatch,
 } from "@/lib/feed/types";
 
@@ -253,6 +253,11 @@ function RepoFacts({ repo }: { repo: RepoInfo }) {
         {delta && (
           <span data-testid="repo-stars-7d" data-estimate={estimate || undefined}>
             {delta}
+          </span>
+        )}
+        {repo.surge && (
+          <span data-testid="repo-surge" className="rounded-pill border border-text-muted px-2 text-text">
+            {SURGE_LABEL}
           </span>
         )}
         {repo.language && <span data-testid="repo-language">{repo.language}</span>}
