@@ -1190,7 +1190,8 @@ BEGIN
                     CASE v_n WHEN 1 THEN 'Inside the selftest 053 charlie show finale'
                              WHEN 2 THEN 'A story with no mention'
                              ELSE 'Selftest 053 charlie showrunner speaks' END,
-                    CASE v_n WHEN 2 THEN ARRAY['Selftest 053 Alpha'] ELSE NULL END)
+                    -- stories.entities is NOT NULL (default '{}'), never NULL.
+                    CASE v_n WHEN 2 THEN ARRAY['Selftest 053 Alpha'] ELSE '{}'::text[] END)
             RETURNING id INTO v_story;
             INSERT INTO public.content_items (source_id, external_id, url, title, published_at, story_id)
             VALUES (v_src, 'selftest053:' || v_n, 'https://selftest.invalid/053/' || v_n, 'x', now(), v_story)
