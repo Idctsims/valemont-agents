@@ -76,8 +76,11 @@ def clean_title(headline: str) -> Cleaned:
 
 
 def norm(name: str) -> str:
-    """Lowercase, no accents, no punctuation, single spaces; "&" is "and"."""
-    s = unicodedata.normalize("NFKD", str(name or "")).encode("ascii", "ignore").decode()
+    """Lowercase, no accents, no punctuation, single spaces; "&" is "and";
+    an apostrophe, straight or curly, joins ("Magician’s" = "Magician's" =
+    "magicians")."""
+    s = re.sub(r"['’‘`]", "", str(name or ""))
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
     s = s.lower().replace("&", " and ")
     s = re.sub(r"[^a-z0-9]+", " ", s)
     return " ".join(s.split())
