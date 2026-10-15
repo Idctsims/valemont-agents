@@ -7,7 +7,9 @@ THE SECTION CONTRACT (read this before adding a pillar)
     context_snapshot(). Today: goals, ventures, capital, feed (db/039, the
     top 3 of For you), tech_brief (db/045: one line, and only when an
     official tech item landed in the last 24 h; its provider returns NULL
-    otherwise and a NULL section is left out). A later chat that
+    otherwise and a NULL section is left out), screening_brief (db/053: one
+    line, today's releases on the shelves and the top For you pick; NULL
+    when there is neither). A later chat that
     ships a pillar adds its provider function and registry row in its own
     migration and sets brief_section = true; its section appears in the next
     brief with NO change here. ctx_brief (the brief itself, for Wags) is
@@ -382,9 +384,28 @@ def _tech_lines(t: Mapping[str, Any]) -> list[str]:
     return [" ".join(parts)] if parts else []
 
 
+def _screening_lines(t: Mapping[str, Any]) -> list[str]:
+    """One line (db/053 ctx_screening_brief): what on the Want and Watching
+    shelves comes out today and where it streams, then the top For you pick
+    and the loved title it is like."""
+    parts = []
+    rel = t.get("releases_today") or []
+    if rel:
+        def one(r: Mapping[str, Any]) -> str:
+            what = {"episode": " (new episode)", "arrival": " (just arrived)"}.get(str(r.get("what")), "")
+            return f"{r.get('title')}{what}" + (f" on {r.get('on')}" if r.get("on") else "")
+        parts.append("Today: " + "; ".join(one(r) for r in rel[:3]) + ".")
+    pick = t.get("top_pick") or {}
+    if pick.get("title"):
+        because = f", because you loved {pick['because_you_loved']}" if pick.get("because_you_loved") else ""
+        where = f" (on {pick['tonight'][0]})" if pick.get("tonight") else ""
+        parts.append(f"Pick: {pick['title']}{where}{because}.")
+    return [" ".join(parts)] if parts else []
+
+
 #: Sections held to one line, however many the model wrote (owner,
-#: 2026-10-13: "one Tech line").
-ONE_LINE_SECTIONS = frozenset({"tech_brief"})
+#: 2026-10-13: "one Tech line"; 2026-10-15: "the Brief's Screening line").
+ONE_LINE_SECTIONS = frozenset({"tech_brief", "screening_brief"})
 
 #: How the fallback words each section it knows. A later pillar adds one.
 FALLBACK_SECTIONS: dict[str, Callable[[Mapping[str, Any], str], list[str]]] = {
@@ -393,6 +414,7 @@ FALLBACK_SECTIONS: dict[str, Callable[[Mapping[str, Any], str], list[str]]] = {
     "capital": lambda p, _today: _capital_lines(p.get("capital") or {}),
     "feed": lambda p, _today: _feed_lines(p.get("feed") or {}),
     "tech_brief": lambda p, _today: _tech_lines(p.get("tech_brief") or {}),
+    "screening_brief": lambda p, _today: _screening_lines(p.get("screening_brief") or {}),
 }
 
 

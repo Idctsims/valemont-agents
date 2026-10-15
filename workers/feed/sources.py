@@ -25,11 +25,14 @@ EXCLUSIVE = ("tech", "screening")
 #: A YouTube channel feed (db/051 trailers): no key, one channel id.
 YOUTUBE_FEED = re.compile(r"^https://www\.youtube\.com/feeds/videos\.xml\?channel_id=UC[\w-]{22}$")
 SPORTS = frozenset({"cfb", "nfl", "nba", "f1", "golf"})
-KINDS = frozenset({"rss", "gnews", "page", "hn", "github"})
+KINDS = frozenset({"rss", "gnews", "page", "hn", "github", "tmdb"})
 HN_API = "https://hn.algolia.com/api/v1/"
 #: The repos source (db/049): tech only, never official, fetched by the daily
 #: repos job (feed/repos.py), never by the 30-minute ingest.
 GITHUB = "https://github.com/"
+#: Trailer source #2 (db/053): TMDB's official videos, screening only, read
+#: by the recommendations job (screening/rec_jobs.py), never by the ingest.
+TMDB = "https://api.themoviedb.org/"
 _SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 
@@ -80,9 +83,12 @@ def _spec(raw: dict) -> SourceSpec:
         raise SourcesInvalid(f"{where}: a tech source is tech only (db/045: no cross-in)")
     if "screening" in pillars and pillars != ("screening",):
         raise SourcesInvalid(f"{where}: a screening source is screening only (db/051: no cross-in)")
-    if "screening" in pillars and (raw.get("kind") != "rss" or not YOUTUBE_FEED.match(str(raw.get("url", "")))
-                                   or not slug.startswith("yt-")):
-        raise SourcesInvalid(f"{where}: a screening source is a YouTube channel feed (kind rss, slug yt-...)")
+    # Two kinds of screening source: a YouTube channel feed (db/051), or the
+    # one TMDB videos source (db/053).
+    if "screening" in pillars and raw.get("kind") != "tmdb" and (
+            raw.get("kind") != "rss" or not YOUTUBE_FEED.match(str(raw.get("url", ""))) or not slug.startswith("yt-")):
+        raise SourcesInvalid(f"{where}: a screening source is a YouTube channel feed (kind rss, slug yt-...) "
+                             "or the TMDB videos source (kind tmdb)")
     sport = raw.get("sport")
     if sport is not None and sport not in SPORTS:
         raise SourcesInvalid(f"{where}: unknown sport {sport!r}")
@@ -114,11 +120,15 @@ def _spec(raw: dict) -> SourceSpec:
             raise SourcesInvalid(f"{where}: an hn source queries {HN_API}")
         if kind == "github" and not url.startswith(GITHUB):
             raise SourcesInvalid(f"{where}: a github source is on {GITHUB}")
+        if kind == "tmdb" and not url.startswith(TMDB):
+            raise SourcesInvalid(f"{where}: a tmdb source is on {TMDB}")
     official = raw.get("official", False)
     if not isinstance(official, bool) or (official and pillars != ("tech",)):
         raise SourcesInvalid(f"{where}: official is true or false, and only on a tech source")
     if kind == "github" and (pillars != ("tech",) or official):
         raise SourcesInvalid(f"{where}: a github source is tech only and never official (db/049)")
+    if kind == "tmdb" and (pillars != ("screening",) or official):
+        raise SourcesInvalid(f"{where}: a tmdb source is screening only and never official (db/053)")
     cats = raw.get("include_categories")
     sport_from = raw.get("sport_from", "source")
     if sport_from not in SPORT_FROM:

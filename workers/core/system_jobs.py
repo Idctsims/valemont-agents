@@ -73,6 +73,20 @@
                              providers, release date, next episode
                              (screening/jobs.py). TMDB_READ_TOKEN missing or
                              401 fails loudly.
+    screening_recs   daily   04:30 America/Chicago, and at boot unless today's
+                             run already succeeded: the Screening Room's
+                             recommendations from the seeds and the owner's
+                             reactions (TMDB lists, embeddings, the profile,
+                             For you), the seen-it pass once, then TMDB's
+                             official trailers (screening/rec_jobs.py, db/053).
+                             A reaction queues a `screening_rerank` (job_queue,
+                             debounced by the database): the stored pool
+                             re-scored, no TMDB lists.
+    screening_release_push daily 08:30 America/Chicago, and at boot until
+                             20:00: one push when a Want or Watching title is
+                             out, has a new episode, or arrives on one of the
+                             owner's services today. Never twice for one title
+                             and event; at most one a day (db/053).
     feed_prune       daily   03:15 America/Chicago, never at boot: clears item
                              embeddings older than 72 h; deletes filtered
                              stories (with their items), seeded items and
@@ -104,6 +118,7 @@ from feed import summarize as feed_summarize
 from feed import tech as feed_tech
 from feed import why as feed_why
 from screening import jobs as screening_jobs
+from screening import rec_jobs as screening_recs
 
 log = logging.getLogger("valemont.system")
 
@@ -309,7 +324,14 @@ def check_db_size() -> None:
 #: kind -> handler(payload). Real handlers arrive with the features that need
 #: them (slip parsing, Arm Me, Lookbook tagging...). 'noop' exists to test.
 QueueHandler = Callable[[Mapping[str, Any]], None]
-QUEUE_HANDLERS: dict[str, QueueHandler] = {"noop": lambda payload: None}
+QUEUE_HANDLERS: dict[str, QueueHandler] = {
+    "noop": lambda payload: None,
+    # db/053: queued by the database after a title reaction, a shelf move or
+    # a trailer reaction (one at a time, 60 s debounce).
+    screening_recs.RERANK_KIND: lambda payload: screening_recs.rerank_job(payload) and None,
+    # scripts/screening_test_push.py: a TEST release push, armed for 08:30.
+    screening_recs.TEST_PUSH_KIND: lambda payload: screening_recs.test_release_push(payload) and None,
+}
 
 
 def backoff(attempt: int) -> timedelta:
@@ -544,6 +566,12 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
                   feed_repos.repos_job, misfire_grace=3600, start_delay_s=180),
         SystemJob(screening_jobs.REFRESH_JOB, 24 * 60 * 60, CronTrigger(hour=5, minute=30, timezone=OWNER_TZ),
                   screening_jobs.refresh_job, misfire_grace=3600, start_delay_s=240),
+        # After feed_ingest's boot run has synced sources.toml (tmdb-videos).
+        SystemJob(screening_recs.FULL_JOB, 24 * 60 * 60, CronTrigger(hour=4, minute=30, timezone=OWNER_TZ),
+                  screening_recs.recs_job, misfire_grace=3600, start_delay_s=300),
+        SystemJob(screening_recs.RELEASE_JOB, 24 * 60 * 60,
+                  CronTrigger(hour=screening_recs.RELEASE_AT[0], minute=screening_recs.RELEASE_AT[1], timezone=OWNER_TZ),
+                  screening_recs.release_push_job, misfire_grace=1800, start_delay_s=360),
         SystemJob("feed_prune", 24 * 60 * 60, CronTrigger(hour=3, minute=15, timezone=OWNER_TZ),
                   feed_prune, misfire_grace=3600, run_at_boot=False),
     ]

@@ -371,12 +371,20 @@ class Registry(unittest.TestCase):
                           "morning_brief", "morning_brief_push",
                           "feed_ingest", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
                           "feed_repo_why", "feed_profile", "feed_prune", "tech_repos",
-                          "screening_match", "screening_refresh"})
+                          "screening_match", "screening_refresh", "screening_recs", "screening_release_push"})
         self.assertFalse(built["screening_match"].scheduled)
         self.assertTrue(built["screening_refresh"].run_at_boot)
         self.assertEqual((built["screening_refresh"].trigger.fields[5].expressions[0].first,
                           built["screening_refresh"].trigger.fields[6].expressions[0].first,
                           str(built["screening_refresh"].trigger.timezone)), (5, 30, "America/Chicago"))
+        # Phase 4 (db/053): recommendations at 04:30 and at boot; the release push at 08:30.
+        for name, at in (("screening_recs", (4, 30)), ("screening_release_push", (8, 30))):
+            self.assertTrue(built[name].run_at_boot)
+            self.assertEqual((built[name].trigger.fields[5].expressions[0].first,
+                              built[name].trigger.fields[6].expressions[0].first,
+                              str(built[name].trigger.timezone)), (*at, "America/Chicago"))
+        self.assertIn("screening_rerank", system_jobs.QUEUE_HANDLERS)
+        self.assertIn("screening_test_release_push", system_jobs.QUEUE_HANDLERS)
         self.assertEqual(built["feed_ingest"].expected_interval_s, 1800)
         self.assertFalse(built["feed_tech_summarize"].scheduled)
         self.assertFalse(built["feed_summarize"].scheduled)
@@ -428,10 +436,11 @@ class SystemOnlyBoot(SystemTestCase):
                                "system:capital_snapshot", "system:morning_brief",
                                "system:morning_brief_push", "system:feed_ingest",
                                "system:feed_profile", "system:feed_prune", "system:tech_repos",
-                               "system:screening_refresh"})
+                               "system:screening_refresh", "system:screening_recs",
+                               "system:screening_release_push"})
         # screening_match, feed_tech_summarize, feed_summarize, feed_score, feed_why and feed_repo_why
         # are registered (job_health rows, watched) but never scheduled: feed_ingest runs them.
-        self.assertEqual(self.ledger.names().count("job_register"), 20)
+        self.assertEqual(self.ledger.names().count("job_register"), 22)
         for chained in ("screening_match", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
                         "feed_repo_why"):
             self.assertNotIn(f"system:{chained}", ids)
@@ -483,7 +492,7 @@ class SystemOnlyBoot(SystemTestCase):
                           "morning_brief", "morning_brief_push",
                           "feed_ingest", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
                           "feed_repo_why", "feed_profile", "feed_prune", "tech_repos",
-                          "screening_match", "screening_refresh"})
+                          "screening_match", "screening_refresh", "screening_recs", "screening_release_push"})
 
 
 if __name__ == "__main__":

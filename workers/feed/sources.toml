@@ -836,3 +836,15 @@ kind = "rss"
 url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCvC4D8onUfXzvjTOM-dBfEA"
 priority = 70
 notes = "YouTube @marvel, trailers and teasers only (owner, 2026-10-14)."
+
+# Trailer source #2 (Chat 4 Phase 4, db/053): TMDB's official YouTube trailers and teasers, read by the
+# daily recommendations job (screening/rec_jobs.py tmdb_trailers), never by the 30-minute ingest. A video
+# from here and the same video from a YouTube feed land once (content_items.youtube_key).
+[[source]]
+slug = "tmdb-videos"
+name = "TMDB"
+pillars = ["screening"]
+kind = "tmdb"
+url = "https://api.themoviedb.org/3"
+priority = 75
+notes = "TMDB videos: official Trailer/Teaser on YouTube, for the shelves and the profile's upcoming titles (owner, 2026-10-15)."

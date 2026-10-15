@@ -691,7 +691,7 @@ class RepoStoriesInTheEngine(unittest.TestCase):
 
     def test_ingest_never_fetches_the_github_source(self) -> None:
         import inspect
-        self.assertIn("kind <> 'github'", inspect.getsource(ledger.feed_active_sources))
+        self.assertIn("kind NOT IN ('github', 'tmdb')", inspect.getsource(ledger.feed_active_sources))
 
     def test_a_repo_story_never_pushes(self) -> None:
         from feed import tech

@@ -84,13 +84,17 @@ class Objects(ScreeningSqlCase):
                 "AND has_table_privilege('authenticated', c.oid, 'INSERT,UPDATE,DELETE')")]
             fixed = conn.execute("SELECT 1 FROM migration_log WHERE name = '052_watch_current_grants'").fetchone()
             self.assertEqual(writable, [] if fixed else ["v_watch_current"])
+            # db/053 adds two AFTER INSERT triggers (the re-rank queue, the title entity).
+            recs = conn.execute("SELECT 1 FROM migration_log WHERE name = '053_screening_recs'").fetchone()
             self.assertEqual({r[0] for r in conn.execute(
                 "SELECT tgname FROM pg_trigger WHERE tgrelid = 'watch_status'::regclass AND NOT tgisinternal")},
-                {"watch_status_stamp", "watch_status_immutable", "watch_status_no_truncate"})
+                {"watch_status_stamp", "watch_status_immutable", "watch_status_no_truncate"}
+                | ({"watch_status_rerank", "watch_status_title_entity"} if recs else set()))
             self.assertEqual(conn.execute("SELECT key, brief_section, enabled FROM context_providers "
                                           "WHERE key LIKE 'screening%%' ORDER BY key").fetchall(),
                              [("screening", False, True), ("screening_brief", True, True)])
-            self.assertIsNone(conn.execute("SELECT ctx_screening_brief()").fetchone()[0])
+            if not recs:  # silent until db/053; from then it speaks (tests_live/test_screening_recs_sql.py)
+                self.assertIsNone(conn.execute("SELECT ctx_screening_brief()").fetchone()[0])
             self.assertEqual(conn.execute("SELECT active, is_test, pillars FROM sources WHERE slug = '_e2e-screening'")
                              .fetchone(), (False, True, ["screening"]))
             for fn, ro in (("public.ctx_screening()", True), ("public.add_test_title(text, text, text)", False)):
