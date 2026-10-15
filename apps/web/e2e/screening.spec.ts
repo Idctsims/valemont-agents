@@ -142,11 +142,14 @@ test.describe("owner", () => {
     await page.getByTestId("shelf-want").click();
     await expect(page.getByTestId("shelf-buttons")).toHaveAttribute("aria-busy", "false");
     await page.goto("/screening");
-    await expect(page.getByText(name)).toHaveCount(1);
+    // With the marker: on the Want shelf, and in Upcoming (it comes out in 10 days).
+    await expect(page.getByTestId("shelf-section-want").getByText(name)).toHaveCount(1);
+    await expect(page.getByTestId("upcoming").getByText(name)).toHaveCount(1);
     try {
       await context.unroute(`${baseURL}/**`);
       await page.goto("/screening");
       await expect(page.getByTestId("shelf-section-want")).toBeVisible();
+      // Without it: nowhere on the page, shelves and Upcoming alike.
       await expect(page.getByText(name)).toHaveCount(0);
       const res = await page.goto(`/screening/title/movie/${t.tmdbId}`);
       expect(res?.status()).toBe(404);
