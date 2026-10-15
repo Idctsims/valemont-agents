@@ -71,6 +71,7 @@ from typing import Any, Callable, Sequence
 from core import embed as embedder
 from core import ledger, memory, push
 from core.jobs import describe
+from feed import candidates as candidates_mod
 from feed import cluster, watch
 from feed.parse import MAX_ITEMS, RawItem, ParseFailed, canonical_url, head_items, keeps_category, parse_feed
 from feed.rules import Rule, Rules, SeedPhrase, best_seed
@@ -227,20 +228,9 @@ class RunStats:
                 + (f"; failing: {', '.join(failed)}" if failed else ""))
 
 
-@dataclass
-class _Candidate:
-    story_id: int
-    count: int
-    members: list[cluster.Member]
-    #: Its world: 'tech', 'screening' or 'main'. Only an item of the same
-    #: world is compared with it (db/045, db/051).
-    world: str = "main"
-
-    @property
-    def item_count(self) -> int:
-        """cluster.assign reads candidates by these three names, so the run's
-        own list is passed as is (no per-item copy; Chat 3 Phase 1 hotfix)."""
-        return self.count
+#: The cluster candidate (feed/candidates.py; the name the tests and the run
+#: have always used).
+_Candidate = candidates_mod.Candidate
 
 
 class Ingest:
@@ -248,8 +238,12 @@ class Ingest:
 
     def __init__(self, *, get: Get, decode: Decode = _gnews_decode,
                  embed: Embed = embedder.embed, send: Callable[[push.Message], Any] = push.send,
-                 throttle: Throttle | None = None, now: Callable[[], datetime] | None = None) -> None:
+                 throttle: Throttle | None = None, now: Callable[[], datetime] | None = None,
+                 cache: candidates_mod.CandidateCache | None = None) -> None:
         self.get, self.decode, self.embed, self.send = get, decode, embed, send
+        #: The process's candidate cache (ingest_job); None: a full load per
+        #: run, as before the cache (the tests' default).
+        self.cache = cache
         self.throttle = throttle or Throttle(DECODES_PER_SECOND)
         self.now = now or (lambda: datetime.now(timezone.utc))
         self.rules: Rules | None = None
@@ -287,6 +281,10 @@ class Ingest:
                 seed_cache[(r.id, r.pattern)] = tuple(v)
         self.seeds = [SeedPhrase(r.id, r.pattern, seed_cache[(r.id, r.pattern)])
                       for r in self.rules.seed_rules]
+        if self.cache is not None:
+            log.info("feed %s", self.cache.refresh().line())
+            self.candidates = self.cache.candidates()
+            return
         self.candidates = [_Candidate(c.story_id, c.item_count, [cluster.Member(t, v) for t, v in c.members],
                                       c.world)
                            for c in ledger.feed_candidates(cluster.CANDIDATE_HOURS)]
@@ -503,6 +501,10 @@ class Ingest:
             log.info("feed join %.3f (fuzz %.0f, by %s): %r -> story %d", best.cosine, best.fuzz,
                      decision.joined_by, it.title, decision.story_id)
             stats.joined += 1
+            if self.cache is not None:
+                # The run's list shares the cache's objects: one update.
+                self.cache.joined(decision.story_id, item_id, member)
+                return
             for c in self.candidates:
                 if c.story_id == decision.story_id:
                     c.members.append(member)
@@ -523,7 +525,10 @@ class Ingest:
             return
         stats.new_stories += 1
         stats.filtered += int(reason is not None)
-        self.candidates.insert(0, _Candidate(made[0], 1, [member], world))
+        if self.cache is not None:
+            self.candidates.insert(0, self.cache.founded(made[0], made[1], member, world))
+        else:
+            self.candidates.insert(0, _Candidate(made[0], 1, [member], world))
 
 
 #: How many GUIDs a fetch's log line carries, and how much of each.
@@ -617,6 +622,9 @@ class _NoLink(Exception):
 
 _SEED_CACHE: dict[tuple[int, str], tuple[float, ...]] = {}
 _SYNCED = False
+#: The process's cluster candidates (egress fix 1): full at boot and daily,
+#: incremental between (feed/candidates.py).
+CANDIDATES = candidates_mod.CandidateCache()
 
 
 def sync_sources() -> tuple[int, int]:
@@ -633,7 +641,8 @@ def ingest_job(*, ingest: Ingest | None = None) -> RunStats:
         sync_sources()
         _SYNCED = True
     fetcher = None if ingest else Fetcher()
-    run = ingest or Ingest(get=fetcher)  # type: ignore[arg-type]
+    run = ingest or Ingest(get=fetcher, cache=CANDIDATES)  # type: ignore[arg-type]
+    ok = False
     try:
         run.prepare(_SEED_CACHE)
         stats = RunStats()
@@ -642,10 +651,15 @@ def ingest_job(*, ingest: Ingest | None = None) -> RunStats:
             stats.sources.append(run.run_source(src))
         stats.youtube_outage = run.settle_youtube(stats.sources, [s.slug for s in sources if is_youtube(s)])
         log.info("feed ingest: %s", stats.line())
+        ok = True
         return stats
     finally:
-        # The run's candidate vectors are the job's biggest structure: drop
-        # them, then hand the freed memory back (core/memory.py).
+        # A run that failed part-way may have written what the cache never
+        # saw: the next run loads in full.
+        if not ok and run.cache is not None:
+            run.cache.invalidate()
+        # The run's list (the cache keeps the candidates themselves), then
+        # hand the freed memory back (core/memory.py).
         run.candidates = []
         if fetcher is not None:
             fetcher.close()

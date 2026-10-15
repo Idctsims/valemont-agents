@@ -28,6 +28,15 @@ from core import ledger
 from tests_live.test_feed_rank_sql import RankSqlCase, _act_as, _rolled_back
 
 
+
+def candidate_worlds(conn, ids, *, hours: int = 48, is_test: bool = False) -> dict:
+    """Each of `ids`' world as FEED_CANDIDATES_SQL gives it, decided in the
+    database: reading the whole real window would pull ~17-25 MB of vectors
+    (egress fix 1, 2026-10-15)."""
+    return dict(conn.execute(
+        f"SELECT DISTINCT x.id, x.w FROM ({ledger.FEED_CANDIDATES_SQL}) x(id, n, t, v, w, i) WHERE x.id = ANY (%(ids)s)",
+        {"is_test": is_test, "hours": hours, "since": None, "skip": [], "ids": list(ids)}).fetchall())
+
 class TechSqlCase(RankSqlCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -390,8 +399,8 @@ class WorkerQueries(TechSqlCase):
         with _rolled_back() as conn:
             t = self.tech_story(conn)
             h = self.story(conn, self.source(conn))
-            worlds = {c.story_id: c.tech for c in ledger.feed_candidates(48, conn=conn)}
-            self.assertEqual((worlds[t], worlds[h]), (True, False))
+            worlds = candidate_worlds(conn, [t, h])
+            self.assertEqual((worlds[t], worlds[h]), ("tech", "main"))
             slug = f"tl-{uuid.uuid4().hex[:10]}"
             conn.execute("""INSERT INTO sources (slug, name, pillars, kind, url, active, official, config)
                             VALUES (%s, 'TL page', ARRAY['tech'], 'page', 'https://tests-live.invalid/p', false,
