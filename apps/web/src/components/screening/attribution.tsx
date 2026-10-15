@@ -1,14 +1,17 @@
 // The attributions TMDB's and JustWatch's terms ask for (db/051).
 
-/** TMDB: on /screening and every title page. The official logo is to be
- * dropped in as public/tmdb-logo.svg (owner; their site blocks scripted
- * downloads), until then the name links to TMDB. */
+import Image from "next/image";
+
+/** TMDB: on /screening and every title page. Their official logo
+ * (public/tmdb-logo.svg, added by the owner on 2026-10-14) links to TMDB,
+ * with the notice their terms ask for. */
 export function TmdbAttribution() {
   return (
-    <p data-testid="tmdb-attribution" className="mt-12 max-w-measure border-t border-border pt-4 text-xs text-text-muted">
-      <a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer"
-         className="font-mono font-medium text-text hover:text-accent">TMDB</a>
-      <span className="ml-2">This product uses the TMDB API but is not endorsed or certified by TMDB.</span>
+    <p data-testid="tmdb-attribution" className="mt-12 flex max-w-measure items-center gap-3 border-t border-border pt-4 text-xs text-text-muted">
+      <a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer" className="tap inline-flex shrink-0 items-center">
+        <Image src="/tmdb-logo.svg" alt="TMDB" width={44} height={32} unoptimized data-testid="tmdb-logo" />
+      </a>
+      <span>This product uses the TMDB API but is not endorsed or certified by TMDB.</span>
     </p>
   );
 }

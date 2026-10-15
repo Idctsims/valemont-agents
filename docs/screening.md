@@ -140,10 +140,10 @@ like any other source. A non-YouTube failure is never held.
 
 ## 5. Decisions made while building, for the owner
 
-1. **TMDB's logo is not in the repo yet.** themoviedb.org blocks scripted
-   downloads (403 on the attribution page; the old logo URL is gone). The
-   required text attribution ships; drop the official logo in as
-   `apps/web/public/tmdb-logo.svg` and the attribution switches to it.
+1. **TMDB's logo** was added by the owner as `apps/web/public/tmdb-logo.svg`
+   (2026-10-14; themoviedb.org blocks scripted downloads). It is their
+   stacked logo, a plain SVG (no script, no external reference); the
+   attribution shows it beside the required notice.
 2. **Tonight counts `ads` and `free` offers** on the owner's services, not
    only `flatrate` (TMDB lists Paramount+ Essential and Prime with Ads there).
 3. **Test titles** use TMDB ids from 900,000,000 up (never a real id) and

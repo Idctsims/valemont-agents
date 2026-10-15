@@ -64,6 +64,8 @@ test.describe("owner", () => {
   test("search returns results, with poster, year and kind", async () => {
     await page.goto("/screening");
     await expect(page.getByTestId("tmdb-attribution")).toContainText("not endorsed or certified by TMDB");
+    await expect(page.getByTestId("tmdb-logo")).toHaveAttribute("src", "/tmdb-logo.svg");
+    expect(await page.getByTestId("tmdb-logo").evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
     const started = Date.now();
     await page.getByTestId("screening-search-input").fill("Succession");
     await expect(page.getByTestId("screening-search-state")).toHaveAttribute("data-state", "done");
