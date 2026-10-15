@@ -255,33 +255,38 @@ WORKFLOW = "dev workflow"
 CLIENTS = "client sites"
 #: The non-venture targets: how each is described to the model, and what the
 #: line must say to name it.
+#: Written to the reader in the second person (owner, 2026-10-14): the
+#: model copies these words, so they say "your", never the owner's name.
 REPO_TARGETS: dict[str, tuple[str, re.Pattern[str]]] = {
-    DASHBOARD: ("Valemont Command, Tsims's private dashboard: a Next.js app on Vercel, Supabase Postgres, Python "
-                "workers on Railway, Claude for summaries and the Wags assistant, a feed engine with embeddings, "
-                "push notifications, and paper-trading and forecast-tracking agents.",
+    DASHBOARD: ("Your dashboard, Valemont Command: a Next.js app on Vercel, Supabase Postgres, Python workers on "
+                "Railway, Claude for summaries and the Wags assistant, a feed engine with embeddings, push "
+                "notifications, and paper-trading and forecast-tracking agents.",
                 re.compile(r"\bdashboard\b", re.IGNORECASE)),
-    WORKFLOW: ("Tsims's dev workflow: building with Claude Code, Cursor and MCP servers, agent skills and the "
-               "CLI tools around them.",
+    WORKFLOW: ("Your dev workflow: you build with Claude Code, Cursor and MCP servers, agent skills and the CLI "
+               "tools around them.",
                re.compile(r"\b(workflow|claude code|cursor|mcp)\b", re.IGNORECASE)),
-    CLIENTS: ("Freelance client sites Tsims builds: Next.js, Supabase and Tailwind websites and web apps for "
+    CLIENTS: ("Your freelance client sites: Next.js, Supabase and Tailwind websites and web apps you build for "
               "clients.",
               re.compile(r"\b(client|clients|freelance)\b", re.IGNORECASE)),
 }
 #: The repo hedge rule: "can"/"could" are allowed (the target is named).
 REPO_HEDGE = re.compile(r"\b(may|might|potentially|possibly|perhaps)\b", re.IGNORECASE)
+#: Owner, 2026-10-14: a repo line speaks to the reader ("your Claude Code",
+#: "your client sites"), never about them by name.
+THIRD_PERSON = re.compile(r"\btsims\b|\bthe (reader|owner|user)\b", re.IGNORECASE)
 
-REPO_SYSTEM = f"""You decide whether a GitHub repository is something one reader, Tsims, would actually use, and say for what in one line.
+REPO_SYSTEM = f"""You decide whether a GitHub repository is something the reader would actually use, and tell them for what in one line. Speak to the reader directly: "you", "your".
 
-You get Tsims's ventures (name, what it does, and for some the stage, next action and workstreams), three more targets described below, and a few repositories (id, owner/name, description, topics, summary).
+You get the reader's ventures (name, what it does, and for some the stage, next action and workstreams), three more targets described below, and a few repositories (id, owner/name, description, topics, summary).
 
 For each repository answer with a target and a line:
 - target = a venture's exact name, when the repository has a concrete use in that venture's work: it does a job the venture needs done (its product, its marketing, its operations, its data).
-- target = "{DASHBOARD}", when it has a concrete use in Tsims's dashboard: a library, tool or pattern its stack would adopt.
-- target = "{WORKFLOW}", when it has a concrete use in Tsims's dev workflow: Claude Code, Cursor, MCP, agent skills.
-- target = "{CLIENTS}", when it has a concrete use in freelance client sites (Next.js, Supabase, Tailwind).
+- target = "{DASHBOARD}", when it has a concrete use in your dashboard: a library, tool or pattern its stack would adopt.
+- target = "{WORKFLOW}", when it has a concrete use in your dev workflow: Claude Code, Cursor, MCP, agent skills.
+- target = "{CLIENTS}", when it has a concrete use in your freelance client sites (Next.js, Supabase, Tailwind).
 - target = null, when there is no concrete use. Never stretch.
 
-When the target is not null, write ONE sentence of at most {MAX_WORDS} words that names the target (the venture's exact name, or "dashboard", "dev workflow" or "client sites") and the concrete use. "Can" is fine; never "may" or "might".
+When the target is not null, write ONE sentence of at most {MAX_WORDS} words that names the target (the venture's exact name, or "your dashboard", "your dev workflow", "your Claude Code", "your client sites") and the concrete use, in the second person: "your Claude Code", "your client sites". Never the reader's name, never "the reader". "Can" is fine; never "may" or "might".
 
 Return one result per repository: its id, the target (or null) and the line (or null). Output only the JSON object."""
 
@@ -317,6 +322,9 @@ def check_repo(item: dict[str, Any], names: Sequence[str]) -> tuple[str, str | N
     hedge = REPO_HEDGE.search(why)
     if hedge:
         return GENERAL, f"hedges ({hedge.group(0)!r}): say what it does for the target, plainly"
+    third = THIRD_PERSON.search(why)
+    if third:
+        return GENERAL, f"names the reader ({third.group(0)!r}): speak to them as \"you\" / \"your\""
     n = len(why.split())
     if n > MAX_WORDS:
         return GENERAL, f"{n} words; the cap is {MAX_WORDS}"

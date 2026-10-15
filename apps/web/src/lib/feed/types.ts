@@ -63,7 +63,29 @@ export type RepoInfo = {
   language: string | null;
   /** At most 3 shown (the card's rule; the row keeps every topic). */
   topics: string[];
+  /** A trending count over half the total on a repo older than 30 days
+   * (starSurge): the card says "star surge — unverified". */
+  surge: boolean;
 };
+
+/** The worker's trending_suspect (workers/feed/repos.py SUSPECT_SHARE,
+ * SUSPECT_AGE_DAYS; pinned by e2e/repos-unit.spec.ts). */
+export const SURGE_SHARE = 0.5;
+export const SURGE_AGE_DAYS = 30;
+export const SURGE_LABEL = "star surge — unverified";
+
+/** Owner, 2026-10-14 (morluto/rea: 183,758 "stars this week" on 239,045,
+ * six months old): a TRENDING stars_7d over SURGE_SHARE of the total, on a
+ * repo created more than SURGE_AGE_DAYS before it surfaced. */
+export function starSurge(r: {
+  stars: number | null; stars7d: number | null; stars7dSource: Stars7dSource | null;
+  createdAt: string | null; surfacedAt: string;
+}): boolean {
+  if (r.stars === null || r.stars <= 0 || r.stars7d === null || r.createdAt === null) return false;
+  if (r.stars7dSource !== "trending_weekly" && r.stars7dSource !== "trending_daily") return false;
+  const ageDays = (Date.parse(r.surfacedAt) - Date.parse(r.createdAt)) / 86_400_000;
+  return ageDays > SURGE_AGE_DAYS && r.stars7d > SURGE_SHARE * r.stars;
+}
 
 /** At most this many topics on a repo card. */
 export const REPO_TOPICS_SHOWN = 3;
