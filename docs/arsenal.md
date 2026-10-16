@@ -425,6 +425,9 @@ UI approved pending these fixes (same follow-up PR):
   - **Guard:** `tests/fixtures/arsenal/outcome_controls.json` (Thermopylae with its deploy line, Custer, Miracle on Ice). `tests/test_arsenal.py` `OutcomeControls` locks the question, the warn rule, Thermopylae's line in the prompt, the held-out cases' absence from it, and the own-page ranking over a decoy that outscores it. `scripts.arsenal_outcome_control` runs the three through the real model and exits 1 on any miss: **3/3 PASS** after round B.
   - Cost of every outcome run to date: 219 Haiku calls, $0.071872.
   - The ready pool after the 3 holds: 18 references, all 7 categories, so tomorrow's drop is not short.
+- **db/056 (owner, Oct 16):** hold releases (append-only, once per hold) and `v_arsenal_active_holds`. The picker, the worker's ready counts and the outcome check read active holds only. Applied 21:07:36 UTC and verified via db_inspect. **Holds 9, 10 and 11 released** (releases 3–5, the agreed reason): no active holds, 21 ready references across all 7 categories.
+  - The outcome check is now a dry run by default. `--write` refuses unless the three controls pass in the same run (`tests/` `OutcomeWriteGate`).
+  - Merge gate: `tests/` 1049 OK; `tests_live -v`, metered, **421 OK, 0 skipped**, ~2.66 MB (2,723 KB, 805 s).
 - **Merge gate after db/055 (Oct 16):** `tests/` 1043 OK. `tests_live -v`, metered: **418 OK, 0 skipped**, ~2.65 MB read (2,718 KB, 748 s), the 8 `RoomsAndWordSeeds` tests included.
 - **Item 6 at render time:** `quoteCredit` (`lib/arsenal/types.ts`) shows a film or TV speaker as "Sean Parker (as written in The Social Network)" on every card, old and new. The generator rule stays. The same cases are in `e2e/arsenal-unit.spec.ts` and `tests/test_arsenal.py` `FilmQuoteCredit`.
 - **Pool size: 36 references and 12 words a batch** (`REFS_MAX_TOKENS` 14,000). Estimate from the first batch's tokens, at the batch rate:
