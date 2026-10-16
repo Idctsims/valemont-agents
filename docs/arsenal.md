@@ -350,6 +350,17 @@ One item per job, through `run_tracked`, so it has its own `job_health` row and 
 
 ---
 
+## 8a. Pre-merge record (Oct 16)
+
+- **db/054 applied 04:36:56 UTC** (the second paste) and verified via db_inspect. The record is in CLAUDE.md, Current State.
+- **Owner changes before merge (Oct 16):**
+  1. The drop defers while a batch is open or under 2 h old. It retries every 30 min to 21:30 Chicago, and stops waiting from 21:00.
+  2. The top-up verifies inline before the pick. With nothing verified it fails loudly (ERROR log and `DropFailed`).
+  3. Every near-duplicate skip is logged with its cosine and the matched key, and the distribution goes into the pool run's note. The threshold stays at 0.92.
+- **Found by `tests_live`:** `ledger.arsenal_near_dup` bound its threshold as double precision against db/054's `real`. The first batch would have failed on its first card. Fixed with a `::real` cast.
+- **`tests/`: 1021 OK.** Commit 1451296's message says 1022; that was a miscount.
+- **`tests_live -v`, metered: 409 tests OK, 0 skipped, ~2.43 MB read** (2,492 KB). That includes `test_arsenal_sql`, 17 tests.
+
 ## 8. Results
 
 Filled in after the first production run (Step 5). Anything not run is pending.
