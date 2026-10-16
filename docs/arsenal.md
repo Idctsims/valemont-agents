@@ -412,6 +412,19 @@ UI approved pending these fixes (same follow-up PR):
   - **Run against production at ~20:40 UTC Oct 16, after db/055:** 21 references, **0 conflicts, 0 held**. Every vote was unanimous no (nnn): 189, 191, 195–200, 203–208, 210, 211, 213, 214, 216–218. 63 Haiku calls, $0.019029.
   - Today's drop 61 (already dropped, so out of the check's scope) holds **Thermopylae as a pitch line**, the very case the check was written for.
 - **Brief line (owner, 2026-10-16):** brief 1018's line named the word, dropped the reference and closed with "Test every move today against it". `ctx_arsenal_brief` already returns the word, the strongest reference's title and its room, so no db/056 was needed. The Arsenal line is now built from that data in the AI brief too (`brief.DATA_LINE_SECTIONS`): "Power Word: asymmetric. Strongest reference: Thermopylae, for the pitch." No exhortation. Tested: `BriefLine`.
+- **Positive control (owner, after PR #54's merge, Oct 16):** drop 61's Thermopylae (ref 194), dry run.
+  - **Run 1: no conflict (nnn), on the wrong page.** It read the *Battle of Salamis*: `split_work` took "Battle of Thermopylae" for a person, and Salamis outscored the card's own page on shared terms (Xerxes, 480 BC). The note said the excerpt "does not state its outcome".
+  - **Fix 1 (retrieval):** a page whose title holds every key word of the card's title ranks first (`candidates()` `own_page`).
+  - **Fix 2 (the prompt, round A):** the owner's question verbatim, with Thermopylae as the example. The control then flagged YYY. **The 21 were then re-run WITH holds, before a dry run. That was a mistake.** It held 195 The Trojan Horse, 197 Cannae and 218 The Midas touch (arsenal_holds 9, 10, 11).
+    - Cannae's own note said the ending "is supported, not contradicted".
+    - The Trojan Horse ("inspect the gift") and Midas ("check what turns to gold") warn WITH the ending, like Enron.
+    - **All three are false positives, and holds are permanent: owner decision pending.**
+  - **Fix 3 (the prompt, round B, dry runs only):** two steps (the move and the promised result; the real ending for whoever made the move), and a line that warns with the ending agrees with it. outcome_conflict must agree with the note.
+    - Measured: Thermopylae YYY; held-out Custer (Little Bighorn) YYY; held-out Miracle on Ice nnn.
+    - All 21 nnn, the three held ones included. No further hold was written.
+  - **Guard:** `tests/fixtures/arsenal/outcome_controls.json` (Thermopylae with its deploy line, Custer, Miracle on Ice). `tests/test_arsenal.py` `OutcomeControls` locks the question, the warn rule, Thermopylae's line in the prompt, the held-out cases' absence from it, and the own-page ranking over a decoy that outscores it. `scripts.arsenal_outcome_control` runs the three through the real model and exits 1 on any miss: **3/3 PASS** after round B.
+  - Cost of every outcome run to date: 219 Haiku calls, $0.071872.
+  - The ready pool after the 3 holds: 18 references, all 7 categories, so tomorrow's drop is not short.
 - **Merge gate after db/055 (Oct 16):** `tests/` 1043 OK. `tests_live -v`, metered: **418 OK, 0 skipped**, ~2.65 MB read (2,718 KB, 748 s), the 8 `RoomsAndWordSeeds` tests included.
 - **Item 6 at render time:** `quoteCredit` (`lib/arsenal/types.ts`) shows a film or TV speaker as "Sean Parker (as written in The Social Network)" on every card, old and new. The generator rule stays. The same cases are in `e2e/arsenal-unit.spec.ts` and `tests/test_arsenal.py` `FilmQuoteCredit`.
 - **Pool size: 36 references and 12 words a batch** (`REFS_MAX_TOKENS` 14,000). Estimate from the first batch's tokens, at the batch rate:
