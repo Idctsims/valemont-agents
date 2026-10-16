@@ -17,7 +17,11 @@
   is Already know it; taking it back ('none') makes it eligible again.
 * db/055 (skips until pasted): three distinct rooms whenever the pool
   allows, the word's room off the references' majority, a seed word never
-  picked and never back to pool, the owner's example words known.
+  picked and never back to pool, the owner's example words known; ONE
+  re-verification, recorded append-only, never a second; a held item never
+  picked and never counted ready; the new tables' access; item 11 written.
+  The worker's pool-status SQL reads arsenal_holds, so the tests that run it
+  fail until db/055 is pasted (paste before the merge).
 * the worker's queries (core/ledger.py), each run here exactly as written.
 
 Every test runs inside ONE transaction that is always rolled back and reads
@@ -224,8 +228,12 @@ class Guards(ArsenalSqlCase):
 
     def test_truncate_is_refused_with_every_referencing_table_named(self) -> None:
         with _rolled_back() as conn:
-            self.refused(conn, "TRUNCATE arsenal_pool_runs, arsenal_refs, arsenal_words, arsenal_drops, "
-                         "arsenal_reactions", None, "TRUNCATE is refused")
+            # db/055's two tables reference refs and words: name them too once they exist.
+            extra = [t for t in ("arsenal_holds", "arsenal_reverifications")
+                     if conn.execute("SELECT to_regclass(%s)", (f"public.{t}",)).fetchone()[0] is not None]
+            self.refused(conn, "TRUNCATE " + ", ".join(["arsenal_pool_runs", "arsenal_refs", "arsenal_words",
+                                                        "arsenal_drops", "arsenal_reactions", *extra]),
+                         None, "TRUNCATE is refused")
 
 
 # ============================================================ near-dup, weights
@@ -466,6 +474,94 @@ class RoomsAndWordSeeds(ArsenalSqlCase):
             self.refused(conn, "SELECT arsenal_pick_drop('2001-06-03', true)", None, "no eligible word")
             self.refused(conn, "UPDATE arsenal_words SET status = 'pool' WHERE id = %s", (w,),
                          "a seed word never changes status")
+
+    # -- db/055 sections 3, 4, 6 and 7: re-verification, holds, access, item 11
+
+    def unverified_ref(self, conn: psycopg.Connection, note: str = "insufficient: x") -> int:
+        key = f"tl_{uuid.uuid4().hex[:16]}"
+        return int(conn.execute(
+            "INSERT INTO arsenal_refs (canonical_key, category, title, origin, meaning, deploy_line, room, source_work, "
+            "source_kind, status, verification, verification_note, origin_kind, is_test) VALUES (%s, 'sports', %s, "
+            "'An origin long enough.', 'A meaning.', 'A line.', 'pitch', 'A work', 'wikipedia', 'pool', 'unverified', "
+            "%s, 'pool', true) RETURNING id", (key, f"TL {key}", note)).fetchone()[0])
+
+    def test_one_re_verification_recorded_and_never_a_second(self) -> None:
+        with _rolled_back() as conn:
+            r = self.unverified_ref(conn)
+            self.refused(conn, "UPDATE arsenal_refs SET verification_note = 'rewritten' WHERE id = %s", (r,),
+                         "settles once")
+            rec = conn.execute("SELECT arsenal_reverify_ref(%s, 'corrected', 'second look', 'tests_live', "
+                               "'https://tl.invalid/r', 'A corrected origin, long enough.')", (r,)).fetchone()[0]
+            self.assertEqual(conn.execute(
+                "SELECT verification, verification_note, origin, verified_at IS NOT NULL FROM arsenal_refs WHERE id = %s",
+                (r,)).fetchone(), ("corrected", "second look", "A corrected origin, long enough.", True))
+            self.assertEqual(conn.execute(
+                "SELECT ref_id, old_verification, new_verification, old_note, new_note, by_whom, db_role = current_user "
+                "FROM arsenal_reverifications WHERE id = %s", (rec,)).fetchone(),
+                (r, "unverified", "corrected", "insufficient: x", "second look", "tests_live", True))
+            self.refused(conn, "SELECT arsenal_reverify_ref(%s, 'verified', 'again', 'tests_live')", (r,),
+                         "only an unverified pool reference")
+            # Staying unverified still spends the one chance.
+            r2 = self.unverified_ref(conn)
+            conn.execute("SELECT arsenal_reverify_ref(%s, 'unverified', 'still nothing', 'tests_live')", (r2,))
+            self.refused(conn, "SELECT arsenal_reverify_ref(%s, 'verified', 'third', 'tests_live', 'https://tl.invalid/r')",
+                         (r2,), "already re-verified once")
+            self.refused(conn, "UPDATE arsenal_reverifications SET by_whom = 'someone' WHERE id = %s", (rec,), "")
+            self.refused(conn, "DELETE FROM arsenal_reverifications WHERE id = %s", (rec,), "")
+
+    def test_a_held_reference_or_word_is_never_picked_nor_ready(self) -> None:
+        with _rolled_back() as conn:
+            self._only_mine_eligible(conn)
+            refs = [self.ref(conn, c, test=True) for c in ("finance_business", "sports", "film_tv")]
+            w = self.word(conn, test=True)
+            conn.execute("INSERT INTO arsenal_holds (ref_id, reason, detail) VALUES (%s, 'outcome_conflict', 'tl')",
+                         (refs[0],))
+            self.refused(conn, "SELECT arsenal_pick_drop('2001-06-10', true)", None, "(2 categories")
+            self.ref(conn, "finance_business", test=True)
+            ledger.arsenal_hold(word_id=w, reason="outcome_conflict", detail="tl", conn=conn)
+            self.refused(conn, "SELECT arsenal_pick_drop('2001-06-10', true)", None, "no eligible word")
+            self.refused(conn, "INSERT INTO arsenal_holds (ref_id, reason) VALUES (%s, 'Outcome Conflict')", (refs[1],),
+                         "", psycopg.errors.CheckViolation)
+            # The worker's "ready" never counts a held REAL item.
+            before = ledger.arsenal_pool_status(conn=conn)
+            real = self.ref(conn, "philosophy")
+            mid = ledger.arsenal_pool_status(conn=conn)
+            ledger.arsenal_hold(ref_id=real, reason="outcome_conflict", detail="tl", conn=conn)
+            after = ledger.arsenal_pool_status(conn=conn)
+            self.assertEqual((mid.refs_ready - before.refs_ready, after.refs_ready), (1, before.refs_ready))
+            self.assertIn(real, [p.ref.id for p in ledger.arsenal_undropped_checked_refs(conn=conn) if p.held])
+
+    def test_access_to_the_new_tables_and_functions(self) -> None:
+        with _rolled_back() as conn:
+            for table in ("arsenal_holds", "arsenal_reverifications"):
+                with self.subTest(table=table):
+                    self.assertEqual(conn.execute(
+                        "SELECT relrowsecurity, (SELECT count(*) FROM pg_policies p WHERE p.tablename = c.relname), "
+                        "has_table_privilege('anon', oid, 'SELECT,INSERT,UPDATE,DELETE'), "
+                        "has_table_privilege('authenticated', oid, 'SELECT'), "
+                        "has_table_privilege('authenticated', oid, 'INSERT,UPDATE,DELETE,TRUNCATE'), "
+                        "has_table_privilege('valemont_readonly', oid, 'SELECT') "
+                        "FROM pg_class c WHERE oid = %s::regclass", (f"public.{table}",)).fetchone(),
+                        (True, 1, False, True, False, True))
+            for fn in ("public.arsenal_reverify_ref(bigint, text, text, text, text, text, text, text, text, boolean)",
+                       "public.arsenal_reverify_word(bigint, text, text, text, text, text, text)"):
+                with self.subTest(fn=fn):
+                    self.assertEqual(conn.execute(
+                        "SELECT has_function_privilege('anon', %s, 'EXECUTE'), "
+                        "has_function_privilege('authenticated', %s, 'EXECUTE'), "
+                        "has_function_privilege('valemont_readonly', %s, 'EXECUTE')", (fn, fn, fn)).fetchone(),
+                        (False, False, False))
+
+    def test_item_11_was_written_once(self) -> None:
+        with _rolled_back() as conn:
+            self.assertEqual(conn.execute(
+                "SELECT id, verification FROM arsenal_refs WHERE id IN (206, 216) ORDER BY id").fetchall(),
+                [(206, "corrected"), (216, "verified")])
+            self.assertEqual(conn.execute(
+                "SELECT count(*) FROM arsenal_reverifications WHERE ref_id IN (206, 216)").fetchone()[0], 2)
+            self.assertEqual(conn.execute(
+                "SELECT count(*) FROM arsenal_refs WHERE id IN (190, 192, 201, 209, 212, 215) "
+                "AND verification = 'unverified'").fetchone()[0], 6)
 
     def test_the_owners_example_words_are_known(self) -> None:
         with _rolled_back() as conn:

@@ -53,6 +53,11 @@ from core import ai, ledger
 log = logging.getLogger("valemont.arsenal.verify")
 
 PURPOSE = "arsenal_verify"
+#: Haiku 5.5 takes no temperature: non-default sampling is a 400 on this
+#: model, and the installed SDK's create() has no such argument (the owner
+#: asked for temperature 0 on 2026-10-16; checked the same day). Verdict
+#: drift is held by covers_every_claim / held() and, for the outcome check,
+#: by a vote of OUTCOME_SAMPLES reads.
 MODEL = "claude-haiku-5-5"
 VERDICTS = ("supported", "corrected", "contradicted", "insufficient")
 
@@ -340,6 +345,74 @@ def verify_ref(ref: ledger.ArsenalRefToVerify, *, ask: Ask, http: sources.Http |
                       meaning=judgement.fixed_meaning if corrected else None,
                       deploy_line=judgement.fixed_deploy_line if corrected else None,
                       judged_pages=tuple(judged))
+
+
+# ------------------------------------------------------------ outcome check
+
+OUTCOME_PURPOSE = "arsenal_outcome"
+OUTCOME_SYSTEM = """\
+You check ONE thing about one reference card, using ONLY the excerpt: does how the story really ended undercut the card's meaning or its deploy_line?
+
+Thermopylae was a total defeat for the Greeks, so a pitch line about winning there is undercut. A comeback that really happened, used as a comeback line, is not.
+
+outcome_conflict: true only when the excerpt shows the real ending AND that ending undercuts the meaning or the deploy_line. False when the ending fits, or when the excerpt does not show the ending.
+note: one short sentence saying why. Answer with the JSON the schema asks for."""
+#: Haiku 5.5 takes no temperature (non-default sampling is a 400), so the
+#: check votes: this many independent reads, a hold on a strict majority.
+OUTCOME_SAMPLES = 3
+
+
+def outcome_schema() -> dict[str, Any]:
+    return {"type": "object", "additionalProperties": False, "required": ["outcome_conflict", "note"],
+            "properties": {"outcome_conflict": {"type": "boolean"}, "note": {"type": "string"}}}
+
+
+#: (card, excerpt) -> (conflict, note). Injected by tests.
+AskOutcome = Callable[[ledger.ArsenalRefToVerify, str], tuple[bool, str]]
+
+
+def ask_outcome_haiku(ref: ledger.ArsenalRefToVerify, excerpt: str, *, client: Any = None) -> tuple[bool, str]:
+    card = {"title": ref.title, "origin": ref.origin, "meaning": ref.meaning, "deploy_line": ref.deploy_line,
+            "source_work": ref.source_work}
+    response = ai.complete(
+        purpose=OUTCOME_PURPOSE, model=MODEL, critical=False, max_tokens=300, client=client,
+        system=OUTCOME_SYSTEM,
+        messages=[{"role": "user", "content": "CARD:\n" + json.dumps(card, ensure_ascii=False)
+                   + "\n\nEXCERPT:\n" + excerpt[:sources.JUDGE_CHARS + 200]}],
+        thinking={"type": "disabled"},
+        output_config={"effort": "low", "format": {"type": "json_schema", "schema": outcome_schema()}},
+    )
+    data = response_json(response)
+    if not isinstance(data, Mapping) or not isinstance(data.get("outcome_conflict"), bool):
+        return False, "unreadable answer"
+    return bool(data["outcome_conflict"]), " ".join(str(data.get("note") or "").split())[:300]
+
+
+@dataclass(frozen=True)
+class OutcomeResult:
+    conflict: bool
+    #: Each read's answer, in order.
+    votes: tuple[bool, ...]
+    #: A conflicting read's note when held, else the first read's.
+    note: str
+    page: str | None
+
+
+def outcome_check(ref: ledger.ArsenalRefToVerify, *, ask: AskOutcome, http: sources.Http | None = None,
+                  samples: int = OUTCOME_SAMPLES) -> OutcomeResult:
+    """The item 5 check on one checked card: the best page's excerpt, read
+    `samples` times; a conflict on a strict majority. No page: no conflict
+    (nothing shows the ending), said in the note."""
+    found, down = candidates(ref, http=http)
+    page = next((c for c in found if c.excerpt.text.strip()), None)
+    if page is None:
+        return OutcomeResult(False, (), f"no page to read ({down[0] if down else 'none found'})", None)
+    text = f"SOURCE: {page.title} ({page.kind})\n\n{page.excerpt.text}"
+    answers = [ask(ref, text) for _ in range(samples)]
+    votes = tuple(a[0] for a in answers)
+    conflict = sum(votes) * 2 > len(votes)
+    note = next((n for c, n in answers if c), answers[0][1]) if conflict else answers[0][1]
+    return OutcomeResult(conflict, votes, note, page.title)
 
 
 @dataclass(frozen=True)

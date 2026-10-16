@@ -398,6 +398,30 @@ UI approved pending these fixes (same follow-up PR):
 
   **2 of 8 clear.** Haiku's answers vary between runs. Three dry runs were made: the first, before the coverage guard, "cleared" five by trimming claims. The verdicts on 201 and 215 swing between contradicted and insufficient (both unverified). Second sources are sometimes off-topic (Andy Jassy, Bill Gates); the judge then answers insufficient. Cost of the three runs: 47 Haiku calls, $0.019522.
 
+## 8c. Round 3 (owner, Oct 16)
+
+- **db/055 amended before the paste.**
+  - (a) ONE re-verification of an unverified pool reference or word, only through `arsenal_reverify_ref` / `arsenal_reverify_word` (the worker's; nobody else executes them). Each one is recorded in `arsenal_reverifications`: append-only, TRUNCATE-guarded, UNIQUE per target; it holds who, the database role, when, and the old -> new verification and note. Every other "settles once" rule stands.
+  - Item 11 is written through it in the migration: **206 corrected** and **216 verified**; the other six stay unverified.
+  - **206's correction drops the 20-game winning streak of 2002.** The streak is true; the judge left it out because the book's page does not mention it.
+  - (b) `arsenal_holds`: append-only, TRUNCATE-guarded, a snake_case reason plus a detail. The picker skips held items, and the worker's pool status never counts them as ready.
+  - The self-test covers both, plus item 11's state. Every `INSERT` was checked mechanically. One flag was the checker's own (an `ARRAY[...]` in the picker's insert, 5/5 as in db/054).
+- **Temperature 0 is not available.** Haiku 5.5 rejects non-default sampling with a 400 (the API reference), and the installed SDK's `create()` has no `temperature` argument: a probe on 2026-10-16 failed before reaching the API. The judge (item 4) is unchanged, held by `covers_every_claim`. The item 5 outcome check reads each card's best page `OUTCOME_SAMPLES` = 3 times and holds on a strict majority. **Owner decision pending:** the vote, a different model, or a single read.
+- **Item 5 over the existing pool:** `scripts.arsenal_outcome_check` (`--dry-run` writes nothing). It covers every real, undropped, verified or corrected reference and holds each conflict with reason `outcome_conflict`. It runs after db/055 is pasted, before the 05:30 drop. Results: pending.
+- **Item 6 at render time:** `quoteCredit` (`lib/arsenal/types.ts`) shows a film or TV speaker as "Sean Parker (as written in The Social Network)" on every card, old and new. The generator rule stays. The same cases are in `e2e/arsenal-unit.spec.ts` and `tests/test_arsenal.py` `FilmQuoteCredit`.
+- **Pool size: 36 references and 12 words a batch** (`REFS_MAX_TOKENS` 14,000). Estimate from the first batch's tokens, at the batch rate:
+
+  | Part | Basis | Estimate |
+  |---|---|---|
+  | References | 7,352 output tokens for 30, so ~8,800 for 36 | ~$0.044 |
+  | Words | 873 output tokens for 10, so ~1,050 for 12, plus the cache write | ~$0.009 |
+  | Verification | ~1.6 Haiku reads a reference at ~$0.00042 each (the dry runs' 47 calls) | ~$0.024 |
+  | **Total** | | **~$0.08 a weekly batch** (the first was $0.051) |
+
+  The outcome check over a week's pool adds ~36 × 3 × ~$0.0004 ≈ $0.04 when it is run.
+- **Near-duplicate threshold:** 0.92, unchanged until Sunday's batch (2026-10-18 03:30 Chicago). Its distribution goes next to the first batch's (min 0.79, p50 0.82, p90 0.87, max 0.91). Pending.
+- **Today's Brief:** brief 1018 (2026-10-16, Sonnet, not a fallback) carries the `arsenal_brief` section: "Power word: asymmetric. Far more upside than downside. Test every move today against it." Delivery 379 → notification 466 was sent at 14:45:02 UTC (09:45 Chicago, not late).
+
 ## 8. Results
 
 Filled in after the first production run (Step 5). Anything not run is pending.

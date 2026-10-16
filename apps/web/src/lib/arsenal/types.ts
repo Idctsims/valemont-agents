@@ -82,6 +82,34 @@ export type UnverifiedRef = {
   isTest: boolean;
 };
 
+const CREDIT = "as written in";
+const TRAILING_PARENS = /\s*\([^()]*\)\s*$/;
+
+/** The work a source_work names, without its trailing parentheticals:
+ *  "The Social Network (2010)" -> "The Social Network". */
+export function workTitle(sourceWork: string): string {
+  let work = sourceWork.trim();
+  for (let m = TRAILING_PARENS.exec(work); m && m.index > 0; m = TRAILING_PARENS.exec(work)) {
+    work = work.slice(0, m.index).trim();
+  }
+  return work;
+}
+
+/** Who a quote is credited to on the card (owner, 2026-10-16). A film or TV
+ *  quote credits the character AND the work, never the real person alone:
+ *  "Sean Parker (as written in The Social Network)". Applied at render
+ *  time, so cards written before the generator rule read the same way. The
+ *  worker's twin is workers/arsenal/cards.py credit_film_quote. */
+export function quoteCredit(category: Category, quoteBy: string | null, sourceWork: string): string | null {
+  const speaker = (quoteBy ?? "").split(/\s+/).filter(Boolean).join(" ");
+  if (!speaker) return null;
+  if (category !== "film_tv") return speaker;
+  const work = workTitle(sourceWork);
+  const lower = speaker.toLowerCase();
+  if (!work || lower.includes(CREDIT) || lower.includes(work.toLowerCase())) return speaker;
+  return `${speaker} (${CREDIT} ${work})`;
+}
+
 /** "Thu, Oct 16" for a YYYY-MM-DD date (no timezone shift). */
 export function dropDate(day: string): string {
   const [y, m, d] = day.split("-").map(Number);

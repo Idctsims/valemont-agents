@@ -7,7 +7,9 @@ import { ArrowSquareOut, Brain, EyeSlash, Heart } from "@phosphor-icons/react";
 import { reactToRef, reactToWord } from "@/app/(app)/arsenal/actions";
 import { Fold } from "@/components/ui/fold";
 import type { ActionResult } from "@/lib/action-result";
-import { CATEGORY_LABEL, ROOM_LABEL, type Ref, type RefReaction, type Room, type Word } from "@/lib/arsenal/types";
+import {
+  CATEGORY_LABEL, ROOM_LABEL, quoteCredit, type Ref, type RefReaction, type Room, type Word,
+} from "@/lib/arsenal/types";
 
 // Today's drop (Chat 5 Phase 1; db/054): the Power Word hero, then the three
 // cards in slot order. Love / Not interested / Already know it on each (the
@@ -118,6 +120,7 @@ export function DropCards({ word, refs }: { word: Word; refs: Ref[] }) {
 }
 
 function Card({ r, current, onReact }: { r: Ref; current: RefReaction | null; onReact: (x: RefReaction | null) => void }) {
+  const credit = quoteCredit(r.category, r.quoteBy, r.sourceWork);
   return (
     <li data-testid="arsenal-card" data-ref-id={r.id} data-category={r.category} className="border-b border-border py-6">
       <div className="flex flex-wrap items-center gap-2">
@@ -130,7 +133,7 @@ function Card({ r, current, onReact }: { r: Ref; current: RefReaction | null; on
       <p data-testid="card-origin" className="mt-3 text-base text-text-muted text-pretty">{r.origin}</p>
       {r.quote && (
         <p data-testid="card-quote" className="mt-3 text-base text-text text-pretty">
-          “{r.quote}”{r.quoteBy && <span className="text-text-muted"> — {r.quoteBy}</span>}
+          “{r.quote}”{credit && <span data-testid="card-quote-by" className="text-text-muted"> — {credit}</span>}
         </p>
       )}
       <p data-testid="card-meaning" className="mt-3 text-base text-text text-pretty">{r.meaning}</p>

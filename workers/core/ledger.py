@@ -4393,17 +4393,21 @@ class ArsenalPoolStatus:
     open_batch: ArsenalOpenBatch | None
 
 
-#: tests_live runs this exact text.
+#: tests_live runs this exact text. A held item (db/055 arsenal_holds) is
+#: never ready: the picker skips it, so counting it would hide a short pool.
 ARSENAL_POOL_STATUS_SQL: Final = """
     SELECT
-        (SELECT count(*) FROM arsenal_refs
-          WHERE NOT is_test AND status = 'pool' AND verification IN ('verified', 'corrected')),
+        (SELECT count(*) FROM arsenal_refs r
+          WHERE NOT r.is_test AND r.status = 'pool' AND r.verification IN ('verified', 'corrected')
+            AND NOT EXISTS (SELECT 1 FROM arsenal_holds h WHERE h.ref_id = r.id)),
         (SELECT count(*) FROM arsenal_refs WHERE NOT is_test AND status = 'pool' AND verification = 'pending'),
-        (SELECT count(*) FROM arsenal_words
-          WHERE NOT is_test AND status = 'pool' AND verification IN ('verified', 'corrected')),
+        (SELECT count(*) FROM arsenal_words w
+          WHERE NOT w.is_test AND w.status = 'pool' AND w.verification IN ('verified', 'corrected')
+            AND NOT EXISTS (SELECT 1 FROM arsenal_holds h WHERE h.word_id = w.id)),
         (SELECT count(*) FROM arsenal_words WHERE NOT is_test AND status = 'pool' AND verification = 'pending'),
-        (SELECT coalesce(array_agg(DISTINCT category ORDER BY category), '{}') FROM arsenal_refs
-          WHERE NOT is_test AND status = 'pool' AND verification IN ('verified', 'corrected')),
+        (SELECT coalesce(array_agg(DISTINCT r.category ORDER BY r.category), '{}') FROM arsenal_refs r
+          WHERE NOT r.is_test AND r.status = 'pool' AND r.verification IN ('verified', 'corrected')
+            AND NOT EXISTS (SELECT 1 FROM arsenal_holds h WHERE h.ref_id = r.id)),
         (SELECT max(created_at) FROM arsenal_pool_runs WHERE NOT is_test AND kind = 'batch' AND status = 'submitted')
 """
 
@@ -4444,6 +4448,39 @@ def arsenal_recent_lemmas(limit: int = 60, *, conn: psycopg.Connection | None = 
     with _brief_conn(conn) as c:
         return [r[0] for r in c.execute(
             "SELECT lemma FROM arsenal_words WHERE NOT is_test ORDER BY id DESC LIMIT %s", (limit,)).fetchall()]
+
+
+@dataclass(frozen=True)
+class ArsenalPoolRef:
+    """An undropped verified or corrected real reference: what the item 5
+    outcome check reads (scripts.arsenal_outcome_check)."""
+    ref: "ArsenalRefToVerify"
+    held: bool
+
+
+def arsenal_undropped_checked_refs(*, conn: psycopg.Connection | None = None) -> list[ArsenalPoolRef]:
+    with _brief_conn(conn) as c:
+        ids = [(int(r[0]), bool(r[1])) for r in c.execute(
+            "SELECT r.id, EXISTS (SELECT 1 FROM arsenal_holds h WHERE h.ref_id = r.id) FROM arsenal_refs r "
+            "WHERE NOT r.is_test AND r.status = 'pool' AND r.verification IN ('verified', 'corrected') "
+            "ORDER BY r.id").fetchall()]
+        out = []
+        for ref_id, held in ids:
+            ref = arsenal_ref_to_verify(ref_id, conn=c)
+            if ref is not None:
+                out.append(ArsenalPoolRef(ref, held))
+    return out
+
+
+def arsenal_hold(*, ref_id: int | None = None, word_id: int | None = None, reason: str, detail: str | None,
+                 conn: psycopg.Connection | None = None) -> int:
+    """One arsenal_holds row (db/055, append-only): out of every drop."""
+    if (ref_id is None) == (word_id is None):
+        raise LedgerError("arsenal_hold: exactly one of ref_id and word_id")
+    with _brief_conn(conn) as c:
+        return int(c.execute(
+            "INSERT INTO arsenal_holds (ref_id, word_id, reason, detail) VALUES (%s, %s, %s, %s) RETURNING id",
+            (ref_id, word_id, reason, detail[:500] if detail else None)).fetchone()[0])
 
 
 def arsenal_seed_lemmas(*, conn: psycopg.Connection | None = None) -> list[str]:

@@ -596,6 +596,38 @@ class JudgeHeldToCoverage(unittest.TestCase):
         self.assertEqual(verify.schema()["properties"]["covers_every_claim"], {"type": "boolean"})
 
 
+class OutcomeVote(unittest.TestCase):
+    """Item 5 over the existing pool: Haiku 5.5 takes no temperature, so the
+    check reads the best page OUTCOME_SAMPLES times and holds on a strict
+    majority (owner decision pending on the vote vs. a single read)."""
+
+    def test_a_majority_conflict_holds_and_a_minority_does_not(self) -> None:
+        for answers, want in (([True, True, False], True), ([True, False, False], False), ([False] * 3, False)):
+            with self.subTest(answers=answers):
+                it = iter(answers)
+                res = verify.outcome_check(ref(**Retrieval.MONEYBALL), http=Retrieval().http(),
+                                           ask=lambda r, e: (next(it), "the ending"))
+                self.assertEqual((res.conflict, res.votes, res.page), (want, tuple(answers), "Moneyball (book)"))
+
+    def test_no_page_is_no_conflict_and_says_so(self) -> None:
+        res = verify.outcome_check(ref(title="Nowhere", source_page="Nowhere at all"), http=VerifyRef().http(),
+                                   ask=lambda r, e: (True, "x"))
+        self.assertEqual((res.conflict, res.votes), (False, ()))
+        self.assertIn("no page to read", res.note)
+
+    def test_the_schema_and_the_hold_reason(self) -> None:
+        self.assertEqual(verify.outcome_schema()["required"], ["outcome_conflict", "note"])
+        self.assertEqual(verify.OUTCOME_SAMPLES, 3)
+        from scripts import arsenal_outcome_check
+        self.assertEqual(arsenal_outcome_check.REASON, verify.OUTCOME_CONFLICT)
+
+
+class PoolSize(unittest.TestCase):
+    def test_36_references_and_12_words_a_batch(self) -> None:
+        self.assertEqual((cards.POOL_REFS, cards.POOL_WORDS), (36, 12))
+        self.assertEqual(sum(cards.allocate(cards.POOL_REFS, {c: 1.0 for c in cards.CATEGORIES}).values()), 36)
+
+
 class OutcomeCheck(unittest.TestCase):
     """A reference whose real ending undercuts its line is reframed or cut,
     and says outcome_conflict (owner, 2026-10-16)."""
@@ -673,7 +705,7 @@ class Pool(NoDatabase):
         self.assertEqual(submitted[0]["model"], "claude-sonnet-5-5")
         self.assertFalse(submitted[0].get("critical", False))
         self.assertEqual(logged[0][:2], ("batch", "submitted"))
-        self.assertEqual((logged[0][2]["refs_requested"], logged[0][2]["words_requested"]), (30, 10))
+        self.assertEqual((logged[0][2]["refs_requested"], logged[0][2]["words_requested"]), (36, 12))
         self.assertIn("submitted msgbatch_1", run.job_note)
 
 

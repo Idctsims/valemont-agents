@@ -38,7 +38,8 @@ RESUBMIT_AFTER = timedelta(days=6)
 #: Seven days of drops.
 MIN_REFS = 21
 MIN_WORDS = 7
-REFS_MAX_TOKENS = 12_000
+#: The first batch's 30 references took 7,352 output tokens; 36 need ~8,800.
+REFS_MAX_TOKENS = 14_000
 WORDS_MAX_TOKENS = 3_000
 TOPUP_MAX_TOKENS = 5_000
 

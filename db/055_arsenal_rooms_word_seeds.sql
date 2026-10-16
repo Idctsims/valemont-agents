@@ -19,9 +19,26 @@
 --      category (as before) and, when an ordering allows it, nor yesterday's
 --      room. The Power Word's room is the one the references use least (a
 --      room none of them uses when one exists): it differs from the
---      majority whenever the pool allows.
+--      majority whenever the pool allows. Held items are skipped (5).
+--   4. ONE re-verification (owner, 2026-10-16): a POOL reference or word
+--      whose verification is 'unverified' may be settled again exactly
+--      once, only through arsenal_reverify_ref / arsenal_reverify_word
+--      (the worker's; nobody else executes them), and every one is recorded
+--      in arsenal_reverifications (APPEND-ONLY: the target, old -> new
+--      verification and note, who, the database role, when; UNIQUE per
+--      target, so never twice). Everything else in db/054's "verification
+--      settles once" stands.
+--   5. arsenal_holds (APPEND-ONLY, TRUNCATE-guarded): a reference or a word
+--      held out of every drop, with a snake_case reason ('outcome_conflict':
+--      its real ending undercuts its line) and a detail. The picker never
+--      takes a held item. A hold is permanent.
+--   6. Item 11's results, written through (4): 206 Moneyball corrected (the
+--      book's page), 216 "What is up to us" verified (the Enchiridion's
+--      page). The other six unverified references stay unverified.
 --
--- A self-test runs on paste (section 4), rolled back.
+-- PASTE BEFORE THE MERGE of the follow-up PR: the worker's pool status
+-- reads arsenal_holds.
+-- A self-test runs on paste (section 8), rolled back.
 -- Prerequisites: db/054.
 -- SUPABASE: paste the whole file into the SQL Editor and Run. No BEGIN/COMMIT.
 
@@ -37,6 +54,8 @@ RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = ''
 AS $$
+DECLARE
+    v_rev boolean;
 BEGIN
     IF TG_OP = 'INSERT' THEN
         NEW.created_at := now();
@@ -55,6 +74,20 @@ BEGIN
     IF NEW.id <> OLD.id OR NEW.lemma <> OLD.lemma OR NEW.is_test <> OLD.is_test OR NEW.created_at <> OLD.created_at
        OR NEW.pool_run_id IS DISTINCT FROM OLD.pool_run_id THEN
         RAISE EXCEPTION 'arsenal_words: a word''s identity never changes';
+    END IF;
+    -- The one re-verification (section 4): only inside arsenal_reverify_word,
+    -- for an unverified pool word, matching the row it just recorded.
+    v_rev := OLD.status = 'pool' AND OLD.verification = 'unverified' AND NEW.status = OLD.status
+             AND coalesce(current_setting('arsenal.reverify', true), '') = 'word:' || OLD.id
+             AND EXISTS (SELECT 1 FROM public.arsenal_reverifications v
+                          WHERE v.word_id = OLD.id AND v.new_verification = NEW.verification
+                            AND v.new_note IS NOT DISTINCT FROM NEW.verification_note);
+    IF v_rev THEN
+        IF NEW.verification = 'pending' THEN
+            RAISE EXCEPTION 'arsenal_words: a re-verification settles; it never returns to pending';
+        END IF;
+        NEW.verified_at := now();
+        RETURN NEW;
     END IF;
     IF (NEW.pronunciation, NEW.etymology, NEW.etymology_url, NEW.meaning, NEW.room, NEW.sentence)
        IS DISTINCT FROM (OLD.pronunciation, OLD.etymology, OLD.etymology_url, OLD.meaning, OLD.room, OLD.sentence)
@@ -90,6 +123,240 @@ UPDATE arsenal_words SET status = 'seed'
  WHERE NOT is_test AND status = 'pool' AND lemma IN ('asymmetric', 'inflection', 'provenance', 'fiduciary');
 
 -- ===================================================================== 3
+-- ONE re-verification, recorded append-only.
+
+CREATE TABLE IF NOT EXISTS arsenal_reverifications (
+    id                BIGSERIAL    PRIMARY KEY,
+    ref_id            BIGINT       REFERENCES arsenal_refs (id) ON DELETE RESTRICT,
+    word_id           BIGINT       REFERENCES arsenal_words (id) ON DELETE RESTRICT,
+    old_verification  TEXT         NOT NULL CHECK (old_verification = 'unverified'),
+    new_verification  TEXT         NOT NULL CHECK (new_verification IN ('verified', 'corrected', 'unverified')),
+    old_note          TEXT,
+    new_note          TEXT,
+    -- Who asked for it, in words ("owner, 2026-10-16: item 11"), and the
+    -- database role that wrote it.
+    by_whom           TEXT         NOT NULL CHECK (char_length(btrim(by_whom)) BETWEEN 3 AND 200),
+    db_role           TEXT         NOT NULL DEFAULT current_user,
+    created_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT arsenal_reverifications_one_target CHECK (num_nonnulls(ref_id, word_id) = 1)
+);
+-- Once per target, ever.
+CREATE UNIQUE INDEX IF NOT EXISTS arsenal_reverifications_once_ref ON arsenal_reverifications (ref_id)
+    WHERE ref_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS arsenal_reverifications_once_word ON arsenal_reverifications (word_id)
+    WHERE word_id IS NOT NULL;
+
+DROP TRIGGER IF EXISTS arsenal_reverifications_stamp ON arsenal_reverifications;
+CREATE TRIGGER arsenal_reverifications_stamp
+    BEFORE INSERT ON arsenal_reverifications
+    FOR EACH ROW EXECUTE FUNCTION public.arsenal_stamp_created();
+DROP TRIGGER IF EXISTS arsenal_reverifications_immutable ON arsenal_reverifications;
+CREATE TRIGGER arsenal_reverifications_immutable
+    BEFORE UPDATE OR DELETE ON arsenal_reverifications
+    FOR EACH ROW EXECUTE FUNCTION public.reject_mutation();
+DROP TRIGGER IF EXISTS arsenal_reverifications_no_truncate ON arsenal_reverifications;
+CREATE TRIGGER arsenal_reverifications_no_truncate
+    BEFORE TRUNCATE ON arsenal_reverifications
+    FOR EACH STATEMENT EXECUTE FUNCTION public.reject_truncate();
+
+-- db/054's reference guard, with the one re-verification branch.
+CREATE OR REPLACE FUNCTION public.arsenal_refs_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+DECLARE
+    v_rev boolean;
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        NEW.created_at := now();
+        NEW.verified_at := CASE WHEN NEW.verification <> 'pending' THEN now() END;
+        IF NEW.status NOT IN ('pool', 'seed') THEN
+            RAISE EXCEPTION 'arsenal_refs: a reference enters as pool or seed, never %', NEW.status;
+        END IF;
+        IF NOT NEW.is_test AND NEW.verification <> 'pending' THEN
+            RAISE EXCEPTION 'arsenal_refs: a real reference enters pending; verification is its own step';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'arsenal_refs: a reference is never deleted (status rejected retires one)';
+    END IF;
+    -- UPDATE.
+    IF NEW.id <> OLD.id OR NEW.canonical_key <> OLD.canonical_key OR NEW.is_test <> OLD.is_test
+       OR NEW.origin_kind <> OLD.origin_kind OR NEW.created_at <> OLD.created_at
+       OR NEW.pool_run_id IS DISTINCT FROM OLD.pool_run_id OR NEW.source_title_id IS DISTINCT FROM OLD.source_title_id THEN
+        RAISE EXCEPTION 'arsenal_refs: a reference''s identity never changes';
+    END IF;
+    -- The embedding is set once (compared as text: no pgvector operator here).
+    IF OLD.embedding IS NOT NULL AND NEW.embedding::text IS DISTINCT FROM OLD.embedding::text THEN
+        RAISE EXCEPTION 'arsenal_refs: the embedding is set once';
+    END IF;
+    -- The one re-verification (section 3): only inside arsenal_reverify_ref,
+    -- for an unverified pool reference, matching the row it just recorded.
+    v_rev := OLD.status = 'pool' AND OLD.verification = 'unverified' AND NEW.status = OLD.status
+             AND coalesce(current_setting('arsenal.reverify', true), '') = 'ref:' || OLD.id
+             AND EXISTS (SELECT 1 FROM public.arsenal_reverifications v
+                          WHERE v.ref_id = OLD.id AND v.new_verification = NEW.verification
+                            AND v.new_note IS NOT DISTINCT FROM NEW.verification_note);
+    IF v_rev THEN
+        IF NEW.verification = 'pending' THEN
+            RAISE EXCEPTION 'arsenal_refs: a re-verification settles; it never returns to pending';
+        END IF;
+        NEW.verified_at := now();
+        RETURN NEW;
+    END IF;
+    IF (NEW.category, NEW.title, NEW.origin, NEW.meaning, NEW.deploy_line, NEW.room, NEW.source_work, NEW.quote,
+        NEW.quote_by, NEW.source_kind, NEW.source_page, NEW.source_url)
+       IS DISTINCT FROM
+       (OLD.category, OLD.title, OLD.origin, OLD.meaning, OLD.deploy_line, OLD.room, OLD.source_work, OLD.quote,
+        OLD.quote_by, OLD.source_kind, OLD.source_page, OLD.source_url)
+       AND OLD.verification <> 'pending' THEN
+        RAISE EXCEPTION 'arsenal_refs: a reference''s card changes only while it is pending verification';
+    END IF;
+    IF OLD.verification <> 'pending' AND (NEW.verification, NEW.verification_note, NEW.verified_at)
+                                          IS DISTINCT FROM (OLD.verification, OLD.verification_note, OLD.verified_at) THEN
+        RAISE EXCEPTION 'arsenal_refs: verification settles once';
+    END IF;
+    IF OLD.verification = 'pending' AND NEW.verification <> 'pending' THEN
+        NEW.verified_at := now();
+    END IF;
+    IF NEW.status <> OLD.status THEN
+        IF OLD.status <> 'pool' THEN
+            RAISE EXCEPTION 'arsenal_refs: a % reference never changes status', OLD.status;
+        END IF;
+        IF NEW.status = 'dropped'
+           AND NOT EXISTS (SELECT 1 FROM public.arsenal_drops d WHERE NEW.id = ANY (d.ref_ids)) THEN
+            RAISE EXCEPTION 'arsenal_refs: only a drop marks a reference dropped';
+        END IF;
+        IF NEW.status NOT IN ('dropped', 'rejected') THEN
+            RAISE EXCEPTION 'arsenal_refs: a pool reference becomes dropped or rejected, never %', NEW.status;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+-- Re-verify one unverified pool reference, once, recorded. Returns the
+-- record's id. Raises for anything else (already re-verified, not
+-- unverified, not in the pool, no "who").
+CREATE OR REPLACE FUNCTION public.arsenal_reverify_ref(p_ref_id bigint, p_verification text, p_note text, p_by text,
+                                                       p_source_url text DEFAULT NULL, p_origin text DEFAULT NULL,
+                                                       p_source_work text DEFAULT NULL, p_meaning text DEFAULT NULL,
+                                                       p_deploy_line text DEFAULT NULL, p_drop_quote boolean DEFAULT false)
+RETURNS bigint
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+    v_status text;
+    v_old    text;
+    v_note   text;
+    v_id     bigint;
+BEGIN
+    SELECT r.status, r.verification, r.verification_note INTO v_status, v_old, v_note
+      FROM public.arsenal_refs r WHERE r.id = p_ref_id FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'arsenal_reverify_ref: no reference %', p_ref_id;
+    END IF;
+    IF v_status <> 'pool' OR v_old <> 'unverified' THEN
+        RAISE EXCEPTION 'arsenal_reverify_ref: only an unverified pool reference is re-verified (% is %, %)',
+            p_ref_id, v_status, v_old;
+    END IF;
+    IF EXISTS (SELECT 1 FROM public.arsenal_reverifications v WHERE v.ref_id = p_ref_id) THEN
+        RAISE EXCEPTION 'arsenal_reverify_ref: reference % was already re-verified once', p_ref_id;
+    END IF;
+    INSERT INTO public.arsenal_reverifications (ref_id, old_verification, new_verification, old_note, new_note, by_whom)
+    VALUES (p_ref_id, v_old, p_verification, v_note, p_note, p_by)
+    RETURNING id INTO v_id;
+    PERFORM set_config('arsenal.reverify', 'ref:' || p_ref_id, true);
+    UPDATE public.arsenal_refs
+       SET verification = p_verification, verification_note = p_note,
+           source_url = coalesce(p_source_url, source_url), origin = coalesce(p_origin, origin),
+           source_work = coalesce(p_source_work, source_work), meaning = coalesce(p_meaning, meaning),
+           deploy_line = coalesce(p_deploy_line, deploy_line),
+           quote = CASE WHEN p_drop_quote THEN NULL ELSE quote END,
+           quote_by = CASE WHEN p_drop_quote THEN NULL ELSE quote_by END
+     WHERE id = p_ref_id;
+    PERFORM set_config('arsenal.reverify', '', true);
+    RETURN v_id;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.arsenal_reverify_word(p_word_id bigint, p_verification text, p_note text, p_by text,
+                                                        p_pronunciation text DEFAULT NULL, p_etymology text DEFAULT NULL,
+                                                        p_etymology_url text DEFAULT NULL)
+RETURNS bigint
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+    v_status text;
+    v_old    text;
+    v_note   text;
+    v_id     bigint;
+BEGIN
+    SELECT w.status, w.verification, w.verification_note INTO v_status, v_old, v_note
+      FROM public.arsenal_words w WHERE w.id = p_word_id FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'arsenal_reverify_word: no word %', p_word_id;
+    END IF;
+    IF v_status <> 'pool' OR v_old <> 'unverified' THEN
+        RAISE EXCEPTION 'arsenal_reverify_word: only an unverified pool word is re-verified (% is %, %)',
+            p_word_id, v_status, v_old;
+    END IF;
+    IF EXISTS (SELECT 1 FROM public.arsenal_reverifications v WHERE v.word_id = p_word_id) THEN
+        RAISE EXCEPTION 'arsenal_reverify_word: word % was already re-verified once', p_word_id;
+    END IF;
+    INSERT INTO public.arsenal_reverifications (word_id, old_verification, new_verification, old_note, new_note, by_whom)
+    VALUES (p_word_id, v_old, p_verification, v_note, p_note, p_by)
+    RETURNING id INTO v_id;
+    PERFORM set_config('arsenal.reverify', 'word:' || p_word_id, true);
+    UPDATE public.arsenal_words
+       SET verification = p_verification, verification_note = p_note,
+           pronunciation = coalesce(p_pronunciation, pronunciation), etymology = coalesce(p_etymology, etymology),
+           etymology_url = coalesce(p_etymology_url, etymology_url)
+     WHERE id = p_word_id;
+    PERFORM set_config('arsenal.reverify', '', true);
+    RETURN v_id;
+END;
+$$;
+
+-- ===================================================================== 4
+-- Holds: out of every drop, permanently, with the reason.
+
+CREATE TABLE IF NOT EXISTS arsenal_holds (
+    id          BIGSERIAL    PRIMARY KEY,
+    ref_id      BIGINT       REFERENCES arsenal_refs (id) ON DELETE RESTRICT,
+    word_id     BIGINT       REFERENCES arsenal_words (id) ON DELETE RESTRICT,
+    -- snake_case: 'outcome_conflict' (item 5).
+    reason      TEXT         NOT NULL CHECK (reason ~ '^[a-z][a-z0-9_]{1,59}$'),
+    -- The check's one sentence.
+    detail      TEXT         CHECK (detail IS NULL OR char_length(detail) <= 500),
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT arsenal_holds_one_target CHECK (num_nonnulls(ref_id, word_id) = 1)
+);
+CREATE INDEX IF NOT EXISTS arsenal_holds_ref ON arsenal_holds (ref_id) WHERE ref_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS arsenal_holds_word ON arsenal_holds (word_id) WHERE word_id IS NOT NULL;
+
+DROP TRIGGER IF EXISTS arsenal_holds_stamp ON arsenal_holds;
+CREATE TRIGGER arsenal_holds_stamp
+    BEFORE INSERT ON arsenal_holds
+    FOR EACH ROW EXECUTE FUNCTION public.arsenal_stamp_created();
+DROP TRIGGER IF EXISTS arsenal_holds_immutable ON arsenal_holds;
+CREATE TRIGGER arsenal_holds_immutable
+    BEFORE UPDATE OR DELETE ON arsenal_holds
+    FOR EACH ROW EXECUTE FUNCTION public.reject_mutation();
+DROP TRIGGER IF EXISTS arsenal_holds_no_truncate ON arsenal_holds;
+CREATE TRIGGER arsenal_holds_no_truncate
+    BEFORE TRUNCATE ON arsenal_holds
+    FOR EACH STATEMENT EXECUTE FUNCTION public.reject_truncate();
+
+-- ===================================================================== 5
 -- The picker.
 
 CREATE OR REPLACE FUNCTION public.arsenal_pick_drop(p_date date, p_with_tests boolean DEFAULT false,
@@ -149,6 +416,7 @@ BEGIN
           FROM public.arsenal_refs r
          WHERE r.is_test = p_with_tests AND r.status = 'pool' AND r.verification IN ('verified', 'corrected')
            AND NOT EXISTS (SELECT 1 FROM latest l WHERE l.ref_id = r.id AND l.reaction IN ('known', 'not_interested'))
+           AND NOT EXISTS (SELECT 1 FROM public.arsenal_holds h WHERE h.ref_id = r.id)
     ),
     cats AS MATERIALIZED (
         SELECT c.category, -ln(1 - random()) / greatest(cw.weight, 0.0001) AS k
@@ -207,6 +475,7 @@ BEGIN
                                         FROM public.arsenal_reactions x WHERE x.word_id = wd.id
                                        ORDER BY x.word_id, x.created_at DESC, x.id DESC) lw
                         WHERE lw.reaction IN ('known', 'not_interested'))
+       AND NOT EXISTS (SELECT 1 FROM public.arsenal_holds h WHERE h.word_id = wd.id)
      ORDER BY (SELECT count(*) FROM unnest(v_rooms) AS rm WHERE rm = wd.room), random()
      LIMIT 1;
     IF v_word IS NULL THEN
@@ -252,10 +521,64 @@ BEGIN
 END;
 $$;
 
--- ===================================================================== 4
--- Self-test (rolled back): word seeds, then the picker's rooms, on TEST
--- rows only. Every other eligible test row (e2e leftovers) is first marked
--- 'known' inside the rolled-back block, so the picker sees only these.
+-- ===================================================================== 6
+-- Access: the owner reads both new tables; the worker writes them
+-- (DATABASE_URL bypasses RLS); the re-verify functions are the worker's.
+
+ALTER TABLE arsenal_reverifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE arsenal_holds ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON arsenal_reverifications, arsenal_holds FROM anon, authenticated, PUBLIC;
+REVOKE ALL ON SEQUENCE arsenal_reverifications_id_seq, arsenal_holds_id_seq FROM anon, authenticated, PUBLIC;
+GRANT SELECT ON arsenal_reverifications, arsenal_holds TO authenticated;
+DROP POLICY IF EXISTS arsenal_reverifications_owner_read ON arsenal_reverifications;
+CREATE POLICY arsenal_reverifications_owner_read ON arsenal_reverifications FOR SELECT TO authenticated
+    USING ((SELECT public.is_owner()));
+DROP POLICY IF EXISTS arsenal_holds_owner_read ON arsenal_holds;
+CREATE POLICY arsenal_holds_owner_read ON arsenal_holds FOR SELECT TO authenticated
+    USING ((SELECT public.is_owner()));
+GRANT SELECT ON arsenal_reverifications, arsenal_holds TO valemont_readonly;
+
+REVOKE ALL ON FUNCTION public.arsenal_refs_guard() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.arsenal_words_guard() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.arsenal_pick_drop(date, boolean, boolean) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.arsenal_reverify_ref(bigint, text, text, text, text, text, text, text, text, boolean)
+    FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.arsenal_reverify_word(bigint, text, text, text, text, text, text)
+    FROM PUBLIC, anon, authenticated;
+
+-- ===================================================================== 7
+-- Item 11 (owner, 2026-10-16): the dry run's two clears, written once.
+-- Each only while the card is still the unverified pool card the dry run
+-- read; the self-test (section 8) fails the paste if either is missing.
+
+SELECT public.arsenal_reverify_ref(
+    206, 'corrected',
+    're-verified once (owner, 2026-10-16, item 11; source: Moneyball: The Art of Winning an Unfair Game): '
+    || 'corrected by the source: a $44 million payroll and the 2002 playoffs; the book''s full title. '
+    || 'The 20-game streak was not in the excerpt and was left out.',
+    'owner, 2026-10-16: item 11 (scripts.arsenal_reverify dry run; db/055)',
+    'https://en.wikipedia.org/wiki/Moneyball%3A_The_Art_of_Winning_an_Unfair_Game',
+    'Billy Beane''s Oakland A''s used sabermetrics to find undervalued players and reached the 2002 playoffs '
+    || 'on a $44 million payroll, against the Yankees'' $125 million.',
+    'Moneyball: The Art of Winning an Unfair Game (Michael Lewis, 2003)')
+ WHERE EXISTS (SELECT 1 FROM public.arsenal_refs
+                WHERE id = 206 AND canonical_key = 'moneyball_oakland' AND status = 'pool'
+                  AND verification = 'unverified' AND NOT is_test);
+
+SELECT public.arsenal_reverify_ref(
+    216, 'verified',
+    're-verified once (owner, 2026-10-16, item 11; source: Enchiridion of Epictetus): supported.',
+    'owner, 2026-10-16: item 11 (scripts.arsenal_reverify dry run; db/055)',
+    'https://en.wikipedia.org/wiki/Enchiridion_of_Epictetus')
+ WHERE EXISTS (SELECT 1 FROM public.arsenal_refs
+                WHERE id = 216 AND canonical_key = 'epictetus_what_is_up_to_us' AND status = 'pool'
+                  AND verification = 'unverified' AND NOT is_test);
+
+-- ===================================================================== 8
+-- Self-test (rolled back): word seeds, re-verification, holds, then the
+-- picker's rooms, on TEST rows only. Every other eligible test row (e2e
+-- leftovers) is first marked 'known' inside the rolled-back block, so the
+-- picker sees only these.
 
 DO $$
 DECLARE
@@ -267,6 +590,8 @@ DECLARE
     v_rooms  text[];
     v_ok     boolean;
     v_n      int;
+    v_r      bigint;
+    v_r2     bigint;
     i        int;
 BEGIN
     BEGIN
@@ -365,6 +690,154 @@ BEGIN
             RAISE EXCEPTION 'SELFTEST FAILED: the word took the references'' majority room';
         END IF;
 
+        -- ---------------------------------------------------- 7. item 11, written once
+        IF (SELECT verification FROM public.arsenal_refs WHERE id = 206) <> 'corrected'
+           OR (SELECT origin FROM public.arsenal_refs WHERE id = 206) NOT LIKE '%$44 million payroll%'
+           OR (SELECT verification FROM public.arsenal_refs WHERE id = 216) <> 'verified'
+           OR (SELECT source_url FROM public.arsenal_refs WHERE id = 216) <> 'https://en.wikipedia.org/wiki/Enchiridion_of_Epictetus'
+           OR (SELECT count(*) FROM public.arsenal_reverifications
+                WHERE ref_id IN (206, 216) AND old_verification = 'unverified' AND by_whom LIKE 'owner, 2026-10-16%') <> 2
+           OR (SELECT count(*) FROM public.arsenal_refs
+                WHERE id IN (190, 192, 201, 209, 212, 215) AND verification = 'unverified' AND status = 'pool') <> 6 THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: item 11 (206 corrected, 216 verified, the other six unverified)';
+        END IF;
+
+        -- ---------------------------------------------------- 8. one re-verification, recorded
+        INSERT INTO public.arsenal_refs (canonical_key, category, title, origin, meaning, deploy_line, room,
+                                         source_work, source_kind, status, verification, verification_note,
+                                         origin_kind, is_test)
+        VALUES ('selftest_055_rev_a', 'sports', 'Selftest rev a', 'An origin long enough.', 'A meaning.',
+                'A line to deploy.', 'pitch', 'A work', 'wikipedia', 'pool', 'unverified', 'insufficient: x', 'pool', true),
+               ('selftest_055_rev_b', 'sports', 'Selftest rev b', 'An origin long enough.', 'A meaning.',
+                'A line to deploy.', 'pitch', 'A work', 'wikipedia', 'pool', 'unverified', 'insufficient: y', 'pool', true);
+        SELECT id INTO v_r FROM public.arsenal_refs WHERE canonical_key = 'selftest_055_rev_a';
+        SELECT id INTO v_r2 FROM public.arsenal_refs WHERE canonical_key = 'selftest_055_rev_b';
+        v_n := 0;
+        -- Never by a plain UPDATE, nor by a forged setting without the record.
+        BEGIN
+            UPDATE public.arsenal_refs SET verification = 'unverified', verification_note = 'rewritten' WHERE id = v_r;
+        EXCEPTION WHEN raise_exception THEN IF SQLERRM LIKE '%settles once%' THEN v_n := v_n + 1; END IF;
+        END;
+        BEGIN
+            PERFORM set_config('arsenal.reverify', 'ref:' || v_r, true);
+            UPDATE public.arsenal_refs SET verification = 'unverified', verification_note = 'rewritten' WHERE id = v_r;
+        EXCEPTION WHEN raise_exception THEN IF SQLERRM LIKE '%settles once%' THEN v_n := v_n + 1; END IF;
+        END;
+        PERFORM set_config('arsenal.reverify', '', true);
+        -- Through the function: settled, stamped, recorded old -> new with who.
+        PERFORM public.arsenal_reverify_ref(v_r, 'corrected', 'second look', 'selftest 055', 'https://selftest.invalid/r',
+                                            'A corrected origin, long enough.');
+        IF NOT EXISTS (SELECT 1 FROM public.arsenal_refs
+                        WHERE id = v_r AND verification = 'corrected' AND origin = 'A corrected origin, long enough.'
+                          AND verification_note = 'second look' AND verified_at IS NOT NULL)
+           OR NOT EXISTS (SELECT 1 FROM public.arsenal_reverifications
+                           WHERE ref_id = v_r AND old_verification = 'unverified' AND new_verification = 'corrected'
+                             AND old_note = 'insufficient: x' AND new_note = 'second look' AND by_whom = 'selftest 055'
+                             AND db_role = current_user AND created_at IS NOT NULL) THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: the re-verification or its record';
+        END IF;
+        -- Once: a re-verification that stays unverified still uses the one chance.
+        PERFORM public.arsenal_reverify_ref(v_r2, 'unverified', 'still nothing', 'selftest 055');
+        BEGIN
+            PERFORM public.arsenal_reverify_ref(v_r2, 'verified', 'third try', 'selftest 055', 'https://selftest.invalid/r');
+        EXCEPTION WHEN raise_exception THEN IF SQLERRM LIKE '%already re-verified once%' THEN v_n := v_n + 1; END IF;
+        END;
+        BEGIN
+            PERFORM public.arsenal_reverify_ref(v_r, 'verified', 'again', 'selftest 055');
+        EXCEPTION WHEN raise_exception THEN IF SQLERRM LIKE '%only an unverified pool reference%' THEN v_n := v_n + 1; END IF;
+        END;
+        -- The record is append-only.
+        BEGIN
+            UPDATE public.arsenal_reverifications SET by_whom = 'someone else' WHERE ref_id = v_r;
+        EXCEPTION WHEN raise_exception THEN v_n := v_n + 1;
+        END;
+        BEGIN
+            DELETE FROM public.arsenal_reverifications WHERE ref_id = v_r;
+        EXCEPTION WHEN raise_exception THEN v_n := v_n + 1;
+        END;
+        BEGIN
+            TRUNCATE public.arsenal_reverifications;
+        EXCEPTION WHEN raise_exception THEN v_n := v_n + 1;
+        END;
+        -- A word, the same way.
+        INSERT INTO public.arsenal_words (lemma, meaning, room, sentence, verification, verification_note, is_test)
+        VALUES ('selftest 055 rev', 'A meaning.', 'pitch', 'A sentence.', 'unverified', 'no pronunciation', true)
+        RETURNING id INTO v_w2;
+        PERFORM public.arsenal_reverify_word(v_w2, 'verified', 'found it', 'selftest 055', '/x/', 'From x.',
+                                             'https://selftest.invalid/w');
+        IF (SELECT verification FROM public.arsenal_words WHERE id = v_w2) <> 'verified' THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: the word re-verification';
+        END IF;
+        IF v_n <> 7 THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: re-verification refusals (% of 7)', v_n;
+        END IF;
+
+        -- ---------------------------------------------------- 9. holds
+        INSERT INTO public.arsenal_reactions (owner_id, ref_id, reaction)
+        SELECT v_owner, r.id, 'known' FROM public.arsenal_refs r
+         WHERE r.is_test AND r.status = 'pool' AND r.verification IN ('verified', 'corrected');
+        INSERT INTO public.arsenal_reactions (owner_id, word_id, reaction)
+        SELECT v_owner, w.id, 'known' FROM public.arsenal_words w
+         WHERE w.is_test AND w.status = 'pool' AND w.verification IN ('verified', 'corrected');
+        v_ids := '{}';
+        FOR i IN 1..4 LOOP
+            INSERT INTO public.arsenal_refs (canonical_key, category, title, origin, meaning, deploy_line, room,
+                                             source_work, source_kind, source_url, status, verification,
+                                             origin_kind, is_test)
+            VALUES ('selftest_055_hold_' || i, (ARRAY['finance_business', 'sports', 'film_tv', 'finance_business'])[i],
+                    'Selftest hold ' || i, 'An origin long enough.', 'A meaning.', 'A line to deploy.', 'pitch',
+                    'A work', 'wikipedia', 'https://selftest.invalid/r', 'pool', 'verified', 'pool', true)
+            RETURNING id INTO v_r;
+            v_ids := v_ids || v_r;
+        END LOOP;
+        INSERT INTO public.arsenal_words (lemma, pronunciation, etymology, etymology_url, meaning, room, sentence,
+                                          verification, is_test)
+        VALUES ('selftest 055 hold', '/x/', 'From x.', 'https://selftest.invalid/w', 'A meaning.', 'homies',
+                'A sentence.', 'verified', true)
+        RETURNING id INTO v_w;
+        -- Both finance references held: two categories left.
+        INSERT INTO public.arsenal_holds (ref_id, reason, detail)
+        VALUES (v_ids[1], 'outcome_conflict', 'selftest'), (v_ids[4], 'outcome_conflict', 'selftest');
+        v_ok := false;
+        BEGIN
+            PERFORM public.arsenal_pick_drop('2001-05-10', true);
+        EXCEPTION WHEN raise_exception THEN v_ok := SQLERRM LIKE '%(2 categories%';
+        END;
+        IF NOT v_ok THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: a held reference was eligible';
+        END IF;
+        -- The word held: no word.
+        INSERT INTO public.arsenal_refs (canonical_key, category, title, origin, meaning, deploy_line, room,
+                                         source_work, source_kind, source_url, status, verification, origin_kind, is_test)
+        VALUES ('selftest_055_hold_5', 'history_military', 'Selftest hold 5', 'An origin long enough.', 'A meaning.',
+                'A line to deploy.', 'pitch', 'A work', 'wikipedia', 'https://selftest.invalid/r', 'pool', 'verified',
+                'pool', true);
+        INSERT INTO public.arsenal_holds (word_id, reason) VALUES (v_w, 'outcome_conflict');
+        v_ok := false;
+        BEGIN
+            PERFORM public.arsenal_pick_drop('2001-05-10', true);
+        EXCEPTION WHEN raise_exception THEN v_ok := SQLERRM LIKE '%no eligible word%';
+        END;
+        IF NOT v_ok THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: a held word was eligible';
+        END IF;
+        v_n := 0;
+        BEGIN
+            INSERT INTO public.arsenal_holds (ref_id, reason) VALUES (v_ids[2], 'Outcome Conflict');
+        EXCEPTION WHEN check_violation THEN v_n := v_n + 1;
+        END;
+        BEGIN
+            DELETE FROM public.arsenal_holds WHERE ref_id = v_ids[1];
+        EXCEPTION WHEN raise_exception THEN v_n := v_n + 1;
+        END;
+        BEGIN
+            TRUNCATE public.arsenal_holds;
+        EXCEPTION WHEN raise_exception THEN v_n := v_n + 1;
+        END;
+        IF v_n <> 3 THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: holds are append-only with a snake_case reason (% of 3)', v_n;
+        END IF;
+
         RAISE EXCEPTION 'selftest-rollback';
     EXCEPTION WHEN raise_exception THEN
         IF SQLERRM <> 'selftest-rollback' THEN
@@ -383,4 +856,9 @@ ON CONFLICT (name) DO NOTHING;
 -- SELECT lemma, status FROM arsenal_words WHERE lemma IN ('asymmetric', 'inflection', 'provenance', 'fiduciary');
 --   -- asymmetric dropped; the other three seed
 -- SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'arsenal_words_status_check';
--- SELECT p.oid::regprocedure, p.proacl FROM pg_proc p WHERE proname IN ('arsenal_pick_drop', 'arsenal_words_guard');
+-- SELECT p.oid::regprocedure, p.proacl FROM pg_proc p
+--  WHERE proname IN ('arsenal_pick_drop', 'arsenal_words_guard', 'arsenal_refs_guard', 'arsenal_reverify_ref',
+--                    'arsenal_reverify_word');
+-- SELECT id, verification, source_url FROM arsenal_refs WHERE id IN (206, 216);   -- corrected, verified
+-- SELECT ref_id, old_verification, new_verification, by_whom, db_role FROM arsenal_reverifications;  -- 2 rows
+-- SELECT count(*) FROM arsenal_holds;                                               -- 0 until the outcome check

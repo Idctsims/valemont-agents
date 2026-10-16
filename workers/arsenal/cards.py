@@ -34,9 +34,9 @@ CATEGORY_NOTES: Mapping[str, str] = {
     "literature_myth": "only when instantly recognizable",
 }
 
-#: The weekly pool (docs/arsenal.md §4).
-POOL_REFS = 30
-POOL_WORDS = 10
+#: The weekly pool (docs/arsenal.md §4; 36 and 12 from 2026-10-16, owner).
+POOL_REFS = 36
+POOL_WORDS = 12
 #: The drop's synchronous top-up.
 TOPUP_REFS = 6
 TOPUP_WORDS = 2

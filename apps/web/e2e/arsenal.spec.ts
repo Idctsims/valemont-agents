@@ -57,7 +57,7 @@ test.describe("owner", () => {
                                 quote: "The die is cast." }),
       await addTestArsenalRef({ category: "finance_business", title: titles[1], room: "pitch", verification: "corrected",
                                 note: "the date was 1434, not 1397" }),
-      await addTestArsenalRef({ category: "sports", title: titles[2], room: "homies" }),
+      await addTestArsenalRef({ category: "film_tv", title: titles[2], room: "homies", quote: "Show me the money." }),
     ];
     wordId = await addTestArsenalWord(lemma);
     await addTestArsenalDrop(ids, wordId);
@@ -94,6 +94,10 @@ test.describe("owner", () => {
     await expect(first.getByTestId("card-check")).toHaveText("Checked");
     await expect(card(titles[1]).getByTestId("card-check")).toHaveText("Corrected");
     await expect(card(titles[2]).getByTestId("room-chip")).toHaveText("Homies");
+    // A film or TV quote credits the character AND the work, at render time;
+    // other quotes keep their speaker as written.
+    await expect(card(titles[2]).getByTestId("card-quote-by")).toHaveText("— A test speaker (as written in Test work)");
+    await expect(first.getByTestId("card-quote-by")).toHaveText("— A test speaker");
   });
 
   test("a reaction writes, reads back as a test reaction, and persists", async () => {
