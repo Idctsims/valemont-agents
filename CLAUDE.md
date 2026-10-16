@@ -1045,7 +1045,21 @@ absent row as "I never looked."
     - (e) The five functions: executable by none of anon, authenticated or readonly. Both guards read the record table; the picker reads holds.
     - (f) 0 holds before the outcome check.
     - **The first paste failed and applied nothing** (42P01, `relation "public.arsenal_reverifications" does not exist` in `arsenal_words_guard`). Section 2's UPDATE fired the replaced words guard, which read a table the file created only in section 3. Read back via db_inspect: no log row, no new object, the CHECK and the words unchanged, all three guards still db/054's. Fixed by creating the table first. **Rule:** a trigger function that a later statement of the same file fires must find every table it reads already created; and a guard reads an optional table only inside the branch that needs it.
-    - Next new file: `db/056`.
+  - **`db/056_arsenal_hold_release.sql` applied 2026-10-16 21:07:36 UTC** (`migration_log`; the first paste; owner's paste, the self-test NOTICE shown).
+    - `arsenal_hold_releases`: append-only, TRUNCATE-guarded, `hold_id` UNIQUE (a hold is released at most once); reason, `released_by` (role), `created_at`. The hold stays as history.
+    - `v_arsenal_active_holds` (security_invoker): a hold with no release.
+    - The worker-only `arsenal_release_hold`.
+    - `arsenal_pick_drop`: db/055's, skipping active holds only.
+
+    **Verified via db_inspect the same session:**
+    - (a) The log row.
+    - (b) The releases table: RLS on, 1 policy, triggers stamp, immutable, no_truncate.
+    - (c) The table and the view: anon nothing, authenticated select only, readonly select; the view `security_invoker=true`.
+    - (d) `arsenal_release_hold` and `arsenal_pick_drop`: executable by none of anon, authenticated or readonly; the picker reads the view.
+    - (e) Before the releases: 0 releases, and active holds 9 (ref 195), 10 (197), 11 (218).
+
+    **Holds 9, 10 and 11 released** with `scripts.arsenal_release_hold` (releases 3, 4, 5; role postgres; reason "false positive: intermediate outcome prompt; final prompt clears (dry run 2026-10-16)"). Read back: `v_arsenal_active_holds` empty; refs 195, 197 and 218 ready; 21 ready references across all 7 categories.
+    - Next new file: `db/057`.
   - **Rule (owner, 2026-10-12): the migration record updates in the same session a migration is verified, never deferred to a merge.** Record `applied_at` from `migration_log` and the verification, and move "Next new file" here and in MASTER_PLAN §"Migration numbering", in their own commit.
 - **Known intermittent `tests_live` skip (identified 2026-10-12):** `test_system_jobs_sql.SystemJobsSql.test_claim_retry_and_finish` skips with "another poller claimed the test job first" when the production worker's 10 s `job_queue` poller claims the test's `noop` job first (observed 2 of 60 isolated runs). By design (skip, not fail); not a broken invariant. Two sibling tests in the same file skip the same way ("another poller claimed/failed the test job first"). Since 2026-10-13 `tests_live` runs with `-v`, so a skip is named, not assumed.
   - **2026-10-13, cleared (owner):** a quiet Phase 3 run reported "314 tests, OK (skipped=1)" with no name. The full verbose rerun had **0 skips** (314 OK, 593 s). The owner's judgment: the plausible cause is this documented poller race, since every migration-gated skip cannot fire (all applied). One alternative was not ruled out: a class whose own `setUpClass` hits a transient "database unreachable" is also reported as one skip.
