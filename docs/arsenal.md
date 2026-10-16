@@ -99,7 +99,7 @@ A reference that has appeared in a drop never appears in one again. The database
 
 - `vercel whoami` printed `idctsims`.
 - `tests/`: 973 OK.
-- `tests_live -v`, metered: §9.
+- `tests_live -v`, metered: 392 tests OK, 0 skipped, ~2.42 MB read. Every connection was counted, including tests_live's own `psycopg.connect`, through a wrapper that sets `core/egress.py`'s `MeteredCursor` on every connection. A first run that patched only `Connection.connect` missed the pre-bound `psycopg.connect` and under-read ~0.13 MB.
 
 ### Claude pricing (`core/ai.py` PRICING, verified 2026-10-10)
 
