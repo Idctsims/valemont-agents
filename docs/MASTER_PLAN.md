@@ -372,7 +372,21 @@ Thirteen build chats after this one, each split into phases with a test you run 
      - [x] TMDB_READ_TOKEN never in a client bundle (lint `check:tmdb-token`; a scan of the built client bundle: 0 of 42 files) and never printed
      - [ ] Worker RAM at rest: **pending**, on the owner's rule (Oct 16): the 15 MB band is a leak check, not a budget; a flat 6+ hour curve at rest on #50's worker is the new baseline and closes this item and Phase 4's; investigate only past ~160 MB at rest (CLAUDE.md, Chat 4 Phase 4).
      - Screenshot gate: green (owner, Oct 15).
-   - [ ] Recommendations reflect the six seed shows on day one and shift after reactions (Phase 4)
+   - **Phase 4, Screening Room recommendations: owner checks green Oct 15; six items wait on the calendar.** PRs #46 (merged 19:53:58 UTC Oct 15, ahead of the egress follow-up; owner kept it), #50 (stale cross-in rescore). db/053 applied 19:36:32 UTC Oct 15 (third paste). Design: `docs/screening.md` §7. Full `tests_live -v` on #50, metered: 392 tests, 391 OK, 0 skipped, ~2.24 MB; the one failure (the twin test, story 15462's stale flag) passed alone after #50 deployed.
+     - [x] Day one, before any reaction: at least 8 of the 12 For you picks fit the seeds, each naming its "because", none already seen (owner, Oct 15). The first `screening_recs` run: 20:07:49 UTC Oct 15, 294 scored, 271 eligible.
+     - [x] The seen-it pass: all 30 answered (owner, Oct 15 evening; 01:47–01:48 UTC Oct 16): 12 "Seen, loved", 18 "Haven't seen".
+     - [x] Reactions given (owner, Oct 15): 3 Not interested on For you cards (Bonanza, Deadwood, Law & Order) and 3 Loves (Pretty Woman on its title page; the trailers "In a Holidaze" and "Frisco King"). Each queued a re-rank: `screening_rec_runs` 7–11, loves 18 → 30 with the seen-it pass, not interested 0 → 3, by 03:23 UTC Oct 16.
+     - [x] Shelves set (owner, Oct 15): 2 Watching, 2 Finished.
+     - [ ] The next refresh visibly shifts toward the Loves: **pending (calendar)**, the next refresh's For you against day one's (`screening_rec_runs.top`).
+     - [ ] Nothing marked seen ever appears in recs: **pending (calendar)**, checked across the next 2 refreshes.
+     - [ ] The real release push fires the first morning a watchlisted title drops: **pending (calendar).**
+     - [ ] The test release push arrives at 08:30 and opens the title: **pending, not run** (0 test rows in `release_pushes`, 0 release notifications; `-m scripts.screening_test_push` arms it).
+     - [ ] `e2e/screening-recs.spec.ts` (phone): **pending, not run** (no test title of its kinds exists).
+     - [ ] Screenshot gate (`e2e/screens-screening-recs.spec.ts`, phone and desktop, both themes): **pending, not run** (no `e2e/screenshots/chat4-p4/` in this checkout).
+     - [ ] A watchlisted title's page shows "In the news" when Home has a story about it: **not yet reported.**
+     - [ ] The Brief's Screening line appears; Wags answers "what should I watch tonight?" from the owner's services: **not yet reported.**
+     - [ ] Trailers For you is ranked by taste, and works while YouTube RSS is down (TMDB source): **not yet reported** (the RSS outage ended before Phase 4 shipped; the TMDB path brought 11 trailers on its first run).
+     - [ ] Worker RAM at rest: **pending (calendar)**, the 6 h curve on #50's worker after 07:15 UTC Oct 16; flat means the new baseline, and it closes this item and Phase 3's (owner's rule, Oct 16).
 
 ### Chat 5 — The Arsenal
 
