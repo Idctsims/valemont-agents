@@ -54,7 +54,8 @@ export const NAV: NavGroup[] = [
     key: "culture",
     name: "Culture",
     pillars: [
-      { n: 5, name: "The Arsenal", built: false, href: "/arsenal" },
+      // Built in Chat 5 Phase 1 (db/054).
+      { n: 5, name: "The Arsenal", built: true, href: "/arsenal" },
       // Built in Chat 4 Phase 3 (db/051); the owner named the route /screening.
       { n: 6, name: "Screening Room", built: true, href: "/screening" },
       { n: 7, name: "The Lookbook", built: false, href: "/lookbook" },

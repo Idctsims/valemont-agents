@@ -32,7 +32,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-__all__ = ["REPO_ROOT", "WORKERS_ROOT", "ENV_FILE", "VOICE_FILE", "VOICE_COPY", "load_env"]
+__all__ = ["REPO_ROOT", "WORKERS_ROOT", "ENV_FILE", "VOICE_FILE", "VOICE_COPY", "ARSENAL_VOICE_FILE",
+           "ARSENAL_VOICE_COPY", "load_env"]
 
 WORKERS_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = WORKERS_ROOT.parent
@@ -40,6 +41,10 @@ ENV_FILE = REPO_ROOT / ".env"
 VOICE_ORIGINAL = REPO_ROOT / "prompts" / "wags_voice.md"
 VOICE_COPY = WORKERS_ROOT / "prompts" / "wags_voice.md"
 VOICE_FILE = VOICE_ORIGINAL if VOICE_ORIGINAL.exists() else VOICE_COPY
+#: The Arsenal's voice (Chat 5), the same original-and-copy arrangement.
+ARSENAL_VOICE_ORIGINAL = REPO_ROOT / "prompts" / "arsenal_voice.md"
+ARSENAL_VOICE_COPY = WORKERS_ROOT / "prompts" / "arsenal_voice.md"
+ARSENAL_VOICE_FILE = ARSENAL_VOICE_ORIGINAL if ARSENAL_VOICE_ORIGINAL.exists() else ARSENAL_VOICE_COPY
 
 
 def load_env() -> None:

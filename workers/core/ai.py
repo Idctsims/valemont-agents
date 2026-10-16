@@ -277,3 +277,78 @@ def complete(*, purpose: str, messages: list[Any], model: str = DEFAULT_MODEL,
                         critical=critical, on_recorded=on_recorded)
     log.info("ai %s: %s, $%s", purpose, served, cost)
     return response
+
+
+# ---------------------------------------------------------------- batches
+#
+# Message Batches (Chat 5, the Arsenal's weekly pool): half price, results
+# within 24 h. The budget applies at submit (the same guard as complete());
+# usage is recorded per result when it is read, at the batch rate.
+
+@dataclass(frozen=True)
+class BatchRequest:
+    custom_id: str
+    #: messages.create parameters except `model` and `max_tokens`.
+    params: Mapping[str, Any]
+    max_tokens: int = 16_000
+
+
+@dataclass(frozen=True)
+class BatchResult:
+    custom_id: str
+    #: The Message when the request succeeded, else None.
+    message: Any
+    #: 'succeeded' | 'errored' | 'canceled' | 'expired'
+    kind: str
+    error: str | None = None
+
+
+def submit_batch(*, requests: list[BatchRequest], model: str, critical: bool = False,
+                 client: Any = None) -> tuple[str, str]:
+    """Submit one Message Batch under the budget. Returns (batch id, the model
+    every request uses: downgraded at 80%, refused at 100% unless critical)."""
+    if model not in PRICING:
+        raise AiError(f"no pricing for model {model!r}; add it to core/ai.py PRICING first")
+    if not requests:
+        raise AiError("a batch needs at least one request")
+    sdk = client if client is not None else _client()
+    chosen = guard(model, critical=critical)
+    batch = sdk.messages.batches.create(requests=[
+        {"custom_id": r.custom_id, "params": {"model": chosen, "max_tokens": r.max_tokens, **r.params}}
+        for r in requests
+    ])
+    log.info("ai batch %s submitted: %d request(s), %s", batch.id, len(requests), chosen)
+    return str(batch.id), chosen
+
+
+def batch_status(batch_id: str, *, client: Any = None) -> str:
+    """'in_progress' | 'canceling' | 'ended'."""
+    sdk = client if client is not None else _client()
+    return str(sdk.messages.batches.retrieve(batch_id).processing_status)
+
+
+def batch_results(batch_id: str, *, purpose: str, model: str, critical: bool = False, client: Any = None,
+                  on_recorded: OnRecorded | None = None) -> list[BatchResult]:
+    """Every result of an ENDED batch. Each succeeded one writes its ai_usage
+    row at the batch rate, priced by the model that served it (else `model`,
+    the one submitted)."""
+    sdk = client if client is not None else _client()
+    out: list[BatchResult] = []
+    for entry in sdk.messages.batches.results(batch_id):
+        result = entry.result
+        kind = str(getattr(result, "type", "errored"))
+        if kind != "succeeded":
+            error = getattr(result, "error", None)
+            detail = getattr(getattr(error, "error", None), "message", None) or getattr(error, "type", None)
+            out.append(BatchResult(entry.custom_id, None, kind, str(detail) if detail else kind))
+            continue
+        message = result.message
+        served = getattr(message, "model", None)
+        if served not in PRICING:
+            log.error("batch result served by unpriced model %r; costing it as %r", served, model)
+            served = model
+        cost = record_usage(purpose=purpose, model=served, usage=Usage.from_response(message.usage),
+                            critical=critical, batch=True, on_recorded=on_recorded)
+        log.info("ai batch %s %s: %s, $%s", batch_id, entry.custom_id, served, cost)
+        out.append(BatchResult(entry.custom_id, message, kind))
+    return out

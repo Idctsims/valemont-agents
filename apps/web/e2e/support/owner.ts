@@ -688,6 +688,50 @@ export async function retireTestRec(titleId: number): Promise<void> {
   });
 }
 
+/** A TEST Arsenal reference (db/054 add_test_arsenal_ref): is_test, a .invalid
+ * source, already settled. Shown only with the marker. Returns its id. */
+export async function addTestArsenalRef(opts: {
+  category: string; title: string; room: string; verification?: "verified" | "corrected" | "unverified";
+  note?: string | null; quote?: string | null;
+}): Promise<number> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.rpc("add_test_arsenal_ref", {
+      p_marker: e2eMarker(), p_category: opts.category, p_title: opts.title, p_room: opts.room,
+      p_verification: opts.verification ?? "verified", p_note: opts.note ?? null, p_quote: opts.quote ?? null,
+    });
+    if (error) throw new Error(`test arsenal ref failed: ${error.message}`);
+    return data as number;
+  });
+}
+
+/** A TEST Power Word (db/054 add_test_arsenal_word). Returns its id. */
+export async function addTestArsenalWord(lemma: string): Promise<number> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.rpc("add_test_arsenal_word", { p_marker: e2eMarker(), p_lemma: lemma });
+    if (error) throw new Error(`test arsenal word failed: ${error.message}`);
+    return data as number;
+  });
+}
+
+/** A TEST drop for today of these test references (slot order) and word
+ * (db/054 add_test_arsenal_drop; the drop guard holds it to every rule). */
+export async function addTestArsenalDrop(refIds: number[], wordId: number): Promise<number> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.rpc("add_test_arsenal_drop", { p_marker: e2eMarker(), p_ref_ids: refIds, p_word_id: wordId });
+    if (error) throw new Error(`test arsenal drop failed: ${error.message}`);
+    return data as number;
+  });
+}
+
+/** A reference's arsenal_reactions rows, oldest first, with is_test. */
+export async function arsenalReactions(refId: number): Promise<{ reaction: string; is_test: boolean }[]> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.from("arsenal_reactions").select("reaction, is_test").eq("ref_id", refId).order("id");
+    if (error) throw new Error(`arsenal reaction read failed: ${error.message}`);
+    return (data ?? []) as { reaction: string; is_test: boolean }[];
+  });
+}
+
 /** A title's history (watch_status), oldest first: what the spec checks. */
 export async function watchHistory(titleId: number): Promise<{ status: string; finished_at: string | null }[]> {
   return asOwner(async (supabase) => {

@@ -371,7 +371,25 @@ class Registry(unittest.TestCase):
                           "morning_brief", "morning_brief_push",
                           "feed_ingest", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
                           "feed_repo_why", "feed_profile", "feed_prune", "tech_repos",
-                          "screening_match", "screening_refresh", "screening_recs", "screening_release_push"})
+                          "screening_match", "screening_refresh", "screening_recs", "screening_release_push",
+                          "arsenal_pool", "arsenal_pool_collect", "arsenal_drop", "arsenal_verify"})
+        # db/054 (Chat 5): the pool Sundays 03:30, the drop daily 05:30 (both
+        # Chicago, both at boot), collect every 10 min; verify runs per queued
+        # item, never on its own.
+        self.assertEqual((built["arsenal_pool"].trigger.fields[4].expressions[0].first,
+                          built["arsenal_pool"].trigger.fields[5].expressions[0].first,
+                          built["arsenal_pool"].trigger.fields[6].expressions[0].first,
+                          str(built["arsenal_pool"].trigger.timezone)), (6, 3, 30, "America/Chicago"))
+        # The drop: 05:30, then every 30 min to 21:30 (a deferred drop retries; owner, 2026-10-16).
+        first, retries = built["arsenal_drop"].trigger.triggers
+        self.assertEqual((first.fields[5].expressions[0].first, first.fields[6].expressions[0].first,
+                          str(first.timezone)), (5, 30, "America/Chicago"))
+        self.assertEqual((str(retries.fields[5]), str(retries.fields[6]), str(retries.timezone)),
+                         ("6-21", "0,30", "America/Chicago"))
+        self.assertTrue(built["arsenal_pool"].run_at_boot and built["arsenal_drop"].run_at_boot)
+        self.assertEqual(built["arsenal_pool_collect"].expected_interval_s, 600)
+        self.assertFalse(built["arsenal_verify"].scheduled)
+        self.assertIn("arsenal_verify", system_jobs.QUEUE_HANDLERS)
         self.assertFalse(built["screening_match"].scheduled)
         self.assertTrue(built["screening_refresh"].run_at_boot)
         self.assertEqual((built["screening_refresh"].trigger.fields[5].expressions[0].first,
@@ -437,12 +455,14 @@ class SystemOnlyBoot(SystemTestCase):
                                "system:morning_brief_push", "system:feed_ingest",
                                "system:feed_profile", "system:feed_prune", "system:tech_repos",
                                "system:screening_refresh", "system:screening_recs",
-                               "system:screening_release_push"})
+                               "system:screening_release_push", "system:arsenal_pool",
+                               "system:arsenal_pool_collect", "system:arsenal_drop"})
         # screening_match, feed_tech_summarize, feed_summarize, feed_score, feed_why and feed_repo_why
         # are registered (job_health rows, watched) but never scheduled: feed_ingest runs them.
-        self.assertEqual(self.ledger.names().count("job_register"), 23)
+        # arsenal_verify the same way: the job_queue handler runs it per item.
+        self.assertEqual(self.ledger.names().count("job_register"), 27)
         for chained in ("screening_match", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
-                        "feed_repo_why"):
+                        "feed_repo_why", "arsenal_verify"):
             self.assertNotIn(f"system:{chained}", ids)
 
     def test_disabled_agents_plus_system_jobs_start_rather_than_refuse(self) -> None:
@@ -492,7 +512,8 @@ class SystemOnlyBoot(SystemTestCase):
                           "morning_brief", "morning_brief_push",
                           "feed_ingest", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
                           "feed_repo_why", "feed_profile", "feed_prune", "tech_repos",
-                          "screening_match", "screening_refresh", "screening_recs", "screening_release_push"})
+                          "screening_match", "screening_refresh", "screening_recs", "screening_release_push",
+                          "arsenal_pool", "arsenal_pool_collect", "arsenal_drop", "arsenal_verify"})
 
 
 if __name__ == "__main__":

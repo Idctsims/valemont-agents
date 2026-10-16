@@ -9,7 +9,9 @@ THE SECTION CONTRACT (read this before adding a pillar)
     official tech item landed in the last 24 h; its provider returns NULL
     otherwise and a NULL section is left out), screening_brief (db/053: one
     line, today's releases on the shelves and the top For you pick; NULL
-    when there is neither). A later chat that
+    when there is neither), arsenal_brief (db/054: one line, today's Power
+    Word and the strongest reference with its room; NULL before the drop).
+    A later chat that
     ships a pillar adds its provider function and registry row in its own
     migration and sets brief_section = true; its section appears in the next
     brief with NO change here. ctx_brief (the brief itself, for Wags) is
@@ -403,9 +405,28 @@ def _screening_lines(t: Mapping[str, Any]) -> list[str]:
     return [" ".join(parts)] if parts else []
 
 
+def _arsenal_lines(t: Mapping[str, Any]) -> list[str]:
+    """One line (db/054 ctx_arsenal_brief): today's Power Word and the
+    strongest of today's three references with its room."""
+    parts = []
+    if t.get("power_word"):
+        meaning = f" ({t['word_meaning']})" if t.get("word_meaning") else ""
+        parts.append(f"Power Word: {t['power_word']}{meaning}.")
+    ref = t.get("ref") or {}
+    if ref.get("title"):
+        where = ARSENAL_ROOM_PHRASES.get(str(ref.get("room")), "")
+        parts.append(f"Deploy {ref['title']}" + (f" {where}" if where else "") + ".")
+    return [" ".join(parts)] if parts else []
+
+
+ARSENAL_ROOM_PHRASES = {"boardroom": "in the boardroom", "pitch": "in the pitch", "negotiation": "in the negotiation",
+                        "homies": "with the homies"}
+
+
 #: Sections held to one line, however many the model wrote (owner,
-#: 2026-10-13: "one Tech line"; 2026-10-15: "the Brief's Screening line").
-ONE_LINE_SECTIONS = frozenset({"tech_brief", "screening_brief"})
+#: 2026-10-13: "one Tech line"; 2026-10-15: "the Brief's Screening line";
+#: Chat 5: "one short line" for the Arsenal).
+ONE_LINE_SECTIONS = frozenset({"tech_brief", "screening_brief", "arsenal_brief"})
 
 #: How the fallback words each section it knows. A later pillar adds one.
 FALLBACK_SECTIONS: dict[str, Callable[[Mapping[str, Any], str], list[str]]] = {
@@ -415,6 +436,7 @@ FALLBACK_SECTIONS: dict[str, Callable[[Mapping[str, Any], str], list[str]]] = {
     "feed": lambda p, _today: _feed_lines(p.get("feed") or {}),
     "tech_brief": lambda p, _today: _tech_lines(p.get("tech_brief") or {}),
     "screening_brief": lambda p, _today: _screening_lines(p.get("screening_brief") or {}),
+    "arsenal_brief": lambda p, _today: _arsenal_lines(p.get("arsenal_brief") or {}),
 }
 
 

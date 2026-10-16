@@ -98,6 +98,22 @@
                              system job's reads, core/egress.py) in job_health,
                              carried across a restart; ONE push a day past
                              egress.ALERT_MB (owner, 2026-10-15).
+    arsenal_pool     weekly  Sunday 03:30 America/Chicago, and at boot: embeds
+                             unembedded references, requeues stale pending
+                             items, and submits ONE Message Batch (30 refs, 10
+                             words) when the week is due or the pool is short
+                             (arsenal/pool.py, db/054).
+    arsenal_pool_collect 10 min: reads an ended batch, inserts its cards
+                             pending, queues one arsenal_verify per item.
+    arsenal_verify   queued  (job_queue kind arsenal_verify): one item checked
+                             against Wikipedia / Wikiquote / kaikki, then a
+                             Haiku judge (arsenal/verify.py).
+    arsenal_drop     daily   05:30, then every 30 min to 21:30 America/Chicago,
+                             and at boot: today's drop (db/054
+                             arsenal_pick_drop, zero AI calls). A no-op once
+                             today has one. Pool short: deferred while a batch
+                             is open or < 2 h old, else one synchronous top-up
+                             verified inline first; still short raises.
 
 Alerts go through core/push.py with deep link /settings/health.
 """
@@ -109,10 +125,16 @@ import os
 from datetime import date, timedelta
 from typing import Any, Callable, Iterable, Mapping
 
+from dataclasses import replace
+
 from apscheduler.triggers.combining import OrTrigger
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
+from arsenal import collect as arsenal_collect
+from arsenal import drop as arsenal_drop
+from arsenal import pool as arsenal_pool
+from arsenal import verify as arsenal_verify
 from core import brief, egress, ledger, push
 from core.jobs import SystemJob, describe, run_tracked
 from feed import ingest as feed_ingest
@@ -369,6 +391,10 @@ QUEUE_HANDLERS: dict[str, QueueHandler] = {
     screening_recs.RERANK_KIND: lambda payload: screening_recs.rerank_job(payload) and None,
     # scripts/screening_test_push.py: a TEST release push, armed for 08:30.
     screening_recs.TEST_PUSH_KIND: lambda payload: screening_recs.test_release_push(payload) and None,
+    # db/054: one Arsenal item's verification, queued by arsenal_pool_collect
+    # and arsenal_pool. Its own job_health row and RSS / KB-read line.
+    ledger.ARSENAL_VERIFY_KIND: lambda payload: run_tracked(
+        replace(ARSENAL_VERIFY, fn=lambda: arsenal_verify.verify_job(payload))),
 }
 
 
@@ -509,6 +535,15 @@ SCREENING_MATCH = SystemJob(screening_jobs.MATCH_JOB, FEED_INTERVAL_S, IntervalT
 FEED_REPO_WHY = SystemJob("feed_repo_why", FEED_INTERVAL_S, IntervalTrigger(seconds=FEED_INTERVAL_S),
                           feed_why.repo_why_job, scheduled=False)
 
+# ------------------------------------------------------------------- arsenal
+# db/054, workers/arsenal/ (docs/arsenal.md §4).
+
+ARSENAL_COLLECT_S = 10 * 60
+#: Run per queued item by the job_queue handler, never by the scheduler; a
+#: pool runs weekly, so 8 days keeps it from reading stale between batches.
+ARSENAL_VERIFY = SystemJob("arsenal_verify", 8 * 24 * 60 * 60, IntervalTrigger(days=8),
+                           lambda: None, scheduled=False)
+
 
 def _chain(*jobs: SystemJob) -> None:
     """Run each chained job in turn; one failing never stops the next. Each
@@ -614,6 +649,17 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
                   screening_recs.release_push_job, misfire_grace=1800, start_delay_s=360),
         SystemJob("feed_prune", 24 * 60 * 60, CronTrigger(hour=3, minute=15, timezone=OWNER_TZ),
                   feed_prune, misfire_grace=3600, run_at_boot=False),
+        SystemJob("arsenal_pool", WEEK_S, CronTrigger(day_of_week="sun", hour=3, minute=30, timezone=OWNER_TZ),
+                  arsenal_pool.pool_job, misfire_grace=3600, start_delay_s=420),
+        SystemJob("arsenal_pool_collect", ARSENAL_COLLECT_S, IntervalTrigger(seconds=ARSENAL_COLLECT_S),
+                  arsenal_collect.collect_job, misfire_grace=300, start_delay_s=450),
+        # 05:30, then every 30 min to 21:30: a no-op once today has a drop;
+        # the retries catch a drop deferred while a batch was open (drop.py).
+        SystemJob("arsenal_drop", 24 * 60 * 60,
+                  OrTrigger([CronTrigger(hour=5, minute=30, timezone=OWNER_TZ),
+                             CronTrigger(hour="6-21", minute="0,30", timezone=OWNER_TZ)]),
+                  arsenal_drop.drop_job, misfire_grace=1200, start_delay_s=480),
+        ARSENAL_VERIFY,
     ]
     if env.get("HEALTH_DRILL", "").strip().lower() == "true":
         log.warning("HEALTH_DRILL=true: scheduling health_drill, which always fails")
