@@ -70,14 +70,12 @@ export function DropCards({ word, refs }: { word: Word; refs: Ref[] }) {
             )}
           </p>
         )}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <RoomPill room={word.room} />
-            {word.isTest && <TestTag />}
-          </div>
-          <ReactionButtons label={word.lemma} testPrefix="word" current={reactions[wordKey] ?? null}
-                           onReact={(r) => react({ kind: "word", id: word.id }, r)} />
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <RoomPill room={word.room} />
+          {word.isTest && <TestTag />}
         </div>
+        <ReactionButtons label={word.lemma} testPrefix="word" current={reactions[wordKey] ?? null}
+                         onReact={(r) => react({ kind: "word", id: word.id }, r)} />
       </section>}
 
       <ol data-testid="arsenal-cards" className="lg:max-w-3xl">
@@ -140,26 +138,25 @@ function Card({ r, current, onReact }: { r: Ref; current: RefReaction | null; on
          className="mt-4 border-l-2 border-accent pl-3 font-display text-2xl leading-snug text-text text-pretty">
         {r.deployLine}
       </p>
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <RoomPill room={r.room} />
-          {r.sourceUrl && (
-            <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" data-testid="card-source"
-               className="tap inline-flex items-center gap-1 rounded-pill px-3 text-sm text-text-muted hover:bg-surface-2 hover:text-text">
-              Source <ArrowSquareOut size={14} aria-hidden />
-            </a>
-          )}
-        </div>
-        <ReactionButtons label={r.title} testPrefix="card" current={current} onReact={onReact} />
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <RoomPill room={r.room} />
+        {r.sourceUrl && (
+          <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" data-testid="card-source"
+             className="tap inline-flex items-center gap-1 rounded-pill px-3 text-sm text-text-muted hover:bg-surface-2 hover:text-text">
+            Source <ArrowSquareOut size={14} aria-hidden />
+          </a>
+        )}
       </div>
+      <ReactionButtons label={r.title} testPrefix="card" current={current} onReact={onReact} />
     </li>
   );
 }
 
-// `label` is the accessible name (unchanged); `short` is the visible one under the icon.
+// `label` is the accessible name; `short` is the visible one under the icon,
+// and each name contains its label (voice control matches what it sees).
 const BUTTONS: { r: RefReaction; label: string; short: string; Icon: typeof Heart }[] = [
   { r: "love", label: "Love", short: "Love", Icon: Heart },
-  { r: "not_interested", label: "Not interested", short: "Not for me", Icon: EyeSlash },
+  { r: "not_interested", label: "Not for me", short: "Not for me", Icon: EyeSlash },
   { r: "known", label: "Already know it", short: "Know it", Icon: Brain },
 ];
 
@@ -168,7 +165,7 @@ function ReactionButtons({ label, testPrefix, current, onReact }: {
 }) {
   return (
     <div role="group" aria-label={`Your take on ${label}`} data-testid={`${testPrefix}-reactions`}
-         data-reaction={current ?? "none"} className="-mr-2 flex items-start">
+         data-reaction={current ?? "none"} className="-ml-2 mt-3 flex items-start gap-1">
       {BUTTONS.map(({ r, label: l, short, Icon }) => {
         const on = current === r;
         return (

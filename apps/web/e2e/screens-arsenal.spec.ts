@@ -18,14 +18,15 @@ test.skip(!hasOwner, "set E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD to run");
 const DIR = "e2e/screenshots/chat5-p1";
 const THEMES = ["night", "day"] as const;
 
-// A full-page capture paints the fixed dock wherever the viewport sat, i.e.
-// mid-page over card 1. Hidden for the capture only; the app is unchanged.
-const HIDE_DOCK = 'nav[aria-label="Dock"] { visibility: hidden !important; }';
+// A full-page capture paints the fixed dock and the sticky phone header
+// wherever the viewport sat, i.e. mid-page (over card 1, inside the
+// Unverified fold). Both hidden for the capture only; the app is unchanged.
+const HIDE_CHROME = 'nav[aria-label="Dock"], header.sticky { visibility: hidden !important; }';
 
 async function snap(page: Page, name: string, phone: boolean, theme: string, fullPage = true) {
   const w = phone ? "390" : "1440";
   await page.waitForTimeout(400);
-  await page.screenshot({ path: `${DIR}/${name}-${w}-${theme}.png`, fullPage, style: HIDE_DOCK });
+  await page.screenshot({ path: `${DIR}/${name}-${w}-${theme}.png`, fullPage, style: HIDE_CHROME });
 }
 
 // Opens every fold that has rows; an empty one is locked closed (lockWhenEmpty).

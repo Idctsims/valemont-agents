@@ -16,10 +16,12 @@ import {
 //   * Already know it hides that reference into the "Already known" fold,
 //     and Undo brings it back;
 //   * every reaction button shows its short label (Love / Not for me /
-//     Know it), keeps its accessible name and is at least 44 px;
+//     Know it), its accessible name contains it, it is at least 44 px,
+//     and the reactions sit on their own row below the room chip;
 //   * the Power Word's Already know it does the same: hidden into the
 //     fold, still hidden after a reload, Undo restores it;
-//   * the Unverified fold shows the reason, never a Checked tag;
+//   * the Unverified fold starts closed and shows the reason, muted (never
+//     danger red), two lines with "more", never a Checked tag;
 //   * a test drop is invisible without the marker.
 // Test rows are permanent (append-only); names carry the run prefix.
 //
@@ -133,7 +135,7 @@ test.describe("owner", () => {
     await page.goto("/arsenal");
     for (const prefix of ["word", "card"]) {
       const group = page.getByTestId(`${prefix}-reactions`).first();
-      for (const [id, name, short] of [["love", "Love", "Love"], ["not-interested", "Not interested", "Not for me"],
+      for (const [id, name, short] of [["love", "Love", "Love"], ["not-interested", "Not for me", "Not for me"],
                                        ["known", "Already know it", "Know it"]]) {
         const b = group.getByTestId(`${prefix}-${id}`);
         await expect(b).toHaveAccessibleName(name);
@@ -142,6 +144,12 @@ test.describe("owner", () => {
         expect(box.width).toBeGreaterThanOrEqual(44);
         expect(box.height).toBeGreaterThanOrEqual(44);
       }
+    }
+    // Their own row: below the room chip (and Source), never beside it.
+    for (const scope of [page.getByTestId("power-word"), page.getByTestId("arsenal-card").first()]) {
+      const chip = (await scope.getByTestId("room-chip").boundingBox())!;
+      const group = (await scope.locator("[role=group]").boundingBox())!;
+      expect(group.y).toBeGreaterThanOrEqual(chip.y + chip.height);
     }
   });
 
@@ -170,13 +178,32 @@ test.describe("owner", () => {
     const title = `${P}unverified ${stamp}`;
     await addTestArsenalRef({ category: "film_tv", title, room: "pitch", verification: "unverified",
                               note: "contradicted: the source names a different film" });
+    const long = `${P}long ${stamp}`;
+    await addTestArsenalRef({ category: "film_tv", title: long, room: "pitch", verification: "unverified",
+                              note: "insufficient: " + "the excerpt covers the film's release and cast but never the scene ".repeat(5).trim() });
     await page.goto("/arsenal");
     const fold = page.getByTestId("arsenal-unverified");
-    await fold.getByRole("button", { name: /Unverified/ }).click();
+    const toggle = fold.getByRole("button", { name: /Unverified/ });
+    // Starts closed.
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await toggle.click();
     const row = fold.getByTestId("unverified-ref").filter({ hasText: title });
     await expect(row).toHaveCount(1);
-    await expect(row.getByTestId("unverified-reason")).toHaveText("Not checked: contradicted: the source names a different film");
+    const reason = row.getByTestId("unverified-reason");
+    await expect(reason).toHaveText("Not checked: contradicted: the source names a different film");
+    // Muted, never danger red; a short reason has no "more".
+    await expect(reason).toHaveClass(/text-text-muted/);
+    await expect(reason).not.toHaveClass(/text-danger/);
+    await expect(row.getByTestId("unverified-more")).toHaveCount(0);
     await expect(row.getByTestId("card-check")).toHaveCount(0);
+    // A long reason is clamped to two lines with "more", which shows it all.
+    const longRow = fold.getByTestId("unverified-ref").filter({ hasText: long });
+    const longReason = longRow.getByTestId("unverified-reason");
+    const lineHeight = await longReason.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight));
+    expect((await longReason.boundingBox())!.height).toBeLessThanOrEqual(lineHeight * 2 + 1);
+    await longRow.getByTestId("unverified-more").click();
+    expect((await longReason.boundingBox())!.height).toBeGreaterThan(lineHeight * 2 + 1);
+    await expect(longRow.getByTestId("unverified-more")).toHaveText("less");
     // Never one of today's cards.
     await expect(card(title)).toHaveCount(0);
   });

@@ -15,6 +15,9 @@
   the real picker, ctx_arsenal and ctx_arsenal_brief, the weights.
 * THE PICKER never takes a reference or a Power Word whose latest reaction
   is Already know it; taking it back ('none') makes it eligible again.
+* db/055 (skips until pasted): three distinct rooms whenever the pool
+  allows, the word's room off the references' majority, a seed word never
+  picked and never back to pool, the owner's example words known.
 * the worker's queries (core/ledger.py), each run here exactly as written.
 
 Every test runs inside ONE transaction that is always rolled back and reads
@@ -86,6 +89,15 @@ class ArsenalSqlCase(RankSqlCase):
     def drop(self, conn: psycopg.Connection, day: date, refs: list[int], word: int, *, test: bool = False) -> int:
         return int(conn.execute("INSERT INTO arsenal_drops (drop_date, ref_ids, word_id, is_test) "
                                 "VALUES (%s, %s, %s, %s) RETURNING id", (day, refs, word, test)).fetchone()[0])
+
+    def _only_mine_eligible(self, conn: psycopg.Connection) -> None:
+        """Every other eligible TEST pool row (e2e leftovers) is reacted
+        'known' inside this rolled-back transaction, so the picker can only
+        take this test's own rows. Ids only."""
+        react = "INSERT INTO arsenal_reactions (owner_id, {col}, reaction) SELECT %s, id, 'known' FROM {table} " \
+                "WHERE is_test AND status = 'pool' AND verification IN ('verified', 'corrected')"
+        conn.execute(react.format(col="ref_id", table="arsenal_refs"), (self.owner,))
+        conn.execute(react.format(col="word_id", table="arsenal_words"), (self.owner,))
 
     def refused(self, conn: psycopg.Connection, sql: str, params: Any, message: str,
                 kind: type[Exception] = psycopg.errors.RaiseException) -> None:
@@ -347,15 +359,6 @@ class TestRowsHidden(ArsenalSqlCase):
             # The same date again returns the real drop; a test pick is always new.
             self.assertEqual(ledger.arsenal_pick_drop(date(2001, 2, 1), conn=conn), real)
 
-    def _only_mine_eligible(self, conn: psycopg.Connection) -> None:
-        """Every other eligible TEST pool row (e2e leftovers) is reacted
-        'known' inside this rolled-back transaction, so the picker can only
-        take this test's own rows. Ids only."""
-        react = "INSERT INTO arsenal_reactions (owner_id, {col}, reaction) SELECT %s, id, 'known' FROM {table} " \
-                "WHERE is_test AND status = 'pool' AND verification IN ('verified', 'corrected')"
-        conn.execute(react.format(col="ref_id", table="arsenal_refs"), (self.owner,))
-        conn.execute(react.format(col="word_id", table="arsenal_words"), (self.owner,))
-
     def test_a_known_word_is_never_picked_like_a_known_ref(self) -> None:
         """Already know it (the latest reaction) takes a Power Word out of
         the picker exactly as it takes a reference out; 'none' puts it back."""
@@ -398,6 +401,79 @@ class TestRowsHidden(ArsenalSqlCase):
             for slot, (was, now) in enumerate(zip(cats, got), start=1):
                 with self.subTest(slot=slot):
                     self.assertNotEqual(was, now)
+
+
+# ================================================== db/055: rooms, word seeds
+
+class RoomsAndWordSeeds(ArsenalSqlCase):
+    """db/055: the picker rotates rooms (three distinct when the pool allows;
+    the word's room off the references' majority), and the owner's example
+    words are seeds. Every pick is a TEST pick inside a rolled-back savepoint."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        with _rolled_back() as conn:
+            if "seed" not in conn.execute(
+                    "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'arsenal_words_status_check'"
+            ).fetchone()[0]:
+                raise unittest.SkipTest("db/055 not pasted")
+
+    def _pick_rooms(self, conn: psycopg.Connection, day: str) -> tuple[list[str], str]:
+        did = conn.execute("SELECT arsenal_pick_drop(%s, true)", (day,)).fetchone()[0]
+        rooms = [r[0] for r in conn.execute(
+            "SELECT r.room FROM arsenal_drops d CROSS JOIN LATERAL unnest(d.ref_ids) x JOIN arsenal_refs r ON r.id = x "
+            "WHERE d.id = %s", (did,)).fetchall()]
+        word_room = conn.execute("SELECT w.room FROM arsenal_drops d JOIN arsenal_words w ON w.id = d.word_id "
+                                 "WHERE d.id = %s", (did,)).fetchone()[0]
+        return rooms, word_room
+
+    def test_three_distinct_rooms_whenever_the_pool_allows(self) -> None:
+        with _rolled_back() as conn:
+            self._only_mine_eligible(conn)
+            for cat, other in (("finance_business", "pitch"), ("sports", "negotiation"), ("film_tv", "homies")):
+                self.ref(conn, cat, test=True, room="boardroom")
+                self.ref(conn, cat, test=True, room=other)
+            self.word(conn, test=True)
+            for i in range(8):  # the draw is random; the preference must hold on every pick
+                with self.subTest(pick=i), conn.transaction(force_rollback=True):
+                    rooms, _ = self._pick_rooms(conn, "2001-06-01")
+                    self.assertEqual(len(set(rooms)), 3, rooms)
+
+    def test_the_words_room_is_off_the_references_majority(self) -> None:
+        with _rolled_back() as conn:
+            self._only_mine_eligible(conn)
+            for cat in ("finance_business", "sports", "film_tv"):
+                self.ref(conn, cat, test=True, room="boardroom")
+            for room in ("boardroom", "pitch"):
+                conn.execute(
+                    "INSERT INTO arsenal_words (lemma, pronunciation, etymology, etymology_url, meaning, room, sentence, "
+                    "verification, is_test) VALUES (%s, '/x/', 'From x.', 'https://tl.invalid/w', 'A meaning.', %s, "
+                    "'A sentence.', 'verified', true)", (f"tlword {uuid.uuid4().hex[:10]}", room))
+            for i in range(8):
+                with self.subTest(pick=i), conn.transaction(force_rollback=True):
+                    rooms, word_room = self._pick_rooms(conn, "2001-06-02")
+                    self.assertEqual(rooms, ["boardroom"] * 3)
+                    self.assertEqual(word_room, "pitch")
+
+    def test_a_seed_word_is_never_picked_and_never_leaves_seed(self) -> None:
+        with _rolled_back() as conn:
+            self._only_mine_eligible(conn)
+            for cat in ("finance_business", "sports", "film_tv"):
+                self.ref(conn, cat, test=True)
+            w = self.word(conn, test=True)
+            conn.execute("UPDATE arsenal_words SET status = 'seed' WHERE id = %s", (w,))
+            self.refused(conn, "SELECT arsenal_pick_drop('2001-06-03', true)", None, "no eligible word")
+            self.refused(conn, "UPDATE arsenal_words SET status = 'pool' WHERE id = %s", (w,),
+                         "a seed word never changes status")
+
+    def test_the_owners_example_words_are_known(self) -> None:
+        with _rolled_back() as conn:
+            rows = dict(conn.execute(
+                "SELECT lemma, status FROM arsenal_words WHERE NOT is_test "
+                "AND lemma IN ('asymmetric', 'inflection', 'provenance', 'fiduciary')").fetchall())
+            self.assertNotIn("pool", rows.values(), rows)
+            self.assertIn(ledger.arsenal_seed_lemmas(conn=conn), [sorted(k for k, v in rows.items() if v == "seed")])
 
 
 # ============================================================== worker queries

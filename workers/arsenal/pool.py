@@ -45,7 +45,8 @@ TOPUP_MAX_TOKENS = 5_000
 
 def context() -> cards.PromptContext:
     return cards.PromptContext(seeds=ledger.arsenal_seeds(), recent_keys=ledger.arsenal_recent_keys(60),
-                               recent_lemmas=ledger.arsenal_recent_lemmas(60))
+                               recent_lemmas=ledger.arsenal_recent_lemmas(60),
+                               known_lemmas=ledger.arsenal_seed_lemmas())
 
 
 def should_submit(status: ledger.ArsenalPoolStatus, now: datetime) -> tuple[bool, str]:

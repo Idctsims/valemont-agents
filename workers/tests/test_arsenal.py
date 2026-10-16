@@ -18,6 +18,12 @@ no database.
     drop        zero AI calls when the pool is full; the top-up path when short
     ai          batches: the budget guard at submit, usage at the batch rate
     brief       the one Arsenal line, in AI and fallback briefs
+    gate fixes  (owner, 2026-10-16) film/TV quotes credit the character and
+                the work; the known words are refused; sections and the
+                matched excerpt; search-located pages (a disambiguation
+                resolved to the work's page); one second source on
+                'insufficient', never on 'contradicted'; the judge held to
+                its own coverage answer; the outcome check
 """
 
 from __future__ import annotations
@@ -404,6 +410,223 @@ class VerifyItem(NoDatabase):
         self.assertEqual(verify.verify_item("ref", 3, http=http, ask=judged("supported")), "skipped: not pending")
 
 
+# ============================================ gate fixes (owner, 2026-10-16)
+
+class FilmQuoteCredit(unittest.TestCase):
+    """A film or TV quote credits the character AND the work, never the real
+    person alone."""
+
+    def test_the_work_is_added_to_a_bare_speaker(self) -> None:
+        self.assertEqual(cards.credit_film_quote("Sean Parker", "The Social Network (2010)"),
+                         "Sean Parker (as written in The Social Network)")
+        self.assertEqual(cards.credit_film_quote("Logan Roy", "Succession (2018–2023)"),
+                         "Logan Roy (as written in Succession)")
+
+    def test_an_already_credited_speaker_is_kept(self) -> None:
+        for by in ("Sean Parker (as written in The Social Network)", "Gordon Gekko in Wall Street"):
+            with self.subTest(by=by):
+                self.assertEqual(cards.credit_film_quote(by, "Wall Street (1987)" if "Gekko" in by
+                                                         else "The Social Network (2010)"), by)
+
+    def test_through_validation_and_no_speaker_drops_the_quote(self) -> None:
+        film = card(category="film_tv", canonical_key="a_million_dollars", title="A million dollars isn't cool",
+                    source_work="The Social Network (2010)", source_kind="wikiquote", source_page="The Social Network",
+                    quote="A million dollars isn't cool. You know what's cool? A billion dollars.",
+                    quote_by="Sean Parker")
+        got, _ = cards.validate_ref(film, set())
+        self.assertEqual(got.quote_by, "Sean Parker (as written in The Social Network)")
+        bare, _ = cards.validate_ref({**film, "quote_by": None}, set())
+        self.assertIsNotNone(bare)
+        self.assertIsNone(bare.quote)  # no speaker to credit: the quote goes, the card stays
+        # Outside film and TV a real person's own words keep their speaker.
+        other, _ = cards.validate_ref(card(quote="The die is cast.", quote_by="Julius Caesar"), set())
+        self.assertEqual(other.quote_by, "Julius Caesar")
+
+    def test_the_rules_are_in_the_voice_and_the_prompt(self) -> None:
+        voice = (ROOT / "prompts" / "arsenal_voice.md").read_text(encoding="utf-8")
+        self.assertIn("(as written in The Social Network)", voice)
+        self.assertIn("Thermopylae", voice)
+        self.assertIn("never a Power Word", voice)
+        blocks = cards.system_blocks(cards.PromptContext(seeds=[], recent_keys=[], recent_lemmas=[],
+                                                         known_lemmas=["fiduciary", "inflection", "provenance"]))
+        self.assertIn("as written in The Social Network", blocks[1]["text"])
+        self.assertIn("Check the ending", blocks[1]["text"])
+        self.assertIn("KNOWN POWER WORDS", blocks[2]["text"])
+        self.assertIn("fiduciary, inflection, provenance", blocks[2]["text"])
+
+
+class KnownWords(NoDatabase):
+    def test_a_known_word_is_refused_like_a_seed(self) -> None:
+        self.patch("arsenal_seeds", lambda: [])
+        self.patch("arsenal_recent_keys", lambda n: [])
+        self.patch("arsenal_recent_lemmas", lambda n: ["asymmetric"])
+        self.patch("arsenal_seed_lemmas", lambda: ["fiduciary", "inflection", "provenance"])
+        _, lemmas = collect.blocked()
+        self.assertEqual(lemmas, {"asymmetric", "fiduciary", "inflection", "provenance"})
+        word = {"lemma": "Fiduciary", "meaning": "Bound to act for another.", "room": "boardroom",
+                "sentence": "We have a fiduciary duty here."}
+        got, why = cards.validate_word(word, lemmas)
+        self.assertIsNone(got)
+        self.assertEqual(why, "repeats fiduciary")
+
+
+class Sections(unittest.TestCase):
+    def test_a_plain_extract_splits_at_its_headings(self) -> None:
+        got = sources.split_sections("Lead text.\n\n== Early life ==\nBorn.\n\n=== School ===\nSchool.\n\n== Career ==\nWork.")
+        self.assertEqual([(s.heading, s.text) for s in got],
+                         [("", "Lead text."), ("Early life", "Born."), ("School", "School."), ("Career", "Work.")])
+
+    def test_wikiquote_sections_keep_their_headings_and_skip_the_excluded(self) -> None:
+        wikitext = ("== Sourced ==\n* Luck is a matter of preparation.\n== Misattributed ==\n* A fake line.\n"
+                    "== Letters to Lucilius ==\n* Every new beginning comes from some other beginning's end.")
+        got = sources.quote_sections(wikitext)
+        self.assertEqual([s.heading for s in got], ["Sourced", "Letters to Lucilius"])
+        self.assertNotIn("fake", " ".join(s.text for s in got))
+
+    def test_the_excerpt_passes_the_matched_section_not_the_first_characters(self) -> None:
+        filler = sources.Section("Early life", "He grew up in a small town and went to school there. " * 150)
+        target = sources.Section("Business", "In 1997 he wrote the Day 1 letter to Amazon shareholders.")
+        ex = sources.excerpt([sources.Section("", "Jeff Bezos is an American businessman."), filler, target],
+                             strong=sources.key_terms("Day 1 letter", "Amazon shareholders"), weak=set())
+        self.assertIn("Day 1 letter", ex.text)
+        self.assertEqual(ex.headings[:2], ("", "Business"))
+        self.assertLessEqual(len(ex.text), sources.JUDGE_CHARS)
+        # The quote's own section outranks any amount of term overlap.
+        quoted = sources.excerpt([filler, sources.Section("Sayings", "Luck is a matter of preparation.")],
+                                 strong=sources.key_terms("school town"), weak=set(),
+                                 quote="Luck is a matter of preparation")
+        self.assertEqual(quoted.headings[0], "Sayings")
+
+    def test_split_work(self) -> None:
+        self.assertEqual(verify.split_work("Jay-Z, Diamonds from Sierra Leone (Remix) (2005)"),
+                         ("Jay-Z", "Diamonds from Sierra Leone", "Remix 2005"))
+        self.assertEqual(verify.split_work("Moneyball (Michael Lewis, 2003)"), (None, "Moneyball", "Michael Lewis, 2003"))
+        self.assertEqual(verify.split_work("Bezos, 2016 Amazon shareholder letter"),
+                         ("Bezos", "2016 Amazon shareholder letter", ""))
+        self.assertEqual(verify.split_work("The Wolf of Wall Street (2013)"), (None, "The Wolf of Wall Street", "2013"))
+
+
+def summary(title: str) -> str:
+    return json.dumps({"type": "standard", "title": title, "extract": f"{title} lead.",
+                       "content_urls": {"desktop": {"page": f"https://en.wikipedia.org/wiki/{sources.page_path(title)}"}}})
+
+
+class Retrieval(unittest.TestCase):
+    """The verifier searches for the work's page, reads its matched section,
+    and tries one second source on 'insufficient' (owner, 2026-10-16)."""
+
+    BOOK = ("Moneyball: The Art of Winning an Unfair Game is a 2003 book by Michael Lewis.\n\n"
+            "== Background ==\n" + "Publishing history and reviews of the book. " * 200 + "\n\n"
+            "== Summary ==\nBilly Beane, general manager of the Oakland Athletics, used on-base percentage "
+            "to field a winning team on a small payroll in 2002.")
+    FILM = "Moneyball is a 2011 film starring Brad Pitt.\n\n== Cast ==\nBrad Pitt as Billy Beane."
+
+    def http(self, calls: list[str] | None = None) -> Any:
+        def get(url: str, params: Any) -> tuple[int, str, None]:
+            if calls is not None:
+                calls.append(params.get("srsearch") or params.get("titles") or params.get("page") or url)
+            if url == sources.WIKIPEDIA_API and params.get("list") == "search":
+                hits = ["Moneyball (film)", "Moneyball (book)"] if "Moneyball" in params["srsearch"] else []
+                return 200, json.dumps({"query": {"search": [{"title": t} for t in hits]}}), None
+            if url == sources.WIKIPEDIA_API:
+                text = {"Moneyball (book)": self.BOOK, "Moneyball (film)": self.FILM}.get(params.get("titles"))
+                pages = [{"extract": text}] if text else [{"missing": True}]
+                return 200, json.dumps({"query": {"pages": pages}}), None
+            if url == sources.WIKIPEDIA_SUMMARY + "Moneyball":
+                return 200, json.dumps({"type": "disambiguation", "title": "Moneyball"}), None
+            for t in ("Moneyball (book)", "Moneyball (film)"):
+                if url == sources.WIKIPEDIA_SUMMARY + sources.page_path(t):
+                    return 200, summary(t), None
+            if url == sources.WIKIQUOTE_API:
+                return 200, '{"error":{"code":"missingtitle"}}', None
+            return 404, "", None
+        return get
+
+    MONEYBALL = dict(category="sports", title="Moneyball", source_page="Moneyball",
+                     origin="Billy Beane's Oakland A's won on on-base percentage with a small payroll in 2002.",
+                     source_work="Moneyball (Michael Lewis, 2003)")
+
+    def test_a_disambiguation_is_resolved_to_the_works_page_and_its_section(self) -> None:
+        excerpts: list[str] = []
+
+        def ask(r: Any, e: str) -> verify.Judgement:
+            excerpts.append(e)
+            return verify.Judgement("supported" if "on-base percentage" in e else "insufficient", None, None, "x")
+        v = verify.verify_ref(ref(**self.MONEYBALL), http=self.http(), ask=ask)
+        self.assertEqual(v.verification, "verified")
+        self.assertEqual(v.judged_pages, ("Moneyball (book)",))
+        self.assertEqual(v.source_url, "https://en.wikipedia.org/wiki/Moneyball_(book)")
+        # The matched section sits past the first 5,000 characters; it is what was passed.
+        self.assertGreater(self.BOOK.index("== Summary =="), 5000)
+        self.assertIn("== Summary ==", excerpts[0])
+
+    def test_insufficient_tries_one_second_source_then_lands(self) -> None:
+        verdicts = iter(["insufficient", "supported"])
+        v = verify.verify_ref(ref(**self.MONEYBALL), http=self.http(),
+                              ask=lambda r, e: verify.Judgement(next(verdicts), None, None, "x"))
+        self.assertEqual(v.verification, "verified")
+        self.assertEqual(v.judged_pages, ("Moneyball (book)", "Moneyball (film)"))
+        self.assertIn("first source insufficient (Moneyball (book)); second source Moneyball (film)", v.note)
+        both = verify.verify_ref(ref(**self.MONEYBALL), http=self.http(), ask=judged("insufficient"))
+        self.assertEqual((both.verification, len(both.judged_pages)), ("unverified", 2))  # one retry, no more
+
+    def test_contradicted_never_retries(self) -> None:
+        v = verify.verify_ref(ref(**self.MONEYBALL), http=self.http(), ask=judged("contradicted"))
+        self.assertEqual((v.verification, v.judged_pages), ("unverified", ("Moneyball (book)",)))
+
+
+class JudgeHeldToCoverage(unittest.TestCase):
+    """'Supported' or 'corrected' on an excerpt the judge itself says does not
+    cover every claim is 'insufficient': a silent source never trims a card
+    into 'corrected' (the Seneca-on-luck case, dry run 2026-10-16)."""
+
+    def test_an_uncovered_correction_is_insufficient_and_earns_the_second_source(self) -> None:
+        seneca = verify.Judgement("corrected", "Seneca is often credited with the luck line, but no text says it.",
+                                  None, "says nothing about the luck quote", covers_every_claim=False)
+        self.assertEqual(verify.held(seneca).verdict, "insufficient")
+        answers = iter([seneca, verify.Judgement("supported", None, None, "the letter says it")])
+        v = verify.verify_ref(ref(**Retrieval.MONEYBALL), http=Retrieval().http(), ask=lambda r, e: next(answers))
+        self.assertEqual((v.verification, len(v.judged_pages)), ("verified", 2))
+        self.assertIsNone(v.origin)  # the uncovered "fix" was never kept
+
+    def test_a_model_answer_without_the_field_counts_as_not_covered(self) -> None:
+        j = verify.parse_judgement({"verdict": "supported", "note": "n"})
+        self.assertFalse(j.covers_every_claim)
+        self.assertEqual(verify.held(j).verdict, "insufficient")
+        self.assertEqual(verify.schema()["properties"]["covers_every_claim"], {"type": "boolean"})
+
+
+class OutcomeCheck(unittest.TestCase):
+    """A reference whose real ending undercuts its line is reframed or cut,
+    and says outcome_conflict (owner, 2026-10-16)."""
+
+    def test_reframed_is_corrected_with_the_new_wording(self) -> None:
+        j = verify.Judgement("corrected", None, None, "the Greeks lost at Thermopylae", outcome_conflict=True,
+                             fixed_deploy_line="We only need to hold the pass long enough for the round to close.")
+        v = verify.verify_ref(ref(), http=VerifyRef().http(), ask=lambda r, e: j)
+        self.assertEqual(v.verification, "corrected")
+        self.assertTrue(v.note.startswith("outcome_conflict: reframed"))
+        self.assertEqual(v.deploy_line, j.fixed_deploy_line)
+
+    def test_no_honest_reframe_is_cut_and_never_retried(self) -> None:
+        calls: list[int] = []
+        j = verify.Judgement("insufficient", None, None, "a total defeat", outcome_conflict=True)
+        v = verify.verify_ref(ref(), http=VerifyRef().http(), ask=lambda r, e: calls.append(1) or j)
+        self.assertEqual(v.verification, "unverified")
+        self.assertTrue(v.note.startswith("outcome_conflict: a total defeat"))
+        self.assertEqual(len(calls), 1)
+
+    def test_the_judge_reads_the_line_and_its_answer_carries_the_flag(self) -> None:
+        props = verify.schema()["properties"]
+        self.assertEqual(props["outcome_conflict"], {"type": "boolean"})
+        self.assertIn("Thermopylae", verify.SYSTEM)
+        j = verify.parse_judgement({"verdict": "corrected", "outcome_conflict": True, "fixed_origin": None,
+                                    "fixed_source_work": None, "fixed_meaning": "Hold the line, then fall back.",
+                                    "fixed_deploy_line": "We hold this pass long enough to close.", "note": "n"})
+        self.assertTrue(j.outcome_conflict)
+        self.assertEqual(verify.outcome(quote_dropped=False, judgement=j, unreachable=None)[0], "corrected")
+
+
 # ======================================================================= pool
 
 def status(**kw: Any) -> ledger.ArsenalPoolStatus:
@@ -440,6 +663,7 @@ class Pool(NoDatabase):
         self.patch("arsenal_seeds", lambda: [("x_seed", "X", "Work")])
         self.patch("arsenal_recent_keys", lambda n: [])
         self.patch("arsenal_recent_lemmas", lambda n: [])
+        self.patch("arsenal_seed_lemmas", lambda: ["seedword"])
         self.patch("arsenal_weights", lambda: {("category", c): 1.0 for c in cards.CATEGORIES})
         self.patch("arsenal_log_run", lambda kind, st, **kw: logged.append((kind, st, kw)) or 5)
         with mock.patch.object(ai, "submit_batch",
@@ -609,6 +833,7 @@ class Drop(NoDatabase):
         self.patch("arsenal_seeds", lambda: [])
         self.patch("arsenal_recent_keys", lambda n: [])
         self.patch("arsenal_recent_lemmas", lambda n: [])
+        self.patch("arsenal_seed_lemmas", lambda: ["seedword"])
         self.patch("arsenal_log_run", lambda kind, st, **kw: 12)
         ids = iter(range(500, 600))
         self.patch("arsenal_insert_ref", lambda c, **kw: next(ids))
@@ -656,6 +881,7 @@ class Drop(NoDatabase):
         self.patch("arsenal_seeds", lambda: [])
         self.patch("arsenal_recent_keys", lambda n: [])
         self.patch("arsenal_recent_lemmas", lambda n: [])
+        self.patch("arsenal_seed_lemmas", lambda: ["seedword"])
         self.patch("arsenal_log_run", lambda kind, st, **kw: logged.append((kind, st)) or 11)
         self.patch("arsenal_insert_ref", lambda c, **kw: 200)
         self.patch("arsenal_insert_word", lambda w, **kw: 300)

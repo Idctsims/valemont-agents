@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 
 import { DropCards } from "@/components/arsenal/drop-cards";
+import { UnverifiedReason } from "@/components/arsenal/unverified-reason";
 import { Fold } from "@/components/ui/fold";
 import { PageHeader } from "@/components/ui/page-header";
 import { pastDrops, todayDrop, unverifiedRefs } from "@/lib/arsenal/data";
@@ -18,8 +19,9 @@ export const metadata: Metadata = { title: "The Arsenal" };
 //                each with where it comes from, what it means, the line to
 //                deploy and its room; Checked or Corrected against its source.
 //   Past drops   the last two weeks, newest first.
-//   Unverified   cards the verifier could not stand behind, with the reason.
-//                They never drop and are never styled like a checked card.
+//   Unverified   cards the verifier could not stand behind, with the reason
+//                (muted, two lines, "more"). Starts closed. They never drop
+//                and are never styled like a checked card.
 // A test row shows only to a request with the verified e2e marker.
 
 export default async function ArsenalPage() {
@@ -71,9 +73,7 @@ export default async function ArsenalPage() {
                 {u.isTest && <span className="ml-2 rounded-pill border border-text-muted px-2 font-mono text-xs text-text">test</span>}
               </p>
               <p className="text-sm text-text-muted">{CATEGORY_LABEL[u.category]} · {u.sourceWork}</p>
-              <p data-testid="unverified-reason" className="mt-1 text-sm text-danger">
-                Not checked: {u.note ?? "no reason recorded"}
-              </p>
+              <UnverifiedReason note={u.note} />
             </li>
           ))}
         </Fold>

@@ -150,9 +150,10 @@ def queue_verification(ins: Inserted) -> None:
 
 
 def blocked() -> tuple[set[str], set[str]]:
-    """Keys and lemmas a candidate may never take: the seeds, and every recent one."""
+    """Keys and lemmas a candidate may never take: the seeds (references and
+    the owner's known words), and every recent one."""
     keys = {k for k, _, _ in ledger.arsenal_seeds()} | set(ledger.arsenal_recent_keys(500))
-    return keys, set(ledger.arsenal_recent_lemmas(500))
+    return keys, set(ledger.arsenal_seed_lemmas()) | set(ledger.arsenal_recent_lemmas(500))
 
 
 @dataclass(frozen=True)
