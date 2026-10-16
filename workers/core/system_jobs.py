@@ -94,6 +94,10 @@
                              stories unreacted for 90 days, superseded scores
                              after 7 days and old profiles after 90. A story
                              with any reaction is never deleted (db/039).
+    egress           15 min: the day's approximate database egress (every
+                             system job's reads, core/egress.py) in job_health,
+                             carried across a restart; ONE push a day past
+                             egress.ALERT_MB (owner, 2026-10-15).
 
 Alerts go through core/push.py with deep link /settings/health.
 """
@@ -109,7 +113,7 @@ from apscheduler.triggers.combining import OrTrigger
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from core import brief, ledger, push
+from core import brief, egress, ledger, push
 from core.jobs import SystemJob, describe, run_tracked
 from feed import ingest as feed_ingest
 from feed import profile as feed_profile_mod
@@ -151,6 +155,40 @@ QUEUE_BACKOFF_BASE = timedelta(seconds=30)  # 30 s, 60 s, 2 min, 4 min
 
 def heartbeat() -> None:
     """Nothing to do: the job_health ok stamp written by run_tracked is the beat."""
+
+
+# ------------------------------------------------------------------ egress
+
+EGRESS_JOB = "egress"
+EGRESS_INTERVAL_S = 15 * 60
+_EGRESS_CARRIED = False
+
+
+class EgressRun:
+    def __init__(self, note: str) -> None:
+        self.job_note = note
+
+
+def egress_job(*, send: Callable[[push.Message], Any] | None = None) -> EgressRun:
+    """The day's database egress so far, in job_health (core/egress.py).
+    Its first run in a process takes today's total from its own last note,
+    so a restart does not reset the day. Past egress.ALERT_MB, one push a day."""
+    global _EGRESS_CARRIED
+    if not _EGRESS_CARRIED:
+        egress.carry(ledger.job_note(EGRESS_JOB))
+        _EGRESS_CARRIED = True
+    day = egress.snapshot()
+    if day.total > egress.ALERT_MB * egress.MB and not day.alerted:
+        top = sorted(day.by_job.items(), key=lambda kv: -kv[1])[:3]
+        sent = (send or _alert)(push.Message(
+            kind="egress", title=f"Database egress: ~{day.total / egress.MB:.0f} MB today",
+            body=(f"Over the {egress.ALERT_MB} MB/day budget (Supabase Free is ~165). Top: "
+                  + ", ".join(f"{n} {b / egress.MB:.0f} MB" for n, b in top) + "."),
+            deep_link="/settings/health", tag="egress"))
+        if sent:
+            egress.mark_alerted()
+            day = egress.snapshot()
+    return EgressRun(egress.day_note(day))
 
 
 # ------------------------------------------------------------- health monitor
@@ -534,6 +572,8 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
                   CronTrigger(hour=3, minute=0, timezone="America/Chicago"),
                   check_db_size, misfire_grace=3600),
         SystemJob("job_queue", 10, IntervalTrigger(seconds=10), poll_queue, misfire_grace=9),
+        SystemJob(EGRESS_JOB, EGRESS_INTERVAL_S, IntervalTrigger(seconds=EGRESS_INTERVAL_S), egress_job,
+                  misfire_grace=600, start_delay_s=120),
         SystemJob("goals_rollover", WEEK_S,
                   OrTrigger([
                       CronTrigger(day_of_week="mon", hour=0, minute=1, timezone=OWNER_TZ),

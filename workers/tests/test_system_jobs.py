@@ -366,7 +366,7 @@ class Queue(SystemTestCase):
 class Registry(unittest.TestCase):
     def test_default_jobs(self) -> None:
         built = {j.name: j for j in system_jobs.build_system_jobs({})}
-        self.assertEqual(set(built), {"heartbeat", "health_monitor", "db_size", "job_queue",
+        self.assertEqual(set(built), {"heartbeat", "health_monitor", "db_size", "job_queue", "egress",
                                      "goals_rollover", "goals_monday_push", "capital_snapshot",
                           "morning_brief", "morning_brief_push",
                           "feed_ingest", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
@@ -431,7 +431,7 @@ class SystemOnlyBoot(SystemTestCase):
         self.addCleanup(orchestrator.shutdown, False)
         ids = {j.id for j in orchestrator._scheduler.get_jobs()}
         self.assertEqual(ids, {"system:heartbeat", "system:health_monitor",
-                               "system:db_size", "system:job_queue",
+                               "system:db_size", "system:job_queue", "system:egress",
                                "system:goals_rollover", "system:goals_monday_push",
                                "system:capital_snapshot", "system:morning_brief",
                                "system:morning_brief_push", "system:feed_ingest",
@@ -440,7 +440,7 @@ class SystemOnlyBoot(SystemTestCase):
                                "system:screening_release_push"})
         # screening_match, feed_tech_summarize, feed_summarize, feed_score, feed_why and feed_repo_why
         # are registered (job_health rows, watched) but never scheduled: feed_ingest runs them.
-        self.assertEqual(self.ledger.names().count("job_register"), 22)
+        self.assertEqual(self.ledger.names().count("job_register"), 23)
         for chained in ("screening_match", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
                         "feed_repo_why"):
             self.assertNotIn(f"system:{chained}", ids)
@@ -487,7 +487,7 @@ class SystemOnlyBoot(SystemTestCase):
         self.assertEqual(len(started), 1)
         self.assertEqual(started[0].agents, [])
         self.assertEqual({j.name for j in started[0].system_jobs},
-                         {"heartbeat", "health_monitor", "db_size", "job_queue",
+                         {"heartbeat", "health_monitor", "db_size", "job_queue", "egress",
                           "goals_rollover", "goals_monday_push", "capital_snapshot",
                           "morning_brief", "morning_brief_push",
                           "feed_ingest", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",

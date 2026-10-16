@@ -47,7 +47,7 @@ from typing import Any, Callable, Sequence
 from core import ai, ledger, memory, push
 from core.jobs import JobSkipped
 from feed.summarize import (COPY_RUN, MAX_ATTEMPTS, MAX_ENTITIES, MAX_SENTENCES, MAX_TOPICS, MAX_WORDS,
-                            STALE_AFTER_H, SummaryInvalid, copied_run, latest_profiles, rank_now,
+                            STALE_AFTER_H, SummaryInvalid, copied_run, latest_profiles, rank_now, with_centroids,
                             sentence_count)
 
 log = logging.getLogger("valemont.feed.tech")
@@ -355,7 +355,17 @@ def summarize_group(group: Sequence[ledger.TechSummaryJob], run: TechRun, *, cli
 #: the AI budget guard). Home and Sports keep summarize.DAILY_CAP, counted
 #: apart, so a spent Home cap never blocks Tech.
 COMMUNITY_DAILY_CAP = 300
-POOL = 1000
+#: 200, not 1,000 (egress fix 3, 2026-10-15): a run takes at most RUN_CAP.
+POOL = 200
+
+
+def needs_rank(pool: Sequence[ledger.TechSummaryJob], community_room: int) -> bool:
+    """Whether the order changes what a run takes: more official stories and
+    community stories (within the day's room) than RUN_CAP, or more community
+    stories than the room."""
+    official = sum(1 for j in pool if j.official)
+    community = len(pool) - official
+    return community > max(community_room, 0) or official + min(community, max(community_room, 0)) > RUN_CAP
 
 
 def order_queue(pool: Sequence[ledger.TechSummaryJob], profile: Any, now: datetime,
@@ -384,8 +394,13 @@ def tech_summarize_job(*, client: Any = None, send: Send = push.send, now: datet
         log.info("feed tech: %d stories older than %d h retired as headline-only", retired, STALE_AFTER_H)
     pool = ledger.feed_tech_summary_queue(POOL, MAX_ATTEMPTS)
     room = COMMUNITY_DAILY_CAP - ledger.feed_tech_community_summarized_today() if pool else 0
-    queue = order_queue(pool, latest_profiles().get("tech") if pool else None,
-                        now or datetime.now(timezone.utc), room)
+    # The rank order decides only what a run leaves out: read the centroids
+    # and the profile only when it must leave something (egress fix 3).
+    profile = None
+    if needs_rank(pool, room):
+        pool = with_centroids(pool)
+        profile = latest_profiles().get("tech")
+    queue = order_queue(pool, profile, now or datetime.now(timezone.utc), room)
     del pool
     run = TechRun()
     try:

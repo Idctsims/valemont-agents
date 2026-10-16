@@ -28,15 +28,21 @@ from contextlib import contextmanager
 import logging
 import os
 import re
+import struct
 import time
+import weakref
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Callable, Final, Iterator, Literal, Mapping, Sequence
 
 import psycopg
+from psycopg.adapt import Loader
+from psycopg.pq import Format
 from psycopg.types.json import Jsonb
 from psycopg_pool import ConnectionPool
+
+from core import egress
 
 log = logging.getLogger("valemont.ledger")
 
@@ -338,7 +344,8 @@ def _pool() -> ConnectionPool:
             min_size=_MIN_SIZE,
             max_size=_MAX_SIZE,
             open=False,
-            kwargs={"application_name": "valemont-agents"},
+            # Every read is metered (core/egress.py; owner, 2026-10-15).
+            kwargs={"application_name": "valemont-agents", "cursor_factory": egress.MeteredCursor},
         )
         pool.open(wait=True, timeout=30.0)
         _POOL = pool
@@ -1234,6 +1241,14 @@ def job_succeeded(job: str, note: str | None = None) -> None:
         )
 
 
+def job_note(job: str) -> str | None:
+    """A job's latest note (job_health.last_error: a success note or the
+    error): the egress job reads its own to carry the day's total."""
+    with _pool().connection() as conn:
+        row = conn.execute("SELECT last_error FROM job_health WHERE job = %s", (job,)).fetchone()
+    return row[0] if row else None
+
+
 def job_failed(job: str, error: str) -> None:
     """`error` must already be redacted and short (core/jobs.py does both)."""
     with _pool().connection() as conn:
@@ -1737,10 +1752,50 @@ def _vec_text(vector: Sequence[float]) -> str:
     return "[" + ",".join(f"{float(x):.6g}" for x in vector) + "]"
 
 
+class _HalfvecBinaryLoader(Loader):
+    """pgvector's halfvec in binary (halfvec_send: int16 dim, int16 unused,
+    then dim IEEE half floats, network order) straight to float32. ~770 bytes
+    on the wire for 384 dimensions against ~4.7 KB as text (egress fix 2,
+    2026-10-15)."""
+    format = Format.BINARY
+
+    def load(self, data: Any) -> "array[float]":
+        b = bytes(data)
+        dim = struct.unpack_from(">H", b, 0)[0]
+        return array("f", struct.unpack_from(f">{dim}e", b, 4))
+
+
+_HALFVEC_OID: int | None = None
+_VECTOR_READY: "weakref.WeakSet[psycopg.Connection]" = weakref.WeakSet()
+
+
+def _binary_vectors(c: psycopg.Connection, cur: psycopg.Cursor | None = None) -> None:
+    """Let `c` (and `cur`, a cursor already open on it) read halfvec columns
+    in binary (execute(..., binary=True)): registered once per connection;
+    the type's oid looked up once per process. A cursor copies the
+    connection's adapters when it is created, so one opened before this call
+    must be given too. Every vector read in this module goes through it."""
+    global _HALFVEC_OID
+    if c in _VECTOR_READY:
+        if cur is not None:
+            cur.adapters.register_loader(_HALFVEC_OID, _HalfvecBinaryLoader)  # type: ignore[arg-type]
+        return
+    if _HALFVEC_OID is None:
+        # From the catalog, not ::regtype: a role without USAGE on the
+        # extensions schema (valemont_readonly) can still look it up.
+        _HALFVEC_OID = int(c.execute(
+            "SELECT t.oid FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace "
+            "WHERE n.nspname = 'extensions' AND t.typname = 'halfvec'").fetchone()[0])
+    c.adapters.register_loader(_HALFVEC_OID, _HalfvecBinaryLoader)
+    if cur is not None:
+        cur.adapters.register_loader(_HALFVEC_OID, _HalfvecBinaryLoader)
+    _VECTOR_READY.add(c)
+
+
 def _vec_parse(text: Any) -> tuple[float, ...] | None:
     if text is None:
         return None
-    if isinstance(text, (list, tuple)):
+    if isinstance(text, (list, tuple, array)):
         return tuple(float(x) for x in text)
     return tuple(float(x) for x in str(text).strip("[]").split(",") if x)
 
@@ -1960,7 +2015,7 @@ def feed_insert_seeded(source: FeedSource, items: Sequence[FeedItemIn], *,
 #: other item never one, so a join can never put a story in two worlds).
 #: tests_live/test_feed_ledger.py runs this exact text.
 FEED_CANDIDATES_SQL: Final = """
-    SELECT st.id, st.item_count, i.title, i.title_embedding::text,
+    SELECT st.id, st.item_count, i.title, i.title_embedding,
            CASE WHEN 'tech' = ANY (st.pillars) THEN 'tech'
                 WHEN 'screening' = ANY (st.pillars) THEN 'screening' ELSE 'main' END,
            i.id
@@ -2019,7 +2074,9 @@ def feed_candidates(hours: int, *, is_test: bool = False, since: datetime | None
     stories: dict[int, tuple[int, str, list[tuple[str, array[float]]], list[int]]] = {}
     read = 0
     with _brief_conn(conn) as c, c.cursor() as cur:
-        cur.execute(FEED_CANDIDATES_SQL, {"is_test": is_test, "hours": hours, "since": since, "skip": list(skip)})
+        _binary_vectors(c, cur)
+        cur.execute(FEED_CANDIDATES_SQL, {"is_test": is_test, "hours": hours, "since": since, "skip": list(skip)},
+                    binary=True)
         for sid, count, title, vec, world, item_id in cur:
             read += _row_bytes((sid, count, title, vec, world, item_id))
             s = stories.setdefault(sid, (count, str(world), [], []))
@@ -2153,8 +2210,9 @@ def feed_join_story(source: FeedSource, it: FeedItemIn, vector: Sequence[float],
     The story's title follows its lead. One transaction, the story row locked.
     Returns the item id, or None when the item already existed."""
     with _brief_conn(conn) as c, c.transaction():
+        _binary_vectors(c)
         row = c.execute(
-            "SELECT centroid::text, item_count FROM stories WHERE id = %s FOR UPDATE", (story_id,)
+            "SELECT centroid, item_count FROM stories WHERE id = %s FOR UPDATE", (story_id,), binary=True
         ).fetchone()
         if row is None:
             raise LedgerError(f"story {story_id} vanished before the join")
@@ -2231,7 +2289,7 @@ class SummaryJob:
 #: summary.
 FEED_SUMMARY_QUEUE_SQL: Final = """
     SELECT st.id, st.title, i.teaser, s.name, st.sport, st.summary_attempts, s.slug,
-           st.pillars, st.centroid::text, i.published_at,
+           st.pillars, CASE WHEN %(vectors)s THEN st.centroid END, i.published_at,
            coalesce(lower(st.title) ~ %(priority)s::text, false)
       FROM stories st
       JOIN content_items i ON i.id = st.lead_item_id
@@ -2249,7 +2307,8 @@ FEED_SUMMARY_QUEUE_SQL: Final = """
 #: then newest published. The Home/Sports queue above leaves tech out.
 FEED_TECH_SUMMARY_QUEUE_SQL: Final = """
     SELECT st.id, st.title, i.teaser, s.name, s.official, st.summary_attempts,
-           i.backfill, i.published_at, i.fetched_at, s.slug, st.centroid::text, i.published_precision
+           i.backfill, i.published_at, i.fetched_at, s.slug, CASE WHEN %(vectors)s THEN st.centroid END,
+           i.published_precision
       FROM stories st
       JOIN content_items i ON i.id = st.lead_item_id
       JOIN sources s ON s.id = i.source_id
@@ -2281,10 +2340,15 @@ class TechSummaryJob:
     precision: str = "time"
 
 
-def feed_tech_summary_queue(limit: int, max_attempts: int, *,
+def feed_tech_summary_queue(limit: int, max_attempts: int, *, vectors: bool = False,
                             conn: psycopg.Connection | None = None) -> list[TechSummaryJob]:
+    """`vectors`: with each centroid (binary). Off by default (egress fix 3):
+    the order needs them only when there is more work than room
+    (feed/tech.py; feed_story_centroids fetches them then)."""
     with _brief_conn(conn) as c, c.cursor() as cur:
-        cur.execute(FEED_TECH_SUMMARY_QUEUE_SQL, {"limit": limit, "max_attempts": max_attempts})
+        _binary_vectors(c, cur)
+        cur.execute(FEED_TECH_SUMMARY_QUEUE_SQL, {"limit": limit, "max_attempts": max_attempts, "vectors": vectors},
+                    binary=True)
         return [TechSummaryJob(int(r[0]), r[1], r[2], r[3], bool(r[4]), int(r[5]), bool(r[6]), r[7], r[8],
                                r[9] or "", _vec_array(r[10]) or array("f"), r[11] or "time") for r in cur]
 
@@ -2317,14 +2381,35 @@ _LOCAL_DAY_START = """
 """
 
 
-def feed_summary_queue(limit: int, max_attempts: int, priority: str | None = None, *,
+def feed_summary_queue(limit: int, max_attempts: int, priority: str | None = None, *, vectors: bool = False,
                        conn: psycopg.Connection | None = None) -> list[SummaryJob]:
-    """`priority` None: publish order only. Streamed row by row, each centroid
-    straight to float32 (the pool can be a backlog)."""
+    """`priority` None: publish order only. Streamed row by row. `vectors`:
+    with each centroid (binary, float32). Off by default (egress fix 3): the
+    rank order needs them only when the pool is bigger than the run's room
+    (feed/summarize.py; feed_story_centroids fetches them then)."""
     with _brief_conn(conn) as c, c.cursor() as cur:
-        cur.execute(FEED_SUMMARY_QUEUE_SQL, {"limit": limit, "max_attempts": max_attempts, "priority": priority})
+        _binary_vectors(c, cur)
+        cur.execute(FEED_SUMMARY_QUEUE_SQL,
+                    {"limit": limit, "max_attempts": max_attempts, "priority": priority, "vectors": vectors},
+                    binary=True)
         return [SummaryJob(int(r[0]), r[1], r[2], r[3], r[4], int(r[5]), r[6], tuple(r[7]),
                            _vec_array(r[8]) or array("f"), r[9], bool(r[10])) for r in cur]
+
+
+def feed_story_centroids(ids: Sequence[int], *,
+                         conn: psycopg.Connection | None = None) -> "dict[int, array[float]]":
+    """story id -> centroid (float32, binary): the summarizers' rank order
+    when there is more work than room (egress fix 3)."""
+    out: dict[int, array[float]] = {}
+    if not ids:
+        return out
+    with _brief_conn(conn) as c, c.cursor() as cur:
+        _binary_vectors(c, cur)
+        cur.execute("SELECT id, centroid FROM stories WHERE id = ANY (%s) AND centroid IS NOT NULL",
+                    (list(ids),), binary=True)
+        for sid, vec in cur:
+            out[int(sid)] = _vec_array(vec)
+    return out
 
 
 #: The summary backlog the health monitor watches (owner, 2026-10-12): kept,
@@ -2864,7 +2949,7 @@ def feed_seed_phrases(*, conn: psycopg.Connection | None = None) -> dict[str, di
 #: window. Averaged in the database (pgvector's avg over vector), so seven
 #: days of vectors never travel to the worker.
 FEED_MEAN_SQL: Final = """
-    SELECT extensions.avg(st.centroid::extensions.vector)::text, count(*)
+    SELECT extensions.avg(st.centroid::extensions.vector)::extensions.halfvec, count(*)
       FROM stories st
      WHERE NOT st.is_test AND st.filtered_reason IS NULL AND st.centroid IS NOT NULL
        AND %(pillar)s = ANY (st.pillars)
@@ -2875,7 +2960,8 @@ FEED_MEAN_SQL: Final = """
 def feed_mean_vector(pillar: str, days: int, *,
                      conn: psycopg.Connection | None = None) -> tuple[tuple[float, ...] | None, int]:
     with _brief_conn(conn) as c:
-        text, n = c.execute(FEED_MEAN_SQL, {"pillar": pillar, "days": days}).fetchone()
+        _binary_vectors(c)
+        text, n = c.execute(FEED_MEAN_SQL, {"pillar": pillar, "days": days}, binary=True).fetchone()
     return _vec_parse(text), int(n)
 
 
@@ -2899,7 +2985,7 @@ def _rank_story(r: Sequence[Any]) -> RankStory:
                      _vec_array(r[7]) or array("f"))
 
 
-_RANK_STORY_COLS = "st.id, st.pillars, st.sport, st.title, st.entities, st.topics, s.slug, st.centroid::text"
+_RANK_STORY_COLS = "st.id, st.pillars, st.sport, st.title, st.entities, st.topics, s.slug, st.centroid"
 
 
 @dataclass(frozen=True)
@@ -2925,7 +3011,8 @@ FEED_SIGNALS_SQL: Final = f"""
 def feed_reaction_signals(pillar: str, *, conn: psycopg.Connection | None = None) -> list[ReactionSignal]:
     """Streamed row by row (no fetchall), vectors straight to float32."""
     with _brief_conn(conn) as c, c.cursor() as cur:
-        cur.execute(FEED_SIGNALS_SQL, {"pillar": pillar})
+        _binary_vectors(c, cur)
+        cur.execute(FEED_SIGNALS_SQL, {"pillar": pillar}, binary=True)
         return [ReactionSignal(_rank_story(r[:8]), r[8], bool(r[9])) for r in cur]
 
 
@@ -2951,7 +3038,9 @@ def feed_stories_to_score(hours: int, max_attempts: int, *, unscored: bool,
                           conn: psycopg.Connection | None = None) -> list[RankStory]:
     """Streamed row by row (no fetchall), vectors straight to float32."""
     with _brief_conn(conn) as c, c.cursor() as cur:
-        cur.execute(FEED_TO_SCORE_SQL, {"hours": hours, "max_attempts": max_attempts, "unscored": unscored})
+        _binary_vectors(c, cur)
+        cur.execute(FEED_TO_SCORE_SQL, {"hours": hours, "max_attempts": max_attempts, "unscored": unscored},
+                    binary=True)
         return [_rank_story(r) for r in cur]
 
 
@@ -2998,14 +3087,15 @@ def feed_insert_profile(p: Any, *, conn: psycopg.Connection | None = None) -> in
 
 def feed_latest_profiles(*, conn: psycopg.Connection | None = None) -> dict[str, ProfileRow]:
     with _brief_conn(conn) as c:
+        _binary_vectors(c)
         rows = c.execute("""
             SELECT DISTINCT ON (pillar)
-                   id, pillar, mean_vec::text, mean_n, love_vec::text, ni_vec::text, topic_weights,
+                   id, pillar, mean_vec, mean_n, love_vec, ni_vec, topic_weights,
                    source_weights, entity_weights, love_count, ni_count, open_count, neutral_count,
                    seed_weight_love, seed_weight_ni, built_at
               FROM interest_profiles
              ORDER BY pillar, built_at DESC, id DESC
-        """).fetchall()
+        """, binary=True).fetchall()
     return {r[1]: ProfileRow(int(r[0]), r[1], _vec_parse(r[2]) or (), int(r[3]), _vec_parse(r[4]),
                              _vec_parse(r[5]), dict(r[6]), dict(r[7]), dict(r[8]), r[9], r[10], r[11],
                              r[12], float(r[13]), float(r[14]), r[15])
@@ -3635,8 +3725,9 @@ def screening_title_vectors(ids: Sequence[int], *,
     if not ids:
         return out
     with _brief_conn(conn) as c, c.cursor() as cur:
-        cur.execute("SELECT id, embedding::text FROM titles WHERE id = ANY (%s) AND embedding IS NOT NULL",
-                    (list(ids),))
+        _binary_vectors(c, cur)
+        cur.execute("SELECT id, embedding FROM titles WHERE id = ANY (%s) AND embedding IS NOT NULL",
+                    (list(ids),), binary=True)
         for tid, vec in cur:
             out[int(tid)] = _vec_array(vec)
     return out

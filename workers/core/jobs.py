@@ -39,7 +39,7 @@ from typing import Callable
 
 from apscheduler.triggers.base import BaseTrigger
 
-from core import ledger, memory
+from core import egress, ledger, memory
 
 log = logging.getLogger("valemont.jobs")
 
@@ -101,9 +101,10 @@ class JobSkipped(Exception):
     reason as a note: no failure counted, no alert, but visible in job_health."""
 
 
-def success_note(job_note: str | None, rss: str | None) -> str | None:
-    """'capped: ... · rss 84 MB, job peak 131 MB'; either part may be absent."""
-    parts = [p for p in (job_note, rss) if p]
+def success_note(job_note: str | None, rss: str | None, read: str | None = None) -> str | None:
+    """'capped: ... · rss 84 MB, job peak 131 MB · ~120 KB read'; any part
+    may be absent."""
+    parts = [p for p in (job_note, rss, read) if p]
     return " · ".join(parts) if parts else None
 
 
@@ -114,11 +115,13 @@ def run_tracked(job: SystemJob) -> None:
     except Exception:
         log.error("%s: could not record start (database unreachable?)", job.name, exc_info=True)
     sampler = memory.PeakSampler()
+    # Every database read inside counts against this job (core/egress.py).
+    meter = egress.RunMeter(job.name)
     try:
-        with sampler:
+        with sampler, egress.run(job.name) as meter:
             result = job.fn()
     except JobSkipped as skip:
-        note = success_note(describe(skip).replace("JobSkipped: ", "skipped: ", 1), sampler.note())
+        note = success_note(describe(skip).replace("JobSkipped: ", "skipped: ", 1), sampler.note(), meter.note())
         log.info("%s %s", job.name, note)
         try:
             ledger.job_succeeded(job.name, note)
@@ -135,7 +138,7 @@ def run_tracked(job: SystemJob) -> None:
             log.error("%s: could not record the failure either", job.name, exc_info=True)
         raise
     own = getattr(result, "job_note", None)
-    note = success_note(own if isinstance(own, str) else None, sampler.note())
+    note = success_note(own if isinstance(own, str) else None, sampler.note(), meter.note())
     if note:
         # The whole note, RSS included: job_health keeps only the latest, so
         # this line is the history (Railway logs; owner 2026-10-13).

@@ -207,7 +207,13 @@ class WorkerQueries(RankSqlCase):
             test = self.story(conn, self.source(conn, is_test=True))
 
             def ids(unscored: bool) -> set[int]:
-                return {s.id for s in ledger.feed_stories_to_score(72, 2, unscored=unscored, conn=conn)}
+                # The exact query text, restricted to this test's stories in
+                # the database: the real 72 h window is ~3,700 rows with
+                # vectors (egress fix 4, 2026-10-15).
+                return {r[0] for r in conn.execute(
+                    f"SELECT x.id FROM ({ledger.FEED_TO_SCORE_SQL}) x WHERE x.id = ANY (%(ids)s)",
+                    {"hours": 72, "max_attempts": 2, "unscored": unscored,
+                     "ids": [done, pending, old, test]})}
 
             self.assertIn(done, ids(True))
             self.assertFalse({pending, old, test} & ids(False))
@@ -304,7 +310,9 @@ class ForYou(RankSqlCase):
                 self.score(conn, sid, 45)
             self.react(conn, gone, "not_interested")
             self.react(conn, loved, "love")
-            got = {r.id: r for r in ledger.feed_for_you("home", 100000, conn=conn)}
+            # Only this test's stories, decided in the database (egress fix 4).
+            got = {r[0] for r in conn.execute("SELECT id FROM feed_for_you('home', 100000, 0) WHERE id = ANY (%s)",
+                                              ([gone, kept, loved],))}
             self.assertNotIn(gone, got)
             self.assertIn(kept, got)
             reaction = conn.execute("SELECT reaction FROM feed_for_you('home', 100000, 0) WHERE id = %s",
