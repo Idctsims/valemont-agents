@@ -23,6 +23,7 @@ no database.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import unittest
 from datetime import date, datetime, timedelta, timezone
@@ -54,6 +55,11 @@ class NoDatabase(unittest.TestCase):
                        mock.patch.object(sources, "_httpx", _refuse_database)):
             target.start()
             self.addCleanup(target.stop)
+
+    def logs_on(self) -> None:
+        """tests/__init__.py silences logging; a test that checks log lines turns it back on."""
+        logging.disable(logging.NOTSET)
+        self.addCleanup(logging.disable, logging.CRITICAL)
 
     def patch(self, name: str, value: Any) -> Any:
         p = mock.patch.object(ledger, name, value)
@@ -456,7 +462,8 @@ class Collect(NoDatabase):
         self.patch("arsenal_insert_ref", lambda c, **kw: self.inserted.append(c.canonical_key) or
                    (None if c.canonical_key == "taken_key" else len(self.inserted)))
         self.patch("arsenal_insert_word", lambda w, **kw: 100)
-        self.patch("arsenal_near_dup", lambda vec, t: vec[0] > 0.9)
+        # The nearest real reference: the vector's first value is the cosine.
+        self.patch("arsenal_nearest", lambda vec: ("crossing_the_rubicon", vec[0]))
 
     def test_duplicates_and_invalid_cards_are_counted_never_raised(self) -> None:
         raw = [card(canonical_key="fresh_one"), card(canonical_key="near_dup_one"), card(canonical_key="taken_key"),
@@ -471,6 +478,30 @@ class Collect(NoDatabase):
         self.assertEqual(ins.skipped_invalid, 2)  # a bad category, a seed's key
         self.assertEqual(ins.word_ids, [100])
         del vectors
+
+    def test_every_near_dup_skip_is_logged_with_its_cosine_and_match(self) -> None:
+        self.logs_on()
+        raw = [card(canonical_key=k) for k in ("a_one", "b_two", "c_three", "d_four")]
+        scores = iter([0.41, 0.93, 0.919, 0.97])
+        with self.assertLogs("valemont.arsenal.collect", level="INFO") as logs:
+            ins = collect.insert_candidates(raw, [], run_id=3, blocked_keys=set(), blocked_lemmas=set(),
+                                            embed=lambda texts: [[next(scores)] for _ in texts])
+        self.assertEqual([n.key for n in ins.near_dup_skips], ["b_two", "d_four"])  # 0.919 stays (< 0.92)
+        self.assertEqual(ins.skipped_dup, 2)
+        skips = [m for m in logs.output if "skipped: near-duplicate" in m]
+        self.assertEqual(len(skips), 2)
+        self.assertIn("near-duplicate of crossing_the_rubicon, cosine 0.9300", skips[0])
+        note = collect.distribution_note(ins)
+        self.assertTrue(note.startswith("nearest cosine n=4 min 0.41"))
+        self.assertIn("max 0.97", note)
+        self.assertIn("near-dup skips: b_two~crossing_the_rubicon 0.930, d_four~crossing_the_rubicon 0.970", note)
+
+    def test_nothing_embedded_yet_means_no_skip(self) -> None:
+        self.patch("arsenal_nearest", lambda vec: None)
+        ins = collect.insert_candidates([card(canonical_key="first_ever")], [], run_id=3, blocked_keys=set(),
+                                        blocked_lemmas=set(), embed=lambda texts: [[0.99]])
+        self.assertEqual((len(ins.ref_ids), ins.skipped_dup), (1, 0))
+        self.assertIsNone(collect.distribution_note(ins))
 
     def test_an_embedding_failure_still_inserts_and_says_so(self) -> None:
         def broken(texts: Any) -> Any:
@@ -526,14 +557,98 @@ class Drop(NoDatabase):
         self.assertFalse(drop.is_short(status()))
         calls: list[str] = []
         self.patch("arsenal_drop_on", lambda day: None)
-        self.patch("arsenal_pool_status", lambda: status(ready_categories=("sports",), refs_ready=1))
+        self.patch("arsenal_pool_status", lambda: status(ready_categories=("sports",), refs_ready=1,
+                                                          last_submitted_at=NOW - timedelta(days=3)))
         self.patch("arsenal_pick_drop", lambda day, topped_up=False: calls.append(f"pick {topped_up}") or 43)
         up = pool.TopUp(run_id=11, refs=6, words=2, cost=Decimal("0.04"), verified={"verified": 7, "unverified": 1})
         with mock.patch.object(pool, "topup", lambda st, **kw: calls.append("topup") or up):
-            run = drop.make_drop(date(2026, 10, 16))
+            run = drop.make_drop(date(2026, 10, 16), now=NOW)
         self.assertEqual(calls, ["topup", "pick True"])
         self.assertTrue(run.topped_up)
         self.assertIn("topped up (run 11", run.job_note)
+
+    def test_a_short_pool_defers_while_a_batch_is_open_or_young(self) -> None:
+        """Owner, 2026-10-16: today's drop comes from the batch pool, not the top-up."""
+        self.logs_on()
+        self.patch("arsenal_drop_on", lambda day: None)
+        self.patch("arsenal_pick_drop", _refuse_database)
+        short = dict(ready_categories=("sports",), refs_ready=1, words_ready=0)
+        ob = ledger.ArsenalOpenBatch(5, "msgbatch_open", "claude-sonnet-5-5", NOW - timedelta(hours=5))
+        for label, st in (("open", status(**short, open_batch=ob)),
+                          ("young", status(**short, last_submitted_at=NOW - timedelta(minutes=40)))):
+            with self.subTest(label), mock.patch.object(pool, "topup", _refuse_database), \
+                    self.assertLogs("valemont.arsenal.drop", level="WARNING") as logs:
+                self.patch("arsenal_pool_status", lambda st=st: st)
+                run = drop.make_drop(date(2026, 10, 16), now=NOW)  # 03:30 Chicago
+                self.assertTrue(run.deferred)
+                self.assertIsNone(run.drop_id)
+                self.assertIn("deferred", run.job_note)
+                self.assertIn("deferred", logs.output[0])
+        # A batch older than 2 h and collected: the top-up runs.
+        self.assertIsNone(drop.defer_reason(status(**short, last_submitted_at=NOW - timedelta(hours=2, minutes=1)), NOW))
+        # From 21:00 Chicago it never waits: the day gets its drop.
+        nine_pm = datetime(2026, 10, 17, 2, 5, tzinfo=timezone.utc)  # 21:05 CDT
+        self.assertIsNone(drop.defer_reason(status(**short, open_batch=ob), nine_pm))
+        self.assertIsNotNone(drop.defer_reason(status(**short, open_batch=ob), nine_pm - timedelta(minutes=10)))
+
+    def test_a_full_pool_picks_even_while_a_batch_is_open(self) -> None:
+        ob = ledger.ArsenalOpenBatch(5, "msgbatch_open", "claude-sonnet-5-5", NOW)
+        self.patch("arsenal_drop_on", lambda day: None)
+        self.patch("arsenal_pool_status", lambda: status(open_batch=ob))
+        self.patch("arsenal_pick_drop", lambda day, topped_up=False: 44)
+        self.assertEqual(drop.make_drop(date(2026, 10, 16), now=NOW).drop_id, 44)
+
+    def test_a_top_up_with_nothing_verified_fails_loudly_never_an_empty_day(self) -> None:
+        """Change 2 (owner, 2026-10-16): the top-up verifies inline BEFORE the
+        pick; when nothing verifies, the job raises with an ERROR log."""
+        self.logs_on()
+        order: list[str] = []
+        self.patch("arsenal_drop_on", lambda day: None)
+        self.patch("arsenal_pool_status", lambda: status(ready_categories=(), refs_ready=0, words_ready=0,
+                                                          last_submitted_at=None))
+        self.patch("arsenal_seeds", lambda: [])
+        self.patch("arsenal_recent_keys", lambda n: [])
+        self.patch("arsenal_recent_lemmas", lambda n: [])
+        self.patch("arsenal_log_run", lambda kind, st, **kw: 12)
+        ids = iter(range(500, 600))
+        self.patch("arsenal_insert_ref", lambda c, **kw: next(ids))
+        self.patch("arsenal_insert_word", lambda w, **kw: next(ids))
+        self.patch("arsenal_nearest", lambda v: None)
+        self.patch("arsenal_queue_verify", _refuse_database)  # never through job_queue
+
+        def pick(day: date, topped_up: bool = False) -> int:
+            order.append("pick")
+            raise RuntimeError("arsenal_pick_drop: the verified pool is short (0 categories with an eligible reference; 3 needed)")
+
+        self.patch("arsenal_pick_drop", pick)
+        answer = {"refs": [card(canonical_key=f"topup_{i}", category=c) for i, c in
+                           enumerate(("sports", "film_tv", "philosophy"))],
+                  "words": [{"lemma": "provenance", "meaning": "Where it came from.", "room": "pitch",
+                             "sentence": "Investors buy provenance as much as the product."}]}
+
+        def complete(**kw: Any) -> Any:
+            order.append("sonnet")
+            return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=json.dumps(answer))])
+
+        def verify_item(target: str, item_id: int, **kw: Any) -> str:
+            order.append(f"verify {target}")
+            return "unverified"
+
+        with mock.patch.object(ai, "complete", complete), mock.patch.object(verify, "verify_item", verify_item), \
+                self.assertLogs("valemont.arsenal.drop", level="ERROR") as logs, \
+                self.assertRaises(drop.DropFailed) as failed:
+            drop.make_drop(date(2026, 10, 16), embed=lambda texts: [[0.0]] * len(texts), now=NOW)
+        self.assertEqual(order, ["sonnet", "verify ref", "verify ref", "verify ref", "verify word", "pick"])
+        self.assertIn("NO DROP after the top-up", logs.output[0])
+        self.assertIn("'unverified': 4", str(failed.exception))
+
+    def test_without_a_top_up_a_pick_failure_propagates_as_is(self) -> None:
+        self.patch("arsenal_drop_on", lambda day: None)
+        self.patch("arsenal_pool_status", lambda: status())
+        self.patch("arsenal_pick_drop", lambda day, topped_up=False: (_ for _ in ()).throw(RuntimeError("db down")))
+        with self.assertRaises(RuntimeError) as caught:
+            drop.make_drop(date(2026, 10, 16), now=NOW)
+        self.assertNotIsInstance(caught.exception, drop.DropFailed)
 
     def test_the_top_up_is_one_sonnet_call_verified_inline(self) -> None:
         logged: list[tuple] = []
@@ -544,7 +659,7 @@ class Drop(NoDatabase):
         self.patch("arsenal_log_run", lambda kind, st, **kw: logged.append((kind, st)) or 11)
         self.patch("arsenal_insert_ref", lambda c, **kw: 200)
         self.patch("arsenal_insert_word", lambda w, **kw: 300)
-        self.patch("arsenal_near_dup", lambda v, t: False)
+        self.patch("arsenal_nearest", lambda v: ("x_seed", 0.4))
         answer = {"refs": [card(canonical_key="topup_one")], "words": [
             {"lemma": "provenance", "meaning": "Where it came from.", "room": "pitch",
              "sentence": "Investors buy provenance as much as the product."}]}

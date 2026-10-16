@@ -228,6 +228,27 @@ class NearDupAndWeights(ArsenalSqlCase):
             self.ref(conn, "film_tv", test=True, embedding=onehot(98))
             self.assertEqual(ledger.arsenal_near_dup(onehot(98), 0.92, conn=conn), before)
 
+    def test_the_nearest_query_agrees_with_arsenal_near_dup(self) -> None:
+        """The worker logs every skip's cosine and matched key from
+        ARSENAL_NEAREST_SQL; it must apply the database's own rule."""
+        with _rolled_back() as conn:
+            probe = onehot(101)
+            r = self.ref(conn, "sports", embedding=probe)
+            key = conn.execute("SELECT canonical_key FROM arsenal_refs WHERE id = %s", (r,)).fetchone()[0]
+            nearest = ledger.arsenal_nearest(probe, conn=conn)
+            self.assertEqual(nearest[0], key)
+            self.assertAlmostEqual(nearest[1], 1.0, places=3)
+            # A test row and an unverified pool row are never the match.
+            self.ref(conn, "film_tv", test=True, embedding=onehot(102))
+            self.ref(conn, "film_tv", verification="unverified", embedding=onehot(103))
+            for i in (102, 103):
+                got = ledger.arsenal_nearest(onehot(i), conn=conn)
+                self.assertLess(got[1], 0.92)
+            for v in (probe, onehot(102), onehot(103), [0.5] * 384):
+                for t in (0.5, 0.92, 0.999):
+                    got = ledger.arsenal_nearest(v, conn=conn)
+                    self.assertEqual(ledger.arsenal_near_dup(v, t, conn=conn), got is not None and got[1] >= t)
+
     def test_love_and_not_interested_move_weights_known_and_tests_do_not(self) -> None:
         with _rolled_back() as conn:
             w = lambda: ledger.arsenal_weights(conn=conn)  # noqa: E731
@@ -376,7 +397,7 @@ class WorkerQueries(ArsenalSqlCase):
     def test_insert_skips_a_taken_key_and_the_check_counts(self) -> None:
         with _rolled_back() as conn:
             card = ledger.ArsenalCardIn(canonical_key="crossing_the_rubicon", category="history_military",
-                                        title="Crossing the Rubicon", origin="An origin long enough.", meaning="M.",
+                                        title="Crossing the Rubicon", origin="An origin long enough.", meaning="A meaning.",
                                         deploy_line="A line.", room="boardroom", source_work="Caesar", quote=None,
                                         quote_by=None, source_kind="wikipedia", source_page="Crossing the Rubicon")
             self.assertIsNone(ledger.arsenal_insert_ref(card, pool_run_id=None, vector=None, conn=conn))

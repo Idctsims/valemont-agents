@@ -108,9 +108,12 @@
     arsenal_verify   queued  (job_queue kind arsenal_verify): one item checked
                              against Wikipedia / Wikiquote / kaikki, then a
                              Haiku judge (arsenal/verify.py).
-    arsenal_drop     daily   05:30 America/Chicago, and at boot: today's drop
-                             (db/054 arsenal_pick_drop, zero AI calls; one
-                             synchronous top-up first if the pool is short).
+    arsenal_drop     daily   05:30, then every 30 min to 21:30 America/Chicago,
+                             and at boot: today's drop (db/054
+                             arsenal_pick_drop, zero AI calls). A no-op once
+                             today has one. Pool short: deferred while a batch
+                             is open or < 2 h old, else one synchronous top-up
+                             verified inline first; still short raises.
 
 Alerts go through core/push.py with deep link /settings/health.
 """
@@ -650,8 +653,12 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
                   arsenal_pool.pool_job, misfire_grace=3600, start_delay_s=420),
         SystemJob("arsenal_pool_collect", ARSENAL_COLLECT_S, IntervalTrigger(seconds=ARSENAL_COLLECT_S),
                   arsenal_collect.collect_job, misfire_grace=300, start_delay_s=450),
-        SystemJob("arsenal_drop", 24 * 60 * 60, CronTrigger(hour=5, minute=30, timezone=OWNER_TZ),
-                  arsenal_drop.drop_job, misfire_grace=3600, start_delay_s=480),
+        # 05:30, then every 30 min to 21:30: a no-op once today has a drop;
+        # the retries catch a drop deferred while a batch was open (drop.py).
+        SystemJob("arsenal_drop", 24 * 60 * 60,
+                  OrTrigger([CronTrigger(hour=5, minute=30, timezone=OWNER_TZ),
+                             CronTrigger(hour="6-21", minute="0,30", timezone=OWNER_TZ)]),
+                  arsenal_drop.drop_job, misfire_grace=1200, start_delay_s=480),
         ARSENAL_VERIFY,
     ]
     if env.get("HEALTH_DRILL", "").strip().lower() == "true":

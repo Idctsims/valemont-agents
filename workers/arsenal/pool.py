@@ -180,8 +180,9 @@ def topup(status: ledger.ArsenalPoolStatus, *, client: Any = None, http: Any = N
     keys, lemmas = collect.blocked()
     ins = collect.insert_candidates(data.get("refs") or [], data.get("words") or [], run_id=run_id,
                                     blocked_keys=keys, blocked_lemmas=lemmas, embed=embed)
+    dist = collect.distribution_note(ins)
     ledger.arsenal_log_run("topup", "collected", run_id=run_id, model=MODEL, cost_usd=cost,
-                           note="; ".join(ins.notes) or None, inserted_refs=len(ins.ref_ids),
+                           note="; ".join(ins.notes + ([dist] if dist else [])) or None, inserted_refs=len(ins.ref_ids),
                            inserted_words=len(ins.word_ids), skipped_dup=ins.skipped_dup,
                            skipped_invalid=ins.skipped_invalid)
     verified: dict[str, int] = {}

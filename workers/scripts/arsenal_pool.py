@@ -50,12 +50,28 @@ def main(argv: list[str] | None = None) -> int:
             time.sleep(POLL_S)
         run = collect.collect(open_batch, queue=False)
         print(run.job_note)
+        if run.inserted is not None:
+            # Every candidate's nearest real reference (owner, 2026-10-16):
+            # the skips, then the distribution, before 0.92 is tuned.
+            for n in run.inserted.near_dup_skips:
+                print(f"near-dup skip: {n.key} ({n.title}) ~ {n.matched}, cosine {n.cosine:.4f}")
+            scores = sorted(n.cosine for n in run.inserted.nearest if n.cosine is not None)
+            if scores:
+                print("nearest cosine: " + ", ".join(f"{s:.3f}" for s in scores))
+                edges = (0.5, 0.7, 0.8, 0.85, 0.9, collect.NEAR_DUP, 1.01)
+                lo = 0.0
+                for hi in edges:
+                    print(f"  [{lo:.2f}, {min(hi, 1.0):.2f}{']' if hi > 1 else ')'}: {sum(lo <= s < hi for s in scores)}")
+                    lo = hi
         outcomes: dict[str, int] = {}
         for target, item_id in ledger.arsenal_stale_pending(0):
             result = verify.verify_item(target, item_id)
             outcomes[f"{target} {result}"] = outcomes.get(f"{target} {result}", 0) + 1
         print("verified: " + (", ".join(f"{k} {v}" for k, v in sorted(outcomes.items())) or "nothing pending"))
         ledger.arsenal_close_run_if_settled(open_batch.run_id)
+        for row in ledger.arsenal_run_rows(open_batch.run_id):
+            counts = {k: v for k, v in row.items() if k not in ("id", "status", "batch_id", "model", "note") and v}
+            print(f"run row {row['id']} {row['status']}: {counts}" + (f" | {row['note']}" if row["note"] else ""))
         costs = ledger.arsenal_ai_cost_since(started)
         print("cost: " + (", ".join(f"{p} ${c}" for p, c in costs.items()) or "$0")
               + f" (total ${sum(costs.values())})")

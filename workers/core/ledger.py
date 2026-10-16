@@ -4509,7 +4509,8 @@ class ArsenalWordIn:
 def arsenal_near_dup(vector: Sequence[float], threshold: float, *, conn: psycopg.Connection | None = None) -> bool:
     """db/054 arsenal_near_dup: the vector goes in, a boolean comes out."""
     with _brief_conn(conn) as c:
-        return bool(c.execute("SELECT arsenal_near_dup(%s::extensions.halfvec, %s)",
+        # ::real: the function takes real; a Python float binds as double.
+        return bool(c.execute("SELECT arsenal_near_dup(%s::extensions.halfvec, %s::real)",
                               (_vec_text(vector), threshold)).fetchone()[0])
 
 
@@ -4809,3 +4810,37 @@ def arsenal_drop_details(drop_id: int, *, conn: psycopg.Connection | None = None
             "JOIN arsenal_refs r ON r.id = s.ref_id WHERE d.id = %s ORDER BY s.ord", (drop_id,)).fetchall()
     return ArsenalDropDetails(int(d[0]), d[1], bool(d[2]),
                               tuple(ArsenalDropCard(int(r[0]), r[1], r[2], r[3], r[4]) for r in rows), d[3], d[4])
+
+
+#: The nearest real reference to a candidate, by the same rule as db/054's
+#: arsenal_near_dup (seeds, dropped, and pool rows not retired as unverified
+#: or rejected). The vector goes in; a key and a cosine come back, never a
+#: vector. tests_live runs this exact text against arsenal_near_dup.
+ARSENAL_NEAREST_SQL: Final = """
+    SELECT r.canonical_key, 1 - extensions.cosine_distance(r.embedding, %(v)s::extensions.halfvec) AS cosine
+      FROM arsenal_refs r
+     WHERE NOT r.is_test
+       AND r.embedding IS NOT NULL
+       AND r.status <> 'rejected'
+       AND NOT (r.status = 'pool' AND r.verification = 'unverified')
+     ORDER BY 2 DESC, r.id
+     LIMIT 1
+"""
+
+
+def arsenal_nearest(vector: Sequence[float], *, conn: psycopg.Connection | None = None) -> tuple[str, float] | None:
+    """(canonical_key, cosine) of the nearest real reference; None when none is embedded."""
+    with _brief_conn(conn) as c:
+        row = c.execute(ARSENAL_NEAREST_SQL, {"v": _vec_text(vector)}).fetchone()
+    return None if row is None else (row[0], float(row[1]))
+
+
+def arsenal_run_rows(run_id: int, *, conn: psycopg.Connection | None = None) -> list[dict[str, Any]]:
+    """Every arsenal_pool_runs row of one run (its 'submitted' row first)."""
+    cols = ("id", "status", "batch_id", "model", "refs_requested", "words_requested", "inserted_refs",
+            "inserted_words", "skipped_dup", "skipped_invalid", "verified", "corrected", "unverified", "rejected",
+            "cost_usd", "note")
+    with _brief_conn(conn) as c:
+        rows = c.execute(f"SELECT {', '.join(cols)} FROM arsenal_pool_runs WHERE id = %s OR run_id = %s ORDER BY id",
+                         (run_id, run_id)).fetchall()
+    return [dict(zip(cols, r)) for r in rows]

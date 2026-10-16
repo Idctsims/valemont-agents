@@ -39,6 +39,18 @@ NEAR_DUP = 0.92
 Embed = Callable[[Sequence[str]], list[list[float]]]
 
 
+@dataclass(frozen=True)
+class Nearest:
+    """One candidate's nearest real reference (owner, 2026-10-16: every
+    near-duplicate skip is logged with its cosine and the matched key, and
+    the first pool's distribution is reported before 0.92 is tuned)."""
+    key: str
+    title: str
+    matched: str | None
+    cosine: float | None
+    skipped: bool
+
+
 @dataclass
 class Inserted:
     ref_ids: list[int] = field(default_factory=list)
@@ -46,6 +58,30 @@ class Inserted:
     skipped_dup: int = 0
     skipped_invalid: int = 0
     notes: list[str] = field(default_factory=list)
+    #: Every embedded candidate, skipped or not.
+    nearest: list[Nearest] = field(default_factory=list)
+
+    @property
+    def near_dup_skips(self) -> list[Nearest]:
+        return [n for n in self.nearest if n.skipped]
+
+
+def quantile(xs: Sequence[float], q: float) -> float:
+    s = sorted(xs)
+    return s[min(len(s) - 1, max(0, round(q * (len(s) - 1))))]
+
+
+def distribution_note(ins: Inserted) -> str | None:
+    """'nearest cosine n=30 min .41 p50 .63 p90 .82 max .95; near-dup skips: a~b .95, …'"""
+    scores = [n.cosine for n in ins.nearest if n.cosine is not None]
+    if not scores:
+        return None
+    note = (f"nearest cosine n={len(scores)} min {min(scores):.2f} p50 {quantile(scores, .5):.2f} "
+            f"p90 {quantile(scores, .9):.2f} max {max(scores):.2f}")
+    skips = ins.near_dup_skips
+    if skips:
+        note += "; near-dup skips: " + ", ".join(f"{n.key}~{n.matched} {n.cosine:.3f}" for n in skips)
+    return note
 
 
 def insert_candidates(raw_refs: Sequence[Any], raw_words: Sequence[Any], *, run_id: int | None,
@@ -71,10 +107,18 @@ def insert_candidates(raw_refs: Sequence[Any], raw_words: Sequence[Any], *, run_
             out.notes.append(f"embed failed ({type(exc).__name__}): near-duplicate check skipped for {len(good)}")
             log.error("arsenal: embedding failed, inserting without the near-duplicate check: %s", exc)
     for card, vec in zip(good, vectors):
-        if vec is not None and ledger.arsenal_near_dup(vec, NEAR_DUP):
-            out.skipped_dup += 1
-            log.info("arsenal candidate %s (%r) skipped: near-duplicate", card.canonical_key, card.title)
-            continue
+        if vec is not None:
+            near = ledger.arsenal_nearest(vec)
+            matched, cosine = near if near else (None, None)
+            skip = cosine is not None and cosine >= NEAR_DUP
+            out.nearest.append(Nearest(card.canonical_key, card.title, matched, cosine, skip))
+            if skip:
+                out.skipped_dup += 1
+                log.info("arsenal candidate %s (%r) skipped: near-duplicate of %s, cosine %.4f",
+                         card.canonical_key, card.title, matched, cosine)
+                continue
+            if cosine is not None:
+                log.info("arsenal candidate %s nearest %s, cosine %.4f", card.canonical_key, matched, cosine)
         new_id = ledger.arsenal_insert_ref(card, pool_run_id=run_id, vector=vec)
         if new_id is None:
             out.skipped_dup += 1
@@ -160,7 +204,8 @@ def _collect(open_batch: ledger.ArsenalOpenBatch, *, client: Any, embed: Embed |
     keys, lemmas = blocked()
     ins = insert_candidates(raw_refs, raw_words, run_id=open_batch.run_id, blocked_keys=keys,
                             blocked_lemmas=lemmas, embed=embed)
-    note = "; ".join(errors + ins.notes) or None
+    dist = distribution_note(ins)
+    note = "; ".join(errors + ins.notes + ([dist] if dist else [])) or None
     ledger.arsenal_log_run("batch", "collected", run_id=open_batch.run_id, batch_id=open_batch.batch_id,
                            model=open_batch.model or None, cost_usd=cost, note=note,
                            inserted_refs=len(ins.ref_ids), inserted_words=len(ins.word_ids),

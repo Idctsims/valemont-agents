@@ -380,9 +380,12 @@ class Registry(unittest.TestCase):
                           built["arsenal_pool"].trigger.fields[5].expressions[0].first,
                           built["arsenal_pool"].trigger.fields[6].expressions[0].first,
                           str(built["arsenal_pool"].trigger.timezone)), (6, 3, 30, "America/Chicago"))
-        self.assertEqual((built["arsenal_drop"].trigger.fields[5].expressions[0].first,
-                          built["arsenal_drop"].trigger.fields[6].expressions[0].first,
-                          str(built["arsenal_drop"].trigger.timezone)), (5, 30, "America/Chicago"))
+        # The drop: 05:30, then every 30 min to 21:30 (a deferred drop retries; owner, 2026-10-16).
+        first, retries = built["arsenal_drop"].trigger.triggers
+        self.assertEqual((first.fields[5].expressions[0].first, first.fields[6].expressions[0].first,
+                          str(first.timezone)), (5, 30, "America/Chicago"))
+        self.assertEqual((str(retries.fields[5]), str(retries.fields[6]), str(retries.timezone)),
+                         ("6-21", "0,30", "America/Chicago"))
         self.assertTrue(built["arsenal_pool"].run_at_boot and built["arsenal_drop"].run_at_boot)
         self.assertEqual(built["arsenal_pool_collect"].expected_interval_s, 600)
         self.assertFalse(built["arsenal_verify"].scheduled)
