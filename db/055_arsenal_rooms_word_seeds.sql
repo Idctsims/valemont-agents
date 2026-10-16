@@ -41,6 +41,49 @@
 -- A self-test runs on paste (section 8), rolled back.
 -- Prerequisites: db/054.
 -- SUPABASE: paste the whole file into the SQL Editor and Run. No BEGIN/COMMIT.
+--
+-- ORDER (first paste, 2026-10-16, failed and applied nothing): the guards
+-- replaced in sections 1 and 3 read arsenal_reverifications, and section
+-- 2's UPDATE fires the words guard, so the table is created FIRST (section
+-- 0). A trigger function that a later statement of the same file fires
+-- must find every table it reads already created.
+
+-- ===================================================================== 0
+-- The re-verification record, append-only (read by the guards below).
+
+CREATE TABLE IF NOT EXISTS arsenal_reverifications (
+    id                BIGSERIAL    PRIMARY KEY,
+    ref_id            BIGINT       REFERENCES arsenal_refs (id) ON DELETE RESTRICT,
+    word_id           BIGINT       REFERENCES arsenal_words (id) ON DELETE RESTRICT,
+    old_verification  TEXT         NOT NULL CHECK (old_verification = 'unverified'),
+    new_verification  TEXT         NOT NULL CHECK (new_verification IN ('verified', 'corrected', 'unverified')),
+    old_note          TEXT,
+    new_note          TEXT,
+    -- Who asked for it, in words ("owner, 2026-10-16: item 11"), and the
+    -- database role that wrote it.
+    by_whom           TEXT         NOT NULL CHECK (char_length(btrim(by_whom)) BETWEEN 3 AND 200),
+    db_role           TEXT         NOT NULL DEFAULT current_user,
+    created_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT arsenal_reverifications_one_target CHECK (num_nonnulls(ref_id, word_id) = 1)
+);
+-- Once per target, ever.
+CREATE UNIQUE INDEX IF NOT EXISTS arsenal_reverifications_once_ref ON arsenal_reverifications (ref_id)
+    WHERE ref_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS arsenal_reverifications_once_word ON arsenal_reverifications (word_id)
+    WHERE word_id IS NOT NULL;
+
+DROP TRIGGER IF EXISTS arsenal_reverifications_stamp ON arsenal_reverifications;
+CREATE TRIGGER arsenal_reverifications_stamp
+    BEFORE INSERT ON arsenal_reverifications
+    FOR EACH ROW EXECUTE FUNCTION public.arsenal_stamp_created();
+DROP TRIGGER IF EXISTS arsenal_reverifications_immutable ON arsenal_reverifications;
+CREATE TRIGGER arsenal_reverifications_immutable
+    BEFORE UPDATE OR DELETE ON arsenal_reverifications
+    FOR EACH ROW EXECUTE FUNCTION public.reject_mutation();
+DROP TRIGGER IF EXISTS arsenal_reverifications_no_truncate ON arsenal_reverifications;
+CREATE TRIGGER arsenal_reverifications_no_truncate
+    BEFORE TRUNCATE ON arsenal_reverifications
+    FOR EACH STATEMENT EXECUTE FUNCTION public.reject_truncate();
 
 -- ===================================================================== 1
 -- Word seeds.
@@ -75,13 +118,16 @@ BEGIN
        OR NEW.pool_run_id IS DISTINCT FROM OLD.pool_run_id THEN
         RAISE EXCEPTION 'arsenal_words: a word''s identity never changes';
     END IF;
-    -- The one re-verification (section 4): only inside arsenal_reverify_word,
-    -- for an unverified pool word, matching the row it just recorded.
-    v_rev := OLD.status = 'pool' AND OLD.verification = 'unverified' AND NEW.status = OLD.status
-             AND coalesce(current_setting('arsenal.reverify', true), '') = 'word:' || OLD.id
-             AND EXISTS (SELECT 1 FROM public.arsenal_reverifications v
+    -- The one re-verification (section 3): only inside arsenal_reverify_word,
+    -- for an unverified pool word, matching the row it just recorded. The
+    -- record is read only when the function's setting names this word.
+    v_rev := false;
+    IF OLD.status = 'pool' AND OLD.verification = 'unverified' AND NEW.status = OLD.status
+       AND coalesce(current_setting('arsenal.reverify', true), '') = 'word:' || OLD.id THEN
+        v_rev := EXISTS (SELECT 1 FROM public.arsenal_reverifications v
                           WHERE v.word_id = OLD.id AND v.new_verification = NEW.verification
                             AND v.new_note IS NOT DISTINCT FROM NEW.verification_note);
+    END IF;
     IF v_rev THEN
         IF NEW.verification = 'pending' THEN
             RAISE EXCEPTION 'arsenal_words: a re-verification settles; it never returns to pending';
@@ -123,41 +169,8 @@ UPDATE arsenal_words SET status = 'seed'
  WHERE NOT is_test AND status = 'pool' AND lemma IN ('asymmetric', 'inflection', 'provenance', 'fiduciary');
 
 -- ===================================================================== 3
--- ONE re-verification, recorded append-only.
-
-CREATE TABLE IF NOT EXISTS arsenal_reverifications (
-    id                BIGSERIAL    PRIMARY KEY,
-    ref_id            BIGINT       REFERENCES arsenal_refs (id) ON DELETE RESTRICT,
-    word_id           BIGINT       REFERENCES arsenal_words (id) ON DELETE RESTRICT,
-    old_verification  TEXT         NOT NULL CHECK (old_verification = 'unverified'),
-    new_verification  TEXT         NOT NULL CHECK (new_verification IN ('verified', 'corrected', 'unverified')),
-    old_note          TEXT,
-    new_note          TEXT,
-    -- Who asked for it, in words ("owner, 2026-10-16: item 11"), and the
-    -- database role that wrote it.
-    by_whom           TEXT         NOT NULL CHECK (char_length(btrim(by_whom)) BETWEEN 3 AND 200),
-    db_role           TEXT         NOT NULL DEFAULT current_user,
-    created_at        TIMESTAMPTZ  NOT NULL DEFAULT now(),
-    CONSTRAINT arsenal_reverifications_one_target CHECK (num_nonnulls(ref_id, word_id) = 1)
-);
--- Once per target, ever.
-CREATE UNIQUE INDEX IF NOT EXISTS arsenal_reverifications_once_ref ON arsenal_reverifications (ref_id)
-    WHERE ref_id IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS arsenal_reverifications_once_word ON arsenal_reverifications (word_id)
-    WHERE word_id IS NOT NULL;
-
-DROP TRIGGER IF EXISTS arsenal_reverifications_stamp ON arsenal_reverifications;
-CREATE TRIGGER arsenal_reverifications_stamp
-    BEFORE INSERT ON arsenal_reverifications
-    FOR EACH ROW EXECUTE FUNCTION public.arsenal_stamp_created();
-DROP TRIGGER IF EXISTS arsenal_reverifications_immutable ON arsenal_reverifications;
-CREATE TRIGGER arsenal_reverifications_immutable
-    BEFORE UPDATE OR DELETE ON arsenal_reverifications
-    FOR EACH ROW EXECUTE FUNCTION public.reject_mutation();
-DROP TRIGGER IF EXISTS arsenal_reverifications_no_truncate ON arsenal_reverifications;
-CREATE TRIGGER arsenal_reverifications_no_truncate
-    BEFORE TRUNCATE ON arsenal_reverifications
-    FOR EACH STATEMENT EXECUTE FUNCTION public.reject_truncate();
+-- ONE re-verification: the reference guard and the two functions (the
+-- record table is section 0).
 
 -- db/054's reference guard, with the one re-verification branch.
 CREATE OR REPLACE FUNCTION public.arsenal_refs_guard()
@@ -194,11 +207,14 @@ BEGIN
     END IF;
     -- The one re-verification (section 3): only inside arsenal_reverify_ref,
     -- for an unverified pool reference, matching the row it just recorded.
-    v_rev := OLD.status = 'pool' AND OLD.verification = 'unverified' AND NEW.status = OLD.status
-             AND coalesce(current_setting('arsenal.reverify', true), '') = 'ref:' || OLD.id
-             AND EXISTS (SELECT 1 FROM public.arsenal_reverifications v
+    -- The record is read only when the function's setting names this one.
+    v_rev := false;
+    IF OLD.status = 'pool' AND OLD.verification = 'unverified' AND NEW.status = OLD.status
+       AND coalesce(current_setting('arsenal.reverify', true), '') = 'ref:' || OLD.id THEN
+        v_rev := EXISTS (SELECT 1 FROM public.arsenal_reverifications v
                           WHERE v.ref_id = OLD.id AND v.new_verification = NEW.verification
                             AND v.new_note IS NOT DISTINCT FROM NEW.verification_note);
+    END IF;
     IF v_rev THEN
         IF NEW.verification = 'pending' THEN
             RAISE EXCEPTION 'arsenal_refs: a re-verification settles; it never returns to pending';
