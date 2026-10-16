@@ -652,9 +652,11 @@ $$;
 -- never a drop. Each in its accurate form; verified by the same pipeline
 -- (pending until the worker's first verification pass).
 
+-- Twelve fields per seed; status and origin_kind are 'seed' for every row.
 INSERT INTO arsenal_refs (canonical_key, category, title, origin, meaning, deploy_line, room, source_work, quote,
                           quote_by, source_kind, source_page, status, origin_kind)
-VALUES
+SELECT s.*, 'seed', 'seed'
+  FROM (VALUES
     ('an_offer_he_cant_refuse', 'film_tv', 'An offer he can''t refuse',
      'Vito Corleone to Johnny Fontane, about a studio boss who won''t cast him, in The Godfather (1972). The offer arrives as a horse''s head.',
      'A proposal built so that saying no costs more than saying yes.',
@@ -801,6 +803,9 @@ VALUES
      'Losing the title is a data point. The response is the record.',
      'We lost that pitch. Watch the next four.',
      'homies', 'Lewis Hamilton, Formula One, 2017–2020', NULL, NULL, 'wikipedia', 'Lewis Hamilton')
+  ) AS s (canonical_key, category, title, origin, meaning, deploy_line, room, source_work, quote, quote_by,
+          source_kind, source_page)
+ WHERE true  -- INSERT ... SELECT ... FROM: keeps ON CONFLICT from parsing as a join's ON
 ON CONFLICT (canonical_key) DO NOTHING;
 
 -- ===================================================================== 10
