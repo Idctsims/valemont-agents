@@ -229,7 +229,7 @@ class Guards(ArsenalSqlCase):
     def test_truncate_is_refused_with_every_referencing_table_named(self) -> None:
         with _rolled_back() as conn:
             # db/055's two tables reference refs and words: name them too once they exist.
-            extra = [t for t in ("arsenal_holds", "arsenal_reverifications")
+            extra = [t for t in ("arsenal_holds", "arsenal_reverifications", "arsenal_hold_releases")
                      if conn.execute("SELECT to_regclass(%s)", (f"public.{t}",)).fetchone()[0] is not None]
             self.refused(conn, "TRUNCATE " + ", ".join(["arsenal_pool_runs", "arsenal_refs", "arsenal_words",
                                                         "arsenal_drops", "arsenal_reactions", *extra]),
@@ -570,6 +570,79 @@ class RoomsAndWordSeeds(ArsenalSqlCase):
                 "AND lemma IN ('asymmetric', 'inflection', 'provenance', 'fiduciary')").fetchall())
             self.assertNotIn("pool", rows.values(), rows)
             self.assertIn(ledger.arsenal_seed_lemmas(conn=conn), [sorted(k for k, v in rows.items() if v == "seed")])
+
+
+# ==================================================== db/056: hold releases
+
+class HoldReleases(ArsenalSqlCase):
+    """db/056: a hold is released at most once, on the record; only an
+    ACTIVE hold (v_arsenal_active_holds) keeps an item out of the picker and
+    out of the worker's ready counts."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        with _rolled_back() as conn:
+            if conn.execute("SELECT to_regclass('public.arsenal_hold_releases')").fetchone()[0] is None:
+                raise unittest.SkipTest("db/056 not pasted")
+
+    def test_a_released_hold_frees_the_item_once_and_stays_as_history(self) -> None:
+        with _rolled_back() as conn:
+            self._only_mine_eligible(conn)
+            refs = [self.ref(conn, c, test=True) for c in ("finance_business", "sports", "film_tv")]
+            self.word(conn, test=True)
+            h = ledger.arsenal_hold(ref_id=refs[0], reason="outcome_conflict", detail="tl", conn=conn)
+            self.refused(conn, "SELECT arsenal_pick_drop('2001-08-01', true)", None, "(2 categories")
+            rel = ledger.arsenal_release_hold(h, "tests_live: a false positive", conn=conn)
+            self.assertEqual(conn.execute(
+                "SELECT hold_id, reason, released_by = current_user, created_at IS NOT NULL "
+                "FROM arsenal_hold_releases WHERE id = %s", (rel,)).fetchone(),
+                (h, "tests_live: a false positive", True, True))
+            self.assertEqual(conn.execute("SELECT count(*) FROM arsenal_holds WHERE id = %s", (h,)).fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT count(*) FROM v_arsenal_active_holds WHERE id = %s",
+                                          (h,)).fetchone()[0], 0)
+            with conn.transaction(force_rollback=True):
+                did = conn.execute("SELECT arsenal_pick_drop('2001-08-01', true)").fetchone()[0]
+                self.assertIn(refs[0], conn.execute("SELECT ref_ids FROM arsenal_drops WHERE id = %s",
+                                                    (did,)).fetchone()[0])
+            self.refused(conn, "SELECT arsenal_release_hold(%s, 'again')", (h,), "already released")
+            self.refused(conn, "SELECT arsenal_release_hold(%s, '  ')",
+                         (ledger.arsenal_hold(ref_id=refs[1], reason="outcome_conflict", detail=None, conn=conn),),
+                         "a reason is required")
+            self.refused(conn, "UPDATE arsenal_hold_releases SET reason = 'x' WHERE id = %s", (rel,), "")
+            self.refused(conn, "DELETE FROM arsenal_hold_releases WHERE id = %s", (rel,), "")
+            self.refused(conn, "TRUNCATE arsenal_hold_releases", None, "TRUNCATE is refused")
+
+    def test_only_an_active_hold_hides_a_real_item_from_the_ready_counts(self) -> None:
+        with _rolled_back() as conn:
+            before = ledger.arsenal_pool_status(conn=conn)
+            real = self.ref(conn, "philosophy")
+            h = ledger.arsenal_hold(ref_id=real, reason="outcome_conflict", detail="tl", conn=conn)
+            self.assertEqual(ledger.arsenal_pool_status(conn=conn).refs_ready, before.refs_ready)
+            self.assertIn(real, [p.ref.id for p in ledger.arsenal_undropped_checked_refs(conn=conn) if p.held])
+            ledger.arsenal_release_hold(h, "tests_live", conn=conn)
+            self.assertEqual(ledger.arsenal_pool_status(conn=conn).refs_ready, before.refs_ready + 1)
+            self.assertNotIn(real, [p.ref.id for p in ledger.arsenal_undropped_checked_refs(conn=conn) if p.held])
+            self.assertEqual([x.released for x in ledger.arsenal_holds_by_id([h], conn=conn)], [True])
+
+    def test_access(self) -> None:
+        with _rolled_back() as conn:
+            for rel in ("arsenal_hold_releases", "v_arsenal_active_holds"):
+                with self.subTest(rel=rel):
+                    self.assertEqual(conn.execute(
+                        "SELECT has_table_privilege('anon', %s, 'SELECT,INSERT,UPDATE,DELETE'), "
+                        "has_table_privilege('authenticated', %s, 'SELECT'), "
+                        "has_table_privilege('authenticated', %s, 'INSERT,UPDATE,DELETE,TRUNCATE'), "
+                        "has_table_privilege('valemont_readonly', %s, 'SELECT')", (f"public.{rel}",) * 4).fetchone(),
+                        (False, True, False, True))
+            self.assertEqual(conn.execute(
+                "SELECT relrowsecurity, (SELECT count(*) FROM pg_policies WHERE tablename = 'arsenal_hold_releases') "
+                "FROM pg_class WHERE oid = 'public.arsenal_hold_releases'::regclass").fetchone(), (True, 1))
+            fn = "public.arsenal_release_hold(bigint, text)"
+            self.assertEqual(conn.execute(
+                "SELECT has_function_privilege('anon', %s, 'EXECUTE'), has_function_privilege('authenticated', %s, "
+                "'EXECUTE'), has_function_privilege('valemont_readonly', %s, 'EXECUTE')", (fn, fn, fn)).fetchone(),
+                (False, False, False))
 
 
 # ============================================================== worker queries

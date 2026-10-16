@@ -33,20 +33,31 @@ def cases() -> list[dict]:
     return json.loads(FIXTURE.read_text(encoding="utf-8"))["cases"]
 
 
+def run_controls(*, ask: verify.AskOutcome, samples: int = verify.OUTCOME_SAMPLES,
+                 http: sources.Http | None = None) -> tuple[int, list[str]]:
+    """(how many came out wrong, one line per case). Also the gate of
+    arsenal_outcome_check --write."""
+    wrong = 0
+    lines = []
+    for case in cases():
+        res = verify.outcome_check(card(case["card"]), ask=ask, samples=samples, http=http)
+        ok = res.conflict == case["expect_conflict"]
+        wrong += not ok
+        votes = "".join("Y" if v else "n" for v in res.votes) or "-"
+        lines.append(f"{'PASS' if ok else 'FAIL'} {case['name']}: expect {'conflict' if case['expect_conflict'] else 'ok'}, "
+                     f"got {'conflict' if res.conflict else 'ok'} (votes {votes}; page {res.page}); {res.note}")
+    return wrong, lines
+
+
 def main() -> int:
     load_env()
-    wrong = 0
     try:
-        for case in cases():
-            res = verify.outcome_check(card(case["card"]), ask=lambda r, e: verify.ask_outcome_haiku(r, e))
-            ok = res.conflict == case["expect_conflict"]
-            wrong += not ok
-            votes = "".join("Y" if v else "n" for v in res.votes) or "-"
-            print(f"{'PASS' if ok else 'FAIL'} {case['name']}: expect {'conflict' if case['expect_conflict'] else 'ok'}, "
-                  f"got {'conflict' if res.conflict else 'ok'} (votes {votes}; page {res.page}); {res.note}")
+        wrong, lines = run_controls(ask=lambda r, e: verify.ask_outcome_haiku(r, e))
     finally:
         sources.close_http()
         ledger.close_pool()
+    for line in lines:
+        print(line)
     print(f"{wrong} wrong")
     return 1 if wrong else 0
 

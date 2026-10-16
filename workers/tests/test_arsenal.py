@@ -685,6 +685,52 @@ class OutcomeControls(unittest.TestCase):
         self.assertEqual((c.id, c.deploy_line), (194, self.CASES["thermopylae"]["card"]["deploy_line"]))
 
 
+class OutcomeWriteGate(NoDatabase):
+    """Owner, 2026-10-16: the check is a dry run by default; --write needs
+    every control to pass IN THE SAME RUN, or nothing is written."""
+
+    POOL_REF = ref(id=195, title="The Trojan Horse", meaning="A gift can hide a cost.",
+                   deploy_line="I'm inspecting the gift before it comes inside.")
+
+    def setUp(self) -> None:
+        super().setUp()
+        from scripts import arsenal_outcome_check as check
+        self.check = check
+        self.holds: list[int] = []
+        self.pool_read: list[bool] = []
+        self.patch("arsenal_hold", lambda **kw: self.holds.append(kw["ref_id"]) or 9)
+        self.patch("arsenal_undropped_checked_refs",
+                   lambda: self.pool_read.append(True) or [ledger.ArsenalPoolRef(self.POOL_REF, False)])
+        self.patch("close_pool", lambda: None)
+        page = verify.Candidate("wikipedia", "Some page", "https://x.invalid",
+                                sources.Excerpt("an excerpt", 1, ("",)), ())
+        p = mock.patch.object(verify, "candidates", lambda r, http=None: ([page], []))
+        p.start()
+        self.addCleanup(p.stop)
+        for target in (mock.patch.object(check, "load_env", lambda: None),
+                       mock.patch("builtins.print", lambda *a, **k: None)):
+            target.start()
+            self.addCleanup(target.stop)
+
+    def test_write_is_refused_unless_every_control_passes_in_this_run(self) -> None:
+        always_no = lambda card, e: (False, "no conflict")  # noqa: E731 - Thermopylae and Custer then fail
+        self.assertEqual(self.check.main(["--write"], ask=always_no), 1)
+        self.assertEqual((self.holds, self.pool_read), ([], []))  # refused before the pool was read
+
+    def test_write_holds_once_the_controls_pass(self) -> None:
+        def ask(card: ledger.ArsenalRefToVerify, e: str) -> tuple[bool, str]:
+            return card.title in ("Thermopylae", "Custer's Last Stand", "The Trojan Horse"), "x"
+        self.assertEqual(self.check.main(["--write"], ask=ask), 0)
+        self.assertEqual(self.holds, [195])
+
+    def test_the_default_is_a_dry_run_and_ids_never_write(self) -> None:
+        conflict = lambda card, e: (True, "x")  # noqa: E731
+        self.assertEqual(self.check.main([], ask=conflict), 0)
+        self.assertEqual(self.holds, [])
+        with self.assertRaises(SystemExit):
+            self.check.main(["--write", "--ids", "194"], ask=conflict)
+
+
 class PoolSize(unittest.TestCase):
     def test_36_references_and_12_words_a_batch(self) -> None:
         self.assertEqual((cards.POOL_REFS, cards.POOL_WORDS), (36, 12))
