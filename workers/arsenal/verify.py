@@ -284,7 +284,17 @@ def candidates(ref: ledger.ArsenalRefToVerify, *, http: sources.Http | None = No
                              sources.excerpt(q.sections or (sources.Section("", "\n".join(q.lines)),),
                                              strong=strong, weak=weak, quote=ref.quote),
                              q.lines))
-    out.sort(key=lambda c: -c.excerpt.score)  # stable: search order breaks ties
+    # The card's own subject page first: a page whose title holds every key
+    # word of the card's title ("Battle of Thermopylae" for "Thermopylae")
+    # outranks one that merely shares terms (the Battle of Salamis shares
+    # Xerxes and 480 BC). Then the best-matching section; search order
+    # breaks ties (a stable sort).
+    subject = sources.key_terms(ref.title)
+
+    def own_page(c: Candidate) -> bool:
+        return bool(subject) and subject <= set(sources.normalize(c.title).split())
+
+    out.sort(key=lambda c: (not own_page(c), -c.excerpt.score))
     return out, down
 
 
@@ -351,12 +361,21 @@ def verify_ref(ref: ledger.ArsenalRefToVerify, *, ask: Ask, http: sources.Http |
 
 OUTCOME_PURPOSE = "arsenal_outcome"
 OUTCOME_SYSTEM = """\
-You check ONE thing about one reference card, using ONLY the excerpt: does how the story really ended undercut the card's meaning or its deploy_line?
+You check ONE thing about one reference card: does the reference's real ending (defeat, death, ruin, scandal) contradict what the deploy_line asks the listener to believe?
 
-Thermopylae was a total defeat for the Greeks, so a pitch line about winning there is undercut. A comeback that really happened, used as a comeback line, is not.
+Two steps, in order:
+1. What does the deploy_line ask the listener to believe? Name the move it recommends and the result it promises.
+2. How did the reference really end for whoever made that move? A conflict is ONLY when that ending is the opposite of the promised result: the line recommends a move, and the people who made that move were defeated, died, were ruined or disgraced.
 
-outcome_conflict: true only when the excerpt shows the real ending AND that ending undercuts the meaning or the deploy_line. False when the ending fits, or when the excerpt does not show the ending.
-note: one short sentence saying why. Answer with the JSON the schema asks for."""
+A line that WARNS against the move, using the bad ending as its lesson, agrees with the ending: NOT a conflict. A line whose promised result is what really happened: NOT a conflict.
+
+- Thermopylae: the Greeks held the narrow pass for three days, then were outflanked and wiped out, and the Persians took the pass. "I'm holding one narrow pass where our numbers don't matter" recommends the Greeks' move and promises it wins: CONFLICT.
+- Enron collapsed in fraud: "clean-looking numbers can hide rot, so we do the diligence" warns, using the ending: NOT a conflict. A line praising Enron's growth model as the way to win: CONFLICT.
+- The Fabian strategy wore Hannibal down and Rome won: "patient attrition wins" promises what happened: NOT a conflict.
+
+Use the excerpt for the ending. When the excerpt does not show the ending at all, answer false.
+outcome_conflict: true or false as above. It must agree with your note: if your note says the ending supports or fits the line, the answer is false.
+note: one short sentence: the move, the promised result, the real ending. Answer with the JSON the schema asks for."""
 #: Haiku 5.5 takes no temperature (non-default sampling is a 400), so the
 #: check votes: this many independent reads, a hold on a strict majority.
 OUTCOME_SAMPLES = 3

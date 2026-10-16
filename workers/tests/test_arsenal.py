@@ -622,6 +622,69 @@ class OutcomeVote(unittest.TestCase):
         self.assertEqual(arsenal_outcome_check.REASON, verify.OUTCOME_CONFLICT)
 
 
+class OutcomeControls(unittest.TestCase):
+    """Thermopylae (ref 194, drop 61) is the positive control (owner,
+    2026-10-16). The first prompt read the Battle of SALAMIS page and voted
+    no 3 times; a soft rewrite then held Trojan Horse, Cannae and Midas,
+    whose lines warn WITH the ending. These lock the prompt's question, its
+    warn-vs-recommend rule and the page choice; the model itself is checked
+    by scripts.arsenal_outcome_control (exit 1 on a miss)."""
+
+    CASES = {c["name"]: c for c in json.loads(fixture("outcome_controls.json"))["cases"]}
+
+    def test_the_prompt_asks_the_question_and_carries_the_control(self) -> None:
+        p = verify.OUTCOME_SYSTEM
+        self.assertIn("does the reference's real ending (defeat, death, ruin, scandal) contradict what the "
+                      "deploy_line asks the listener to believe?", p)
+        thermo = self.CASES["thermopylae"]["card"]["deploy_line"].rstrip(".")
+        self.assertIn(thermo.split(", ")[1], p)  # "I'm holding one narrow pass where our numbers don't matter"
+        self.assertIn("CONFLICT", p)
+        # A line that warns with the bad ending agrees with it (the three false holds).
+        self.assertIn("WARNS against the move", p)
+        self.assertIn("must agree with your note", p)
+        # The held-out controls stay out of the prompt, or they test nothing.
+        for name in ("custer", "miracle_on_ice"):
+            self.assertFalse(self.CASES[name]["in_prompt"])
+            self.assertNotIn(self.CASES[name]["card"]["title"].split("'")[0], p)
+
+    def test_the_cards_own_page_outranks_a_page_that_shares_its_terms(self) -> None:
+        case = self.CASES["thermopylae"]
+        own, decoy = case["own_page"], case["decoy_page"]
+        thermo_card = case["card"]
+        # The decoy shares more of the card's words than the card's own page.
+        texts = {own: "Thermopylae lead.\n\n== Battle ==\nLeonidas held the pass; the Persians took it.",
+                 decoy: ("Salamis lead.\n\n== Background ==\nIn 480 BC Xerxes' Persian army, after Thermopylae, "
+                         "where Leonidas I and 300 Spartans of the Greek alliance held the pass for three days.")}
+
+        def get(url: str, params: Any) -> tuple[int, str, None]:
+            if params.get("list") == "search":
+                return 200, json.dumps({"query": {"search": [{"title": decoy}, {"title": own}]}}), None
+            if url == sources.WIKIPEDIA_API:
+                text = texts.get(params.get("titles"))
+                return 200, json.dumps({"query": {"pages": [{"extract": text} if text else {"missing": True}]}}), None
+            for t in texts:
+                if url == sources.WIKIPEDIA_SUMMARY + sources.page_path(t):
+                    return 200, summary(t), None
+            return 404, "", None
+
+        r = ref(**{k: v for k, v in thermo_card.items() if k != "meaning" and k != "deploy_line"},
+                meaning=thermo_card["meaning"], deploy_line=thermo_card["deploy_line"])
+        found, _ = verify.candidates(r, http=get)
+        score = {c.title: c.excerpt.score for c in found}
+        self.assertGreater(score[decoy], score[own])  # on terms alone the decoy would win
+        self.assertEqual(found[0].title, own)
+        votes = iter([True, True, False])
+        res = verify.outcome_check(r, http=get, ask=lambda c, e: (next(votes), "the Greeks were wiped out"))
+        self.assertEqual((res.conflict, res.page), (True, own))
+
+    def test_the_control_script_reads_the_same_fixture(self) -> None:
+        from scripts import arsenal_outcome_control
+        names = [c["name"] for c in arsenal_outcome_control.cases()]
+        self.assertEqual(names, ["thermopylae", "custer", "miracle_on_ice"])
+        c = arsenal_outcome_control.card(self.CASES["thermopylae"]["card"])
+        self.assertEqual((c.id, c.deploy_line), (194, self.CASES["thermopylae"]["card"]["deploy_line"]))
+
+
 class PoolSize(unittest.TestCase):
     def test_36_references_and_12_words_a_batch(self) -> None:
         self.assertEqual((cards.POOL_REFS, cards.POOL_WORDS), (36, 12))

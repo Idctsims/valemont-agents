@@ -1,0 +1,43 @@
+{
+  "_about": "The outcome check's controls (owner, 2026-10-16). thermopylae is ref 194 as dropped on Oct 16 (drop 61): the positive control. custer is held out (never in the prompt) and must flag; miracle_on_ice must not. tests/test_arsenal.py locks the prompt and the page ranking with these; scripts.arsenal_outcome_control runs them through the real model.",
+  "cases": [
+    {
+      "name": "thermopylae",
+      "expect_conflict": true,
+      "in_prompt": true,
+      "card": {
+        "id": 194, "category": "history_military", "title": "Thermopylae",
+        "origin": "In 480 BC, Leonidas I led a Greek alliance, including 300 Spartans, holding the pass at Thermopylae against Xerxes' Persian army for three days.",
+        "source_work": "Battle of Thermopylae, 480 BC", "source_kind": "wikipedia", "source_page": "Battle of Thermopylae",
+        "meaning": "Chose terrain and a narrow front so a smaller force could hold against a vastly larger one.",
+        "deploy_line": "I'm not fighting them across the whole market, I'm holding one narrow pass where our numbers don't matter."
+      },
+      "own_page": "Battle of Thermopylae",
+      "decoy_page": "Battle of Salamis"
+    },
+    {
+      "name": "custer",
+      "expect_conflict": true,
+      "in_prompt": false,
+      "card": {
+        "id": -1, "category": "history_military", "title": "Custer's Last Stand",
+        "origin": "At the Little Bighorn in 1876, Custer split his 7th Cavalry and charged a far larger Lakota and Cheyenne force.",
+        "source_work": "Battle of the Little Bighorn, 1876", "source_kind": "wikipedia", "source_page": "Battle of the Little Bighorn",
+        "meaning": "Move first and hit hard before the other side organizes.",
+        "deploy_line": "We charge first, before they're organized, and the bigger side folds."
+      }
+    },
+    {
+      "name": "miracle_on_ice",
+      "expect_conflict": false,
+      "in_prompt": false,
+      "card": {
+        "id": -2, "category": "sports", "title": "Miracle on Ice",
+        "origin": "At Lake Placid in 1980, a team of US college players beat the Soviet Union 4-3.",
+        "source_work": "Miracle on Ice, 1980", "source_kind": "wikipedia", "source_page": "Miracle on Ice",
+        "meaning": "The underdog can beat the favorite on the day.",
+        "deploy_line": "They're the favorite on paper, and that's exactly how the Soviets felt in 1980."
+      }
+    }
+  ]
+}

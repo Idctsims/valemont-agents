@@ -28,12 +28,20 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--dry-run", action="store_true", help="read and report; write no hold")
     parser.add_argument("--samples", type=int, default=verify.OUTCOME_SAMPLES, help="reads per reference")
+    parser.add_argument("--ids", type=int, nargs="+",
+                        help="only these references, dropped ones included (a positive control); needs --dry-run")
     args = parser.parse_args(argv)
+    if args.ids and not args.dry_run:
+        parser.error("--ids reads references outside the pool (a control): use it with --dry-run")
     load_env()
     held = 0
     try:
-        pool = ledger.arsenal_undropped_checked_refs()
-        print(f"{len(pool)} undropped checked references ({'dry run' if args.dry_run else 'holds written'})")
+        if args.ids:
+            pool = [ledger.ArsenalPoolRef(r, False) for r in (ledger.arsenal_ref_to_verify(i) for i in args.ids) if r]
+        else:
+            pool = ledger.arsenal_undropped_checked_refs()
+        what = "references by id" if args.ids else "undropped checked references"
+        print(f"{len(pool)} {what} ({'dry run' if args.dry_run else 'holds written'})")
         for item in pool:
             r = item.ref
             if item.held:
