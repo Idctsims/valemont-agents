@@ -13,15 +13,20 @@ export function Fold({
   count,
   defaultOpen = false,
   testId,
+  lockWhenEmpty = false,
   children,
 }: {
   label: string;
   count: number;
   defaultOpen?: boolean;
   testId?: string;
+  /** At 0 the fold never opens, so empty and filled folds read the same (closed, pointing right). */
+  lockWhenEmpty?: boolean;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const locked = lockWhenEmpty && count === 0;
+  const [state, setOpen] = useState(defaultOpen);
+  const open = state && !locked;
   const id = useId();
   return (
     <div data-testid={testId} className="border-b border-border">
@@ -29,8 +34,9 @@ export function Fold({
         type="button"
         aria-expanded={open}
         aria-controls={id}
+        disabled={locked}
         onClick={() => setOpen((o) => !o)}
-        className="tap flex w-full items-center justify-between font-mono text-xs text-text-muted transition-colors hover:text-text"
+        className="tap flex w-full items-center justify-between font-mono text-xs text-text-muted transition-colors enabled:hover:text-text"
       >
         <span>
           {label} · {count}

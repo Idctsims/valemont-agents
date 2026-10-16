@@ -43,7 +43,7 @@ export default async function ArsenalPage() {
       )}
 
       <div className="mt-10 lg:max-w-3xl">
-        <Fold label="Past drops" count={past.length} testId="arsenal-past">
+        <Fold label="Past drops" count={past.length} testId="arsenal-past" lockWhenEmpty>
           {past.map((d) => (
             <li key={d.id} data-testid="past-drop" className="border-b border-border py-3">
               <p className="label-mono text-text-muted">
@@ -63,7 +63,7 @@ export default async function ArsenalPage() {
             </li>
           ))}
         </Fold>
-        <Fold label="Unverified" count={unverified.length} testId="arsenal-unverified">
+        <Fold label="Unverified" count={unverified.length} testId="arsenal-unverified" lockWhenEmpty>
           {unverified.map((u) => (
             <li key={u.id} data-testid="unverified-ref" className="border-b border-border py-3">
               <p className="text-base text-text-muted">

@@ -10,10 +10,11 @@ import type { ActionResult } from "@/lib/action-result";
 import { CATEGORY_LABEL, ROOM_LABEL, type Ref, type RefReaction, type Room, type Word } from "@/lib/arsenal/types";
 
 // Today's drop (Chat 5 Phase 1; db/054): the Power Word hero, then the three
-// cards in slot order. Love / Not interested / Already know it on each; the
-// pressed one again takes it back. "Already know it" moves the card into the
-// "Already known" fold (with Undo). Optimistic; the server render that
-// follows each action replaces it.
+// cards in slot order. Love / Not interested / Already know it on each (the
+// word too), labelled under the icon; the pressed one again takes it back.
+// "Already know it" moves the card or the word into the "Already known" fold
+// (with Undo). Optimistic; the server render that follows each action
+// replaces it.
 
 type Target = { kind: "ref" | "word"; id: number };
 type Reactions = Record<string, RefReaction | null>;
@@ -45,10 +46,11 @@ export function DropCards({ word, refs }: { word: Word; refs: Ref[] }) {
   const shown = refs.filter((r) => reactions[key({ kind: "ref", id: r.id })] !== "known");
   const known = refs.filter((r) => reactions[key({ kind: "ref", id: r.id })] === "known");
   const wordKey = key({ kind: "word", id: word.id });
+  const wordKnown = reactions[wordKey] === "known";
 
   return (
     <div aria-busy={saving} data-testid="arsenal-drop">
-      <section aria-label="Power Word" data-testid="power-word" className="border-y border-border py-6 lg:max-w-3xl">
+      {!wordKnown && <section aria-label="Power Word" data-testid="power-word" className="border-y border-border py-6 lg:max-w-3xl">
         <p className="label-mono text-text-muted">Power Word</p>
         <h2 data-testid="power-word-lemma" className="mt-2 font-display text-4xl leading-none text-text">{word.lemma}</h2>
         {word.pronunciation && (
@@ -76,7 +78,7 @@ export function DropCards({ word, refs }: { word: Word; refs: Ref[] }) {
           <ReactionButtons label={word.lemma} testPrefix="word" current={reactions[wordKey] ?? null}
                            onReact={(r) => react({ kind: "word", id: word.id }, r)} />
         </div>
-      </section>
+      </section>}
 
       <ol data-testid="arsenal-cards" className="lg:max-w-3xl">
         {shown.map((r) => (
@@ -85,9 +87,20 @@ export function DropCards({ word, refs }: { word: Word; refs: Ref[] }) {
         ))}
       </ol>
 
-      {known.length > 0 && (
+      {(known.length > 0 || wordKnown) && (
         <div className="mt-6 lg:max-w-3xl">
-          <Fold label="Already known" count={known.length} testId="arsenal-known">
+          <Fold label="Already known" count={known.length + (wordKnown ? 1 : 0)} testId="arsenal-known">
+            {wordKnown && (
+              <li data-testid="known-word" className="flex items-center justify-between gap-3 border-b border-border py-2">
+                <span className="min-w-0 truncate text-sm text-text">
+                  <span className="label-mono mr-2 text-text-muted">Power Word</span>{word.lemma}
+                </span>
+                <button type="button" data-testid="known-undo" onClick={() => react({ kind: "word", id: word.id }, null)}
+                        className="tap inline-flex items-center rounded-pill px-3 text-sm text-accent hover:bg-surface-2">
+                  Undo
+                </button>
+              </li>
+            )}
             {known.map((r) => (
               <li key={r.id} data-testid="known-ref" className="flex items-center justify-between gap-3 border-b border-border py-2">
                 <span className="min-w-0 truncate text-sm text-text">{r.title}</span>
@@ -137,33 +150,35 @@ function Card({ r, current, onReact }: { r: Ref; current: RefReaction | null; on
             </a>
           )}
         </div>
-        <ReactionButtons label={r.title} testPrefix="card" current={current} onReact={onReact} known />
+        <ReactionButtons label={r.title} testPrefix="card" current={current} onReact={onReact} />
       </div>
     </li>
   );
 }
 
-const BUTTONS: { r: RefReaction; label: string; Icon: typeof Heart }[] = [
-  { r: "love", label: "Love", Icon: Heart },
-  { r: "not_interested", label: "Not interested", Icon: EyeSlash },
-  { r: "known", label: "Already know it", Icon: Brain },
+// `label` is the accessible name (unchanged); `short` is the visible one under the icon.
+const BUTTONS: { r: RefReaction; label: string; short: string; Icon: typeof Heart }[] = [
+  { r: "love", label: "Love", short: "Love", Icon: Heart },
+  { r: "not_interested", label: "Not interested", short: "Not for me", Icon: EyeSlash },
+  { r: "known", label: "Already know it", short: "Know it", Icon: Brain },
 ];
 
-function ReactionButtons({ label, testPrefix, current, onReact, known = false }: {
-  label: string; testPrefix: string; current: RefReaction | null; onReact: (r: RefReaction | null) => void; known?: boolean;
+function ReactionButtons({ label, testPrefix, current, onReact }: {
+  label: string; testPrefix: string; current: RefReaction | null; onReact: (r: RefReaction | null) => void;
 }) {
   return (
     <div role="group" aria-label={`Your take on ${label}`} data-testid={`${testPrefix}-reactions`}
-         data-reaction={current ?? "none"} className="-mr-2 flex items-center">
-      {BUTTONS.filter((b) => known || b.r !== "known").map(({ r, label: l, Icon }) => {
+         data-reaction={current ?? "none"} className="-mr-2 flex items-start">
+      {BUTTONS.map(({ r, label: l, short, Icon }) => {
         const on = current === r;
         return (
           <button key={r} type="button" data-testid={`${testPrefix}-${r.replace("_", "-")}`} aria-label={l} title={l}
                   aria-pressed={on} onClick={() => onReact(on ? null : r)}
-                  className={`tap inline-flex items-center justify-center rounded-pill transition-colors ${
+                  className={`tap inline-flex flex-col items-center justify-center gap-1 rounded-inner px-2 py-1 transition-colors ${
                     on ? "text-accent" : "text-text-muted hover:bg-surface-2 hover:text-text"
                   }`}>
             <Icon size={20} weight={on ? "fill" : "regular"} aria-hidden />
+            <span aria-hidden className="font-mono text-xs leading-none whitespace-nowrap">{short}</span>
           </button>
         );
       })}

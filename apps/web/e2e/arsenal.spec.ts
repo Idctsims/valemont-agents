@@ -15,6 +15,10 @@ import {
 //     target, so it never trains the real weights) and persists;
 //   * Already know it hides that reference into the "Already known" fold,
 //     and Undo brings it back;
+//   * every reaction button shows its short label (Love / Not for me /
+//     Know it), keeps its accessible name and is at least 44 px;
+//   * the Power Word's Already know it does the same: hidden into the
+//     fold, still hidden after a reload, Undo restores it;
 //   * the Unverified fold shows the reason, never a Checked tag;
 //   * a test drop is invisible without the marker.
 // Test rows are permanent (append-only); names carry the run prefix.
@@ -38,6 +42,7 @@ test.describe("owner", () => {
   const titles = [`${P}Rubicon ${stamp}`, `${P}Medici ${stamp}`, `${P}Last Dance ${stamp}`];
   const lemma = `${P}inflection ${stamp}`.toLowerCase();
   let ids: number[] = [];
+  let wordId = 0;
   let context: BrowserContext;
   let page: Page;
 
@@ -52,7 +57,8 @@ test.describe("owner", () => {
                                 note: "the date was 1434, not 1397" }),
       await addTestArsenalRef({ category: "sports", title: titles[2], room: "homies" }),
     ];
-    await addTestArsenalDrop(ids, await addTestArsenalWord(lemma));
+    wordId = await addTestArsenalWord(lemma);
+    await addTestArsenalDrop(ids, wordId);
     context = await browser.newContext(testInfo.project.use);
     await useE2eMarker(context, testInfo.project.use.baseURL!);
     page = await context.newPage();
@@ -121,6 +127,43 @@ test.describe("owner", () => {
     await expect(card(titles[1])).toHaveCount(1);
     await expect(page.getByTestId("arsenal-drop")).toHaveAttribute("aria-busy", "false");
     await expect.poll(async () => (await arsenalReactions(ids[1])).map((r) => r.reaction)).toEqual(["known", "none"]);
+  });
+
+  test("every reaction button shows a short label and keeps its accessible name, at 44 px", async () => {
+    await page.goto("/arsenal");
+    for (const prefix of ["word", "card"]) {
+      const group = page.getByTestId(`${prefix}-reactions`).first();
+      for (const [id, name, short] of [["love", "Love", "Love"], ["not-interested", "Not interested", "Not for me"],
+                                       ["known", "Already know it", "Know it"]]) {
+        const b = group.getByTestId(`${prefix}-${id}`);
+        await expect(b).toHaveAccessibleName(name);
+        await expect(b).toContainText(short);
+        const box = (await b.boundingBox())!;
+        expect(box.width).toBeGreaterThanOrEqual(44);
+        expect(box.height).toBeGreaterThanOrEqual(44);
+      }
+    }
+  });
+
+  test("Already know it on the Power Word hides it into the fold, and Undo brings it back", async () => {
+    await page.goto("/arsenal");
+    await page.getByTestId("word-known").click();
+    await expect(page.getByTestId("power-word")).toHaveCount(0);
+    await expect(page.getByTestId("arsenal-drop")).toHaveAttribute("aria-busy", "false");
+    await expect(page.getByTestId("arsenal-error")).toHaveCount(0);
+    await expect.poll(() => arsenalReactions(wordId, "word_id")).toEqual([{ reaction: "known", is_test: true }]);
+    // Excluded after a reload too, like a known reference; the cards stay.
+    await page.reload();
+    await expect(page.getByTestId("arsenal-card").first()).toBeVisible();
+    await expect(page.getByTestId("power-word")).toHaveCount(0);
+    const fold = page.getByTestId("arsenal-known");
+    await fold.getByRole("button", { name: /Already known/ }).click();
+    await expect(fold.getByTestId("known-word")).toContainText(lemma);
+    await fold.getByTestId("known-word").getByTestId("known-undo").click();
+    await expect(page.getByTestId("power-word-lemma")).toHaveText(lemma);
+    await expect(page.getByTestId("arsenal-drop")).toHaveAttribute("aria-busy", "false");
+    await expect.poll(async () => (await arsenalReactions(wordId, "word_id")).map((r) => r.reaction))
+      .toEqual(["known", "none"]);
   });
 
   test("the Unverified fold shows the reason, never a Checked tag", async () => {

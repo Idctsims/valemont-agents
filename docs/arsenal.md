@@ -360,6 +360,12 @@ One item per job, through `run_tracked`, so it has its own `job_health` row and 
 - **Found by `tests_live`:** `ledger.arsenal_near_dup` bound its threshold as double precision against db/054's `real`. The first batch would have failed on its first card. Fixed with a `::real` cast.
 - **`tests/`: 1021 OK.** Commit 1451296's message says 1022; that was a miscount.
 - **`tests_live -v`, metered: 409 tests OK, 0 skipped, ~2.43 MB read** (2,492 KB). That includes `test_arsenal_sql`, 17 tests.
+- **Screenshot gate, phone Night: conditionally approved (owner, Oct 16). Fixes before merge:**
+  1. `screens-arsenal` hides the fixed dock during the capture only (`page.screenshot`'s `style`). The app's dock is unchanged.
+  2. The reaction buttons show short labels under the icons: Love / Not for me / Know it. Their accessible names are unchanged (Love / Not interested / Already know it). Tokens only; each button is at least 44 px.
+  3. The Power Word gets Already know it. It moves into the "Already known" fold, with Undo. The picker already excluded a known word, as it excludes a known reference (db/054, no migration). That is now tested: `test_a_known_word_is_never_picked_like_a_known_ref`, plus two new `arsenal.spec` tests (word known/undo; labels, names and 44 px).
+  4. Fold chevrons: an empty Past drops or Unverified fold is locked closed (`Fold lockWhenEmpty`). Every fold now shows the same right-pointing chevron when closed. Before, the gate had opened the empty folds (down chevron, a double rule) and left the filled ones closed.
+- **After the fixes, `tests_live -v`, metered (both `psycopg.connect` and `Connection.connect`): 410 OK, 0 skipped, ~2.64 MB read** (2,699 KB, 735 s). `tests/`: 1021 OK.
 
 ## 8. Results
 

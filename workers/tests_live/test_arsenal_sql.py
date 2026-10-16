@@ -13,6 +13,8 @@
   reactions move nothing.
 * TEST ROWS are invisible to every real selector: the worker's pool status,
   the real picker, ctx_arsenal and ctx_arsenal_brief, the weights.
+* THE PICKER never takes a reference or a Power Word whose latest reaction
+  is Already know it; taking it back ('none') makes it eligible again.
 * the worker's queries (core/ledger.py), each run here exactly as written.
 
 Every test runs inside ONE transaction that is always rolled back and reads
@@ -344,6 +346,39 @@ class TestRowsHidden(ArsenalSqlCase):
                     self.assertEqual(flags, (want, True, 3, want))
             # The same date again returns the real drop; a test pick is always new.
             self.assertEqual(ledger.arsenal_pick_drop(date(2001, 2, 1), conn=conn), real)
+
+    def _only_mine_eligible(self, conn: psycopg.Connection) -> None:
+        """Every other eligible TEST pool row (e2e leftovers) is reacted
+        'known' inside this rolled-back transaction, so the picker can only
+        take this test's own rows. Ids only."""
+        react = "INSERT INTO arsenal_reactions (owner_id, {col}, reaction) SELECT %s, id, 'known' FROM {table} " \
+                "WHERE is_test AND status = 'pool' AND verification IN ('verified', 'corrected')"
+        conn.execute(react.format(col="ref_id", table="arsenal_refs"), (self.owner,))
+        conn.execute(react.format(col="word_id", table="arsenal_words"), (self.owner,))
+
+    def test_a_known_word_is_never_picked_like_a_known_ref(self) -> None:
+        """Already know it (the latest reaction) takes a Power Word out of
+        the picker exactly as it takes a reference out; 'none' puts it back."""
+        with _rolled_back() as conn:
+            self._only_mine_eligible(conn)
+            refs = [self.ref(conn, c, test=True) for c in ("finance_business", "sports", "film_tv")]
+            w = self.word(conn, test=True)
+            react = "INSERT INTO arsenal_reactions (owner_id, ref_id, word_id, reaction) VALUES (%s, %s, %s, %s)"
+            pick = "SELECT arsenal_pick_drop('2001-04-01', true)"
+            # The word.
+            conn.execute(react, (self.owner, None, w, "known"))
+            self.refused(conn, pick, None, "no eligible word")
+            conn.execute(react, (self.owner, None, w, "none"))
+            with conn.transaction(force_rollback=True):
+                did = conn.execute(pick).fetchone()[0]
+                self.assertEqual(conn.execute("SELECT word_id FROM arsenal_drops WHERE id = %s", (did,)).fetchone()[0], w)
+            # A reference, the same way.
+            conn.execute(react, (self.owner, refs[1], None, "known"))
+            self.refused(conn, pick, None, "the verified pool is short (2 categories")
+            conn.execute(react, (self.owner, refs[1], None, "none"))
+            did = conn.execute(pick).fetchone()[0]
+            self.assertEqual(sorted(conn.execute("SELECT ref_ids FROM arsenal_drops WHERE id = %s",
+                                                 (did,)).fetchone()[0]), sorted(refs))
 
     def test_no_slot_repeats_yesterdays_category(self) -> None:
         with _rolled_back() as conn:
