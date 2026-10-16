@@ -367,10 +367,10 @@ Thirteen build chats after this one, each split into phases with a test you run 
      - [x] A title page shows the trailer inline and "Tonight on your services" first, correct for at least 3 titles checked by hand (owner, Oct 15)
      - [x] Want → Watching → Finished works; Finished records the date (owner; `e2e/screening.spec.ts`)
      - [x] Upcoming shows the next episode or release for the watchlist (owner, Oct 15)
-     - [ ] The Trailers tab shows new trailers within one cycle of posting, most matched to a title: **pending**. YouTube's feed server has 404'd every channel feed since ~23:50 UTC Oct 14 (Railway and locally; channel pages fine), so nothing has been ingested. The outage collapse logged it as one state with 0 per-source failures. Matching measured offline on the six saved feeds against live TMDB: 14 of 18 matched.
+     - [x] The Trailers tab shows new trailers within one cycle of posting, most matched to a title: **CLOSED GREEN (owner, Oct 16).** YouTube's feeds came back by 05:20 UTC Oct 15 (the outage never reached 24 h). Of 36 trailers to 00:10 UTC Oct 16, 23 matched to a title; 29 were first-fetch backfill or seeded; all 7 live ones were first seen within one cycle (median 21.2 min, max 21.4).
      - [x] Wags answers "what's on my watchlist and what's coming up?" (owner, Oct 15)
      - [x] TMDB_READ_TOKEN never in a client bundle (lint `check:tmdb-token`; a scan of the built client bundle: 0 of 42 files) and never printed
-     - [ ] Worker RAM at rest within ~15 MB of Phase 2's 138 MB: **pending** (120 MB shortly after the Oct 15 boot)
+     - [ ] Worker RAM at rest: **pending**, on the owner's rule (Oct 16): the 15 MB band is a leak check, not a budget; a flat 6+ hour curve at rest on #50's worker is the new baseline and closes this item and Phase 4's; investigate only past ~160 MB at rest (CLAUDE.md, Chat 4 Phase 4).
      - Screenshot gate: green (owner, Oct 15).
    - [ ] Recommendations reflect the six seed shows on day one and shift after reactions (Phase 4)
 
