@@ -976,11 +976,30 @@ class BriefLine(unittest.TestCase):
     def test_one_line_in_ai_and_fallback_briefs(self) -> None:
         self.assertIn("arsenal_brief", brief.ONE_LINE_SECTIONS)
         lines = brief.FALLBACK_SECTIONS["arsenal_brief"](self.PAYLOAD, "2026-10-16")
-        self.assertEqual(lines, ["Power Word: asymmetric (uneven on purpose). Deploy Crossing the Rubicon in the boardroom."])
+        self.assertEqual(lines, ["Power Word: asymmetric. Strongest reference: Crossing the Rubicon, for the boardroom."])
         homies = {"arsenal_brief": {"power_word": "inflection", "ref": {"title": "Mamba Mentality", "room": "homies"}}}
         self.assertEqual(brief.FALLBACK_SECTIONS["arsenal_brief"](homies, "x"),
-                         ["Power Word: inflection. Deploy Mamba Mentality with the homies."])
+                         ["Power Word: inflection. Strongest reference: Mamba Mentality, with the homies."])
         self.assertEqual(brief.FALLBACK_SECTIONS["arsenal_brief"]({"arsenal_brief": {}}, "x"), [])
+
+    def test_the_ai_brief_carries_the_data_line_never_the_models(self) -> None:
+        """Owner, 2026-10-16: brief 1018's line named the word, dropped the
+        reference and closed with "Test every move today against it"."""
+        model_body = {"headline": "A day.", "one_move": "Ship it.", "sections": [
+            {"key": "arsenal_brief", "title": "x",
+             "lines": ["Power word: asymmetric. Far more upside than downside. Test every move today against it."]}]}
+        response = SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=json.dumps(model_body))])
+        payload = {**self.PAYLOAD, "local_date": "2026-10-16"}
+        with mock.patch.object(brief, "prompt", lambda p, s: ("system", "user")), \
+                mock.patch.object(brief, "validate", lambda body, keys: body), \
+                mock.patch.object(ai, "complete", lambda **kw: response):
+            got = brief.generate_ai(payload, [ledger.BriefSection("arsenal_brief", "Arsenal", 60)])
+        (section,) = got.body["sections"]
+        self.assertEqual(section["lines"],
+                         ["Power Word: asymmetric. Strongest reference: Crossing the Rubicon, for the boardroom."])
+        for exhortation in ("Test every move", "today against it"):
+            self.assertNotIn(exhortation, section["lines"][0])
+        self.assertIn("arsenal_brief", brief.DATA_LINE_SECTIONS)
 
     def test_the_section_is_registered_in_the_migration(self) -> None:
         sql = MIGRATION.read_text(encoding="utf-8")

@@ -283,6 +283,8 @@ def generate_ai(payload: Mapping[str, Any], sections: Sequence[ledger.BriefSecti
             s["title"] = titles[s["key"]]
             if s["key"] in ONE_LINE_SECTIONS:
                 s["lines"] = s["lines"][:1]
+            if s["key"] in DATA_LINE_SECTIONS:
+                s["lines"] = FALLBACK_SECTIONS[s["key"]](payload, str(payload.get("local_date"))) or s["lines"]
         usage_id, model = recorded[-1] if recorded else (None, MODEL)
         return Generated(body, model, usage_id, False, word_count(body))
     raise BriefInvalid(f"invalid twice: {last_error}")
@@ -407,26 +409,32 @@ def _screening_lines(t: Mapping[str, Any]) -> list[str]:
 
 def _arsenal_lines(t: Mapping[str, Any]) -> list[str]:
     """One line (db/054 ctx_arsenal_brief): today's Power Word and the
-    strongest of today's three references with its room."""
+    strongest of today's three references with its room, and nothing else
+    (owner, 2026-10-16: name both, no closing exhortation). It is built
+    from the data in the AI brief too (DATA_LINE_SECTIONS)."""
     parts = []
     if t.get("power_word"):
-        meaning = f" ({t['word_meaning']})" if t.get("word_meaning") else ""
-        parts.append(f"Power Word: {t['power_word']}{meaning}.")
+        parts.append(f"Power Word: {t['power_word']}.")
     ref = t.get("ref") or {}
     if ref.get("title"):
         where = ARSENAL_ROOM_PHRASES.get(str(ref.get("room")), "")
-        parts.append(f"Deploy {ref['title']}" + (f" {where}" if where else "") + ".")
+        parts.append(f"Strongest reference: {ref['title']}" + (f", {where}" if where else "") + ".")
     return [" ".join(parts)] if parts else []
 
 
-ARSENAL_ROOM_PHRASES = {"boardroom": "in the boardroom", "pitch": "in the pitch", "negotiation": "in the negotiation",
-                        "homies": "with the homies"}
+ARSENAL_ROOM_PHRASES = {"boardroom": "for the boardroom", "pitch": "for the pitch",
+                        "negotiation": "for the negotiation", "homies": "with the homies"}
 
 
 #: Sections held to one line, however many the model wrote (owner,
 #: 2026-10-13: "one Tech line"; 2026-10-15: "the Brief's Screening line";
 #: Chat 5: "one short line" for the Arsenal).
 ONE_LINE_SECTIONS = frozenset({"tech_brief", "screening_brief", "arsenal_brief"})
+
+#: Sections whose line is always the data template, in the AI brief too: the
+#: model once wrote "Power word: asymmetric. … Test every move today against
+#: it." (brief 1018), dropping the reference and adding an exhortation.
+DATA_LINE_SECTIONS = frozenset({"arsenal_brief"})
 
 #: How the fallback words each section it knows. A later pillar adds one.
 FALLBACK_SECTIONS: dict[str, Callable[[Mapping[str, Any], str], list[str]]] = {
