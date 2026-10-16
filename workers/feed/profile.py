@@ -149,7 +149,9 @@ def profile_job(*, embed: Embed = embedder.embed) -> RebuildStats:
 
 
 def score_new_job(*, embed: Embed = embedder.embed) -> int:
-    """The feed_score system job: score stories with no score row yet. Once
+    """The feed_score system job: score stories with no score row yet, and
+    rescore any that gained a pillar since (a member from a new pillar
+    joined: its cross-in flag would be stale; owner, 2026-10-15). Once
     any profile exists, a pillar with none (Tech, the first time its stories
     arrive: db/045) gets its first one built here, so its stories are scored
     in the same cycle instead of waiting for the 04:00 rebuild. With no
@@ -167,7 +169,11 @@ def score_new_job(*, embed: Embed = embedder.embed) -> int:
         if built:
             log.info("feed score: first profile for %s: %s", ", ".join(sorted(built)), stats.line())
     try:
-        stories = ledger.feed_stories_to_score(rank.WINDOW_H, MAX_ATTEMPTS, unscored=True)
+        # New stories, and stories that gained a pillar since they were
+        # scored (a stale cross-in flag; owner, 2026-10-15): rescored in the
+        # same ingest chain.
+        stories = ledger.feed_stories_to_score(rank.WINDOW_H, MAX_ATTEMPTS, unscored=True,
+                                               pillars=sorted(profiles))
         if not stories:
             return 0
         n = score_stories(stories, profiles, ids, follows_from(ledger.feed_follows()))

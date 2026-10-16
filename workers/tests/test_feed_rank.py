@@ -338,3 +338,16 @@ class TenLoves(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GainedPillar(unittest.TestCase):
+    """Story 15462 (2026-10-15): scored as a tier-1 Sports cross-in on Home,
+    then a Home item joined. Rescored with its new pillars, it is native in
+    both: no cross-in left for /news to drop."""
+
+    def test_a_story_in_both_pillars_is_native_in_both(self) -> None:
+        follows = [rank.Follow("Test Star", 1, None, False, ("test star",), "nba", False, "person")]
+        before = rank.StoryIn(1, ("sports",), "nba", "Test Star scores 40", ("Test Star",), (), "src", (0.0,))
+        after = rank.StoryIn(1, ("home", "sports"), "nba", "Test Star scores 40", ("Test Star",), (), "src", (0.0,))
+        self.assertEqual(sorted(rank.placements(before, follows)), [("home", True), ("sports", False)])
+        self.assertEqual(sorted(rank.placements(after, follows)), [("home", False), ("sports", False)])

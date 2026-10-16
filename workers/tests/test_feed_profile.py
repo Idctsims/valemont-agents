@@ -42,6 +42,7 @@ class StubLedger:
         self.profiles: list[rank.Profile] = []
         self.scores: list[tuple[list[rank.Score], dict]] = []
         self.unscored_flags: list[bool] = []
+        self.to_score_pillars: list[list[str]] = []
         self.built_today = False
         self.latest: dict[str, ledger.ProfileRow] = {}
         self.signals: dict[str, list[ledger.ReactionSignal]] = {"home": [], "sports": [], "tech": []}
@@ -83,8 +84,10 @@ class StubLedger:
         self.profiles.append(p)
         return 100 + len(self.profiles)
 
-    def _to_score(self, hours: int, max_attempts: int, *, unscored: bool) -> list[ledger.RankStory]:
+    def _to_score(self, hours: int, max_attempts: int, *, unscored: bool,
+                  pillars: tuple[str, ...] | list[str] = ()) -> list[ledger.RankStory]:
         self.unscored_flags.append(unscored)
+        self.to_score_pillars.append(list(pillars))
         return self.stories
 
 
@@ -161,6 +164,9 @@ class ScoreNew(unittest.TestCase):
             7, "home", (1.1,) * DIMS, 40, vec(0), None, {}, {}, {}, 0, 0, 0, 0, 1.0, 0.0, None)}
         n = profile.score_new_job(embed=fake_embed)
         self.assertEqual(self.db.unscored_flags, [True])
+        # A story that gained a pillar is rescored too, in the pillars that
+        # have a profile (owner, 2026-10-15; story 15462).
+        self.assertEqual(self.db.to_score_pillars, [["home"]])
         scores, ids = self.db.scores[0]
         self.assertEqual(ids, {"home": 7})
         self.assertEqual(n, len(scores))
