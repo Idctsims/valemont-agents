@@ -2113,8 +2113,12 @@ def feed_candidate_window(hours: int, *, is_test: bool = False, meter: list[int]
 
 
 def _row_bytes(values: Sequence[Any]) -> int:
-    """Approximate wire bytes of a fetched row: each value's text length."""
-    return sum(len(str(v)) for v in values if v is not None)
+    """Approximate wire bytes of a fetched row: a binary halfvec (an array
+    from _HalfvecBinaryLoader) at its wire size, 4 + 2 a dimension; anything
+    else at its text length. str() of a float32 array is ~20 characters a
+    dimension, which overstated the boot load 8x (26 MB logged, 3.2 MB on
+    the wire by core/egress.py, 2026-10-16)."""
+    return sum(4 + 2 * len(v) if isinstance(v, array) else len(str(v)) for v in values if v is not None)
 
 
 @dataclass(frozen=True)
@@ -3029,18 +3033,31 @@ FEED_TO_SCORE_SQL: Final = f"""
        AND i.url IS NOT NULL
        AND st.first_seen_at > now() - make_interval(hours => %(hours)s)
        AND (st.summarized_at IS NOT NULL OR st.summary_attempts >= %(max_attempts)s)
-       AND (NOT %(unscored)s OR NOT EXISTS (SELECT 1 FROM story_scores x WHERE x.story_id = st.id))
+       AND (NOT %(unscored)s
+            OR NOT EXISTS (SELECT 1 FROM story_scores x WHERE x.story_id = st.id)
+            -- A story that GAINED a pillar (an item from a new pillar joined):
+            -- one of its scorable pillars has no native score yet, so its
+            -- cross-in flag there is stale, or it is missing from that
+            -- pillar altogether (owner, 2026-10-15; story 15462).
+            OR EXISTS (SELECT 1 FROM unnest(st.pillars) AS p
+                        WHERE p = ANY (%(pillars)s::text[])
+                          AND NOT EXISTS (SELECT 1 FROM v_story_scores_latest sc
+                                           WHERE sc.story_id = st.id AND sc.pillar = p
+                                             AND NOT sc.cross_pillar)))
      ORDER BY st.id
 """
 
 
-def feed_stories_to_score(hours: int, max_attempts: int, *, unscored: bool,
+def feed_stories_to_score(hours: int, max_attempts: int, *, unscored: bool, pillars: Sequence[str] = (),
                           conn: psycopg.Connection | None = None) -> list[RankStory]:
-    """Streamed row by row (no fetchall), vectors straight to float32."""
+    """Streamed row by row (no fetchall), vectors straight to float32.
+    `unscored`: only stories with no score yet, or with a pillar among
+    `pillars` (those with a profile) that has no native score: a story that
+    gained a pillar since it was scored."""
     with _brief_conn(conn) as c, c.cursor() as cur:
         _binary_vectors(c, cur)
-        cur.execute(FEED_TO_SCORE_SQL, {"hours": hours, "max_attempts": max_attempts, "unscored": unscored},
-                    binary=True)
+        cur.execute(FEED_TO_SCORE_SQL, {"hours": hours, "max_attempts": max_attempts, "unscored": unscored,
+                                        "pillars": list(pillars)}, binary=True)
         return [_rank_story(r) for r in cur]
 
 

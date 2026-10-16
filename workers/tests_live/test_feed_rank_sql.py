@@ -196,6 +196,48 @@ class WorkerQueries(RankSqlCase):
             self.assertEqual((s.reaction, s.opened, s.story.title), ("love", True, "Real reacted"))
             self.assertAlmostEqual(s.story.vec[7], 1.0, places=3)
 
+    def test_a_story_that_gains_a_pillar_is_rescored_and_stops_being_a_cross_in(self) -> None:
+        """Story 15462's path (2026-10-15): a Sports story scored natively in
+        Sports and as a tier-1 cross-in on Home; a Home item then joins it.
+        feed_score's selection picks it up, the real scorer rescores it, and
+        Home's flag is native: it stays on /news (cap 0) and the twin agrees."""
+        from feed import profile as feed_profile
+        from feed import rank
+        with _rolled_back() as conn:
+            sports, home = self.source(conn, ("sports",), sport="nba"), self.source(conn)
+            sid = self.story(conn, sports, title="Gained pillar story", vec=unit(9))
+            self.score(conn, sid, 10.0, pillar="sports")
+            self.score(conn, sid, 10.0, pillar="home", cross=True)
+
+            def to_score() -> set[int]:
+                return {s.id for s in ledger.feed_stories_to_score(72, 2, unscored=True,
+                                                                   pillars=["home", "sports", "tech"], conn=conn)}
+
+            self.assertNotIn(sid, to_score())  # scored, and every pillar it has holds a native score
+            item = ledger.FeedItemIn(f"tl:{uuid.uuid4().hex}", f"https://tests-live.invalid/{uuid.uuid4().hex}",
+                                     None, "Gained pillar story, Home's take", None,
+                                     datetime.now(timezone.utc), False)
+            ledger.feed_join_story(home, item, unit(9), unit(9), sid, seed=None, logged=[], conn=conn)
+            self.assertEqual(sorted(conn.execute("SELECT pillars FROM stories WHERE id = %s", (sid,)).fetchone()[0]),
+                             ["home", "sports"])
+            self.assertIn(sid, to_score())  # Home's only score row is the stale cross-in
+            # The rescore feed_score runs, on the real latest profiles.
+            latest = ledger.feed_latest_profiles(conn=conn)
+            if not {"home", "sports"} <= set(latest):
+                self.skipTest("no Home or Sports profile yet")
+            story = next(s for s in ledger.feed_stories_to_score(72, 2, unscored=True, pillars=sorted(latest),
+                                                                 conn=conn) if s.id == sid)
+            scores = rank.score_all([feed_profile.story_from(story)],
+                                    {p: feed_profile.profile_from(r) for p, r in latest.items()}, [])
+            self.assertEqual(sorted((s.pillar, s.cross_pillar) for s in scores), [("home", False), ("sports", False)])
+            ledger.feed_insert_scores(scores, {p: r.id for p, r in latest.items()}, conn=conn)
+            self.assertFalse(conn.execute("SELECT cross_pillar FROM v_story_scores_latest "
+                                          "WHERE story_id = %s AND pillar = 'home'", (sid,)).fetchone()[0])
+            self.assertNotIn(sid, to_score())
+            row = conn.execute("SELECT cross_pillar FROM feed_for_you('home', 100000, 0, NULL, NULL, 0) WHERE id = %s",
+                               (sid,)).fetchone()
+            self.assertEqual(row, (False,))  # on /news, and not as a cross-in
+
     def test_stories_to_score(self) -> None:
         with _rolled_back() as conn:
             src = self.source(conn)
@@ -212,7 +254,7 @@ class WorkerQueries(RankSqlCase):
                 # vectors (egress fix 4, 2026-10-15).
                 return {r[0] for r in conn.execute(
                     f"SELECT x.id FROM ({ledger.FEED_TO_SCORE_SQL}) x WHERE x.id = ANY (%(ids)s)",
-                    {"hours": 72, "max_attempts": 2, "unscored": unscored,
+                    {"hours": 72, "max_attempts": 2, "unscored": unscored, "pillars": ["home", "sports", "tech"],
                      "ids": [done, pending, old, test]})}
 
             self.assertIn(done, ids(True))

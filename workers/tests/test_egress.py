@@ -193,3 +193,8 @@ class TechNeedsRank(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CandidateLogBytes(unittest.TestCase):
+    def test_a_binary_vector_counts_at_its_wire_size(self) -> None:
+        self.assertEqual(ledger._row_bytes((12, "abc", array("f", [0.1] * 384), None)), 2 + 3 + 772)
