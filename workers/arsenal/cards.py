@@ -34,9 +34,9 @@ CATEGORY_NOTES: Mapping[str, str] = {
     "literature_myth": "only when instantly recognizable",
 }
 
-#: The weekly pool (docs/arsenal.md §4).
-POOL_REFS = 30
-POOL_WORDS = 10
+#: The weekly pool (docs/arsenal.md §4; 36 and 12 from 2026-10-16, owner).
+POOL_REFS = 36
+POOL_WORDS = 12
 #: The drop's synchronous top-up.
 TOPUP_REFS = 6
 TOPUP_WORDS = 2
@@ -85,6 +85,8 @@ class PromptContext:
     seeds: Sequence[tuple[str, str, str]]
     recent_keys: Sequence[str]
     recent_lemmas: Sequence[str]
+    #: The owner's known words (db/055 word seeds): never a Power Word.
+    known_lemmas: Sequence[str] = ()
 
 
 RULES = """\
@@ -97,13 +99,15 @@ FOR EACH REFERENCE
 - source_kind: "wikiquote" when the card carries a quote from a film, series or person with a Wikiquote page; "wikipedia" otherwise; "other" only when neither has a page.
 - source_page: the exact English Wikipedia or Wikiquote page title that supports the origin (for a film, the film's page: "Heat (1995 film)").
 - quote and quote_by: null unless you are certain of the exact words; at most 15 words.
+- A film or TV quote credits the character AND the work, never the real person alone: quote_by "Sean Parker (as written in The Social Network)".
+- Check the ending: if the reference's real outcome undercuts the deploy_line (Thermopylae was a total defeat, so it is never a pitch line about winning), reframe the line to fit what really happened, or choose another reference.
 - Never repeat a seed or a recent key, and never write the same reference under a different name.
 
 FOR EACH POWER WORD
 - lemma: one English word, lowercase.
 - meaning: what it means, in plain words.
 - sentence: one sentence Tsims would say in the room, with the word in it.
-- Never a recent word below.
+- Never a known word or a recent word below.
 """
 
 
@@ -114,9 +118,12 @@ def system_blocks(ctx: PromptContext) -> list[dict[str, Any]]:
     taste = "\n".join(f"- {title} ({work}) [{key}]" for key, title, work in ctx.seeds)
     recent = ", ".join(ctx.recent_keys) or "(none yet)"
     lemmas = ", ".join(ctx.recent_lemmas) or "(none yet)"
+    known = ", ".join(ctx.known_lemmas) or "(none)"
     rules = RULES.format(categories=", ".join(f"{c} ({CATEGORY_NOTES[c]})" for c in CATEGORIES))
     lists = ("THE OWNER'S CANON: taste to match, NEVER to repeat\n" + taste
-             + "\n\nRECENT KEYS: never repeat\n" + recent + "\n\nRECENT POWER WORDS: never repeat\n" + lemmas)
+             + "\n\nRECENT KEYS: never repeat\n" + recent
+             + "\n\nKNOWN POWER WORDS: the owner already uses these; the register to match, never a Power Word\n"
+             + known + "\n\nRECENT POWER WORDS: never repeat\n" + lemmas)
     return [
         {"type": "text", "text": voice.text},
         {"type": "text", "text": rules},
@@ -219,6 +226,29 @@ def clean_quote(raw: Any) -> str | None:
     return q
 
 
+_YEAR_PARENS = re.compile(r"\s*\([^()]*\)\s*$")
+CREDIT = "as written in"
+
+
+def credit_film_quote(quote_by: str | None, source_work: str) -> str | None:
+    """A film or TV quote credits the character AND the work, never the real
+    person alone (owner, 2026-10-16): "Sean Parker" from "The Social Network
+    (2010)" becomes "Sean Parker (as written in The Social Network)". None
+    when there is no speaker to credit, or the credit will not fit
+    quote_by's 80 characters: the quote then goes, the card stays."""
+    speaker = _clean(quote_by)
+    work = source_work.strip()
+    while (m := _YEAR_PARENS.search(work)) and m.start() > 0:
+        work = work[:m.start()].strip()
+    if not speaker or not work:
+        return None
+    if CREDIT in speaker.lower() or work.lower() in speaker.lower():
+        credited = speaker
+    else:
+        credited = f"{speaker} ({CREDIT} {work})"
+    return credited if len(credited) <= 80 else None
+
+
 def validate_ref(item: Any, blocked: set[str]) -> tuple[ledger.ArsenalCardIn | None, str | None]:
     """(card, None) when kept, else (None, why)."""
     if not isinstance(item, Mapping):
@@ -241,6 +271,10 @@ def validate_ref(item: Any, blocked: set[str]) -> tuple[ledger.ArsenalCardIn | N
         return None, f"{', '.join(bad)} missing or out of bounds"
     quote = clean_quote(item.get("quote"))
     quote_by = _clean(item.get("quote_by"))[:80] or None if quote else None
+    if quote and category == "film_tv":
+        quote_by = credit_film_quote(item.get("quote_by"), fields["source_work"])
+        if quote_by is None:
+            quote = None
     page = _clean(item.get("source_page"))[:200] or None
     return ledger.ArsenalCardIn(
         canonical_key=key, category=category, title=fields["title"], origin=fields["origin"],

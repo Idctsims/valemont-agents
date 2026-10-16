@@ -723,10 +723,10 @@ export async function addTestArsenalDrop(refIds: number[], wordId: number): Prom
   });
 }
 
-/** A reference's arsenal_reactions rows, oldest first, with is_test. */
-export async function arsenalReactions(refId: number): Promise<{ reaction: string; is_test: boolean }[]> {
+/** A reference's (or, with "word_id", a Power Word's) arsenal_reactions rows, oldest first, with is_test. */
+export async function arsenalReactions(id: number, column: "ref_id" | "word_id" = "ref_id"): Promise<{ reaction: string; is_test: boolean }[]> {
   return asOwner(async (supabase) => {
-    const { data, error } = await supabase.from("arsenal_reactions").select("reaction, is_test").eq("ref_id", refId).order("id");
+    const { data, error } = await supabase.from("arsenal_reactions").select("reaction, is_test").eq(column, id).order("id");
     if (error) throw new Error(`arsenal reaction read failed: ${error.message}`);
     return (data ?? []) as { reaction: string; is_test: boolean }[];
   });

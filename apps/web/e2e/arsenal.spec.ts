@@ -15,7 +15,13 @@ import {
 //     target, so it never trains the real weights) and persists;
 //   * Already know it hides that reference into the "Already known" fold,
 //     and Undo brings it back;
-//   * the Unverified fold shows the reason, never a Checked tag;
+//   * every reaction button shows its short label (Love / Not for me /
+//     Know it), its accessible name contains it, it is at least 44 px,
+//     and the reactions sit on their own row below the room chip;
+//   * the Power Word's Already know it does the same: hidden into the
+//     fold, still hidden after a reload, Undo restores it;
+//   * the Unverified fold starts closed and shows the reason, muted (never
+//     danger red), two lines with "more", never a Checked tag;
 //   * a test drop is invisible without the marker.
 // Test rows are permanent (append-only); names carry the run prefix.
 //
@@ -38,6 +44,7 @@ test.describe("owner", () => {
   const titles = [`${P}Rubicon ${stamp}`, `${P}Medici ${stamp}`, `${P}Last Dance ${stamp}`];
   const lemma = `${P}inflection ${stamp}`.toLowerCase();
   let ids: number[] = [];
+  let wordId = 0;
   let context: BrowserContext;
   let page: Page;
 
@@ -50,9 +57,10 @@ test.describe("owner", () => {
                                 quote: "The die is cast." }),
       await addTestArsenalRef({ category: "finance_business", title: titles[1], room: "pitch", verification: "corrected",
                                 note: "the date was 1434, not 1397" }),
-      await addTestArsenalRef({ category: "sports", title: titles[2], room: "homies" }),
+      await addTestArsenalRef({ category: "film_tv", title: titles[2], room: "homies", quote: "Show me the money." }),
     ];
-    await addTestArsenalDrop(ids, await addTestArsenalWord(lemma));
+    wordId = await addTestArsenalWord(lemma);
+    await addTestArsenalDrop(ids, wordId);
     context = await browser.newContext(testInfo.project.use);
     await useE2eMarker(context, testInfo.project.use.baseURL!);
     page = await context.newPage();
@@ -86,6 +94,10 @@ test.describe("owner", () => {
     await expect(first.getByTestId("card-check")).toHaveText("Checked");
     await expect(card(titles[1]).getByTestId("card-check")).toHaveText("Corrected");
     await expect(card(titles[2]).getByTestId("room-chip")).toHaveText("Homies");
+    // A film or TV quote credits the character AND the work, at render time;
+    // other quotes keep their speaker as written.
+    await expect(card(titles[2]).getByTestId("card-quote-by")).toHaveText("— A test speaker (as written in Test work)");
+    await expect(first.getByTestId("card-quote-by")).toHaveText("— A test speaker");
   });
 
   test("a reaction writes, reads back as a test reaction, and persists", async () => {
@@ -123,17 +135,79 @@ test.describe("owner", () => {
     await expect.poll(async () => (await arsenalReactions(ids[1])).map((r) => r.reaction)).toEqual(["known", "none"]);
   });
 
+  test("every reaction button shows a short label and keeps its accessible name, at 44 px", async () => {
+    await page.goto("/arsenal");
+    for (const prefix of ["word", "card"]) {
+      const group = page.getByTestId(`${prefix}-reactions`).first();
+      for (const [id, name, short] of [["love", "Love", "Love"], ["not-interested", "Not for me", "Not for me"],
+                                       ["known", "Already know it", "Know it"]]) {
+        const b = group.getByTestId(`${prefix}-${id}`);
+        await expect(b).toHaveAccessibleName(name);
+        await expect(b).toContainText(short);
+        const box = (await b.boundingBox())!;
+        expect(box.width).toBeGreaterThanOrEqual(44);
+        expect(box.height).toBeGreaterThanOrEqual(44);
+      }
+    }
+    // Their own row: below the room chip (and Source), never beside it.
+    for (const scope of [page.getByTestId("power-word"), page.getByTestId("arsenal-card").first()]) {
+      const chip = (await scope.getByTestId("room-chip").boundingBox())!;
+      const group = (await scope.locator("[role=group]").boundingBox())!;
+      expect(group.y).toBeGreaterThanOrEqual(chip.y + chip.height);
+    }
+  });
+
+  test("Already know it on the Power Word hides it into the fold, and Undo brings it back", async () => {
+    await page.goto("/arsenal");
+    await page.getByTestId("word-known").click();
+    await expect(page.getByTestId("power-word")).toHaveCount(0);
+    await expect(page.getByTestId("arsenal-drop")).toHaveAttribute("aria-busy", "false");
+    await expect(page.getByTestId("arsenal-error")).toHaveCount(0);
+    await expect.poll(() => arsenalReactions(wordId, "word_id")).toEqual([{ reaction: "known", is_test: true }]);
+    // Excluded after a reload too, like a known reference; the cards stay.
+    await page.reload();
+    await expect(page.getByTestId("arsenal-card").first()).toBeVisible();
+    await expect(page.getByTestId("power-word")).toHaveCount(0);
+    const fold = page.getByTestId("arsenal-known");
+    await fold.getByRole("button", { name: /Already known/ }).click();
+    await expect(fold.getByTestId("known-word")).toContainText(lemma);
+    await fold.getByTestId("known-word").getByTestId("known-undo").click();
+    await expect(page.getByTestId("power-word-lemma")).toHaveText(lemma);
+    await expect(page.getByTestId("arsenal-drop")).toHaveAttribute("aria-busy", "false");
+    await expect.poll(async () => (await arsenalReactions(wordId, "word_id")).map((r) => r.reaction))
+      .toEqual(["known", "none"]);
+  });
+
   test("the Unverified fold shows the reason, never a Checked tag", async () => {
     const title = `${P}unverified ${stamp}`;
     await addTestArsenalRef({ category: "film_tv", title, room: "pitch", verification: "unverified",
                               note: "contradicted: the source names a different film" });
+    const long = `${P}long ${stamp}`;
+    await addTestArsenalRef({ category: "film_tv", title: long, room: "pitch", verification: "unverified",
+                              note: "insufficient: " + "the excerpt covers the film's release and cast but never the scene ".repeat(5).trim() });
     await page.goto("/arsenal");
     const fold = page.getByTestId("arsenal-unverified");
-    await fold.getByRole("button", { name: /Unverified/ }).click();
+    const toggle = fold.getByRole("button", { name: /Unverified/ });
+    // Starts closed.
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await toggle.click();
     const row = fold.getByTestId("unverified-ref").filter({ hasText: title });
     await expect(row).toHaveCount(1);
-    await expect(row.getByTestId("unverified-reason")).toHaveText("Not checked: contradicted: the source names a different film");
+    const reason = row.getByTestId("unverified-reason");
+    await expect(reason).toHaveText("Not checked: contradicted: the source names a different film");
+    // Muted, never danger red; a short reason has no "more".
+    await expect(reason).toHaveClass(/text-text-muted/);
+    await expect(reason).not.toHaveClass(/text-danger/);
+    await expect(row.getByTestId("unverified-more")).toHaveCount(0);
     await expect(row.getByTestId("card-check")).toHaveCount(0);
+    // A long reason is clamped to two lines with "more", which shows it all.
+    const longRow = fold.getByTestId("unverified-ref").filter({ hasText: long });
+    const longReason = longRow.getByTestId("unverified-reason");
+    const lineHeight = await longReason.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight));
+    expect((await longReason.boundingBox())!.height).toBeLessThanOrEqual(lineHeight * 2 + 1);
+    await longRow.getByTestId("unverified-more").click();
+    expect((await longReason.boundingBox())!.height).toBeGreaterThan(lineHeight * 2 + 1);
+    await expect(longRow.getByTestId("unverified-more")).toHaveText("less");
     // Never one of today's cards.
     await expect(card(title)).toHaveCount(0);
   });

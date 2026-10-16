@@ -38,14 +38,16 @@ RESUBMIT_AFTER = timedelta(days=6)
 #: Seven days of drops.
 MIN_REFS = 21
 MIN_WORDS = 7
-REFS_MAX_TOKENS = 12_000
+#: The first batch's 30 references took 7,352 output tokens; 36 need ~8,800.
+REFS_MAX_TOKENS = 14_000
 WORDS_MAX_TOKENS = 3_000
 TOPUP_MAX_TOKENS = 5_000
 
 
 def context() -> cards.PromptContext:
     return cards.PromptContext(seeds=ledger.arsenal_seeds(), recent_keys=ledger.arsenal_recent_keys(60),
-                               recent_lemmas=ledger.arsenal_recent_lemmas(60))
+                               recent_lemmas=ledger.arsenal_recent_lemmas(60),
+                               known_lemmas=ledger.arsenal_seed_lemmas())
 
 
 def should_submit(status: ledger.ArsenalPoolStatus, now: datetime) -> tuple[bool, str]:

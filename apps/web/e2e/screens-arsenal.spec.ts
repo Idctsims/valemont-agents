@@ -18,15 +18,22 @@ test.skip(!hasOwner, "set E2E_OWNER_EMAIL and E2E_OWNER_PASSWORD to run");
 const DIR = "e2e/screenshots/chat5-p1";
 const THEMES = ["night", "day"] as const;
 
+// A full-page capture paints the fixed dock and the sticky phone header
+// wherever the viewport sat, i.e. mid-page (over card 1, inside the
+// Unverified fold). Both hidden for the capture only; the app is unchanged.
+const HIDE_CHROME = 'nav[aria-label="Dock"], header.sticky { visibility: hidden !important; }';
+
 async function snap(page: Page, name: string, phone: boolean, theme: string, fullPage = true) {
   const w = phone ? "390" : "1440";
   await page.waitForTimeout(400);
-  await page.screenshot({ path: `${DIR}/${name}-${w}-${theme}.png`, fullPage });
+  await page.screenshot({ path: `${DIR}/${name}-${w}-${theme}.png`, fullPage, style: HIDE_CHROME });
 }
 
+// Opens every fold that has rows; an empty one is locked closed (lockWhenEmpty).
 async function openFolds(page: Page) {
   for (const id of ["arsenal-past", "arsenal-unverified"]) {
     const button = page.getByTestId(id).getByRole("button").first();
+    if (await button.isDisabled()) continue;
     if ((await button.getAttribute("aria-expanded")) === "false") await button.click();
   }
 }
@@ -60,6 +67,7 @@ test("arsenal screens", async ({ page }, testInfo) => {
     await setTheme(page, theme);
     await page.goto("/arsenal");
     await expect(page.getByTestId("arsenal-card")).toHaveCount(3);
+    await openFolds(page);
     await snap(page, "arsenal-test-drop", phone, theme);
   }
 });

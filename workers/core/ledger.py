@@ -4393,17 +4393,21 @@ class ArsenalPoolStatus:
     open_batch: ArsenalOpenBatch | None
 
 
-#: tests_live runs this exact text.
+#: tests_live runs this exact text. A held item (db/055 arsenal_holds) is
+#: never ready: the picker skips it, so counting it would hide a short pool.
 ARSENAL_POOL_STATUS_SQL: Final = """
     SELECT
-        (SELECT count(*) FROM arsenal_refs
-          WHERE NOT is_test AND status = 'pool' AND verification IN ('verified', 'corrected')),
+        (SELECT count(*) FROM arsenal_refs r
+          WHERE NOT r.is_test AND r.status = 'pool' AND r.verification IN ('verified', 'corrected')
+            AND NOT EXISTS (SELECT 1 FROM arsenal_holds h WHERE h.ref_id = r.id)),
         (SELECT count(*) FROM arsenal_refs WHERE NOT is_test AND status = 'pool' AND verification = 'pending'),
-        (SELECT count(*) FROM arsenal_words
-          WHERE NOT is_test AND status = 'pool' AND verification IN ('verified', 'corrected')),
+        (SELECT count(*) FROM arsenal_words w
+          WHERE NOT w.is_test AND w.status = 'pool' AND w.verification IN ('verified', 'corrected')
+            AND NOT EXISTS (SELECT 1 FROM arsenal_holds h WHERE h.word_id = w.id)),
         (SELECT count(*) FROM arsenal_words WHERE NOT is_test AND status = 'pool' AND verification = 'pending'),
-        (SELECT coalesce(array_agg(DISTINCT category ORDER BY category), '{}') FROM arsenal_refs
-          WHERE NOT is_test AND status = 'pool' AND verification IN ('verified', 'corrected')),
+        (SELECT coalesce(array_agg(DISTINCT r.category ORDER BY r.category), '{}') FROM arsenal_refs r
+          WHERE NOT r.is_test AND r.status = 'pool' AND r.verification IN ('verified', 'corrected')
+            AND NOT EXISTS (SELECT 1 FROM arsenal_holds h WHERE h.ref_id = r.id)),
         (SELECT max(created_at) FROM arsenal_pool_runs WHERE NOT is_test AND kind = 'batch' AND status = 'submitted')
 """
 
@@ -4444,6 +4448,46 @@ def arsenal_recent_lemmas(limit: int = 60, *, conn: psycopg.Connection | None = 
     with _brief_conn(conn) as c:
         return [r[0] for r in c.execute(
             "SELECT lemma FROM arsenal_words WHERE NOT is_test ORDER BY id DESC LIMIT %s", (limit,)).fetchall()]
+
+
+@dataclass(frozen=True)
+class ArsenalPoolRef:
+    """An undropped verified or corrected real reference: what the item 5
+    outcome check reads (scripts.arsenal_outcome_check)."""
+    ref: "ArsenalRefToVerify"
+    held: bool
+
+
+def arsenal_undropped_checked_refs(*, conn: psycopg.Connection | None = None) -> list[ArsenalPoolRef]:
+    with _brief_conn(conn) as c:
+        ids = [(int(r[0]), bool(r[1])) for r in c.execute(
+            "SELECT r.id, EXISTS (SELECT 1 FROM arsenal_holds h WHERE h.ref_id = r.id) FROM arsenal_refs r "
+            "WHERE NOT r.is_test AND r.status = 'pool' AND r.verification IN ('verified', 'corrected') "
+            "ORDER BY r.id").fetchall()]
+        out = []
+        for ref_id, held in ids:
+            ref = arsenal_ref_to_verify(ref_id, conn=c)
+            if ref is not None:
+                out.append(ArsenalPoolRef(ref, held))
+    return out
+
+
+def arsenal_hold(*, ref_id: int | None = None, word_id: int | None = None, reason: str, detail: str | None,
+                 conn: psycopg.Connection | None = None) -> int:
+    """One arsenal_holds row (db/055, append-only): out of every drop."""
+    if (ref_id is None) == (word_id is None):
+        raise LedgerError("arsenal_hold: exactly one of ref_id and word_id")
+    with _brief_conn(conn) as c:
+        return int(c.execute(
+            "INSERT INTO arsenal_holds (ref_id, word_id, reason, detail) VALUES (%s, %s, %s, %s) RETURNING id",
+            (ref_id, word_id, reason, detail[:500] if detail else None)).fetchone()[0])
+
+
+def arsenal_seed_lemmas(*, conn: psycopg.Connection | None = None) -> list[str]:
+    """The owner's known words (db/055 status 'seed'): never a Power Word."""
+    with _brief_conn(conn) as c:
+        return [r[0] for r in c.execute(
+            "SELECT lemma FROM arsenal_words WHERE status = 'seed' AND NOT is_test ORDER BY lemma").fetchall()]
 
 
 def arsenal_seeds(*, conn: psycopg.Connection | None = None) -> list[tuple[str, str, str]]:
@@ -4573,15 +4617,18 @@ class ArsenalRefToVerify:
     source_page: str | None
     verification: str
     pool_run_id: int | None
+    #: What the outcome check reads (owner, 2026-10-16).
+    meaning: str = ""
+    deploy_line: str = ""
 
 
 def arsenal_ref_to_verify(ref_id: int, *, conn: psycopg.Connection | None = None) -> ArsenalRefToVerify | None:
     with _brief_conn(conn) as c:
         r = c.execute(
             "SELECT id, category, title, origin, source_work, quote, quote_by, source_kind, source_page, "
-            "verification, pool_run_id FROM arsenal_refs WHERE id = %s", (ref_id,)).fetchone()
+            "verification, pool_run_id, meaning, deploy_line FROM arsenal_refs WHERE id = %s", (ref_id,)).fetchone()
     return None if r is None else ArsenalRefToVerify(int(r[0]), r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9],
-                                                     None if r[10] is None else int(r[10]))
+                                                     None if r[10] is None else int(r[10]), r[11], r[12])
 
 
 @dataclass(frozen=True)
@@ -4601,23 +4648,26 @@ def arsenal_word_to_verify(word_id: int, *, conn: psycopg.Connection | None = No
 
 def arsenal_settle_ref(ref_id: int, *, verification: str, note: str | None, source_url: str | None,
                        origin: str | None = None, source_work: str | None = None, drop_quote: bool = False,
+                       meaning: str | None = None, deploy_line: str | None = None,
                        conn: psycopg.Connection | None = None) -> bool:
     """Settle a pending reference once (db/054's guard refuses a second time):
-    the verdict, its note, the fetched page's URL, and any corrected wording.
-    False when it was not pending (already settled by another run)."""
+    the verdict, its note, the fetched page's URL, and any corrected wording
+    (an outcome-conflict reframe rewrites meaning and deploy_line). False
+    when it was not pending (already settled by another run)."""
     with _brief_conn(conn) as c:
         row = c.execute(
             """
             UPDATE arsenal_refs
                SET verification = %s, verification_note = %s, source_url = coalesce(%s, source_url),
                    origin = coalesce(%s, origin), source_work = coalesce(%s, source_work),
+                   meaning = coalesce(%s, meaning), deploy_line = coalesce(%s, deploy_line),
                    quote = CASE WHEN %s THEN NULL ELSE quote END,
                    quote_by = CASE WHEN %s THEN NULL ELSE quote_by END
              WHERE id = %s AND verification = 'pending'
             RETURNING id
             """,
-            (verification, note[:500] if note else None, source_url, origin, source_work, drop_quote, drop_quote,
-             ref_id)).fetchone()
+            (verification, note[:500] if note else None, source_url, origin, source_work, meaning, deploy_line,
+             drop_quote, drop_quote, ref_id)).fetchone()
     return row is not None
 
 

@@ -1,13 +1,18 @@
 """The Arsenal's free sources (no keys; probed 2026-10-15, docs/arsenal.md §2).
 
-    Wikipedia  REST page summary (the canonical URL and the lead) and the
-               MediaWiki plain-text extract (up to EXTRACT_CHARS, what the
-               judge reads: the summary's ~450-character lead alone leaves
-               most origins "insufficient").
-    Wikiquote  MediaWiki parse (sections + wikitext). Quote lines are taken
-               only from sections that are not Disputed, Misattributed,
-               About, Quotes about, Cast, See also, External links or
-               References.
+    Wikipedia  REST page summary (the canonical URL and the lead; a
+               disambiguation page is None) and the MediaWiki plain-text
+               extract of the WHOLE article, split into its sections.
+    Wikiquote  MediaWiki parse (wikitext). Quote lines are taken only from
+               sections that are not Disputed, Misattributed, About, Quotes
+               about, Cast, See also, External links or References, and kept
+               by section.
+    search     MediaWiki list=search on either wiki (owner, 2026-10-16): the
+               verifier finds the specific work's page (the song, the film,
+               the letter) instead of reading the first 5,000 characters of
+               the person's biography.
+    excerpt()  ranks a page's sections by the card's key terms (and the
+               quote) and passes the lead plus the matched sections.
     kaikki     per-word JSONL (Wiktionary's data): the etymology and the IPA.
                Wiktionary's REST definition is the fallback that can only say
                "the word exists" (it carries no etymology or IPA).
@@ -36,9 +41,11 @@ USER_AGENT = "ValemontCommand/1.0 (+https://valemont-command.vercel.app/privacy)
 TIMEOUT_S = 10.0
 TRIES = 2
 RETRY_WAIT_MAX_S = 10.0
-EXTRACT_CHARS = 5000
 #: What the judge reads, at most (~1,500 tokens).
 JUDGE_CHARS = 6000
+#: The article's lead, at most, ahead of the matched sections.
+LEAD_CHARS = 800
+SEARCH_LIMIT = 5
 ETYMOLOGY_CHARS = 200
 #: A quote matches a sourced line at or above this (rapidfuzz partial_ratio).
 QUOTE_MATCH = 90
@@ -126,16 +133,43 @@ def page_path(title: str) -> str:
 # --------------------------------------------------------------- wikipedia
 
 @dataclass(frozen=True)
+class Section:
+    #: "" for the lead.
+    heading: str
+    text: str
+
+
+@dataclass(frozen=True)
 class WikiPage:
     title: str
     url: str
     #: The plain-text extract (else the summary's lead), at most JUDGE_CHARS.
     text: str
+    #: The whole article by section, the lead first.
+    sections: tuple[Section, ...] = ()
+
+
+_PLAIN_HEADING = re.compile(r"^(={2,6})\s*(.*?)\s*\1\s*$", re.M)
+
+
+def split_sections(text: str) -> list[Section]:
+    """A plain-text extract (exsectionformat=wiki) by its == headings."""
+    out: list[Section] = []
+    pos, heading = 0, ""
+    for m in _PLAIN_HEADING.finditer(text):
+        body = text[pos:m.start()].strip()
+        if body or heading == "":
+            out.append(Section(heading, body))
+        pos, heading = m.end(), m.group(2)
+    body = text[pos:].strip()
+    if body:
+        out.append(Section(heading, body))
+    return out
 
 
 def wikipedia_page(title: str, *, http: Http | None = None) -> WikiPage | None:
-    """The page's summary and extract; None when there is no such article
-    (or only a disambiguation page)."""
+    """The page's summary and its whole extract by section; None when there
+    is no such article (or only a disambiguation page)."""
     status, body = fetch(WIKIPEDIA_SUMMARY + page_path(title), {"redirect": "true"}, http=http)
     summary = _json(body) if status == 200 else None
     if not isinstance(summary, dict) or summary.get("type") == "disambiguation":
@@ -146,13 +180,25 @@ def wikipedia_page(title: str, *, http: Http | None = None) -> WikiPage | None:
     lead = str(summary.get("extract") or "")
     text = lead
     status, body = fetch(WIKIPEDIA_API, {"action": "query", "prop": "extracts", "explaintext": "1",
-                                         "exchars": str(EXTRACT_CHARS), "titles": canonical, "redirects": "1",
+                                         "exsectionformat": "wiki", "titles": canonical, "redirects": "1",
                                          "format": "json", "formatversion": "2"}, http=http)
     data = _json(body) if status == 200 else None
     pages = ((data or {}).get("query") or {}).get("pages") or []
     if pages and isinstance(pages[0], dict) and pages[0].get("extract"):
         text = str(pages[0]["extract"])
-    return WikiPage(canonical, str(url), text[:JUDGE_CHARS])
+    return WikiPage(canonical, str(url), text[:JUDGE_CHARS], tuple(split_sections(text)))
+
+
+def search(api: str, query: str, *, limit: int = SEARCH_LIMIT, http: Http | None = None) -> list[str]:
+    """Article titles for a MediaWiki full-text search (list=search) on
+    Wikipedia or Wikiquote, best first. A quoted phrase searches the phrase."""
+    if not query.strip():
+        return []
+    status, body = fetch(api, {"action": "query", "list": "search", "srsearch": query, "srlimit": str(limit),
+                               "srnamespace": "0", "format": "json", "formatversion": "2"}, http=http)
+    data = _json(body) if status == 200 else None
+    hits = ((data or {}).get("query") or {}).get("search") if isinstance(data, dict) else None
+    return [str(h["title"]) for h in hits or [] if isinstance(h, dict) and h.get("title")]
 
 
 # --------------------------------------------------------------- wikiquote
@@ -169,6 +215,8 @@ class QuotePage:
     url: str
     #: Cleaned quote lines from the allowed sections.
     lines: tuple[str, ...]
+    #: The same lines by allowed section (heading, lines joined).
+    sections: tuple[Section, ...] = ()
 
 
 def allowed_wikitext(wikitext: str) -> str:
@@ -212,14 +260,39 @@ def strip_markup(text: str) -> str:
 def quote_lines(wikitext: str) -> list[str]:
     """Every quote or dialogue line (`*`, `:` and `#` lines) of the allowed
     sections, markup stripped."""
-    out = []
-    for line in allowed_wikitext(wikitext).splitlines():
-        s = line.strip()
+    return [ln for s in quote_sections(wikitext) for ln in s.text.split("\n") if ln]
+
+
+def quote_sections(wikitext: str) -> list[Section]:
+    """The allowed sections' quote lines, kept by their heading (the nearest
+    one above). A heading of an excluded section, and everything under it,
+    never appears (allowed_wikitext keeps the allowed headings' lines only)."""
+    out: list[Section] = []
+    heading, lines = "", []
+    skip_level: int | None = None
+    for raw in wikitext.splitlines():
+        m = _HEADING.match(raw.strip())
+        if m:
+            level = len(m.group(1))
+            if skip_level is not None and level <= skip_level:
+                skip_level = None
+            if skip_level is None and EXCLUDED_SECTION.search(strip_markup(m.group(2))):
+                skip_level = level
+            if skip_level is None:
+                if lines:
+                    out.append(Section(heading, "\n".join(lines)))
+                heading, lines = strip_markup(m.group(2)), []
+            continue
+        if skip_level is not None:
+            continue
+        s = raw.strip()
         if not s or s[0] not in "*:#":
             continue
         cleaned = strip_markup(s.lstrip("*:# "))
         if len(cleaned) >= 4:
-            out.append(cleaned)
+            lines.append(cleaned)
+    if lines:
+        out.append(Section(heading, "\n".join(lines)))
     return out
 
 
@@ -231,8 +304,9 @@ def wikiquote_page(title: str, *, http: Http | None = None) -> QuotePage | None:
     if not isinstance(parsed, dict):
         return None  # {"error": {"code": "missingtitle"}} or a 404
     canonical = str(parsed.get("title") or title)
+    sections = quote_sections(str(parsed.get("wikitext") or ""))
     return QuotePage(canonical, f"https://en.wikiquote.org/wiki/{page_path(canonical)}",
-                     tuple(quote_lines(str(parsed.get("wikitext") or ""))))
+                     tuple(ln for s in sections for ln in s.text.split("\n") if ln), tuple(sections))
 
 
 # ------------------------------------------------------------------ quotes
@@ -266,6 +340,72 @@ def quote_found(quote: str, lines: Sequence[str]) -> bool:
         if len(q) >= 12 and len(n) >= len(q) and fuzz.partial_ratio(q, n) >= QUOTE_MATCH:
             return True
     return False
+
+
+# ----------------------------------------------------------------- excerpts
+
+_STOP = frozenset(
+    "the a an and or of in on at to for from by with as is was are were be been his her their its this that "
+    "it not no but who what when how into over than then there they them he she you your our we i me my".split())
+#: A section holding the card's quote outranks any amount of term overlap.
+QUOTE_BONUS = 50
+
+
+def key_terms(*texts: str | None) -> set[str]:
+    """Distinctive normalized words: 3+ letters, not a stop word; a 4-digit
+    year counts."""
+    out: set[str] = set()
+    for t in texts:
+        for w in normalize(t or "").split():
+            if (w.isdigit() and len(w) == 4) or (len(w) >= 3 and not w.isdigit() and w not in _STOP):
+                out.add(w)
+    return out
+
+
+def section_score(section: Section, *, strong: set[str], weak: set[str], quote: str | None) -> int:
+    words = set(normalize(f"{section.heading} {section.text}").split())
+    score = 2 * len(strong & words) + len(weak & words)
+    if quote and quote_found(quote, section.text.split("\n") + sentences(section.text)):
+        score += QUOTE_BONUS
+    return score
+
+
+@dataclass(frozen=True)
+class Excerpt:
+    text: str
+    #: The best section's score: how well this page covers the card.
+    score: int
+    #: The headings passed, in order ("" is the lead).
+    headings: tuple[str, ...]
+
+
+def excerpt(sections: Sequence[Section], *, strong: set[str], weak: set[str] = frozenset(),
+            quote: str | None = None, limit: int = JUDGE_CHARS) -> Excerpt:
+    """The lead (at most LEAD_CHARS), then the sections that match the card
+    best, until `limit`. Nothing matching: the sections in page order, as
+    before (the judge then usually answers insufficient)."""
+    if not sections:
+        return Excerpt("", 0, ())
+    lead = sections[0] if sections[0].heading == "" else None
+    body = [s for s in sections if s is not lead]
+    scored = sorted(((section_score(s, strong=strong, weak=weak, quote=quote), i, s) for i, s in enumerate(body)),
+                    key=lambda x: (-x[0], x[1]))
+    parts: list[str] = []
+    heads: list[str] = []
+    top = section_score(lead, strong=strong, weak=weak, quote=quote) if lead else 0
+    if lead and lead.text:
+        parts.append(lead.text[:LEAD_CHARS])
+        heads.append("")
+    picked = [s for sc, _, s in scored if sc > 0] or body
+    if scored:
+        top = max(top, scored[0][0])
+    for s in picked:
+        room = limit - sum(len(p) + 2 for p in parts)
+        if room < 200:
+            break
+        parts.append(f"== {s.heading} ==\n{s.text}"[:room] if s.heading else s.text[:room])
+        heads.append(s.heading)
+    return Excerpt("\n\n".join(parts)[:limit], top, tuple(heads))
 
 
 # ------------------------------------------------------------------- words

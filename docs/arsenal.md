@@ -360,7 +360,83 @@ One item per job, through `run_tracked`, so it has its own `job_health` row and 
 - **Found by `tests_live`:** `ledger.arsenal_near_dup` bound its threshold as double precision against db/054's `real`. The first batch would have failed on its first card. Fixed with a `::real` cast.
 - **`tests/`: 1021 OK.** Commit 1451296's message says 1022; that was a miscount.
 - **`tests_live -v`, metered: 409 tests OK, 0 skipped, ~2.43 MB read** (2,492 KB). That includes `test_arsenal_sql`, 17 tests.
+- **Screenshot gate, phone Night: conditionally approved (owner, Oct 16).** PR #53 had already merged (05:03:43 UTC Oct 16), so these fixes ship in a follow-up PR (`chat5-arsenal-gate-fixes`):
+  1. `screens-arsenal` hides the fixed dock during the capture only (`page.screenshot`'s `style`). The app's dock is unchanged.
+  2. The reaction buttons show short labels under the icons: Love / Not for me / Know it. Their accessible names are unchanged (Love / Not interested / Already know it). Tokens only; each button is at least 44 px.
+  3. The Power Word gets Already know it. It moves into the "Already known" fold, with Undo. The picker already excluded a known word, as it excludes a known reference (db/054, no migration). That is now tested: `test_a_known_word_is_never_picked_like_a_known_ref`, plus two new `arsenal.spec` tests (word known/undo; labels, names and 44 px).
+  4. Fold chevrons: an empty Past drops or Unverified fold is locked closed (`Fold lockWhenEmpty`). Every fold now shows the same right-pointing chevron when closed. Before, the gate had opened the empty folds (down chevron, a double rule) and left the filled ones closed.
+- **After the fixes, `tests_live -v`, metered (both `psycopg.connect` and `Connection.connect`): 410 OK, 0 skipped, ~2.64 MB read** (2,699 KB, 735 s). `tests/`: 1021 OK.
+
+## 8b. Gate, round 2 (owner, Oct 16)
+
+UI approved pending these fixes (same follow-up PR):
+
+- **UI.** (1) `screens-arsenal` also hides the sticky phone header in captures (`header.sticky`; the app is unchanged). (2) The reactions sit on their own row, below the room chip and Source, on every card and the Power Word. (3) An unverified reason is muted (`text-text-muted`), never danger red (red is for real losses). It is clamped to two lines, wrapped at words, with a "more" toggle (`UnverifiedReason`). The Unverified fold starts closed. (4) The Not interested button's accessible name is "Not for me", matching its label (the reaction value stays `not_interested`).
+- **Content.**
+  - (5) The outcome check runs in the pool prompt (rules and voice) and in the judge. A card whose real ending undercuts its line is reframed (corrected, with `fixed_meaning` / `fixed_deploy_line`) or cut (unverified). Either way its note starts `outcome_conflict`.
+  - (6) A film or TV quote credits the character and the work: `cards.credit_film_quote` turns "Sean Parker" into "Sean Parker (as written in The Social Network)". With no speaker to credit, or a credit over 80 characters, the quote goes and the card stays. The rule is in the voice (`VOICE_VERSION 2026-10-16.1`) and the rules block.
+  - (7) **db/055** (written, not pasted): the picker takes the trio with the most distinct rooms, then the fewest of yesterday's rooms, then the draw. Slots avoid yesterday's category and, when possible, its room. The Power Word takes the room the references use least.
+  - (8) **db/055**: `arsenal_words.status` gains `seed`; inflection, provenance and fiduciary (all in the pool) become seeds. asymmetric had already dropped (drop 61, Oct 16) and stays dropped. The prompt lists the seed words as KNOWN; `collect.blocked()` refuses them; the voice no longer offers the four as examples. That example list is why the first batch returned exactly those four.
+- **Verifier retrieval (the judge not loosened).**
+  - (9) Pages come from MediaWiki search for the work with its person (or its own context, for disambiguation: Moneyball the book) and the title, and from Wikiquote for the quote's phrase. Each page is split into sections. The judge reads the lead plus the best-matching sections (`sources.excerpt`), not the first 5,000 characters.
+  - (10) `insufficient` tries one second source; `contradicted` and an outcome conflict never retry.
+  - **Tightened, found in the dry run below:** Haiku used `corrected` to trim claims a source never mentioned. The judge now answers `covers_every_claim`, and `verify.held()` turns supported or corrected without it into insufficient. The prompt also says a fix comes only from the excerpt.
+- **(11) Re-verification of the 8 unverified, DRY RUN only** (`scripts.arsenal_reverify`). db/054's guard lets verification settle once, so writing these verdicts needs an owner decision. Final run, 2026-10-16 ~19:45 UTC:
+
+  | id | card | before | after (dry run) | page read |
+  |---|---|---|---|---|
+  | 190 | Bezos's Day 1 | insufficient | insufficient (2 sources) | Jeff Bezos, Andy Jassy |
+  | 192 | Buffett's Ovarian Lottery | insufficient | insufficient (2 sources) | Warren Buffett, Bill Gates |
+  | 201 | Sell me this pen | insufficient | contradicted (the note says insufficient fits better) | The Wolf of Wall Street (2013 film) |
+  | 206 | Moneyball | no page | **corrected** ($44M payroll, 2002 playoffs; full book title) | Moneyball: The Art of Winning an Unfair Game |
+  | 209 | I'm a business, man | insufficient | insufficient (2 sources) | Diamonds from Sierra Leone, Jay-Z |
+  | 212 | Dr. Dre's The Chronic | contradicted | insufficient (the Beats sale is not on the album's page) | Dr. Dre discography, The Chronic |
+  | 215 | Seneca on luck | insufficient | contradicted (stays unverified, as expected) | Seneca the Younger |
+  | 216 | What is up to us | insufficient | **verified** | Enchiridion of Epictetus |
+
+- **Tests after round 2:** `tests/` 1038 OK (17 new). `tests_live -v`, metered: 410 OK, **1 skip, named: `RoomsAndWordSeeds` "db/055 not pasted"** (its 4 tests run once db/055 is in), ~2.64 MB read (2,707 KB, 735 s). `pnpm lint` and `tsc` clean. The owner-run `arsenal.spec` and `screens-arsenal` are pending.
+
+  **2 of 8 clear.** Haiku's answers vary between runs. Three dry runs were made: the first, before the coverage guard, "cleared" five by trimming claims. The verdicts on 201 and 215 swing between contradicted and insufficient (both unverified). Second sources are sometimes off-topic (Andy Jassy, Bill Gates); the judge then answers insufficient. Cost of the three runs: 47 Haiku calls, $0.019522.
+
+## 8c. Round 3 (owner, Oct 16)
+
+- **db/055 amended before the paste.**
+  - (a) ONE re-verification of an unverified pool reference or word, only through `arsenal_reverify_ref` / `arsenal_reverify_word` (the worker's; nobody else executes them). Each one is recorded in `arsenal_reverifications`: append-only, TRUNCATE-guarded, UNIQUE per target; it holds who, the database role, when, and the old -> new verification and note. Every other "settles once" rule stands.
+  - Item 11 is written through it in the migration: **206 corrected** and **216 verified**; the other six stay unverified.
+  - **206's correction drops the 20-game winning streak of 2002.** The streak is true; the judge left it out because the book's page does not mention it.
+  - (b) `arsenal_holds`: append-only, TRUNCATE-guarded, a snake_case reason plus a detail. The picker skips held items, and the worker's pool status never counts them as ready.
+  - **The first paste failed and applied nothing** (42P01, `relation "public.arsenal_reverifications" does not exist`, in `arsenal_words_guard`). Section 2's `UPDATE` (the example words → seed) fired the new words guard, which read the record table created only in section 3. Read back via db_inspect: no log row, no new table or function, the status CHECK unchanged, the words still `pool`, 206 and 216 still unverified, all three guards still db/054's. Fixed by creating the table first (section 0). Both guards now read it only when the re-verify setting names the row. **Rule: a trigger function that a later statement of the same file fires must find every table it reads already created.**
+  - The self-test covers both, plus item 11's state. Every `INSERT` was checked mechanically. One flag was the checker's own (an `ARRAY[...]` in the picker's insert, 5/5 as in db/054).
+- **Temperature 0 is not available.** Haiku 5.5 rejects non-default sampling with a 400 (the API reference), and the installed SDK's `create()` has no `temperature` argument: a probe on 2026-10-16 failed before reaching the API. The judge (item 4) is unchanged, held by `covers_every_claim`. The item 5 outcome check reads each card's best page `OUTCOME_SAMPLES` = 3 times and holds on a strict majority. **Owner decision pending:** the vote, a different model, or a single read.
+- **Item 5 over the existing pool:** `scripts.arsenal_outcome_check` (`--dry-run` writes nothing). It covers every real, undropped, verified or corrected reference and holds each conflict with reason `outcome_conflict`. The owner kept the 3-read majority vote, judge unchanged, on 2026-10-16.
+  - **Run against production at ~20:40 UTC Oct 16, after db/055:** 21 references, **0 conflicts, 0 held**. Every vote was unanimous no (nnn): 189, 191, 195–200, 203–208, 210, 211, 213, 214, 216–218. 63 Haiku calls, $0.019029.
+  - Today's drop 61 (already dropped, so out of the check's scope) holds **Thermopylae as a pitch line**, the very case the check was written for.
+- **Brief line (owner, 2026-10-16):** brief 1018's line named the word, dropped the reference and closed with "Test every move today against it". `ctx_arsenal_brief` already returns the word, the strongest reference's title and its room, so no db/056 was needed. The Arsenal line is now built from that data in the AI brief too (`brief.DATA_LINE_SECTIONS`): "Power Word: asymmetric. Strongest reference: Thermopylae, for the pitch." No exhortation. Tested: `BriefLine`.
+- **Merge gate after db/055 (Oct 16):** `tests/` 1043 OK. `tests_live -v`, metered: **418 OK, 0 skipped**, ~2.65 MB read (2,718 KB, 748 s), the 8 `RoomsAndWordSeeds` tests included.
+- **Item 6 at render time:** `quoteCredit` (`lib/arsenal/types.ts`) shows a film or TV speaker as "Sean Parker (as written in The Social Network)" on every card, old and new. The generator rule stays. The same cases are in `e2e/arsenal-unit.spec.ts` and `tests/test_arsenal.py` `FilmQuoteCredit`.
+- **Pool size: 36 references and 12 words a batch** (`REFS_MAX_TOKENS` 14,000). Estimate from the first batch's tokens, at the batch rate:
+
+  | Part | Basis | Estimate |
+  |---|---|---|
+  | References | 7,352 output tokens for 30, so ~8,800 for 36 | ~$0.044 |
+  | Words | 873 output tokens for 10, so ~1,050 for 12, plus the cache write | ~$0.009 |
+  | Verification | ~1.6 Haiku reads a reference at ~$0.00042 each (the dry runs' 47 calls) | ~$0.024 |
+  | **Total** | | **~$0.08 a weekly batch** (the first was $0.051) |
+
+  The outcome check over a week's pool adds ~36 × 3 × ~$0.0004 ≈ $0.04 when it is run.
+- **Near-duplicate threshold:** 0.92, unchanged until Sunday's batch (2026-10-18 03:30 Chicago). Its distribution goes next to the first batch's (min 0.79, p50 0.82, p90 0.87, max 0.91). Pending.
+- **Today's Brief:** brief 1018 (2026-10-16, Sonnet, not a fallback) carries the `arsenal_brief` section: "Power word: asymmetric. Far more upside than downside. Test every move today against it." Delivery 379 → notification 466 was sent at 14:45:02 UTC (09:45 Chicago, not late).
 
 ## 8. Results
 
 Filled in after the first production run (Step 5). Anything not run is pending.
+
+**First production run, Oct 16 (read via db_inspect).** PR #53 merged at 05:03:43 UTC. Everything below came from the worker's scheduled jobs; `arsenal_pool --now` and `arsenal_drop` were not run by hand.
+
+- **Pool:** batch run 14 submitted 05:11:57 UTC (`arsenal_pool`: "embedded 27; pool short: 0 refs, 0 words"), 30 refs and 10 words requested. Collected 06:02:37 (run 15): **30 refs and 10 words inserted, 0 near-duplicate skips, 0 invalid**. Verification closed 06:05:02 (run 16).
+- **Verification of those 40:** refs 4 verified, 18 corrected, 8 unverified, 0 rejected; words 8 verified, 2 unverified (optionality, unimpeachable: no pronunciation in the source). The 27 `pending` refs are the seeds, which are never verified.
+- **Near-duplicates:** 0 skips. Nearest-cosine distribution over all 30 candidates: min 0.79, p50 0.82, p90 0.87, max 0.91. The threshold of 0.92 sits just above the maximum. The floor is high (0.79), so gte-small separates these titles less than hoped; calibrate after the next batch.
+- **Cost (`ai_usage`):** `arsenal_pool` 2 Sonnet batch results, $0.045415; `arsenal_verify` 29 Haiku calls, $0.005488. **Total $0.050903.**
+- **arsenal_check (its queries through db_inspect):** repeated refs 0, repeated words 0, seeds dropped 0. Today (2026-10-16): drop 61, refs [194, 193, 202], word 37 (asymmetric), `topped_up` false, made at 10:30:01 UTC (05:30 Chicago). Its rooms were pitch, boardroom, pitch, and the word was pitch: the case db/055's room rule fixes.
+- **KB read (`job_health`, each job's last run only):** `arsenal_pool` ~5 KB; `arsenal_pool_collect`, `arsenal_drop`, `arsenal_verify` ~0 KB. The day's egress (19:06 UTC) was ~18.7 MB, with no Arsenal job in the top four. Per-run history is in the Railway logs and was not read.
+- **Worker RSS:** 141 MB at rest (heartbeat 19:18 UTC); the job peak was 149 MB during verification (06:05 UTC). This is one reading, not the 6 h curve the RAM rule asks for.
