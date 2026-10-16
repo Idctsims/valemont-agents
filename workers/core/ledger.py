@@ -4359,3 +4359,453 @@ def _unresolved(
         )
         for row in rows
     ]
+
+
+# ---------------------------------------------------------------------------
+# The Arsenal (db/054; Chat 5 Phase 1; workers/arsenal/). The worker writes
+# the pool, the seeds' embeddings, verification, the pool-run log and the
+# drops (through arsenal_pick_drop); the owner writes reactions (the web).
+# Narrow reads only: no SELECT *, and no vector is ever read back (the
+# near-duplicate check runs inside Postgres, arsenal_near_dup).
+# ---------------------------------------------------------------------------
+
+ARSENAL_VERIFY_KIND: Final = "arsenal_verify"
+
+
+@dataclass(frozen=True)
+class ArsenalOpenBatch:
+    run_id: int
+    batch_id: str
+    model: str
+    submitted_at: datetime
+
+
+@dataclass(frozen=True)
+class ArsenalPoolStatus:
+    """Real rows only. 'ready' is verified or corrected, still in the pool."""
+    refs_ready: int
+    refs_pending: int
+    words_ready: int
+    words_pending: int
+    #: Categories with at least one ready reference.
+    ready_categories: tuple[str, ...]
+    last_submitted_at: datetime | None
+    open_batch: ArsenalOpenBatch | None
+
+
+#: tests_live runs this exact text.
+ARSENAL_POOL_STATUS_SQL: Final = """
+    SELECT
+        (SELECT count(*) FROM arsenal_refs
+          WHERE NOT is_test AND status = 'pool' AND verification IN ('verified', 'corrected')),
+        (SELECT count(*) FROM arsenal_refs WHERE NOT is_test AND status = 'pool' AND verification = 'pending'),
+        (SELECT count(*) FROM arsenal_words
+          WHERE NOT is_test AND status = 'pool' AND verification IN ('verified', 'corrected')),
+        (SELECT count(*) FROM arsenal_words WHERE NOT is_test AND status = 'pool' AND verification = 'pending'),
+        (SELECT coalesce(array_agg(DISTINCT category ORDER BY category), '{}') FROM arsenal_refs
+          WHERE NOT is_test AND status = 'pool' AND verification IN ('verified', 'corrected')),
+        (SELECT max(created_at) FROM arsenal_pool_runs WHERE NOT is_test AND kind = 'batch' AND status = 'submitted')
+"""
+
+#: The newest real batch submitted and not yet collected or failed.
+ARSENAL_OPEN_BATCH_SQL: Final = """
+    SELECT s.id, s.batch_id, s.model, s.created_at
+      FROM arsenal_pool_runs s
+     WHERE s.kind = 'batch' AND s.status = 'submitted' AND NOT s.is_test
+       AND NOT EXISTS (SELECT 1 FROM arsenal_pool_runs x
+                        WHERE x.run_id = s.id AND x.status IN ('collected', 'failed'))
+     ORDER BY s.id DESC
+     LIMIT 1
+"""
+
+
+def arsenal_open_batch(*, conn: psycopg.Connection | None = None) -> ArsenalOpenBatch | None:
+    with _brief_conn(conn) as c:
+        row = c.execute(ARSENAL_OPEN_BATCH_SQL).fetchone()
+    return None if row is None else ArsenalOpenBatch(int(row[0]), str(row[1]), str(row[2] or ""), row[3])
+
+
+def arsenal_pool_status(*, conn: psycopg.Connection | None = None) -> ArsenalPoolStatus:
+    with _brief_conn(conn) as c:
+        r = c.execute(ARSENAL_POOL_STATUS_SQL).fetchone()
+        open_batch = arsenal_open_batch(conn=c)
+    return ArsenalPoolStatus(int(r[0]), int(r[1]), int(r[2]), int(r[3]), tuple(r[4] or ()), r[5], open_batch)
+
+
+def arsenal_recent_keys(limit: int = 60, *, conn: psycopg.Connection | None = None) -> list[str]:
+    """The newest real canonical keys (not seeds): the prompt's never-repeat list."""
+    with _brief_conn(conn) as c:
+        return [r[0] for r in c.execute(
+            "SELECT canonical_key FROM arsenal_refs WHERE NOT is_test AND origin_kind <> 'seed' "
+            "ORDER BY id DESC LIMIT %s", (limit,)).fetchall()]
+
+
+def arsenal_recent_lemmas(limit: int = 60, *, conn: psycopg.Connection | None = None) -> list[str]:
+    with _brief_conn(conn) as c:
+        return [r[0] for r in c.execute(
+            "SELECT lemma FROM arsenal_words WHERE NOT is_test ORDER BY id DESC LIMIT %s", (limit,)).fetchall()]
+
+
+def arsenal_seeds(*, conn: psycopg.Connection | None = None) -> list[tuple[str, str, str]]:
+    """(canonical_key, title, source_work) of every seed: taste, never repeat."""
+    with _brief_conn(conn) as c:
+        return [(r[0], r[1], r[2]) for r in c.execute(
+            "SELECT canonical_key, title, source_work FROM arsenal_refs "
+            "WHERE status = 'seed' AND NOT is_test ORDER BY id").fetchall()]
+
+
+def arsenal_weights(*, conn: psycopg.Connection | None = None) -> dict[tuple[str, str], float]:
+    """(dim, key) -> weight, from db/054 arsenal_weights()."""
+    with _brief_conn(conn) as c:
+        return {(r[0], r[1]): float(r[2]) for r in c.execute(
+            "SELECT dim, key, weight FROM arsenal_weights()").fetchall()}
+
+
+_ARSENAL_RUN_COUNTS: Final = ("refs_requested", "words_requested", "inserted_refs", "inserted_words", "skipped_dup",
+                              "skipped_invalid", "verified", "corrected", "unverified", "rejected")
+
+
+def arsenal_log_run(kind: str, status: str, *, run_id: int | None = None, batch_id: str | None = None,
+                    model: str | None = None, cost_usd: Decimal | None = None, note: str | None = None,
+                    conn: psycopg.Connection | None = None, **counts: int) -> int:
+    """One arsenal_pool_runs row (append-only). Returns its id."""
+    unknown = set(counts) - set(_ARSENAL_RUN_COUNTS)
+    if unknown:
+        raise LedgerError(f"arsenal_log_run: unknown count(s) {sorted(unknown)}")
+    cols = ["kind", "status", "run_id", "batch_id", "model", "cost_usd", "note", *counts]
+    vals = [kind, status, run_id, batch_id, model, cost_usd if cost_usd is not None else Decimal(0),
+            note[:500] if note else None, *counts.values()]
+    with _brief_conn(conn) as c:
+        return int(c.execute(
+            f"INSERT INTO arsenal_pool_runs ({', '.join(cols)}) VALUES ({', '.join(['%s'] * len(cols))}) RETURNING id",
+            vals).fetchone()[0])
+
+
+@dataclass(frozen=True)
+class ArsenalCardIn:
+    """A validated card from the model (workers/arsenal/cards.py)."""
+    canonical_key: str
+    category: str
+    title: str
+    origin: str
+    meaning: str
+    deploy_line: str
+    room: str
+    source_work: str
+    quote: str | None
+    quote_by: str | None
+    source_kind: str
+    source_page: str | None
+
+
+@dataclass(frozen=True)
+class ArsenalWordIn:
+    lemma: str
+    meaning: str
+    room: str
+    sentence: str
+
+
+def arsenal_near_dup(vector: Sequence[float], threshold: float, *, conn: psycopg.Connection | None = None) -> bool:
+    """db/054 arsenal_near_dup: the vector goes in, a boolean comes out."""
+    with _brief_conn(conn) as c:
+        return bool(c.execute("SELECT arsenal_near_dup(%s::extensions.halfvec, %s)",
+                              (_vec_text(vector), threshold)).fetchone()[0])
+
+
+def arsenal_insert_ref(card: ArsenalCardIn, *, pool_run_id: int | None, vector: Sequence[float] | None,
+                       conn: psycopg.Connection | None = None) -> int | None:
+    """A new real pool reference, pending. None when the key already exists
+    (UNIQUE canonical_key: never a repeat)."""
+    with _brief_conn(conn) as c:
+        row = c.execute(
+            """
+            INSERT INTO arsenal_refs (canonical_key, category, title, origin, meaning, deploy_line, room, source_work,
+                                      quote, quote_by, source_kind, source_page, status, origin_kind, pool_run_id,
+                                      embedding)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pool', 'pool', %s, %s::extensions.halfvec)
+            ON CONFLICT (canonical_key) DO NOTHING
+            RETURNING id
+            """,
+            (card.canonical_key, card.category, card.title, card.origin, card.meaning, card.deploy_line, card.room,
+             card.source_work, card.quote, card.quote_by, card.source_kind, card.source_page, pool_run_id,
+             _vec_text(vector) if vector is not None else None)).fetchone()
+    return None if row is None else int(row[0])
+
+
+def arsenal_insert_word(word: ArsenalWordIn, *, pool_run_id: int | None,
+                        conn: psycopg.Connection | None = None) -> int | None:
+    """A new real Power Word, pending. None when the lemma already exists."""
+    with _brief_conn(conn) as c:
+        row = c.execute(
+            "INSERT INTO arsenal_words (lemma, meaning, room, sentence, pool_run_id) VALUES (%s, %s, %s, %s, %s) "
+            "ON CONFLICT (lemma) DO NOTHING RETURNING id",
+            (word.lemma, word.meaning, word.room, word.sentence, pool_run_id)).fetchone()
+    return None if row is None else int(row[0])
+
+
+def arsenal_unembedded(*, conn: psycopg.Connection | None = None) -> list[tuple[int, str, str]]:
+    """(id, title, source_work) of real references with no embedding yet
+    (the seeds, at first): embedded once so the near-duplicate check sees them."""
+    with _brief_conn(conn) as c:
+        return [(int(r[0]), r[1], r[2]) for r in c.execute(
+            "SELECT id, title, source_work FROM arsenal_refs WHERE NOT is_test AND embedding IS NULL "
+            "AND status <> 'rejected' ORDER BY id LIMIT 200").fetchall()]
+
+
+def arsenal_set_embedding(ref_id: int, vector: Sequence[float], *, conn: psycopg.Connection | None = None) -> None:
+    with _brief_conn(conn) as c:
+        c.execute("UPDATE arsenal_refs SET embedding = %s::extensions.halfvec WHERE id = %s AND embedding IS NULL",
+                  (_vec_text(vector), ref_id))
+
+
+@dataclass(frozen=True)
+class ArsenalRefToVerify:
+    id: int
+    category: str
+    title: str
+    origin: str
+    source_work: str
+    quote: str | None
+    quote_by: str | None
+    source_kind: str
+    source_page: str | None
+    verification: str
+    pool_run_id: int | None
+
+
+def arsenal_ref_to_verify(ref_id: int, *, conn: psycopg.Connection | None = None) -> ArsenalRefToVerify | None:
+    with _brief_conn(conn) as c:
+        r = c.execute(
+            "SELECT id, category, title, origin, source_work, quote, quote_by, source_kind, source_page, "
+            "verification, pool_run_id FROM arsenal_refs WHERE id = %s", (ref_id,)).fetchone()
+    return None if r is None else ArsenalRefToVerify(int(r[0]), r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9],
+                                                     None if r[10] is None else int(r[10]))
+
+
+@dataclass(frozen=True)
+class ArsenalWordToVerify:
+    id: int
+    lemma: str
+    verification: str
+    pool_run_id: int | None
+
+
+def arsenal_word_to_verify(word_id: int, *, conn: psycopg.Connection | None = None) -> ArsenalWordToVerify | None:
+    with _brief_conn(conn) as c:
+        r = c.execute("SELECT id, lemma, verification, pool_run_id FROM arsenal_words WHERE id = %s",
+                      (word_id,)).fetchone()
+    return None if r is None else ArsenalWordToVerify(int(r[0]), r[1], r[2], None if r[3] is None else int(r[3]))
+
+
+def arsenal_settle_ref(ref_id: int, *, verification: str, note: str | None, source_url: str | None,
+                       origin: str | None = None, source_work: str | None = None, drop_quote: bool = False,
+                       conn: psycopg.Connection | None = None) -> bool:
+    """Settle a pending reference once (db/054's guard refuses a second time):
+    the verdict, its note, the fetched page's URL, and any corrected wording.
+    False when it was not pending (already settled by another run)."""
+    with _brief_conn(conn) as c:
+        row = c.execute(
+            """
+            UPDATE arsenal_refs
+               SET verification = %s, verification_note = %s, source_url = coalesce(%s, source_url),
+                   origin = coalesce(%s, origin), source_work = coalesce(%s, source_work),
+                   quote = CASE WHEN %s THEN NULL ELSE quote END,
+                   quote_by = CASE WHEN %s THEN NULL ELSE quote_by END
+             WHERE id = %s AND verification = 'pending'
+            RETURNING id
+            """,
+            (verification, note[:500] if note else None, source_url, origin, source_work, drop_quote, drop_quote,
+             ref_id)).fetchone()
+    return row is not None
+
+
+def arsenal_settle_word(word_id: int, *, verification: str, note: str | None, pronunciation: str | None,
+                        etymology: str | None, etymology_url: str | None,
+                        conn: psycopg.Connection | None = None) -> bool:
+    with _brief_conn(conn) as c:
+        row = c.execute(
+            """
+            UPDATE arsenal_words
+               SET verification = %s, verification_note = %s, pronunciation = coalesce(%s, pronunciation),
+                   etymology = coalesce(%s, etymology), etymology_url = coalesce(%s, etymology_url)
+             WHERE id = %s AND verification = 'pending'
+            RETURNING id
+            """,
+            (verification, note[:500] if note else None, pronunciation, etymology, etymology_url, word_id)).fetchone()
+    return row is not None
+
+
+def arsenal_close_run_if_settled(run_id: int, *, conn: psycopg.Connection | None = None) -> bool:
+    """Once a run's last pending item settles, write its 'verified' row with
+    the counts (once). True when this call wrote it."""
+    with _brief_conn(conn) as c, c.transaction():
+        # One closer at a time per run (two verify jobs can finish together).
+        c.execute("SELECT pg_advisory_xact_lock(hashtext('arsenal_run'), %s::int)", (run_id % 2_000_000_000,))
+        row = c.execute(
+            """
+            WITH items AS (
+                SELECT verification, status FROM arsenal_refs WHERE pool_run_id = %(run)s
+                UNION ALL
+                SELECT verification, status FROM arsenal_words WHERE pool_run_id = %(run)s
+            )
+            SELECT (SELECT kind FROM arsenal_pool_runs WHERE id = %(run)s),
+                   count(*) FILTER (WHERE verification = 'pending'),
+                   count(*) FILTER (WHERE verification = 'verified'),
+                   count(*) FILTER (WHERE verification = 'corrected'),
+                   count(*) FILTER (WHERE verification = 'unverified'),
+                   count(*) FILTER (WHERE status = 'rejected'),
+                   EXISTS (SELECT 1 FROM arsenal_pool_runs WHERE run_id = %(run)s AND status = 'verified'),
+                   count(*)
+              FROM items
+            """, {"run": run_id}).fetchone()
+        kind, pending, verified, corrected, unverified, rejected, closed, total = row
+        if kind is None or closed or pending or not total:
+            return False
+        arsenal_log_run(kind, "verified", run_id=run_id, verified=int(verified), corrected=int(corrected),
+                        unverified=int(unverified), rejected=int(rejected), conn=c)
+        return True
+
+
+#: Pending real items older than `hours` with no verify job queued or
+#: running: the pool job queues them again.
+ARSENAL_STALE_PENDING_SQL: Final = """
+    SELECT 'ref', r.id FROM arsenal_refs r
+     WHERE NOT r.is_test AND r.verification = 'pending' AND r.status IN ('pool', 'seed')
+       AND r.created_at < now() - make_interval(hours => %(hours)s)
+       AND NOT EXISTS (SELECT 1 FROM job_queue q WHERE q.kind = 'arsenal_verify' AND q.status IN ('queued', 'running')
+                         AND q.payload ->> 'ref_id' = r.id::text)
+    UNION ALL
+    SELECT 'word', w.id FROM arsenal_words w
+     WHERE NOT w.is_test AND w.verification = 'pending' AND w.status = 'pool'
+       AND w.created_at < now() - make_interval(hours => %(hours)s)
+       AND NOT EXISTS (SELECT 1 FROM job_queue q WHERE q.kind = 'arsenal_verify' AND q.status IN ('queued', 'running')
+                         AND q.payload ->> 'word_id' = w.id::text)
+     ORDER BY 1, 2
+     LIMIT 200
+"""
+
+
+def arsenal_stale_pending(hours: int = 24, *, conn: psycopg.Connection | None = None) -> list[tuple[str, int]]:
+    with _brief_conn(conn) as c:
+        return [(r[0], int(r[1])) for r in c.execute(ARSENAL_STALE_PENDING_SQL, {"hours": hours}).fetchall()]
+
+
+def arsenal_queue_verify(target: str, item_id: int, *, conn: psycopg.Connection | None = None) -> int:
+    """One arsenal_verify job ({'ref_id': n} or {'word_id': n}), due now."""
+    if target not in ("ref", "word"):
+        raise LedgerError(f"arsenal_queue_verify: target is 'ref' or 'word', got {target!r}")
+    return queue_enqueue(ARSENAL_VERIFY_KIND, {f"{target}_id": int(item_id)}, datetime.now(timezone.utc), conn=conn)
+
+
+def arsenal_drop_on(day: date, *, conn: psycopg.Connection | None = None) -> int | None:
+    """The real drop for `day`, if there is one."""
+    with _brief_conn(conn) as c:
+        row = c.execute("SELECT id FROM arsenal_drops WHERE drop_date = %s AND NOT is_test", (day,)).fetchone()
+    return None if row is None else int(row[0])
+
+
+def arsenal_pick_drop(day: date, *, topped_up: bool = False, conn: psycopg.Connection | None = None) -> int:
+    """db/054 arsenal_pick_drop for a real drop: the drop's id (the existing
+    one when `day` already has a drop). Raises when the pool is short."""
+    with _brief_conn(conn) as c:
+        return int(c.execute("SELECT arsenal_pick_drop(%s, false, %s)", (day, topped_up)).fetchone()[0])
+
+
+def arsenal_owner_today(*, conn: psycopg.Connection | None = None) -> date:
+    with _brief_conn(conn) as c:
+        return c.execute("SELECT owner_today()").fetchone()[0]
+
+
+@dataclass(frozen=True)
+class ArsenalCheck:
+    repeated_refs: int
+    repeated_words: int
+    seeds_dropped: int
+    refs_by_verification: dict[str, int]
+    words_by_verification: dict[str, int]
+    today: date
+    today_drop: tuple[int, tuple[int, ...], int] | None
+
+
+def arsenal_check(*, conn: psycopg.Connection | None = None) -> ArsenalCheck:
+    """scripts/arsenal_check.py: the invariants as counts (real rows only)."""
+    with _brief_conn(conn) as c:
+        rep_refs, rep_words, seeds = c.execute(
+            """
+            SELECT (SELECT count(*) FROM (SELECT x FROM arsenal_drops d CROSS JOIN LATERAL unnest(d.ref_ids) x
+                                           WHERE NOT d.is_test GROUP BY x HAVING count(*) > 1) t),
+                   (SELECT count(*) FROM (SELECT word_id FROM arsenal_drops WHERE NOT is_test
+                                           GROUP BY word_id HAVING count(*) > 1) t),
+                   (SELECT count(*) FROM arsenal_drops d CROSS JOIN LATERAL unnest(d.ref_ids) x
+                      JOIN arsenal_refs r ON r.id = x WHERE r.origin_kind = 'seed')
+            """).fetchone()
+        refs = {r[0]: int(r[1]) for r in c.execute(
+            "SELECT verification, count(*) FROM arsenal_refs WHERE NOT is_test GROUP BY 1 ORDER BY 1").fetchall()}
+        words = {r[0]: int(r[1]) for r in c.execute(
+            "SELECT verification, count(*) FROM arsenal_words WHERE NOT is_test GROUP BY 1 ORDER BY 1").fetchall()}
+        today = c.execute("SELECT owner_today()").fetchone()[0]
+        d = c.execute("SELECT id, ref_ids, word_id FROM arsenal_drops WHERE drop_date = %s AND NOT is_test",
+                      (today,)).fetchone()
+    drop = None if d is None else (int(d[0]), tuple(int(x) for x in d[1]), int(d[2]))
+    return ArsenalCheck(int(rep_refs), int(rep_words), int(seeds), refs, words, today, drop)
+
+
+@contextmanager
+def arsenal_collect_lock(run_id: int) -> Iterator[bool]:
+    """A session advisory lock on one run, across processes (the worker's
+    collect job and scripts/arsenal_pool --now): only the holder reads the
+    batch, so its usage is recorded once. Yields False when another holds it."""
+    key = run_id % 2_000_000_000
+    with _pool().connection() as c:
+        got = bool(c.execute("SELECT pg_try_advisory_lock(hashtext('arsenal_collect'), %s::int)",
+                             (key,)).fetchone()[0])
+        c.commit()  # never idle in a transaction while the batch is read
+        try:
+            yield got
+        finally:
+            if got:
+                c.execute("SELECT pg_advisory_unlock(hashtext('arsenal_collect'), %s::int)", (key,))
+                c.commit()
+
+
+def arsenal_ai_cost_since(since: datetime, *, conn: psycopg.Connection | None = None) -> dict[str, Decimal]:
+    """purpose -> cost of the Arsenal's ai_usage rows since `since` (scripts)."""
+    with _brief_conn(conn) as c:
+        return {r[0]: Decimal(r[1]) for r in c.execute(
+            "SELECT purpose, sum(cost_usd) FROM ai_usage WHERE purpose LIKE 'arsenal%%' AND created_at >= %s "
+            "GROUP BY 1 ORDER BY 1", (since,)).fetchall()}
+
+
+@dataclass(frozen=True)
+class ArsenalDropCard:
+    slot: int
+    title: str
+    category: str
+    room: str
+    verification: str
+
+
+@dataclass(frozen=True)
+class ArsenalDropDetails:
+    drop_id: int
+    day: date
+    topped_up: bool
+    cards: tuple[ArsenalDropCard, ...]
+    word: str
+    word_verification: str
+
+
+def arsenal_drop_details(drop_id: int, *, conn: psycopg.Connection | None = None) -> ArsenalDropDetails | None:
+    with _brief_conn(conn) as c:
+        d = c.execute(
+            "SELECT d.id, d.drop_date, d.topped_up, w.lemma, w.verification FROM arsenal_drops d "
+            "JOIN arsenal_words w ON w.id = d.word_id WHERE d.id = %s", (drop_id,)).fetchone()
+        if d is None:
+            return None
+        rows = c.execute(
+            "SELECT s.ord, r.title, r.category, r.room, r.verification FROM arsenal_drops d "
+            "CROSS JOIN LATERAL unnest(d.ref_ids) WITH ORDINALITY AS s(ref_id, ord) "
+            "JOIN arsenal_refs r ON r.id = s.ref_id WHERE d.id = %s ORDER BY s.ord", (drop_id,)).fetchall()
+    return ArsenalDropDetails(int(d[0]), d[1], bool(d[2]),
+                              tuple(ArsenalDropCard(int(r[0]), r[1], r[2], r[3], r[4]) for r in rows), d[3], d[4])
