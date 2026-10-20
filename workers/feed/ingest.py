@@ -490,6 +490,11 @@ class Ingest:
         logged = [ledger.SimilarityRow(s.story_id, "near_miss", s.cosine, s.fuzz) for s in decision.near_misses]
         for s in decision.near_misses:
             log.info("feed near miss %.3f (fuzz %.0f): %r vs story %d", s.cosine, s.fuzz, it.title, s.story_id)
+        # Shadow only (db/058, feed review 3a): what the 0.92 + two-names rule would join. Nothing joins.
+        logged += [ledger.SimilarityRow(s.story_id, "would_join", s.cosine, s.fuzz) for s in decision.would_join]
+        for s in decision.would_join:
+            log.info("feed would_join %.3f (fuzz %.0f, names %s): %r vs story %d", s.cosine, s.fuzz,
+                     sorted(cluster.shared_names(it.title, s.title)), it.title, s.story_id)
         member = cluster.Member(it.title, array("f", title_vec))
         if decision.story_id is not None:
             best = decision.best

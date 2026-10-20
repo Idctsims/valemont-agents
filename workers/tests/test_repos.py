@@ -580,6 +580,54 @@ class RepoWhy(unittest.TestCase):
         self.assertEqual(why.check_repo({"target": "Sail Beach Club", "why": "Sail Beach Club can use it for bookings."},
                                         self.NAMES)[1], None)
 
+    def test_a_dev_workflow_line_names_what_it_lets_you_do(self) -> None:
+        """Owner, 2026-10-20 (feed review 5): a tool name or "sharpen your
+        workflow" is not a use. Day one's universal-modder line (Oct 14) and
+        the two vague lines of Oct 15-19 are refused; the other 18 real lines
+        that week mention Claude Code and pass."""
+        wf = lambda line: why.check_repo({"target": "dev workflow", "why": line}, self.NAMES)  # noqa: E731
+        refused = {
+            # Day one (docs/tech_hub.md §7.2b), as written and in the second person.
+            "Can give Claude Code skills and the fal MCP for agent-driven workflows in Tsims's Claude Code setup.":
+                None,
+            "Can give your Claude Code skills and the fal MCP for agent-driven workflows.": "for agent-driven workflows",
+            "A read-only security scan skill can sharpen your Claude Code workflow across repos, Vercel and GitHub.":
+                "sharpen",
+            "Adds an MCP server and skills to your Claude Code.": "names the tool",
+        }
+        for line, needle in refused.items():
+            with self.subTest(line=line[:40]):
+                got, reason = wf(line)
+                self.assertEqual(got, why.GENERAL)
+                if needle:
+                    self.assertIn(needle, reason)
+        kept = [
+            "Use this as your dev workflow's starting point for vetted Claude Code plugins, with trust checks before install.",
+            "Let your Claude Code and MCP setup search and download 3D assets from 23 sites in one call.",
+            "Route your Claude Code and Codex agents to different model providers from your menu bar, with quota rotation.",
+            "Swap system prompts across your Claude Code, Cursor and Codex clients in one reversible step.",
+            "Your dev workflow can use GitBot to run reusable Claude Code bots locally across your repositories.",
+            "Your dev workflow can use this to have Claude Code ask about your approach and tradeoffs before writing code.",
+            "Your Claude Code can use this skill to answer hard questions with a readable single HTML page.",
+            "Your Claude Code and Cursor setup can pull vetted official MCP servers from this curated directory.",
+            "Your Claude Code is the agentic terminal tool you build with, handling routine tasks and git workflows from natural language.",
+            "Cuts your Claude Code context usage by roughly 98 percent through MCP sandboxing and persistent session memory.",
+            "Your dev workflow can use its MCP server to give Claude Code local file, shell and computer-control tools.",
+            "Gives your Claude Code an MCP server and skill that finds the cheapest API provider for any model.",
+            "Your Claude Code setup can use these eleven free skills to reverse-engineer and test existing apps.",
+            "Your dev workflow can use this Blender MCP server so Claude Code can drive scene building and 3D tasks directly.",
+            "Your Claude Code or Cursor can query live Semrush keyword and backlink data through this MCP server.",
+            "Lets your Claude Code, Cursor and other coding agents run as a managed fleet on your own subscriptions.",
+            "This MCP audit CLI can check your Cursor and Claude Code MCP configs for poisoning and leaked secrets.",
+            "Hycli's typed CLI and MCP actions can give your Claude Code and Cursor agents reliable website automation.",
+            "clodfarm's multi-agent orchestration and usage pacing can help you run parallel Claude Code missions.",
+            "Can add a reverse-engineering MCP server to your Claude Code.",
+        ]
+        for line in kept:
+            with self.subTest(line=line[:40]):
+                self.assertEqual(wf(line), (line, None))
+        self.assertIn("lets you DO", why.REPO_SYSTEM)
+
     def test_second_person_only(self) -> None:
         """Owner, 2026-10-14: "your Claude Code", "your client sites", never
         "Tsims's"; the prompt the model copies from says "your" too."""

@@ -292,6 +292,35 @@ def target_key(target: Any) -> str:
 
 #: The repo hedge rule: "can"/"could" are allowed (the target is named).
 REPO_HEDGE = re.compile(r"\b(may|might|potentially|possibly|perhaps)\b", re.IGNORECASE)
+#: The dev-workflow rule (owner, 2026-10-20; feed review 5): the line names
+#: what the repo lets the owner DO. A vague verb ("sharpen your workflow") or
+#: a workflow as the only purpose ("for agent-driven workflows") is not that.
+WORKFLOW_VAGUE = re.compile(
+    r"\b(sharpen|sharpens|improve|improves|boost|boosts|enhance|enhances|streamline|streamlines|supercharge"
+    r"|supercharges|level up|power up|elevate|elevates|optimi[sz]e|optimi[sz]es)\b"
+    r"|\bfor (?:[\w-]+ ){0,2}workflows?\b",
+    re.IGNORECASE)
+#: Words that name the tool or the target, not a use: a workflow line needs at
+#: least WORKFLOW_MIN_USE_WORDS words beyond these.
+_WORKFLOW_FILLER = frozenset(
+    "your you the a an and or this that these its it can could lets let give gives help helps use uses using "
+    "with to for in on of into from by as setup dev workflow workflows claude code cursor codex mcp server "
+    "servers skill skills agent agents plugin plugins tool tools repo repository".split())
+#: Two: "Can add a reverse-engineering MCP server to your Claude Code." (the
+#: owner's good line of 2026-10-14) keeps "add" and "reverse-engineering".
+WORKFLOW_MIN_USE_WORDS = 2
+
+
+def workflow_use_problem(why: str) -> str | None:
+    """Why a dev-workflow line names no use, or None."""
+    vague = WORKFLOW_VAGUE.search(why)
+    if vague:
+        return (f"says {vague.group(0)!r}, not what it lets you do: name the action "
+                "(\"search and download 3D assets\", \"check MCP configs for leaked secrets\")")
+    use = [w for w in re.findall(r"[a-z0-9][a-z0-9'-]*", why.lower()) if w not in _WORKFLOW_FILLER]
+    if len(use) < WORKFLOW_MIN_USE_WORDS:
+        return "names the tool, not what it lets you do: name the action"
+    return None
 #: Owner, 2026-10-14: a repo line speaks to the reader ("your Claude Code",
 #: "your client sites"), never about them by name.
 THIRD_PERSON = re.compile(r"\btsims\b|\bthe (reader|owner|user)\b", re.IGNORECASE)
@@ -308,6 +337,7 @@ For each repository answer with a target and a line:
 - target = null, when there is no concrete use. Never stretch.
 
 When the target is not null, write ONE sentence of at most {MAX_WORDS} words that names the target (the venture's exact name, or "your dashboard", "your dev workflow", "your Claude Code", "your client sites") and the concrete use, in the second person: "your Claude Code", "your client sites". Never the reader's name, never "the reader". "Can" is fine; never "may" or "might".
+For your dev workflow, say what the repository lets you DO ("search and download 3D assets from 23 sites in one call"). Naming the tool is not a use, and neither is "sharpen", "improve" or "boost your workflow", or "for agent-driven workflows".
 
 Return one result per repository: its id, the target (or null) and the line (or null). Output only the JSON object."""
 
@@ -334,6 +364,10 @@ def check_repo(item: dict[str, Any], names: Sequence[str]) -> tuple[str, str | N
     if key in REPO_TARGETS:
         if not REPO_TARGETS[key][1].search(why):
             return GENERAL, f"does not name the {key} in the line"
+        if key == WORKFLOW:
+            problem = workflow_use_problem(why)
+            if problem:
+                return GENERAL, problem
     else:
         name = resolve_venture(target, names)
         if name is None:
