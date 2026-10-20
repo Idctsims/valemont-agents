@@ -1059,7 +1059,19 @@ absent row as "I never looked."
     - (e) Before the releases: 0 releases, and active holds 9 (ref 195), 10 (197), 11 (218).
 
     **Holds 9, 10 and 11 released** with `scripts.arsenal_release_hold` (releases 3, 4, 5; role postgres; reason "false positive: intermediate outcome prompt; final prompt clears (dry run 2026-10-16)"). Read back: `v_arsenal_active_holds` empty; refs 195, 197 and 218 ready; 21 ready references across all 7 categories.
-    - Next new file: `db/057`.
+  - **`db/057_chat5_fixes.sql` applied 2026-10-20 20:23:21 UTC** (`migration_log`; the first paste; owner's paste, the self-test NOTICE was not seen here; the log row exists only if it and the backfill assertion passed). Branch `chat5-fixes`, not merged (Railway builds paused).
+    - `content_items_frozen` leaves the generated `youtube_key` out of its comparison: in a BEFORE trigger it reads NULL, so every trailer item looked changed and `feed_prune` failed Oct 18 and 19 ("content_items 16900 is frozen"; 67 trailer items blocked the clear of 5,572 rows).
+    - `arsenal_outcome_checks` (append-only, TRUNCATE-guarded; a guard on votes vs the conflict flag, every control passed, test/real); `arsenal_pick_drop` takes a reference only with a check on record (owner, Oct 20). Backfill: the 26 refs then in the pool (14 from run 14, round B dry run Oct 16; 12 from run 38, `--write` Oct 20, controls 3/3), all `nnn`.
+    - `egress_samples` (append-only, TRUNCATE-guarded) and `v_egress_days` (security_invoker): the egress job's day total every run, and a final row for the day just closed.
+
+    **Verified via db_inspect the same session:**
+    - (a) The log row.
+    - (b) The freeze function names `youtube_key`; the picker reads `arsenal_outcome_checks`.
+    - (c) 26 backfill checks, all `nnn`, no conflict, none test; 26 checks in all; 0 real ready refs without a check.
+    - (d) Both tables RLS on, 1 policy each; triggers guard/immutable/no_truncate and stamp/immutable/no_truncate.
+    - (e) Both tables and the view: anon nothing, authenticated select only, readonly select.
+    - (f) `egress_samples` 0 rows (the worker that writes it is not deployed).
+    - Next new file: `db/058`.
   - **Rule (owner, 2026-10-12): the migration record updates in the same session a migration is verified, never deferred to a merge.** Record `applied_at` from `migration_log` and the verification, and move "Next new file" here and in MASTER_PLAN §"Migration numbering", in their own commit.
 - **Known intermittent `tests_live` skip (identified 2026-10-12):** `test_system_jobs_sql.SystemJobsSql.test_claim_retry_and_finish` skips with "another poller claimed the test job first" when the production worker's 10 s `job_queue` poller claims the test's `noop` job first (observed 2 of 60 isolated runs). By design (skip, not fail); not a broken invariant. Two sibling tests in the same file skip the same way ("another poller claimed/failed the test job first"). Since 2026-10-13 `tests_live` runs with `-v`, so a skip is named, not assumed.
   - **2026-10-13, cleared (owner):** a quiet Phase 3 run reported "314 tests, OK (skipped=1)" with no name. The full verbose rerun had **0 skips** (314 OK, 593 s). The owner's judgment: the plausible cause is this documented poller race, since every migration-gated skip cannot fire (all applied). One alternative was not ruled out: a class whose own `setUpClass` hits a transient "database unreachable" is also reported as one skip.
