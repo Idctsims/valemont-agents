@@ -26,7 +26,10 @@
 import type { PushMessage, PushSummary } from "@/lib/push/send";
 
 export const DOWN_AFTER_MS = 5 * 60 * 1000;
-export const REALERT_AFTER_MS = 30 * 60 * 1000;
+/** While one outage lasts, "Worker down" repeats at most this often (owner,
+ *  2026-10-20: the 30-minute repeat sent 41 pushes over one ~23 h outage).
+ *  A recovery clears the incident, so the next outage alerts at once. */
+export const REALERT_AFTER_MS = 4 * 60 * 60 * 1000;
 
 export type WatchdogStatus = "ok" | "down" | "error";
 
