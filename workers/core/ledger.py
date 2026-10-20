@@ -158,6 +158,9 @@ EventKind = Literal[
     "selected",
     "gate_evaluated",
     "error",
+    # A by-hand regeneration of stored output (record_regeneration; owner,
+    # 2026-10-20: the 02:13 UTC Oct 15 repo why re-run left no trace).
+    "regenerated",
 ]
 
 #: What an attempt came to. `deferred` and `error` produced no answer and count
@@ -795,6 +798,25 @@ def emit_event(
             """,
             (agent_id, run_id, kind, message, Jsonb(detail or {})),
         )
+
+
+@dataclass(frozen=True)
+class Regenerated:
+    """One item a by-hand regeneration replaced: its id and the kind of
+    output before and after (e.g. 'concrete' -> 'general')."""
+    id: int
+    old: str
+    new: str
+
+
+def record_regeneration(what: str, changes: Sequence[Regenerated], *, how: str) -> None:
+    """THE GUARD (owner, 2026-10-20): every script path that regenerates
+    stored output writes one 'regenerated' event naming what, which ids, and
+    each id's old -> new kind, and how it was run. The 02:13 UTC Oct 15 repo
+    why re-run overwrote 7 good lines and left no record of who ran it."""
+    emit_event("regenerated", f"{what}: {len(changes)} regenerated ({how})",
+               detail={"what": what, "how": how, "ids": [c.id for c in changes],
+                       "changes": [{"id": c.id, "old": c.old, "new": c.new} for c in changes]})
 
 
 # ---------------------------------------------------------------------------
@@ -3248,6 +3270,14 @@ def feed_why_jobs(story_ids: Sequence[int], *, conn: psycopg.Connection | None =
              WHERE v.id = ANY(%s) ORDER BY v.id
         """, (list(story_ids),)).fetchall()
     return [WhyJob(int(r[0]), r[1], r[2], r[3]) for r in rows]
+
+
+def feed_why_lines(story_ids: Sequence[int], *, conn: psycopg.Connection | None = None) -> dict[int, str | None]:
+    """The stored why-it-matters line of each real story (None: none yet):
+    the 'before' of a by-hand regeneration (record_regeneration)."""
+    with _brief_conn(conn) as c:
+        return {int(r[0]): r[1] for r in c.execute(
+            "SELECT id, why_it_matters FROM stories WHERE id = ANY(%s) AND NOT is_test", (list(story_ids),))}
 
 
 def feed_reset_why(story_ids: Sequence[int], *, conn: psycopg.Connection | None = None) -> int:

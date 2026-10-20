@@ -727,6 +727,70 @@ class RepoWhy(unittest.TestCase):
         self.assertIn("st.category = 'repos'", ledger.FEED_REPO_WHY_QUEUE_SQL)
 
 
+class RegenerationIsOnTheRecord(unittest.TestCase):
+    """THE GUARD (owner, 2026-10-20): every path that regenerates stored
+    output writes one 'regenerated' event (what, which ids, old -> new kind,
+    how). The 02:13 UTC Oct 15 repo why re-run overwrote 7 good lines with
+    "General interest." and left no record of what ran it."""
+
+    def setUp(self) -> None:
+        self.events: list[tuple[str, list, str]] = []
+        stubs = {
+            "_pool": _refuse_database,
+            "ai_calls_today": lambda purpose, **kw: 0,
+            "feed_why_lines": lambda ids, **kw: {1: "Can add a reverse-engineering MCP server to your Claude Code.",
+                                                 2: why.GENERAL},
+            "feed_reset_repo_why": lambda ids, **kw: len(ids),
+            "feed_repo_why_queue": lambda limit, max_attempts, **kw: [
+                ledger.RepoWhyJob(1, "o/a", "S.", "GitHub", None, ()),
+                ledger.RepoWhyJob(2, "o/b", "S.", "GitHub", None, ())],
+            "ctx_ventures": lambda **kw: {},
+            "record_regeneration": lambda what, changes, how: self.events.append((what, list(changes), how)),
+        }
+        for name, fn in stubs.items():
+            p = mock.patch.object(ledger, name, fn)
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_a_repo_why_re_run_records_every_id_old_to_new(self) -> None:
+        with mock.patch.object(why, "ask_repo_group", lambda jobs, ctx, names, **kw: {
+                1: why.GENERAL, 2: "Let your Claude Code search and download 3D assets in one call."}):
+            why.repo_ask_again([1, 2])
+        self.assertEqual(self.events, [("repo_why", [ledger.Regenerated(1, "concrete", "general"),
+                                                     ledger.Regenerated(2, "general", "concrete")],
+                                        "scripts.feed_profile --repo-why --again")])
+
+    def test_a_re_run_that_fails_is_still_on_the_record(self) -> None:
+        def boom(*a: Any, **kw: Any) -> dict:
+            raise RuntimeError("the API is down")
+        with mock.patch.object(why, "ask_repo_group", boom), self.assertRaises(RuntimeError):
+            why.repo_ask_again([1, 2])
+        self.assertEqual([(c.id, c.old, c.new) for c in self.events[0][1]],
+                         [(1, "concrete", "unanswered"), (2, "general", "unanswered")])
+
+    def test_every_reset_of_stored_output_sits_beside_the_guard(self) -> None:
+        """Static: any code outside core/ledger.py that resets a stored line
+        also records the regeneration, and the brief's --generate does."""
+        root = Path(__file__).resolve().parents[1]
+        resets = ("feed_reset_why(", "feed_reset_repo_why(")
+        callers = []
+        for py in sorted(root.rglob("*.py")):
+            if any(p in ("tests", "tests_live", "venv") for p in py.parts) or py.name == "ledger.py":
+                continue
+            text = py.read_text(encoding="utf-8")
+            if any(r in text for r in resets):
+                callers.append(py.name)
+                self.assertTrue("_record(" in text or "record_regeneration(" in text, py.name)
+        self.assertEqual(callers, ["why.py"])
+        self.assertIn("record_regeneration(", (root / "scripts" / "morning_brief.py").read_text(encoding="utf-8"))
+        # arsenal_reverify is a dry run: it settles nothing, so it records nothing.
+        self.assertIn("It NEVER settles anything", (root / "scripts" / "arsenal_reverify.py").read_text(encoding="utf-8"))
+
+    def test_the_line_kinds(self) -> None:
+        self.assertEqual([why.line_kind(x) for x in (None, "", why.GENERAL, "Can add X to your dashboard.")],
+                         ["none", "none", "general", "concrete"])
+
+
 class RepoStoriesInTheEngine(unittest.TestCase):
     def test_summaries_keep_a_repo_storys_topics(self) -> None:
         import inspect

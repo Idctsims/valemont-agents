@@ -226,9 +226,16 @@ def ask_again(story_ids: Sequence[int], *, client: Any = None) -> dict[int, str 
     if DAILY_CALLS - ledger.ai_calls_today(PURPOSE) <= 0:
         raise JobSkipped(f"daily cap of {DAILY_CALLS} calls reached")
     jobs = ledger.feed_why_jobs(story_ids)[:GROUP_SIZE]
-    ledger.feed_reset_why([j.story_id for j in jobs])
+    ids = [j.story_id for j in jobs]
+    before = ledger.feed_why_lines(ids)
+    ledger.feed_reset_why(ids)
     ctx = ledger.ctx_ventures()
-    return ask_group(jobs, ctx, venture_names(ctx), client=client)
+    answers: dict[int, str | None] = {}
+    try:
+        answers = ask_group(jobs, ctx, venture_names(ctx), client=client)
+        return answers
+    finally:
+        _record("news_why", ids, before, answers, how="scripts.feed_profile --why --again")
 
 
 # ------------------------------------------------------------------ repos
@@ -511,10 +518,33 @@ def repo_ask_again(story_ids: Sequence[int], *, client: Any = None) -> dict[int,
     left = REPO_DAILY_CALLS - ledger.ai_calls_today(REPO_PURPOSE)
     if left <= 0:
         raise JobSkipped(f"repo cap of {REPO_DAILY_CALLS} calls reached")
-    ledger.feed_reset_repo_why(story_ids)
-    jobs = [j for j in ledger.feed_repo_why_queue(1000, MAX_ATTEMPTS) if j.story_id in set(story_ids)]
+    ids = list(story_ids)
+    before = ledger.feed_why_lines(ids)
+    ledger.feed_reset_repo_why(ids)
+    jobs = [j for j in ledger.feed_repo_why_queue(1000, MAX_ATTEMPTS) if j.story_id in set(ids)]
     ctx = ledger.ctx_ventures()
-    return ask_repo_group(jobs[:REPO_GROUP_SIZE], ctx, venture_names(ctx), client=client, retry=left >= 2)
+    answers: dict[int, str] = {}
+    try:
+        answers = ask_repo_group(jobs[:REPO_GROUP_SIZE], ctx, venture_names(ctx), client=client, retry=left >= 2)
+        return answers
+    finally:
+        _record("repo_why", ids, before, answers, how="scripts.feed_profile --repo-why --again")
+
+
+def line_kind(line: str | None) -> str:
+    """A why line's kind, for the regeneration record: none, general or concrete."""
+    if not line:
+        return "none"
+    return "general" if line == GENERAL else "concrete"
+
+
+def _record(what: str, ids: Sequence[int], before: dict[int, str | None], after: dict, *, how: str) -> None:
+    """The guard (owner, 2026-10-20): one 'regenerated' event per by-hand
+    re-run, every id with its old -> new kind ('unanswered' when the run
+    failed before answering it)."""
+    ledger.record_regeneration(what, [
+        ledger.Regenerated(i, line_kind(before.get(i)), line_kind(after[i]) if i in after else "unanswered")
+        for i in ids], how=how)
 
 
 def why_job(*, client: Any = None) -> int:
