@@ -372,7 +372,8 @@ class Registry(unittest.TestCase):
                           "feed_ingest", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
                           "feed_repo_why", "feed_profile", "feed_prune", "tech_repos",
                           "screening_match", "screening_refresh", "screening_recs", "screening_release_push",
-                          "arsenal_pool", "arsenal_pool_collect", "arsenal_drop", "arsenal_verify"})
+                          "arsenal_pool", "arsenal_pool_collect", "arsenal_drop", "arsenal_verify",
+                          "arsenal_outcome"})
         # db/054 (Chat 5): the pool Sundays 03:30, the drop daily 05:30 (both
         # Chicago, both at boot), collect every 10 min; verify runs per queued
         # item, never on its own.
@@ -390,6 +391,9 @@ class Registry(unittest.TestCase):
         self.assertEqual(built["arsenal_pool_collect"].expected_interval_s, 600)
         self.assertFalse(built["arsenal_verify"].scheduled)
         self.assertIn("arsenal_verify", system_jobs.QUEUE_HANDLERS)
+        # db/057: the outcome check, the same shape (queued, its own job_health row).
+        self.assertFalse(built["arsenal_outcome"].scheduled)
+        self.assertIn(ledger.ARSENAL_OUTCOME_KIND, system_jobs.QUEUE_HANDLERS)
         self.assertFalse(built["screening_match"].scheduled)
         self.assertTrue(built["screening_refresh"].run_at_boot)
         self.assertEqual((built["screening_refresh"].trigger.fields[5].expressions[0].first,
@@ -459,10 +463,10 @@ class SystemOnlyBoot(SystemTestCase):
                                "system:arsenal_pool_collect", "system:arsenal_drop"})
         # screening_match, feed_tech_summarize, feed_summarize, feed_score, feed_why and feed_repo_why
         # are registered (job_health rows, watched) but never scheduled: feed_ingest runs them.
-        # arsenal_verify the same way: the job_queue handler runs it per item.
-        self.assertEqual(self.ledger.names().count("job_register"), 27)
+        # arsenal_verify and arsenal_outcome the same way: the job_queue handler runs them.
+        self.assertEqual(self.ledger.names().count("job_register"), 28)
         for chained in ("screening_match", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
-                        "feed_repo_why", "arsenal_verify"):
+                        "feed_repo_why", "arsenal_verify", "arsenal_outcome"):
             self.assertNotIn(f"system:{chained}", ids)
 
     def test_disabled_agents_plus_system_jobs_start_rather_than_refuse(self) -> None:
@@ -513,7 +517,8 @@ class SystemOnlyBoot(SystemTestCase):
                           "feed_ingest", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
                           "feed_repo_why", "feed_profile", "feed_prune", "tech_repos",
                           "screening_match", "screening_refresh", "screening_recs", "screening_release_push",
-                          "arsenal_pool", "arsenal_pool_collect", "arsenal_drop", "arsenal_verify"})
+                          "arsenal_pool", "arsenal_pool_collect", "arsenal_drop", "arsenal_verify",
+                          "arsenal_outcome"})
 
 
 if __name__ == "__main__":

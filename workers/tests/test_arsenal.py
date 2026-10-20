@@ -401,11 +401,15 @@ class VerifyItem(NoDatabase):
         self.patch("arsenal_ref_to_verify", lambda i: ref(id=i))
         self.patch("arsenal_settle_ref", lambda i, **kw: settled.append({"id": i, **kw}) or True)
         self.patch("arsenal_close_run_if_settled", lambda run: closed.append(run) or True)
+        queued: list[str] = []
+        self.patch("arsenal_queue_outcome", lambda reason: queued.append(reason) or 81)
         http = VerifyRef().http()
         self.assertEqual(verify.verify_item("ref", 3, http=http, ask=judged("supported")), "verified")
         self.assertEqual(settled[0]["verification"], "verified")
         self.assertEqual(settled[0]["source_url"], "https://en.wikipedia.org/wiki/Crossing_the_Rubicon")
         self.assertEqual(closed, [7])
+        # db/057: the closed run's references drop only once outcome-checked.
+        self.assertEqual(queued, ["run 7 settled"])
         self.patch("arsenal_ref_to_verify", lambda i: ref(id=i, verification="verified"))
         self.assertEqual(verify.verify_item("ref", 3, http=http, ask=judged("supported")), "skipped: not pending")
 
@@ -697,8 +701,16 @@ class OutcomeWriteGate(NoDatabase):
         from scripts import arsenal_outcome_check as check
         self.check = check
         self.holds: list[int] = []
+        self.checks: list[tuple] = []
         self.pool_read: list[bool] = []
-        self.patch("arsenal_hold", lambda **kw: self.holds.append(kw["ref_id"]) or 9)
+        self.patch("arsenal_hold", _refuse_database)  # db/057: holds go with their check, one transaction
+
+        def record(ref_id: int, **kw: Any) -> tuple[int, int | None]:
+            self.checks.append((ref_id, kw["conflict"], kw["votes"], kw["controls"], kw["source"]))
+            if kw["conflict"]:
+                self.holds.append(ref_id)
+            return len(self.checks), 9 if kw["conflict"] else None
+        self.patch("arsenal_record_outcome", record)
         self.patch("arsenal_undropped_checked_refs",
                    lambda: self.pool_read.append(True) or [ledger.ArsenalPoolRef(self.POOL_REF, False)])
         self.patch("close_pool", lambda: None)
@@ -715,20 +727,107 @@ class OutcomeWriteGate(NoDatabase):
     def test_write_is_refused_unless_every_control_passes_in_this_run(self) -> None:
         always_no = lambda card, e: (False, "no conflict")  # noqa: E731 - Thermopylae and Custer then fail
         self.assertEqual(self.check.main(["--write"], ask=always_no), 1)
-        self.assertEqual((self.holds, self.pool_read), ([], []))  # refused before the pool was read
+        self.assertEqual((self.holds, self.checks, self.pool_read), ([], [], []))  # refused before the pool was read
 
-    def test_write_holds_once_the_controls_pass(self) -> None:
-        def ask(card: ledger.ArsenalRefToVerify, e: str) -> tuple[bool, str]:
-            return card.title in ("Thermopylae", "Custer's Last Stand", "The Trojan Horse"), "x"
-        self.assertEqual(self.check.main(["--write"], ask=ask), 0)
+    def test_write_records_every_check_and_holds_a_conflict(self) -> None:
+        self.assertEqual(self.check.main(["--write"], ask=controls_ask("The Trojan Horse")), 0)
+        self.assertEqual(self.checks, [(195, True, "YYY", "3/3", "script")])
         self.assertEqual(self.holds, [195])
+        self.checks.clear()
+        self.assertEqual(self.check.main(["--write"], ask=controls_ask()), 0)
+        self.assertEqual(self.checks, [(195, False, "nnn", "3/3", "script")])
 
     def test_the_default_is_a_dry_run_and_ids_never_write(self) -> None:
         conflict = lambda card, e: (True, "x")  # noqa: E731
         self.assertEqual(self.check.main([], ask=conflict), 0)
-        self.assertEqual(self.holds, [])
+        self.assertEqual((self.holds, self.checks), ([], []))
         with self.assertRaises(SystemExit):
             self.check.main(["--write", "--ids", "194"], ask=conflict)
+
+
+class OutcomeInThePool(NoDatabase):
+    """db/057 (owner, 2026-10-20: "record checks, the picker gates"): the
+    worker checks every unchecked ready reference, controls first, and
+    records each check; a failed control records nothing. Batch run 38's
+    references were never checked, and two of them dropped."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from arsenal import outcome
+        self.outcome = outcome
+        self.recorded: list[tuple] = []
+        self.patch("arsenal_record_outcome", lambda i, **kw: self.recorded.append(
+            (i, kw["conflict"], kw["votes"], kw["controls"], kw["source"])) or (1, 70 if kw["conflict"] else None))
+        page = verify.Candidate("wikipedia", "Some page", "https://x.invalid", sources.Excerpt("x", 1, ("",)), ())
+        p = mock.patch.object(verify, "candidates", lambda r, http=None: ([page], []))
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_nothing_unchecked_is_no_ai_call(self) -> None:
+        self.patch("arsenal_unchecked_refs", lambda: [])
+        run = self.outcome.check_unchecked(ask=_refuse_database)
+        self.assertEqual((run.job_note, run.checked), ("nothing to check", 0))
+
+    def test_controls_first_then_every_reference_on_the_record(self) -> None:
+        refs = [ref(id=711, title="See's Candies", verification="verified"),
+                ref(id=194, title="Thermopylae (the pitch line)", verification="corrected")]
+        self.patch("arsenal_unchecked_refs", lambda: refs)
+        seen: list[str] = []
+        base = controls_ask("Thermopylae (the pitch line)")
+        run = self.outcome.check_unchecked(ask=lambda c, e: seen.append(c.title) or base(c, e))
+        self.assertEqual(seen[:6], ["Thermopylae"] * 3 + ["Custer's Last Stand"] * 3)  # the controls come first
+        self.assertEqual(seen[9:], ["See's Candies"] * 3 + ["Thermopylae (the pitch line)"] * 3)
+        self.assertEqual(self.recorded, [(711, False, "nnn", "3/3", "worker"), (194, True, "YYY", "3/3", "worker")])
+        self.assertEqual((run.checked, run.held, run.job_note), (2, 1, "controls 3/3; checked 2, held 1"))
+
+    def test_a_failed_control_records_nothing_and_raises(self) -> None:
+        self.patch("arsenal_unchecked_refs", lambda: [ref(id=711, verification="verified")])
+        with self.assertRaises(self.outcome.ControlsFailed) as caught:
+            self.outcome.check_unchecked(ask=lambda c, e: (False, "x"))  # Thermopylae and Custer then fail
+        self.assertIn("2 of 3 controls wrong", str(caught.exception))
+        self.assertEqual(self.recorded, [])
+
+    def test_a_top_up_whose_controls_fail_says_so_and_the_pick_fails_loudly(self) -> None:
+        self.patch("arsenal_unchecked_refs", lambda: [ref(id=200, verification="verified")])
+        for name, value in (("arsenal_seeds", lambda: []), ("arsenal_recent_keys", lambda n: []),
+                            ("arsenal_recent_lemmas", lambda n: []), ("arsenal_seed_lemmas", lambda: []),
+                            ("arsenal_log_run", lambda kind, st, **kw: 11), ("arsenal_insert_ref", lambda c, **kw: 200),
+                            ("arsenal_nearest", lambda v: None)):
+            self.patch(name, value)
+        answer = {"refs": [card(canonical_key="topup_x")], "words": []}
+        with mock.patch.object(ai, "complete", lambda **kw: SimpleNamespace(
+                stop_reason="end_turn", content=[SimpleNamespace(type="text", text=json.dumps(answer))])), \
+                mock.patch.object(verify, "verify_item", lambda t, i, **kw: "verified"):
+            up = pool.topup(status(ready_categories=()), embed=lambda texts: [[0.0]] * len(texts),
+                            ask_outcome=lambda c, e: (False, "x"))
+        self.assertTrue(up.outcome.startswith("outcome check refused: 2 of 3 controls wrong"))
+        self.assertEqual(self.recorded, [])
+
+    def test_unchecked_references_are_on_their_way_and_the_pool_job_queues_their_check(self) -> None:
+        # Not ready (the picker cannot take them), but no reason for a new batch either.
+        self.assertFalse(pool.should_submit(status(refs_ready=0, refs_unchecked=26), NOW)[0])
+        self.assertTrue(pool.should_submit(status(refs_ready=0, refs_unchecked=20), NOW)[0])
+        queued: list[str] = []
+        self.patch("arsenal_unembedded", lambda: [])
+        self.patch("arsenal_stale_pending", lambda hours: [])
+        self.patch("arsenal_queue_outcome", lambda reason: queued.append(reason) or 5)
+        self.patch("arsenal_pool_status", lambda: status(refs_unchecked=3))
+        self.assertIn("outcome check queued for 3 (job 5)", pool.pool_job(now=NOW).job_note)
+        self.patch("arsenal_pool_status", lambda: status())
+        self.assertNotIn("outcome", pool.pool_job(now=NOW).job_note)
+        self.assertEqual(len(queued), 1)
+
+    def test_the_control_fixture_is_the_scripts_and_the_votes_text(self) -> None:
+        from scripts import arsenal_outcome_control
+        self.assertIs(arsenal_outcome_control.run_controls, self.outcome.run_controls)
+        self.assertEqual([self.outcome.votes_text(v) for v in ((True, False, True), ())], ["YnY", ""])
+
+    def test_the_migration_gates_the_picker_on_a_check(self) -> None:
+        sql = (ROOT / "db" / "057_chat5_fixes.sql").read_text(encoding="utf-8")
+        self.assertIn("AND EXISTS (SELECT 1 FROM public.arsenal_outcome_checks oc WHERE oc.ref_id = r.id)", sql)
+        self.assertIn("- 'youtube_key'", sql)
+        self.assertIn("EXISTS (SELECT 1 FROM arsenal_outcome_checks oc WHERE oc.ref_id = r.id)",
+                      ledger.ARSENAL_POOL_STATUS_SQL)
 
 
 class PoolSize(unittest.TestCase):
@@ -769,6 +868,13 @@ class OutcomeCheck(unittest.TestCase):
 
 
 # ======================================================================= pool
+
+def controls_ask(*conflicts: str) -> verify.AskOutcome:
+    """An outcome reader that gets the three controls right (Thermopylae and
+    Custer conflict, the Miracle on Ice does not) and flags only `conflicts`."""
+    flag = {"Thermopylae", "Custer's Last Stand", *conflicts}
+    return lambda card, e: (card.title in flag, "the ending")
+
 
 def status(**kw: Any) -> ledger.ArsenalPoolStatus:
     base = dict(refs_ready=30, refs_pending=0, words_ready=10, words_pending=0,
@@ -981,6 +1087,7 @@ class Drop(NoDatabase):
         self.patch("arsenal_insert_word", lambda w, **kw: next(ids))
         self.patch("arsenal_nearest", lambda v: None)
         self.patch("arsenal_queue_verify", _refuse_database)  # never through job_queue
+        self.patch("arsenal_unchecked_refs", lambda: [])  # nothing verified: nothing to outcome-check
 
         def pick(day: date, topped_up: bool = False) -> int:
             order.append("pick")
@@ -1037,15 +1144,25 @@ class Drop(NoDatabase):
             kw["on_recorded"](1, kw["model"], Decimal("0.03"))
             return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=json.dumps(answer))])
 
+        # db/057: the new reference is outcome-checked inline, controls first, on the record.
+        recorded: list[tuple] = []
+        self.patch("arsenal_unchecked_refs", lambda: [ref(id=200, verification="verified")])
+        self.patch("arsenal_record_outcome", lambda i, **kw: recorded.append((i, kw["controls"], kw["source"],
+                                                                              kw["votes"])) or (1, None))
+        page = verify.Candidate("wikipedia", "Some page", "https://x.invalid", sources.Excerpt("x", 1, ("",)), ())
         with mock.patch.object(ai, "complete", complete), \
-                mock.patch.object(verify, "verify_item", lambda t, i, **kw: settled.append(f"{t} {i}") or "verified"):
-            up = pool.topup(status(ready_categories=("sports",)), embed=lambda texts: [[0.0]] * len(texts))
+                mock.patch.object(verify, "verify_item", lambda t, i, **kw: settled.append(f"{t} {i}") or "verified"), \
+                mock.patch.object(verify, "candidates", lambda r, http=None: ([page], [])):
+            up = pool.topup(status(ready_categories=("sports",)), embed=lambda texts: [[0.0]] * len(texts),
+                            ask_outcome=controls_ask())
         self.assertEqual(len(calls), 1)
         self.assertEqual((calls[0]["purpose"], calls[0]["model"], calls[0]["critical"]),
                          ("arsenal_topup", "claude-sonnet-5-5", False))
         self.assertEqual(logged, [("topup", "submitted"), ("topup", "collected")])
         self.assertEqual(settled, ["ref 200", "word 300"])
         self.assertEqual((up.refs, up.words, up.cost), (1, 1, Decimal("0.03")))
+        self.assertEqual(recorded, [(200, "3/3", "worker", "nnn")])
+        self.assertEqual(up.outcome, "controls 3/3; checked 1, held 0")
 
 
 # ========================================================================== ai

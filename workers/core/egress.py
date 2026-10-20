@@ -21,6 +21,9 @@ Where it goes:
                 `egress` system job writes "today <date> ~X MB read (top
                 jobs)" to job_health every EGRESS_INTERVAL_S and carries the
                 day's total across a restart by reading its own last note.
+                Each run also appends an egress_samples row (db/057), and the
+                first run after the rollover a `final` row for the day just
+                closed (take_closed): the note alone lost Oct 16-18.
     alert       one push a day when the day's total passes ALERT_MB.
 Reads outside a system job (agents, scripts) count as "other".
 """
@@ -74,6 +77,9 @@ class Day:
 
 _LOCK = threading.Lock()
 _DAY: Day | None = None
+#: The day just replaced at the Chicago rollover, until the egress job
+#: writes its final sample (take_closed).
+_CLOSED: Day | None = None
 
 
 def owner_today(now: datetime | None = None) -> date:
@@ -81,11 +87,22 @@ def owner_today(now: datetime | None = None) -> date:
 
 
 def _today() -> Day:
-    global _DAY
+    global _DAY, _CLOSED
     d = owner_today()
     if _DAY is None or _DAY.day != d:
+        if _DAY is not None:
+            _CLOSED = _DAY
         _DAY = Day(d)
     return _DAY
+
+
+def take_closed() -> Day | None:
+    """The day closed at the last rollover, once (a copy), or None."""
+    global _CLOSED
+    with _LOCK:
+        _today()
+        closed, _CLOSED = _CLOSED, None
+        return None if closed is None else Day(closed.day, dict(closed.by_job), closed.carried, closed.alerted)
 
 
 def add(n: int) -> None:

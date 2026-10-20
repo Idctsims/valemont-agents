@@ -1249,6 +1249,17 @@ def job_note(job: str) -> str | None:
     return row[0] if row else None
 
 
+def egress_record_sample(day: date, *, total_bytes: int, carried_bytes: int, by_job: Mapping[str, int],
+                         final: bool = False, conn: psycopg.Connection | None = None) -> int:
+    """One egress_samples row (db/057, append-only): the egress job's day
+    total so far, or with `final` the day just closed at the rollover."""
+    with _brief_conn(conn) as c:
+        return int(c.execute(
+            "INSERT INTO egress_samples (day, total_bytes, carried_bytes, by_job, final) "
+            "VALUES (%s, %s, %s, %s, %s) RETURNING id",
+            (day, total_bytes, min(carried_bytes, total_bytes), Jsonb(dict(by_job)), final)).fetchone()[0])
+
+
 def job_failed(job: str, error: str) -> None:
     """`error` must already be redacted and short (core/jobs.py does both)."""
     with _pool().connection() as conn:
@@ -4391,16 +4402,21 @@ class ArsenalPoolStatus:
     ready_categories: tuple[str, ...]
     last_submitted_at: datetime | None
     open_batch: ArsenalOpenBatch | None
+    #: Verified or corrected, not held, but with no outcome check on record
+    #: yet (db/057): the picker cannot take them until arsenal_outcome runs.
+    refs_unchecked: int = 0
 
 
 #: tests_live runs this exact text. An item with an ACTIVE hold (db/056
 #: v_arsenal_active_holds: a hold with no release) is never ready: the
-#: picker skips it, so counting it would hide a short pool.
+#: picker skips it, so counting it would hide a short pool. Nor is a
+#: reference with no outcome check on record (db/057): it is counted apart.
 ARSENAL_POOL_STATUS_SQL: Final = """
     SELECT
         (SELECT count(*) FROM arsenal_refs r
           WHERE NOT r.is_test AND r.status = 'pool' AND r.verification IN ('verified', 'corrected')
-            AND NOT EXISTS (SELECT 1 FROM v_arsenal_active_holds h WHERE h.ref_id = r.id)),
+            AND NOT EXISTS (SELECT 1 FROM v_arsenal_active_holds h WHERE h.ref_id = r.id)
+            AND EXISTS (SELECT 1 FROM arsenal_outcome_checks oc WHERE oc.ref_id = r.id)),
         (SELECT count(*) FROM arsenal_refs WHERE NOT is_test AND status = 'pool' AND verification = 'pending'),
         (SELECT count(*) FROM arsenal_words w
           WHERE NOT w.is_test AND w.status = 'pool' AND w.verification IN ('verified', 'corrected')
@@ -4408,8 +4424,13 @@ ARSENAL_POOL_STATUS_SQL: Final = """
         (SELECT count(*) FROM arsenal_words WHERE NOT is_test AND status = 'pool' AND verification = 'pending'),
         (SELECT coalesce(array_agg(DISTINCT r.category ORDER BY r.category), '{}') FROM arsenal_refs r
           WHERE NOT r.is_test AND r.status = 'pool' AND r.verification IN ('verified', 'corrected')
-            AND NOT EXISTS (SELECT 1 FROM v_arsenal_active_holds h WHERE h.ref_id = r.id)),
-        (SELECT max(created_at) FROM arsenal_pool_runs WHERE NOT is_test AND kind = 'batch' AND status = 'submitted')
+            AND NOT EXISTS (SELECT 1 FROM v_arsenal_active_holds h WHERE h.ref_id = r.id)
+            AND EXISTS (SELECT 1 FROM arsenal_outcome_checks oc WHERE oc.ref_id = r.id)),
+        (SELECT max(created_at) FROM arsenal_pool_runs WHERE NOT is_test AND kind = 'batch' AND status = 'submitted'),
+        (SELECT count(*) FROM arsenal_refs r
+          WHERE NOT r.is_test AND r.status = 'pool' AND r.verification IN ('verified', 'corrected')
+            AND NOT EXISTS (SELECT 1 FROM v_arsenal_active_holds h WHERE h.ref_id = r.id)
+            AND NOT EXISTS (SELECT 1 FROM arsenal_outcome_checks oc WHERE oc.ref_id = r.id))
 """
 
 #: The newest real batch submitted and not yet collected or failed.
@@ -4434,7 +4455,8 @@ def arsenal_pool_status(*, conn: psycopg.Connection | None = None) -> ArsenalPoo
     with _brief_conn(conn) as c:
         r = c.execute(ARSENAL_POOL_STATUS_SQL).fetchone()
         open_batch = arsenal_open_batch(conn=c)
-    return ArsenalPoolStatus(int(r[0]), int(r[1]), int(r[2]), int(r[3]), tuple(r[4] or ()), r[5], open_batch)
+    return ArsenalPoolStatus(int(r[0]), int(r[1]), int(r[2]), int(r[3]), tuple(r[4] or ()), r[5], open_batch,
+                             int(r[6]))
 
 
 def arsenal_recent_keys(limit: int = 60, *, conn: psycopg.Connection | None = None) -> list[str]:
@@ -4482,6 +4504,51 @@ def arsenal_hold(*, ref_id: int | None = None, word_id: int | None = None, reaso
         return int(c.execute(
             "INSERT INTO arsenal_holds (ref_id, word_id, reason, detail) VALUES (%s, %s, %s, %s) RETURNING id",
             (ref_id, word_id, reason, detail[:500] if detail else None)).fetchone()[0])
+
+
+ARSENAL_OUTCOME_KIND: Final = "arsenal_outcome"
+#: db/057: a ready real reference with no outcome check on record and no
+#: active hold. tests_live runs this exact text.
+ARSENAL_UNCHECKED_SQL: Final = """
+    SELECT r.id FROM arsenal_refs r
+     WHERE NOT r.is_test AND r.status = 'pool' AND r.verification IN ('verified', 'corrected')
+       AND NOT EXISTS (SELECT 1 FROM v_arsenal_active_holds h WHERE h.ref_id = r.id)
+       AND NOT EXISTS (SELECT 1 FROM arsenal_outcome_checks oc WHERE oc.ref_id = r.id)
+     ORDER BY r.id
+"""
+
+
+def arsenal_unchecked_refs(*, conn: psycopg.Connection | None = None) -> list["ArsenalRefToVerify"]:
+    """What the worker's outcome check reads (arsenal/outcome.py)."""
+    with _brief_conn(conn) as c:
+        ids = [int(r[0]) for r in c.execute(ARSENAL_UNCHECKED_SQL).fetchall()]
+        return [r for r in (arsenal_ref_to_verify(i, conn=c) for i in ids) if r is not None]
+
+
+def arsenal_record_outcome(ref_id: int, *, conflict: bool, votes: str, page: str | None, note: str | None,
+                           controls: str, source: str, conn: psycopg.Connection | None = None
+                           ) -> tuple[int, int | None]:
+    """One arsenal_outcome_checks row (db/057, append-only; its guard checks
+    the votes against the flag and that every control passed) and, for a
+    conflict, the arsenal_holds row, in ONE transaction. (check id, hold id)."""
+    with _brief_conn(conn) as c, c.transaction():
+        test = c.execute("SELECT is_test FROM arsenal_refs WHERE id = %s", (ref_id,)).fetchone()
+        check_id = int(c.execute(
+            "INSERT INTO arsenal_outcome_checks (ref_id, conflict, votes, page, note, controls, source, is_test) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+            (ref_id, conflict, votes, page[:300] if page else None, note[:500] if note else None, controls, source,
+             bool(test[0]) if test else False)).fetchone()[0])
+        hold_id = None
+        if conflict:
+            hold_id = int(c.execute(
+                "INSERT INTO arsenal_holds (ref_id, reason, detail) VALUES (%s, 'outcome_conflict', %s) RETURNING id",
+                (ref_id, note[:500] if note else None)).fetchone()[0])
+    return check_id, hold_id
+
+
+def arsenal_queue_outcome(reason: str, *, conn: psycopg.Connection | None = None) -> int:
+    """Queue one outcome check run (arsenal/outcome.py check_unchecked)."""
+    return queue_enqueue(ARSENAL_OUTCOME_KIND, {"reason": reason}, datetime.now(timezone.utc), conn=conn)
 
 
 @dataclass(frozen=True)

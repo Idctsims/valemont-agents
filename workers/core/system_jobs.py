@@ -95,9 +95,11 @@
                              after 7 days and old profiles after 90. A story
                              with any reaction is never deleted (db/039).
     egress           15 min: the day's approximate database egress (every
-                             system job's reads, core/egress.py) in job_health,
-                             carried across a restart; ONE push a day past
-                             egress.ALERT_MB (owner, 2026-10-15).
+                             system job's reads, core/egress.py) in job_health
+                             and one egress_samples row (db/057; a final row
+                             for the day just closed), carried across a
+                             restart; ONE push a day past egress.ALERT_MB
+                             (owner, 2026-10-15).
     arsenal_pool     weekly  Sunday 03:30 America/Chicago, and at boot: embeds
                              unembedded references, requeues stale pending
                              items, and submits ONE Message Batch (30 refs, 10
@@ -108,6 +110,10 @@
     arsenal_verify   queued  (job_queue kind arsenal_verify): one item checked
                              against Wikipedia / Wikiquote / kaikki, then a
                              Haiku judge (arsenal/verify.py).
+    arsenal_outcome  queued  (job_queue kind arsenal_outcome, db/057): the
+                             three controls, then the outcome check of every
+                             unchecked ready reference, each on the record; a
+                             conflict holds (arsenal/outcome.py).
     arsenal_drop     daily   05:30, then every 30 min to 21:30 America/Chicago,
                              and at boot: today's drop (db/054
                              arsenal_pick_drop, zero AI calls). A no-op once
@@ -133,6 +139,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from arsenal import collect as arsenal_collect
 from arsenal import drop as arsenal_drop
+from arsenal import outcome as arsenal_outcome
 from arsenal import pool as arsenal_pool
 from arsenal import verify as arsenal_verify
 from core import brief, egress, ledger, push
@@ -199,7 +206,13 @@ def egress_job(*, send: Callable[[push.Message], Any] | None = None) -> EgressRu
     if not _EGRESS_CARRIED:
         egress.carry(ledger.job_note(EGRESS_JOB))
         _EGRESS_CARRIED = True
+    # db/057: the day just closed (once, final), then today so far.
+    closed = egress.take_closed()
+    if closed is not None:
+        ledger.egress_record_sample(closed.day, total_bytes=closed.total, carried_bytes=closed.carried,
+                                    by_job=closed.by_job, final=True)
     day = egress.snapshot()
+    ledger.egress_record_sample(day.day, total_bytes=day.total, carried_bytes=day.carried, by_job=day.by_job)
     if day.total > egress.ALERT_MB * egress.MB and not day.alerted:
         top = sorted(day.by_job.items(), key=lambda kv: -kv[1])[:3]
         sent = (send or _alert)(push.Message(
@@ -395,6 +408,11 @@ QUEUE_HANDLERS: dict[str, QueueHandler] = {
     # and arsenal_pool. Its own job_health row and RSS / KB-read line.
     ledger.ARSENAL_VERIFY_KIND: lambda payload: run_tracked(
         replace(ARSENAL_VERIFY, fn=lambda: arsenal_verify.verify_job(payload))),
+    # db/057: the outcome check over every unchecked ready reference, queued
+    # when a batch's verification closes and by arsenal_pool. A control that
+    # fails raises: job_health shows it, the queue retries, nothing drops.
+    ledger.ARSENAL_OUTCOME_KIND: lambda payload: run_tracked(
+        replace(ARSENAL_OUTCOME, fn=lambda: arsenal_outcome.outcome_job(payload))),
 }
 
 
@@ -543,6 +561,9 @@ ARSENAL_COLLECT_S = 10 * 60
 #: pool runs weekly, so 8 days keeps it from reading stale between batches.
 ARSENAL_VERIFY = SystemJob("arsenal_verify", 8 * 24 * 60 * 60, IntervalTrigger(days=8),
                            lambda: None, scheduled=False)
+#: The same shape: run per queued outcome check (db/057), never scheduled.
+ARSENAL_OUTCOME = SystemJob("arsenal_outcome", 8 * 24 * 60 * 60, IntervalTrigger(days=8),
+                            lambda: None, scheduled=False)
 
 
 def _chain(*jobs: SystemJob) -> None:
@@ -660,6 +681,7 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
                              CronTrigger(hour="6-21", minute="0,30", timezone=OWNER_TZ)]),
                   arsenal_drop.drop_job, misfire_grace=1200, start_delay_s=480),
         ARSENAL_VERIFY,
+        ARSENAL_OUTCOME,
     ]
     if env.get("HEALTH_DRILL", "").strip().lower() == "true":
         log.warning("HEALTH_DRILL=true: scheduling health_drill, which always fails")

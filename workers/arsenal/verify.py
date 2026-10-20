@@ -494,7 +494,9 @@ def verify_item(target: str, item_id: int, *, client: Any = None, http: sources.
     else:
         raise ValueError(f"arsenal verify: unknown target {target!r}")
     if run_id is not None and ledger.arsenal_close_run_if_settled(run_id):
-        log.info("arsenal run %d: every item settled", run_id)
+        # db/057: the run's references drop only once outcome-checked.
+        job = ledger.arsenal_queue_outcome(f"run {run_id} settled")
+        log.info("arsenal run %d: every item settled; outcome check queued (job %d)", run_id, job)
     return result
 
 

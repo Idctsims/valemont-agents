@@ -11,8 +11,8 @@ reference, or no ready word):
     from the batch pool). The next half-hourly run tries again; from
     LAST_CALL (21:00 Chicago) it no longer waits.
   * otherwise ONE synchronous top-up (pool.topup: Sonnet, then each new
-    item verified INLINE by verify.verify_item, never through job_queue),
-    then the pick, marked topped_up.
+    item verified INLINE by verify.verify_item, never through job_queue,
+    then the outcome check inline, db/057), then the pick, marked topped_up.
 A pick that still fails after a top-up logs an ERROR naming the top-up's
 verification counts and raises: job_health records it and the health
 monitor pushes. Never a silent empty day.
@@ -87,7 +87,8 @@ def make_drop(day: date, *, client: Any = None, http: Any = None, ask: Any = Non
                     len(status.ready_categories), status.words_ready)
         up = pool.topup(status, client=client, http=http, ask=ask, embed=embed)
         topped = True
-        note = f"; topped up (run {up.run_id}: {up.refs} refs, {up.words} words, ${up.cost}, {up.verified})"
+        note = (f"; topped up (run {up.run_id}: {up.refs} refs, {up.words} words, ${up.cost}, {up.verified}"
+                + (f"; {up.outcome}" if up.outcome else "") + ")")
     try:
         drop_id = ledger.arsenal_pick_drop(day, topped_up=topped)
     except Exception as exc:

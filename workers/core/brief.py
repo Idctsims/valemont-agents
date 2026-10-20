@@ -285,9 +285,40 @@ def generate_ai(payload: Mapping[str, Any], sections: Sequence[ledger.BriefSecti
                 s["lines"] = s["lines"][:1]
             if s["key"] in DATA_LINE_SECTIONS:
                 s["lines"] = FALLBACK_SECTIONS[s["key"]](payload, str(payload.get("local_date"))) or s["lines"]
+        body = fill_missing(body, payload, sections)
         usage_id, model = recorded[-1] if recorded else (None, MODEL)
         return Generated(body, model, usage_id, False, word_count(body))
     raise BriefInvalid(f"invalid twice: {last_error}")
+
+
+def fill_missing(body: dict[str, Any], payload: Mapping[str, Any],
+                 sections: Sequence[ledger.BriefSection]) -> dict[str, Any]:
+    """A registered section whose provider has data, and that the model left
+    out, is added from its template, in registry order (owner, 2026-10-20:
+    the model dropped the Arsenal line on Oct 17 and 19, and the Screening
+    line on Oct 17, though both had data; the schema cannot require a key).
+    The word cap still holds: a filled section that would break it is
+    dropped again, the last first."""
+    have = {s["key"] for s in body["sections"]}
+    today = str(payload.get("local_date"))
+    filled = []
+    for s in sections:
+        if s.key in have:
+            continue
+        lines = template_lines(payload, s.key, today)
+        if lines:
+            filled.append({"key": s.key, "title": s.title, "lines": lines})
+    if not filled:
+        return body
+    order = {s.key: i for i, s in enumerate(sections)}
+    out = {**body, "sections": sorted(body["sections"] + filled, key=lambda s: order[s["key"]])}
+    while filled and word_count(out) > MAX_WORDS:
+        gone = filled.pop()
+        out["sections"] = [s for s in out["sections"] if s is not gone]
+        log.warning("brief: %s left out again: the word cap", gone["key"])
+    if filled:
+        log.info("brief: filled from data, left out by the model: %s", ", ".join(s["key"] for s in filled))
+    return out
 
 
 # ---------------------------------------------------------------- fallback
@@ -448,16 +479,23 @@ FALLBACK_SECTIONS: dict[str, Callable[[Mapping[str, Any], str], list[str]]] = {
 }
 
 
+def template_lines(payload: Mapping[str, Any], key: str, today: str) -> list[str]:
+    """A section's lines from its template, or [] (no template, no data, or
+    its provider raised). One-line sections keep one line."""
+    render = FALLBACK_SECTIONS.get(key)
+    data = payload.get(key)
+    if render is None or not isinstance(data, dict) or "error" in data:
+        return []
+    lines = render(payload, today)
+    return lines[:1] if key in ONE_LINE_SECTIONS else lines
+
+
 def fallback_brief(payload: Mapping[str, Any], sections: Sequence[ledger.BriefSection]) -> Generated:
     """The deterministic template: same shape, plainer words, data only."""
     today = str(payload.get("local_date"))
     out = []
     for s in sections:
-        render = FALLBACK_SECTIONS.get(s.key)
-        data = payload.get(s.key)
-        if render is None or not isinstance(data, dict) or "error" in data:
-            continue
-        lines = render(payload, today)
+        lines = template_lines(payload, s.key, today)
         if lines:
             out.append({"key": s.key, "title": s.title, "lines": lines})
 

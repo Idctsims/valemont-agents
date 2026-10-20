@@ -293,6 +293,19 @@ class FrozenItem(FeedTestCase):
             cur.execute("UPDATE content_items SET embedding = NULL WHERE id = %s", (it,))
             self.assertIsNone(self.one(cur, "SELECT embedding FROM content_items WHERE id = %s", (it,)))
 
+    def test_a_trailer_items_embeddings_clear_like_any_other(self) -> None:
+        """db/057: youtube_key is GENERATED (db/053) and reads NULL in a BEFORE
+        trigger, so the freeze saw a change on every trailer item and the
+        nightly prune failed (content_items 16900, Oct 18 and 19)."""
+        with _rolled_back() as cur:
+            st = self.story(cur)
+            it = self.item(cur, self.source(cur), st, embedding=True,
+                           url=f"https://www.youtube.com/watch?v=tl{uuid.uuid4().hex[:12]}")
+            self.assertIsNotNone(self.one(cur, "SELECT youtube_key FROM content_items WHERE id = %s", (it,)))
+            cur.execute("UPDATE content_items SET embedding = NULL, title_embedding = NULL WHERE id = %s", (it,))
+            self.assertIsNone(self.one(cur, "SELECT embedding FROM content_items WHERE id = %s", (it,)))
+            self.assertIn("frozen", _refused(cur, "UPDATE content_items SET title = 'edited' WHERE id = %s", (it,)))
+
     def test_shape_checks(self) -> None:
         with _rolled_back() as cur:
             src = self.source(cur)

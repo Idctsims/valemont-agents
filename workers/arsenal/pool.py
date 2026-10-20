@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Sequence
 
-from arsenal import cards, collect, verify
+from arsenal import cards, collect, outcome, verify
 from core import ai, ledger
 from core import embed as embed_mod
 
@@ -54,7 +54,8 @@ def should_submit(status: ledger.ArsenalPoolStatus, now: datetime) -> tuple[bool
     """(submit?, why). Pure."""
     if status.open_batch is not None:
         return False, f"batch {status.open_batch.batch_id} is open"
-    refs = status.refs_ready + status.refs_pending
+    # Awaiting the outcome check (db/057) is on its way to ready, like pending.
+    refs = status.refs_ready + status.refs_pending + status.refs_unchecked
     words = status.words_ready + status.words_pending
     if refs < MIN_REFS or words < MIN_WORDS:
         return True, f"pool short: {refs} refs, {words} words (verified or pending)"
@@ -123,6 +124,10 @@ def pool_job(*, client: Any = None, now: datetime | None = None, embed: collect.
     if requeued:
         notes.append(f"requeued {requeued} pending")
     status = ledger.arsenal_pool_status()
+    if status.refs_unchecked:
+        # A check that failed or never ran (db/057): its references cannot drop until one passes.
+        job = ledger.arsenal_queue_outcome("arsenal_pool: unchecked references")
+        notes.append(f"outcome check queued for {status.refs_unchecked} (job {job})")
     go, why = should_submit(status, now or datetime.now(timezone.utc))
     notes.append(why)
     if go:
@@ -153,11 +158,15 @@ class TopUp:
     words: int
     cost: Decimal
     verified: dict[str, int]
+    #: The inline outcome check's note (db/057), or why it failed.
+    outcome: str = ""
 
 
 def topup(status: ledger.ArsenalPoolStatus, *, client: Any = None, http: Any = None,
-          ask: verify.Ask | None = None, embed: collect.Embed | None = None) -> TopUp:
-    """One synchronous Sonnet call, inserted and verified inline."""
+          ask: verify.Ask | None = None, embed: collect.Embed | None = None,
+          ask_outcome: verify.AskOutcome | None = None) -> TopUp:
+    """One synchronous Sonnet call, inserted, verified and outcome-checked
+    inline (a reference with no check on record cannot drop, db/057)."""
     split = topup_split(status.ready_categories)
     words = cards.TOPUP_WORDS
     ctx = context()
@@ -192,6 +201,12 @@ def topup(status: ledger.ArsenalPoolStatus, *, client: Any = None, http: Any = N
         for item_id in ids:
             result = verify.verify_item(target, item_id, client=client, http=http, ask=ask)
             verified[result] = verified.get(result, 0) + 1
-    log.info("arsenal top-up (run %d): %d refs, %d words, $%s; %s", run_id, len(ins.ref_ids), len(ins.word_ids),
-             cost, verified)
-    return TopUp(run_id, len(ins.ref_ids), len(ins.word_ids), cost, verified)
+    try:
+        checked = outcome.check_unchecked(ask=ask_outcome, http=http, client=client).job_note
+    except outcome.ControlsFailed as exc:
+        # Nothing recorded: the new references cannot drop, so the pick that
+        # follows fails loudly and names this (drop.DropFailed).
+        checked = f"outcome check refused: {exc}"
+    log.info("arsenal top-up (run %d): %d refs, %d words, $%s; %s; %s", run_id, len(ins.ref_ids),
+             len(ins.word_ids), cost, verified, checked)
+    return TopUp(run_id, len(ins.ref_ids), len(ins.word_ids), cost, verified, checked)
