@@ -58,13 +58,17 @@ class ArsenalSqlCase(RankSqlCase):
         with _rolled_back() as conn:
             if conn.execute("SELECT to_regclass('public.arsenal_drops')").fetchone()[0] is None:
                 raise unittest.SkipTest("db/054 not pasted")
+            cls.has_checks = conn.execute(
+                "SELECT to_regclass('public.arsenal_outcome_checks')").fetchone()[0] is not None
 
     # -- fixtures (own rows, rolled back) ------------------------------------
 
     def ref(self, conn: psycopg.Connection, category: str, *, test: bool = False, verification: str = "verified",
-            room: str = "boardroom", embedding: list[float] | None = None) -> int:
+            room: str = "boardroom", embedding: list[float] | None = None, checked: bool = True) -> int:
         """A pool reference. A real one enters pending and is settled as the
-        worker settles it; a test one enters settled."""
+        worker settles it; a test one enters settled. From db/057 a settled
+        one also gets a passing outcome check (the picker needs one), unless
+        `checked` is False."""
         key = f"tl_{uuid.uuid4().hex[:16]}"
         rid = conn.execute(
             "INSERT INTO arsenal_refs (canonical_key, category, title, origin, meaning, deploy_line, room, "
@@ -76,6 +80,9 @@ class ArsenalSqlCase(RankSqlCase):
              ledger._vec_text(embedding) if embedding else None)).fetchone()[0]
         if not test and verification != "pending":
             conn.execute("UPDATE arsenal_refs SET verification = %s WHERE id = %s", (verification, rid))
+        if checked and self.has_checks and verification in ("verified", "corrected"):
+            ledger.arsenal_record_outcome(int(rid), conflict=False, votes="nnn", page="TL page", note="tl",
+                                          controls="3/3", source="worker", conn=conn)
         return int(rid)
 
     def word(self, conn: psycopg.Connection, *, test: bool = False, verification: str = "verified") -> int:
@@ -229,7 +236,8 @@ class Guards(ArsenalSqlCase):
     def test_truncate_is_refused_with_every_referencing_table_named(self) -> None:
         with _rolled_back() as conn:
             # db/055's two tables reference refs and words: name them too once they exist.
-            extra = [t for t in ("arsenal_holds", "arsenal_reverifications", "arsenal_hold_releases")
+            extra = [t for t in ("arsenal_holds", "arsenal_reverifications", "arsenal_hold_releases",
+                                 "arsenal_outcome_checks")
                      if conn.execute("SELECT to_regclass(%s)", (f"public.{t}",)).fetchone()[0] is not None]
             self.refused(conn, "TRUNCATE " + ", ".join(["arsenal_pool_runs", "arsenal_refs", "arsenal_words",
                                                         "arsenal_drops", "arsenal_reactions", *extra]),
@@ -643,6 +651,98 @@ class HoldReleases(ArsenalSqlCase):
                 "SELECT has_function_privilege('anon', %s, 'EXECUTE'), has_function_privilege('authenticated', %s, "
                 "'EXECUTE'), has_function_privilege('valemont_readonly', %s, 'EXECUTE')", (fn, fn, fn)).fetchone(),
                 (False, False, False))
+
+
+class OutcomeChecks(ArsenalSqlCase):
+    """db/057 (owner, 2026-10-20: "record checks, the picker gates"): a
+    reference drops only with an outcome check on record; checks are
+    append-only; a conflict holds in the same transaction; the worker's
+    ready counts and its unchecked list agree with the picker."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        if not cls.has_checks:
+            raise unittest.SkipTest("db/057 not pasted")
+
+    def test_an_unchecked_reference_never_drops_and_a_check_lets_it(self) -> None:
+        with _rolled_back() as conn:
+            self._only_mine_eligible(conn)
+            refs = [self.ref(conn, c, test=True, checked=False) for c in ("finance_business", "sports", "film_tv")]
+            self.word(conn, test=True)
+            self.refused(conn, "SELECT arsenal_pick_drop('2001-10-01', true)", None, "(0 categories")
+            for r in refs[:2]:
+                ledger.arsenal_record_outcome(r, conflict=False, votes="nnn", page="p", note="tl", controls="3/3",
+                                              source="worker", conn=conn)
+            self.refused(conn, "SELECT arsenal_pick_drop('2001-10-01', true)", None, "(2 categories")
+            # A conflict is a check too, but it holds in the same transaction; a release frees it.
+            check, hold = ledger.arsenal_record_outcome(refs[2], conflict=True, votes="YYn", page="p", note="lost",
+                                                        controls="3/3", source="worker", conn=conn)
+            self.assertIsNotNone(hold)
+            self.assertEqual(conn.execute("SELECT ref_id, reason, detail FROM arsenal_holds WHERE id = %s",
+                                          (hold,)).fetchone(), (refs[2], "outcome_conflict", "lost"))
+            self.refused(conn, "SELECT arsenal_pick_drop('2001-10-01', true)", None, "(2 categories")
+            ledger.arsenal_release_hold(hold, "tests_live: a false positive", conn=conn)
+            did = conn.execute("SELECT arsenal_pick_drop('2001-10-01', true)").fetchone()[0]
+            self.assertEqual(sorted(conn.execute("SELECT ref_ids FROM arsenal_drops WHERE id = %s",
+                                                 (did,)).fetchone()[0]), sorted(refs))
+            self.assertEqual(conn.execute("SELECT is_test, created_at = now() FROM arsenal_outcome_checks "
+                                          "WHERE id = %s", (check,)).fetchone(), (True, True))
+
+    def test_the_ready_counts_and_the_unchecked_list_agree_with_the_picker(self) -> None:
+        with _rolled_back() as conn:
+            before = ledger.arsenal_pool_status(conn=conn)
+            real = self.ref(conn, "philosophy", checked=False)
+            after = ledger.arsenal_pool_status(conn=conn)
+            self.assertEqual((after.refs_ready, after.refs_unchecked), (before.refs_ready, before.refs_unchecked + 1))
+            self.assertIn(real, [r.id for r in ledger.arsenal_unchecked_refs(conn=conn)])
+            ledger.arsenal_record_outcome(real, conflict=False, votes="nnn", page="p", note="tl", controls="3/3",
+                                          source="worker", conn=conn)
+            done = ledger.arsenal_pool_status(conn=conn)
+            self.assertEqual((done.refs_ready, done.refs_unchecked), (before.refs_ready + 1, before.refs_unchecked))
+            self.assertNotIn(real, [r.id for r in ledger.arsenal_unchecked_refs(conn=conn)])
+            # A held unchecked reference is neither unchecked-to-do nor ready.
+            held = self.ref(conn, "philosophy", checked=False)
+            ledger.arsenal_hold(ref_id=held, reason="outcome_conflict", detail="tl", conn=conn)
+            self.assertNotIn(held, [r.id for r in ledger.arsenal_unchecked_refs(conn=conn)])
+            self.assertEqual(ledger.arsenal_pool_status(conn=conn).refs_unchecked, before.refs_unchecked)
+
+    def test_the_guard_and_append_only(self) -> None:
+        with _rolled_back() as conn:
+            r = self.ref(conn, "sports", test=True, checked=False)
+            unv = self.ref(conn, "sports", test=True, verification="unverified")
+            real = self.ref(conn, "sports", checked=False)
+            ins = ("INSERT INTO arsenal_outcome_checks (ref_id, conflict, votes, controls, source, is_test) "
+                   "VALUES (%s, %s, %s, %s, %s, %s)")
+            self.refused(conn, ins, (unv, False, "nnn", "3/3", "worker", True), "not verified or corrected")
+            self.refused(conn, ins, (real, False, "nnn", "3/3", "worker", True), "test exactly when")
+            self.refused(conn, ins, (r, False, "YYn", "3/3", "worker", True), "disagrees with votes")
+            self.refused(conn, ins, (r, True, "", "3/3", "worker", True), "disagrees with votes")
+            self.refused(conn, ins, (r, False, "nnn", "2/3", "worker", True), "every control must pass")
+            self.refused(conn, ins, (r, False, "nnx", "3/3", "worker", True), "", psycopg.errors.CheckViolation)
+            self.refused(conn, ins, (r, False, "nnn", "3/3", "by hand", True), "", psycopg.errors.CheckViolation)
+            c, _ = ledger.arsenal_record_outcome(r, conflict=False, votes="", page=None, note="no page to read",
+                                                 controls="3/3", source="script", conn=conn)
+            self.refused(conn, "UPDATE arsenal_outcome_checks SET conflict = true WHERE id = %s", (c,), "")
+            self.refused(conn, "DELETE FROM arsenal_outcome_checks WHERE id = %s", (c,), "")
+            self.refused(conn, "TRUNCATE arsenal_outcome_checks", None, "TRUNCATE is refused")
+
+    def test_the_backfill_covers_the_pool_it_was_written_for(self) -> None:
+        with _rolled_back() as conn:
+            self.assertEqual(conn.execute(
+                "SELECT count(*), count(DISTINCT ref_id), bool_and(votes = 'nnn' AND NOT conflict AND NOT is_test) "
+                "FROM arsenal_outcome_checks WHERE source = 'backfill'").fetchone(), (26, 26, True))
+
+    def test_access(self) -> None:
+        with _rolled_back() as conn:
+            self.assertEqual(conn.execute(
+                "SELECT has_table_privilege('anon', 'public.arsenal_outcome_checks', 'SELECT,INSERT,UPDATE,DELETE'), "
+                "has_table_privilege('authenticated', 'public.arsenal_outcome_checks', 'SELECT'), "
+                "has_table_privilege('authenticated', 'public.arsenal_outcome_checks', 'INSERT,UPDATE,DELETE,TRUNCATE'), "
+                "has_table_privilege('valemont_readonly', 'public.arsenal_outcome_checks', 'SELECT'), "
+                "(SELECT relrowsecurity FROM pg_class WHERE oid = 'public.arsenal_outcome_checks'::regclass), "
+                "(SELECT count(*) FROM pg_policies WHERE tablename = 'arsenal_outcome_checks')").fetchone(),
+                (False, True, False, True, True, 1))
 
 
 # ============================================================== worker queries

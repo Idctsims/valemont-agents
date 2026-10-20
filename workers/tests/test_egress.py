@@ -86,12 +86,18 @@ class Meter(unittest.TestCase):
 
 class EgressJob(unittest.TestCase):
     def setUp(self) -> None:
-        for target, name, value in ((egress, "_DAY", None), (system_jobs, "_EGRESS_CARRIED", False)):
+        for target, name, value in ((egress, "_DAY", None), (egress, "_CLOSED", None),
+                                    (system_jobs, "_EGRESS_CARRIED", False)):
             p = mock.patch.object(target, name, value)
             p.start()
             self.addCleanup(p.stop)
         p = mock.patch.object(ledger, "job_note", return_value=None)
         self.job_note = p.start()
+        self.addCleanup(p.stop)
+        self.samples: list[dict] = []
+        p = mock.patch.object(ledger, "egress_record_sample",
+                              lambda day, **kw: self.samples.append({"day": day, **kw}) or len(self.samples))
+        p.start()
         self.addCleanup(p.stop)
         self.sent: list[push.Message] = []
 
@@ -136,6 +142,38 @@ class EgressJob(unittest.TestCase):
     def test_registered_every_15_minutes(self) -> None:
         built = {j.name: j for j in system_jobs.build_system_jobs({})}
         self.assertEqual(built["egress"].expected_interval_s, 900)
+
+    def test_every_run_appends_a_sample_of_the_day_so_far(self) -> None:
+        """db/057 (owner, 2026-10-20): the note alone lost Oct 16-18."""
+        today = egress.owner_today()
+        self.job_note.return_value = f"today {today.isoformat()} ~2.0 MB read (x 2.0)"
+        with egress.run("feed_ingest"):
+            egress.add(3 * egress.MB)
+        system_jobs.egress_job(send=self.send)
+        with egress.run("feed_score"):
+            egress.add(1024)
+        system_jobs.egress_job(send=self.send)
+        self.assertEqual(self.samples, [
+            {"day": today, "total_bytes": 5 * egress.MB, "carried_bytes": 2 * egress.MB,
+             "by_job": {"feed_ingest": 3 * egress.MB}},
+            {"day": today, "total_bytes": 5 * egress.MB + 1024, "carried_bytes": 2 * egress.MB,
+             "by_job": {"feed_ingest": 3 * egress.MB, "feed_score": 1024}}])
+
+    def test_the_first_run_after_the_rollover_writes_the_closed_days_final_sample_once(self) -> None:
+        with mock.patch.object(egress, "owner_today", return_value=date(2026, 10, 19)):
+            with egress.run("feed_ingest"):
+                egress.add(15 * egress.MB)
+            system_jobs.egress_job(send=self.send)
+            with egress.run("feed_ingest"):
+                egress.add(egress.MB)  # after the 23:45 run, before midnight
+        with mock.patch.object(egress, "owner_today", return_value=date(2026, 10, 20)):
+            system_jobs.egress_job(send=self.send)
+            system_jobs.egress_job(send=self.send)
+        self.assertEqual([(s["day"], s["total_bytes"], s.get("final", False)) for s in self.samples], [
+            (date(2026, 10, 19), 15 * egress.MB, False),
+            (date(2026, 10, 19), 16 * egress.MB, True),
+            (date(2026, 10, 20), 0, False),
+            (date(2026, 10, 20), 0, False)])
 
 
 def sjob(i: int, pillars: tuple[str, ...] = ("home",)) -> ledger.SummaryJob:

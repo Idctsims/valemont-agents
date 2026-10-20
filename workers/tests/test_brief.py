@@ -319,7 +319,40 @@ class Generation(unittest.TestCase):
         self.assertIn("cache_control", call["system"][-1])
         self.assertTrue(self.rows[0]["critical"], "critical: never downgraded at 80%")
         self.assertEqual((made.model, made.ai_usage_id, made.fallback), ("claude-sonnet-5-5", 501, False))
-        self.assertEqual([s["title"] for s in made.body["sections"]], ["Goals", "Ventures"], "titles come from the registry")
+        # Titles come from the registry; Capital, left out by GOOD but with data, is filled from its template.
+        self.assertEqual([s["title"] for s in made.body["sections"]], ["Goals", "Ventures", "Capital"])
+
+    def test_a_section_with_data_the_model_left_out_is_filled_in_registry_order(self) -> None:
+        """Owner, 2026-10-20: briefs 1127 and 1129 had no Arsenal line though
+        each day's drop existed before 06:15 (the schema cannot require a key)."""
+        payload = dict(PAYLOAD, arsenal_brief={"power_word": "latitude",
+                                               "ref": {"title": "28-3", "room": "negotiation"}},
+                       screening_brief={"top_pick": {"title": "56 Days", "because_you_loved": "You"}})
+        sections = [SECTIONS[0], ledger.BriefSection("screening_brief", "Screening Room", 55),
+                    ledger.BriefSection("arsenal_brief", "Arsenal", 60), SECTIONS[1]]
+        made = brief.generate_ai(payload, sections, client=Client(response(json.dumps(GOOD))))
+        self.assertEqual([s["key"] for s in made.body["sections"]],
+                         ["goals", "screening_brief", "arsenal_brief", "ventures"])
+        screening = next(s for s in made.body["sections"] if s["key"] == "screening_brief")
+        self.assertEqual(screening["lines"], ["Pick: 56 Days, because you loved You."])
+        arsenal = next(s for s in made.body["sections"] if s["key"] == "arsenal_brief")
+        self.assertEqual(arsenal, {"key": "arsenal_brief", "title": "Arsenal",
+                                   "lines": ["Power Word: latitude. Strongest reference: 28-3, for the negotiation."]})
+        self.assertEqual(made.words, brief.word_count(made.body))
+
+    def test_nothing_is_filled_without_data_or_a_template_and_the_word_cap_holds(self) -> None:
+        empty = dict(PAYLOAD, capital={"error": "boom"}, arsenal_brief={})
+        sections = SECTIONS + [ledger.BriefSection("arsenal_brief", "Arsenal", 60),
+                               ledger.BriefSection("lookbook_brief", "Lookbook", 70)]
+        made = brief.generate_ai(dict(empty, lookbook_brief={"x": 1}), sections,
+                                 client=Client(response(json.dumps(GOOD))))
+        self.assertEqual([s["key"] for s in made.body["sections"]], ["goals", "ventures"])
+        # A fill that would break the cap is dropped again: 251 words leave no room.
+        full = dict(GOOD, sections=[dict(GOOD["sections"][0], lines=["word " * 24] * 10)])
+        made = brief.generate_ai(PAYLOAD, SECTIONS, client=Client(response(json.dumps(full))))
+        self.assertEqual(brief.word_count(full), 251)
+        self.assertEqual([s["key"] for s in made.body["sections"]], ["goals"])
+        self.assertLessEqual(made.words, brief.MAX_WORDS)
 
     def test_only_brief_sections_reach_the_prompt(self) -> None:
         client = Client(response(json.dumps(GOOD)))

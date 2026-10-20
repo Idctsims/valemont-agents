@@ -13,10 +13,14 @@ pass. Both results are printed and logged.
 Every real, undropped, verified or corrected reference (one with an active
 hold is skipped) is read against its best source page (arsenal/verify.py
 candidates()). Haiku answers outcome_conflict OUTCOME_SAMPLES times, and a
-strict majority is a conflict. With --write each conflict becomes an
-arsenal_holds row (reason 'outcome_conflict', the note as detail), and the
+strict majority is a conflict. With --write every reference read gets an
+arsenal_outcome_checks row (db/057, source 'script'), and each conflict also
+an arsenal_holds row (reason 'outcome_conflict', the note as detail): the
 picker skips it until a release (db/056). Prints one line per reference:
 id, title, the votes, the page read, the note.
+
+The worker runs the same check by itself on every unchecked reference
+(arsenal/outcome.py); this script is for a re-check by hand.
 """
 
 from __future__ import annotations
@@ -25,7 +29,7 @@ import argparse
 import logging
 import sys
 
-from arsenal import sources, verify
+from arsenal import outcome, sources, verify
 from core import ledger
 from core.paths import load_env
 from scripts import arsenal_outcome_control
@@ -33,6 +37,7 @@ from scripts import arsenal_outcome_control
 log = logging.getLogger("valemont.arsenal.outcome_check")
 
 REASON = "outcome_conflict"
+SOURCE = "script"
 
 
 def main(argv: list[str] | None = None, *, ask: verify.AskOutcome | None = None) -> int:
@@ -48,6 +53,7 @@ def main(argv: list[str] | None = None, *, ask: verify.AskOutcome | None = None)
     ask = ask or (lambda card, e: verify.ask_outcome_haiku(card, e))
     load_env()
     held = 0
+    controls = ""
     try:
         if args.write:
             wrong, lines = arsenal_outcome_control.run_controls(ask=ask, samples=args.samples)
@@ -59,7 +65,8 @@ def main(argv: list[str] | None = None, *, ask: verify.AskOutcome | None = None)
                 print(msg)
                 log.error("arsenal outcome check: %s", msg)
                 return 1
-            log.info("arsenal outcome check: all %d controls passed; holds will be written", len(lines))
+            controls = f"{len(lines)}/{len(lines)}"
+            log.info("arsenal outcome check: all %d controls passed; checks and holds will be written", len(lines))
         if args.ids:
             pool = [ledger.ArsenalPoolRef(r, False) for r in (ledger.arsenal_ref_to_verify(i) for i in args.ids) if r]
         else:
@@ -72,15 +79,15 @@ def main(argv: list[str] | None = None, *, ask: verify.AskOutcome | None = None)
                 print(f"{r.id} {r.title!r}: held (an active hold), skipped")
                 continue
             res = verify.outcome_check(r, ask=ask, samples=args.samples)
-            votes = "".join("Y" if v else "n" for v in res.votes) or "-"
+            votes = outcome.votes_text(res.votes) or "-"
             mark = "CONFLICT" if res.conflict else "ok"
             line = f"{r.id} {r.title!r}: {mark} votes {votes}; page {res.page}; {res.note}"
             print(line)
             log.info("arsenal outcome check: %s", line)
-            if res.conflict:
-                held += 1
-                if args.write:
-                    hold_id = ledger.arsenal_hold(ref_id=r.id, reason=REASON, detail=res.note)
+            held += res.conflict
+            if args.write:
+                hold_id = outcome.record(r.id, res, controls=controls, source=SOURCE)
+                if hold_id is not None:
                     print(f"  held: arsenal_holds {hold_id}")
     finally:
         sources.close_http()

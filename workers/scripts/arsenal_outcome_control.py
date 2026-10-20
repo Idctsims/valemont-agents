@@ -8,45 +8,23 @@ Miracle on Ice must not) through verify.outcome_check: the same page
 retrieval and the same 3-read vote. Writes nothing (the Haiku calls are
 costed in ai_usage as usual). Exits 1 when any case comes out wrong: run it
 after any change to the outcome prompt, before it touches the pool.
+
+The controls live in arsenal/outcome.py (db/057: the worker runs them before
+every check it records); this script and arsenal_outcome_check use them.
 """
 
 from __future__ import annotations
 
-import json
 import sys
-from pathlib import Path
 
-from arsenal import sources, verify
+from arsenal import outcome, sources, verify
 from core import ledger
 from core.paths import load_env
 
-FIXTURE = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "arsenal" / "outcome_controls.json"
-
-
-def card(c: dict) -> ledger.ArsenalRefToVerify:
-    return ledger.ArsenalRefToVerify(
-        int(c["id"]), c["category"], c["title"], c["origin"], c["source_work"], None, None, c["source_kind"],
-        c.get("source_page"), "verified", None, c["meaning"], c["deploy_line"])
-
-
-def cases() -> list[dict]:
-    return json.loads(FIXTURE.read_text(encoding="utf-8"))["cases"]
-
-
-def run_controls(*, ask: verify.AskOutcome, samples: int = verify.OUTCOME_SAMPLES,
-                 http: sources.Http | None = None) -> tuple[int, list[str]]:
-    """(how many came out wrong, one line per case). Also the gate of
-    arsenal_outcome_check --write."""
-    wrong = 0
-    lines = []
-    for case in cases():
-        res = verify.outcome_check(card(case["card"]), ask=ask, samples=samples, http=http)
-        ok = res.conflict == case["expect_conflict"]
-        wrong += not ok
-        votes = "".join("Y" if v else "n" for v in res.votes) or "-"
-        lines.append(f"{'PASS' if ok else 'FAIL'} {case['name']}: expect {'conflict' if case['expect_conflict'] else 'ok'}, "
-                     f"got {'conflict' if res.conflict else 'ok'} (votes {votes}; page {res.page}); {res.note}")
-    return wrong, lines
+FIXTURE = outcome.FIXTURE
+card = outcome.card
+cases = outcome.cases
+run_controls = outcome.run_controls
 
 
 def main() -> int:
