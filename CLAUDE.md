@@ -1224,7 +1224,7 @@ absent row as "I never looked."
     - It never judges its **own** staleness (PR #6). Every redeploy used to push a false "health_monitor needs attention" + "Recovered" pair.
     - The external `watchdog` row is watched with the monitor's own incident state and never its `alert_state` (PR #5). That field belongs to the Vercel route.
   - **External watchdog** `/api/watchdog` (Vercel, called by cron-job.org every 5 min with a bearer token):
-    - pushes "Worker down" when the heartbeat is more than 5 min old (again at most every 30 min), and "Worker back" on recovery;
+    - pushes "Worker down" when the heartbeat is more than 5 min old (again at most every 4 h while the same outage lasts; it was 30 min until 2026-10-20, when one ~23 h outage sent 41), and "Worker back" on the first good call;
     - answers 200 ok/down, 503 when it can't read the heartbeat, 401 for a bad token;
     - a failed push never fails the request (PR #7): it's recorded in `job_health.last_error` and retried;
     - pings **healthchecks.io** (`WATCHDOG_PING_URL`, period 5 min, grace 5 min) on every run, and `/fail` when it can't read;

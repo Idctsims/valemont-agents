@@ -127,3 +127,52 @@ test("7. a stamp that fails still returns the decided status", async () => {
   expect(calls.pushes.map((m) => m.kind)).toEqual(["watchdog_down"]);
   expect(calls.logs.join("\n")).toContain(`"phase":"stamp"`);
 });
+
+// Backoff (owner, 2026-10-20): within one outage "Worker down" repeats at most
+// every 4 h; "Worker back" still fires on the first good call.
+const ago = (ms: number) => new Date(NOW - ms).toISOString();
+const MIN = 60_000;
+const HOUR = 60 * MIN;
+const LONG_DOWN = ago(23 * HOUR);
+
+test("8. the same outage, last 'Worker down' 35 min ago (the old repeat): no push, still alerted", async () => {
+  const { deps, calls } = harness({ reads: [state(LONG_DOWN, true)], lastDown: ago(35 * MIN) });
+  expect(await runWatchdog(deps)).toEqual({ status: "down", httpStatus: 200 });
+  expect(calls.pushes).toEqual([]);
+  expect(calls.stamps).toEqual([{ alertState: "alerted", lastError: null }]);
+});
+
+test("9. the same outage, last 'Worker down' 3 h 59 min ago: no push", async () => {
+  const { deps, calls } = harness({ reads: [state(LONG_DOWN, true)], lastDown: ago(4 * HOUR - MIN) });
+  expect(await runWatchdog(deps)).toEqual({ status: "down", httpStatus: 200 });
+  expect(calls.pushes).toEqual([]);
+});
+
+test("10. the same outage, last 'Worker down' 4 h 1 min ago: one repeat, naming the minutes down", async () => {
+  const { deps, calls } = harness({ reads: [state(LONG_DOWN, true)], lastDown: ago(4 * HOUR + MIN) });
+  expect(await runWatchdog(deps)).toEqual({ status: "down", httpStatus: 200 });
+  expect(calls.pushes.map((m) => m.kind)).toEqual(["watchdog_down"]);
+  expect(calls.pushes[0].body).toBe(`No heartbeat from the Railway worker for ${23 * 60} minutes.`);
+  expect(calls.stamps).toEqual([{ alertState: "alerted", lastError: null }]);
+});
+
+test("11. the first good call after an outage: 'Worker back' at once, incident cleared", async () => {
+  const { deps, calls } = harness({ reads: [state(FRESH, true)], lastDown: ago(10 * MIN) });
+  expect(await runWatchdog(deps)).toEqual({ status: "ok", httpStatus: 200 });
+  expect(calls.pushes.map((m) => m.kind)).toEqual(["watchdog_recovered"]);
+  expect(calls.stamps).toEqual([{ alertState: "ok", lastError: null }]);
+});
+
+test("12. a new outage soon after a recovery alerts at once, whatever the last 'Worker down'", async () => {
+  const { deps, calls } = harness({ reads: [state(STALE, false)], lastDown: ago(20 * MIN) });
+  expect(await runWatchdog(deps)).toEqual({ status: "down", httpStatus: 200 });
+  expect(calls.pushes.map((m) => m.kind)).toEqual(["watchdog_down"]);
+  expect(calls.stamps).toEqual([{ alertState: "alerted", lastError: null }]);
+});
+
+test("13. the same outage with the lookup failing: no repeat (history unknown)", async () => {
+  const { deps, calls } = harness({ reads: [state(LONG_DOWN, true)], lastDown: new Error(SKEW) });
+  expect(await runWatchdog(deps)).toEqual({ status: "down", httpStatus: 200 });
+  expect(calls.pushes).toEqual([]);
+  expect(calls.logs.join("\n")).toContain(`"phase":"lookup"`);
+});
