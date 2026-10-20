@@ -208,6 +208,25 @@ evidence. **Migration:** yes, either a `summary_rejections` table or a
     --again`, `morning_brief --generate` over an existing brief). A static
     test fails if any other code resets a stored line without it.
 - **Every day since:** 3, 2, 1, 2, 2 of 8 "General interest." (Oct 15–19).
+- **Re-run, 2026-10-20 21:52 UTC** (owner's call): on the deployed code
+  (`107315a`, PR #60: second-person targets fixed, the dev-workflow rule in
+  force), `scripts.feed_profile --repo-why --again` on stories 11956–11963.
+  The result is **6 concrete, 2 general** (it was 1 concrete before).
+  Recorded by the guard as event 5540, with each id's old → new kind.
+
+  | Story | Repo | Line now |
+  |---|---|---|
+  | 11956 | morluto/rea | Lets your Claude Code reverse engineer apps and binaries through one MCP server, from behavior down to native code. |
+  | 11957 | bas3line/ascii | General interest. (the model's own null) |
+  | 11958 | rehan-remade/universal-modder | Lets your Claude Code mod PC games end to end, with fal-generated art, 3D and audio plus in-game testing. |
+  | 11959 | zai-org/ZCode | General interest. (two lines refused: no target named, then 23 words over the cap of 20) |
+  | 11960 | kuratlielia/arc-library | Gives your client sites owned, customizable React components with built-in reduced-motion support, installable via shadcn. |
+  | 11961 | cathrynlavery/diagram-design | Lets your Claude Code and Cursor produce editorial HTML and SVG diagrams across 44 types without Mermaid. |
+  | 11962 | juliobsz/skills | Lets your Claude Code generate an award-style Astro website from one prompt, checked in a real browser. |
+  | 11963 | Louis-CFM/coucou | Lets you watch all your Claude Code and Cursor sessions from the notch and approve permissions from your Lock Screen. |
+
+  universal-modder now names the use ("mod PC games end to end…"), which was
+  the item 5 concern.
 
 **Proposed fixes:**
 - The dev-workflow target: "name what it lets you do; 'sharpen' or 'improve
