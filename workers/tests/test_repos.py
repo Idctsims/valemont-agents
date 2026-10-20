@@ -580,6 +580,54 @@ class RepoWhy(unittest.TestCase):
         self.assertEqual(why.check_repo({"target": "Sail Beach Club", "why": "Sail Beach Club can use it for bookings."},
                                         self.NAMES)[1], None)
 
+    def test_a_dev_workflow_line_names_what_it_lets_you_do(self) -> None:
+        """Owner, 2026-10-20 (feed review 5): a tool name or "sharpen your
+        workflow" is not a use. Day one's universal-modder line (Oct 14) and
+        the two vague lines of Oct 15-19 are refused; the other 18 real lines
+        that week mention Claude Code and pass."""
+        wf = lambda line: why.check_repo({"target": "dev workflow", "why": line}, self.NAMES)  # noqa: E731
+        refused = {
+            # Day one (docs/tech_hub.md §7.2b), as written and in the second person.
+            "Can give Claude Code skills and the fal MCP for agent-driven workflows in Tsims's Claude Code setup.":
+                None,
+            "Can give your Claude Code skills and the fal MCP for agent-driven workflows.": "for agent-driven workflows",
+            "A read-only security scan skill can sharpen your Claude Code workflow across repos, Vercel and GitHub.":
+                "sharpen",
+            "Adds an MCP server and skills to your Claude Code.": "names the tool",
+        }
+        for line, needle in refused.items():
+            with self.subTest(line=line[:40]):
+                got, reason = wf(line)
+                self.assertEqual(got, why.GENERAL)
+                if needle:
+                    self.assertIn(needle, reason)
+        kept = [
+            "Use this as your dev workflow's starting point for vetted Claude Code plugins, with trust checks before install.",
+            "Let your Claude Code and MCP setup search and download 3D assets from 23 sites in one call.",
+            "Route your Claude Code and Codex agents to different model providers from your menu bar, with quota rotation.",
+            "Swap system prompts across your Claude Code, Cursor and Codex clients in one reversible step.",
+            "Your dev workflow can use GitBot to run reusable Claude Code bots locally across your repositories.",
+            "Your dev workflow can use this to have Claude Code ask about your approach and tradeoffs before writing code.",
+            "Your Claude Code can use this skill to answer hard questions with a readable single HTML page.",
+            "Your Claude Code and Cursor setup can pull vetted official MCP servers from this curated directory.",
+            "Your Claude Code is the agentic terminal tool you build with, handling routine tasks and git workflows from natural language.",
+            "Cuts your Claude Code context usage by roughly 98 percent through MCP sandboxing and persistent session memory.",
+            "Your dev workflow can use its MCP server to give Claude Code local file, shell and computer-control tools.",
+            "Gives your Claude Code an MCP server and skill that finds the cheapest API provider for any model.",
+            "Your Claude Code setup can use these eleven free skills to reverse-engineer and test existing apps.",
+            "Your dev workflow can use this Blender MCP server so Claude Code can drive scene building and 3D tasks directly.",
+            "Your Claude Code or Cursor can query live Semrush keyword and backlink data through this MCP server.",
+            "Lets your Claude Code, Cursor and other coding agents run as a managed fleet on your own subscriptions.",
+            "This MCP audit CLI can check your Cursor and Claude Code MCP configs for poisoning and leaked secrets.",
+            "Hycli's typed CLI and MCP actions can give your Claude Code and Cursor agents reliable website automation.",
+            "clodfarm's multi-agent orchestration and usage pacing can help you run parallel Claude Code missions.",
+            "Can add a reverse-engineering MCP server to your Claude Code.",
+        ]
+        for line in kept:
+            with self.subTest(line=line[:40]):
+                self.assertEqual(wf(line), (line, None))
+        self.assertIn("lets you DO", why.REPO_SYSTEM)
+
     def test_second_person_only(self) -> None:
         """Owner, 2026-10-14: "your Claude Code", "your client sites", never
         "Tsims's"; the prompt the model copies from says "your" too."""
@@ -677,6 +725,70 @@ class RepoWhy(unittest.TestCase):
     def test_home_why_never_asks_a_repo_story(self) -> None:
         self.assertIn("st.category IS DISTINCT FROM 'repos'", ledger.FEED_WHY_QUEUE_SQL)
         self.assertIn("st.category = 'repos'", ledger.FEED_REPO_WHY_QUEUE_SQL)
+
+
+class RegenerationIsOnTheRecord(unittest.TestCase):
+    """THE GUARD (owner, 2026-10-20): every path that regenerates stored
+    output writes one 'regenerated' event (what, which ids, old -> new kind,
+    how). The 02:13 UTC Oct 15 repo why re-run overwrote 7 good lines with
+    "General interest." and left no record of what ran it."""
+
+    def setUp(self) -> None:
+        self.events: list[tuple[str, list, str]] = []
+        stubs = {
+            "_pool": _refuse_database,
+            "ai_calls_today": lambda purpose, **kw: 0,
+            "feed_why_lines": lambda ids, **kw: {1: "Can add a reverse-engineering MCP server to your Claude Code.",
+                                                 2: why.GENERAL},
+            "feed_reset_repo_why": lambda ids, **kw: len(ids),
+            "feed_repo_why_queue": lambda limit, max_attempts, **kw: [
+                ledger.RepoWhyJob(1, "o/a", "S.", "GitHub", None, ()),
+                ledger.RepoWhyJob(2, "o/b", "S.", "GitHub", None, ())],
+            "ctx_ventures": lambda **kw: {},
+            "record_regeneration": lambda what, changes, how: self.events.append((what, list(changes), how)),
+        }
+        for name, fn in stubs.items():
+            p = mock.patch.object(ledger, name, fn)
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_a_repo_why_re_run_records_every_id_old_to_new(self) -> None:
+        with mock.patch.object(why, "ask_repo_group", lambda jobs, ctx, names, **kw: {
+                1: why.GENERAL, 2: "Let your Claude Code search and download 3D assets in one call."}):
+            why.repo_ask_again([1, 2])
+        self.assertEqual(self.events, [("repo_why", [ledger.Regenerated(1, "concrete", "general"),
+                                                     ledger.Regenerated(2, "general", "concrete")],
+                                        "scripts.feed_profile --repo-why --again")])
+
+    def test_a_re_run_that_fails_is_still_on_the_record(self) -> None:
+        def boom(*a: Any, **kw: Any) -> dict:
+            raise RuntimeError("the API is down")
+        with mock.patch.object(why, "ask_repo_group", boom), self.assertRaises(RuntimeError):
+            why.repo_ask_again([1, 2])
+        self.assertEqual([(c.id, c.old, c.new) for c in self.events[0][1]],
+                         [(1, "concrete", "unanswered"), (2, "general", "unanswered")])
+
+    def test_every_reset_of_stored_output_sits_beside_the_guard(self) -> None:
+        """Static: any code outside core/ledger.py that resets a stored line
+        also records the regeneration, and the brief's --generate does."""
+        root = Path(__file__).resolve().parents[1]
+        resets = ("feed_reset_why(", "feed_reset_repo_why(")
+        callers = []
+        for py in sorted(root.rglob("*.py")):
+            if any(p in ("tests", "tests_live", "venv") for p in py.parts) or py.name == "ledger.py":
+                continue
+            text = py.read_text(encoding="utf-8")
+            if any(r in text for r in resets):
+                callers.append(py.name)
+                self.assertTrue("_record(" in text or "record_regeneration(" in text, py.name)
+        self.assertEqual(callers, ["why.py"])
+        self.assertIn("record_regeneration(", (root / "scripts" / "morning_brief.py").read_text(encoding="utf-8"))
+        # arsenal_reverify is a dry run: it settles nothing, so it records nothing.
+        self.assertIn("It NEVER settles anything", (root / "scripts" / "arsenal_reverify.py").read_text(encoding="utf-8"))
+
+    def test_the_line_kinds(self) -> None:
+        self.assertEqual([why.line_kind(x) for x in (None, "", why.GENERAL, "Can add X to your dashboard.")],
+                         ["none", "none", "general", "concrete"])
 
 
 class RepoStoriesInTheEngine(unittest.TestCase):

@@ -450,6 +450,18 @@ that passes only by naming Claude Code, with no concrete action (today:
 says where, not what). If it becomes a pattern, the dev-workflow target's
 rule becomes "names what it would do", not just "names the tool".
 
+**Later (2026-10-20):**
+- **The 7/8 above did not last.** At 02:13 UTC Oct 15 the session that fixed
+  the second-person target bug (`dc8cae6`) re-ran day one's 8 before the fix
+  landed, and 7 were stored as "General interest." The owner recorded this as
+  closed: the exact command was not recovered.
+- **The dev-workflow rule now requires the use** (feed review item 5,
+  `feed/why.py` `workflow_use_problem`).
+- **Every by-hand regeneration writes a `regenerated` event**
+  (`ledger.record_regeneration`).
+- Day one's 8 are re-run after that deploy; the result is in
+  `docs/drafts/feed-review-2026-10.md` §5.
+
 ### 7.3 Order of operations
 
 1. Owner pastes `db/049_repos.sql` on production. Expect the NOTICE

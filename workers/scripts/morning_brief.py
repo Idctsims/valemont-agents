@@ -41,8 +41,15 @@ def main(argv: list[str] | None = None) -> int:
         now = ledger.owner_local_now()
         today = now.date()
         if args.generate:
+            previous = ledger.latest_brief(brief.KIND, today)
             brief_id = brief.build_today(allow_fallback=True)
             row = ledger.latest_brief(brief.KIND, today)
+            if previous is not None:
+                # The guard (owner, 2026-10-20): a regenerated brief is on the record.
+                ledger.record_regeneration("morning_brief", [ledger.Regenerated(
+                    brief_id, f"brief {previous.id} ({'fallback' if previous.fallback else 'ai'})",
+                    f"brief {brief_id} ({'fallback' if row.fallback else 'ai'})")],
+                    how="scripts.morning_brief --generate")
             cost = _cost(row)
             print(f"brief {brief_id} for {today}: {row.word_count} words, "
                   f"{'fallback' if row.fallback else row.model}, cost_usd {cost}")

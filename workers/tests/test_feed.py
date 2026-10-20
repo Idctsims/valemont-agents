@@ -9,6 +9,7 @@ network, no Claude.
 
 from __future__ import annotations
 
+import inspect
 import itertools
 import json
 import os
@@ -206,6 +207,25 @@ class Assignment(unittest.TestCase):
         furyk = story(8, ("Constellation FURYK & FRIENDS", unit(0)))
         self.assertIsNone(cluster.assign(at_cos(0.87), "Vaughn Taylor makes birdie on No. 13 at Constellation FURYK & FRIENDS",
                                          [furyk]).story_id)
+
+    def test_the_shadow_join_logs_but_never_joins(self) -> None:
+        """Feed review 3a (owner, 2026-10-20): cosine >= 0.92 and two shared
+        proper names is logged as would_join; clustering is unchanged."""
+        self.assertEqual((cluster.WOULD_JOIN_COSINE, cluster.WOULD_JOIN_NAMES), (0.92, 2))
+        georgia = story(22079, ("No. 1 Georgia turns the ball over three times as Auburn shocks the Bulldogs", unit(0)))
+        title = "Trio of turnovers haunts No. 1 Georgia in upset loss vs. Auburn"
+        d = cluster.assign(at_cos(0.938), title, [georgia])
+        self.assertIsNone(d.story_id)                       # still no join
+        self.assertEqual([s.story_id for s in d.near_misses], [22079])
+        self.assertEqual([s.story_id for s in d.would_join], [22079])
+        self.assertEqual(cluster.shared_names(title, georgia.members[0].title), {"georgia", "auburn"})
+        # Below 0.92, or one shared name, or only headline words: no would_join.
+        self.assertEqual(cluster.assign(at_cos(0.915), title, [georgia]).would_join, ())
+        self.assertEqual(cluster.assign(at_cos(0.93), "Georgia falls in a shocker", [georgia]).would_join, ())
+        preview = story(5, ("Week 7 Preview: Live Updates And Picks", unit(0)))
+        self.assertEqual(cluster.assign(at_cos(0.93), "Live Updates, Picks and Odds: Week 7", [preview]).would_join, ())
+        # A real join is not also a would_join.
+        self.assertEqual(cluster.assign(at_cos(0.95), title, [georgia]).would_join, ())
 
     def test_the_best_member_counts_not_the_first(self) -> None:
         s = story(7, ("old angle", unit(5)), ("Verstappen takes pole in Singapore", unit(0)))
@@ -529,8 +549,7 @@ def job(sid: int, title: str = "Texans trade for Cardinals' Harrison", teaser: s
 
 
 GOOD = {"summary": "Houston acquired the receiver from Arizona, pairing him again with his college quarterback.",
-        "entities": ["Houston Texans", "Marvin Harrison Jr."], "topics": ["Trade", "nfl trade"], "sport": "nfl",
-        "drop": "none"}
+        "entities": ["Houston Texans", "Marvin Harrison Jr."], "topics": ["Trade", "nfl trade"], "sport": "nfl"}
 
 
 class SummaryValidator(unittest.TestCase):
@@ -540,7 +559,6 @@ class SummaryValidator(unittest.TestCase):
         v = summarize.validate(dict(GOOD, id=1), job(1, teaser=self.TEASER))
         self.assertEqual(v.topics, ("trade", "nfl_trade"))
         self.assertEqual(v.sport, "nfl")
-        self.assertEqual(v.drop, "none")
 
     def test_too_long(self) -> None:
         self.assertEqual((summarize.MAX_WORDS, summarize.MAX_SENTENCES), (35, 2))
@@ -593,22 +611,38 @@ class SummaryValidator(unittest.TestCase):
         results, _, _ = summarize.results_for([job(1), job(2)], None)
         self.assertTrue(all(r.summary is None for r in results))
 
-    def test_drop_is_shadow_by_default_and_filters_only_when_live(self) -> None:
-        self.assertFalse(summarize.DROP_LIVE)
-        gossip = dict(GOOD, id=1, drop="gossip")
-        (r,), _, _ = summarize.results_for([job(1)], {"stories": [gossip]})
-        self.assertEqual((r.drop, r.filtered_reason), ("gossip", None))
-        with mock.patch.object(summarize, "DROP_LIVE", True):
-            (r,), _, _ = summarize.results_for([job(1)], {"stories": [gossip]})
-            self.assertEqual(r.filtered_reason, "drop:gossip")
-            (r,), _, _ = summarize.results_for([job(1)], {"stories": [dict(GOOD, id=1)]})
-            self.assertIsNone(r.filtered_reason)
+    def test_drop_is_retired_never_asked_never_set(self) -> None:
+        """Owner, 2026-10-20 (feed review 2): the shadow drop is retired; the
+        column keeps its history, new summaries never set it or filter."""
+        item = summarize.schema()["properties"]["stories"]["items"]
+        self.assertNotIn("drop", item["properties"])
+        self.assertNotIn("drop", item["required"])
+        self.assertNotIn("drop:", summarize.SYSTEM)
+        self.assertNotIn("don't-care list", summarize.SYSTEM)
+        self.assertFalse(hasattr(summarize, "DROP_LIVE"))
+        (r,), _, _ = summarize.results_for([job(1)], {"stories": [dict(GOOD, id=1, drop="gossip")]})
+        self.assertEqual((r.drop, r.filtered_reason), (None, None))
+        self.assertIn("coalesce(%s, drop_category)", inspect.getsource(ledger.feed_save_summaries))
 
     def test_the_prompt_carries_the_owners_rules(self) -> None:
-        for phrase in ("Kalshi", "moves money", "Never copy 8", "restates the headline", "ALWAYS none"):
+        for phrase in ("Never copy 8", "restates the headline", "Use ONLY what the headline and teaser say"):
             self.assertIn(phrase, summarize.SYSTEM)
-        self.assertEqual(summarize.schema()["properties"]["stories"]["items"]["properties"]["drop"]["enum"],
-                         list(summarize.DROPS))
+
+    def test_every_rejection_is_kept_with_its_attempt_and_reason(self) -> None:
+        """db/058 (owner, 2026-10-20): the reasons lived only in Railway's log."""
+        copied = "The plan would move forward only after the board finished, officials said."
+        group = [ledger.SummaryJob(1, "t", self.PROSE, "Variety", None, 0), job(2),
+                 ledger.SummaryJob(3, "t", None, "Deadline", None, 1)]
+        payload = {"stories": [dict(GOOD, id=1, summary=copied), dict(GOOD, id=2, summary="One. Two. Three.")]}
+        rejections: list[ledger.SummaryRejection] = []
+        summarize.results_for(group, payload, rejections=rejections)
+        self.assertEqual([(r.story_id, r.attempt) for r in rejections], [(1, 1), (2, 1), (3, 2)])
+        self.assertTrue(rejections[0].reason.startswith("copy: copies 8 words from the teaser"))
+        self.assertTrue(rejections[1].reason.startswith("invalid: 3 sentences"))
+        self.assertEqual(rejections[2].reason, "missing: the answer had no result for this story")
+        none: list[ledger.SummaryRejection] = []
+        summarize.results_for([job(4)], None, rejections=none, attempts=2)
+        self.assertEqual(none, [ledger.SummaryRejection(4, 2, "missing: no usable answer (declined or not JSON)")])
 
 
 class FakeResponse(SimpleNamespace):
@@ -618,6 +652,7 @@ class FakeResponse(SimpleNamespace):
 class SummaryJobRun(unittest.TestCase):
     def setUp(self) -> None:
         self.saved: list[tuple[list, Any]] = []
+        self.rejected_rows: list[ledger.SummaryRejection] = []
         self.queue = [job(i, teaser="A short teaser.") for i in range(1, 13)]
         for name, fn in {
             "feed_summarized_today": lambda **kw: 0,
@@ -629,6 +664,7 @@ class SummaryJobRun(unittest.TestCase):
             "feed_follows": lambda **kw: [],
             "feed_sports_entity_names": lambda **kw: frozenset({"nfl"}),
             "feed_save_summaries": lambda results, usage, **kw: self.saved.append((list(results), usage)),
+            "feed_record_summary_rejections": lambda rows, **kw: self.rejected_rows.extend(rows) or len(rows),
             "_pool": lambda *a, **k: (_ for _ in ()).throw(AssertionError("database reached")),
         }.items():
             p = mock.patch.object(ledger, name, fn)
@@ -730,6 +766,9 @@ class SummaryJobRun(unittest.TestCase):
         self.assertEqual((r.accepted, r.rejected, r.retried, r.retry_passed), (0, 1, 1, 0))
         (out,), _ = self.saved[-1]
         self.assertEqual((out.summary, out.attempts), (None, 2))
+        # db/058: both attempts' reasons are kept, in order.
+        self.assertEqual([(x.story_id, x.attempt, x.reason[:6]) for x in self.rejected_rows],
+                         [(1, 1, "copy: "), (1, 2, "copy: ")])
 
     def test_no_retry_for_other_failures_or_a_last_attempt(self) -> None:
         too_long = "word " * 50
@@ -740,6 +779,8 @@ class SummaryJobRun(unittest.TestCase):
             r = summarize.summarize_job()
         self.assertEqual(len(calls), 1)
         self.assertEqual((r.accepted, r.rejected, r.retried), (0, 2, 0))
+        self.assertEqual([(x.story_id, x.attempt, x.reason.split(":")[0]) for x in self.rejected_rows],
+                         [(1, 1, "invalid"), (2, 2, "copy")])
 
     def test_a_spent_budget_is_a_skip_recorded_as_a_note_not_a_failure(self) -> None:
         with mock.patch.object(ai, "complete", side_effect=ai.BudgetExceeded("spent")):

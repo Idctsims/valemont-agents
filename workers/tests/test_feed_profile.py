@@ -334,12 +334,18 @@ class WhyJob(unittest.TestCase):
         resets: list[list[int]] = []
         jobs = [ledger.WhyJob(763, "Creator Dhar Mann on studio deals", "s", "Variety")]
         payload = {"stories": [{"id": 763, "venture": "Clipd", "why": "A Clipd rival raised money."}]}
+        events: list = []
         with mock.patch.object(ledger, "feed_why_jobs", lambda ids: jobs), \
+                mock.patch.object(ledger, "feed_why_lines", lambda ids: {763: None}), \
                 mock.patch.object(ledger, "feed_reset_why", lambda ids: resets.append(list(ids)) or len(ids)), \
+                mock.patch.object(ledger, "record_regeneration", lambda what, ch, how: events.append((what, ch, how))), \
                 mock.patch.object(ai, "complete", self.complete(payload)):
             got = why.ask_again([763])
         self.assertEqual((resets, got), ([[763]], {763: "A Clipd rival raised money."}))
         self.assertEqual(self.db.why_saved, [({763: "A Clipd rival raised money."}, 555)])
+        # The guard (owner, 2026-10-20): the re-run is on the record.
+        self.assertEqual(events, [("news_why", [ledger.Regenerated(763, "none", "concrete")],
+                                   "scripts.feed_profile --why --again")])
 
     def test_no_ventures_is_a_skip_without_a_call(self) -> None:
         self.db.why_queue = [ledger.WhyJob(1, "t", None, "X")]

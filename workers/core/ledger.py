@@ -158,6 +158,9 @@ EventKind = Literal[
     "selected",
     "gate_evaluated",
     "error",
+    # A by-hand regeneration of stored output (record_regeneration; owner,
+    # 2026-10-20: the 02:13 UTC Oct 15 repo why re-run left no trace).
+    "regenerated",
 ]
 
 #: What an attempt came to. `deferred` and `error` produced no answer and count
@@ -795,6 +798,25 @@ def emit_event(
             """,
             (agent_id, run_id, kind, message, Jsonb(detail or {})),
         )
+
+
+@dataclass(frozen=True)
+class Regenerated:
+    """One item a by-hand regeneration replaced: its id and the kind of
+    output before and after (e.g. 'concrete' -> 'general')."""
+    id: int
+    old: str
+    new: str
+
+
+def record_regeneration(what: str, changes: Sequence[Regenerated], *, how: str) -> None:
+    """THE GUARD (owner, 2026-10-20): every script path that regenerates
+    stored output writes one 'regenerated' event naming what, which ids, and
+    each id's old -> new kind, and how it was run. The 02:13 UTC Oct 15 repo
+    why re-run overwrote 7 good lines and left no record of who ran it."""
+    emit_event("regenerated", f"{what}: {len(changes)} regenerated ({how})",
+               detail={"what": what, "how": how, "ids": [c.id for c in changes],
+                       "changes": [{"id": c.id, "old": c.old, "new": c.new} for c in changes]})
 
 
 # ---------------------------------------------------------------------------
@@ -2135,7 +2157,8 @@ def _row_bytes(values: Sequence[Any]) -> int:
 @dataclass(frozen=True)
 class SimilarityRow:
     story_id: int
-    kind: Literal["join", "near_miss", "cap_overflow"]
+    #: 'would_join' (db/058): the shadow rule's pair, logged and never joined.
+    kind: Literal["join", "near_miss", "cap_overflow", "would_join"]
     cosine: float
     fuzz: float
     joined_by: str | None = None
@@ -2483,8 +2506,10 @@ class SummaryOut:
     entities: tuple[str, ...] = ()
     topics: tuple[str, ...] = ()
     sport: str | None = None
+    #: Retired (owner, 2026-10-20): the summarizer no longer classifies drops;
+    #: stories.drop_category keeps what earlier summaries wrote (coalesce).
     drop: str | None = None
-    #: Set only when the drop filter is live: 'drop:<category>'.
+    #: Retired with drop: never set by the summarizer.
     filtered_reason: str | None = None
     #: Attempts this run used: 1, or 2 with the same-run targeted retry.
     attempts: int = 1
@@ -2524,7 +2549,7 @@ def feed_save_summaries(results: Sequence[SummaryOut], ai_usage_id: int | None, 
                        sport = CASE WHEN %s THEN coalesce(%s, sport) ELSE coalesce(sport, %s) END,
                        category = coalesce(category, %s),
                        claimable_offer = coalesce(claimable_offer, %s),
-                       drop_category = %s, filtered_reason = coalesce(filtered_reason, %s),
+                       drop_category = coalesce(%s, drop_category), filtered_reason = coalesce(filtered_reason, %s),
                        summary_attempts = least(summary_attempts + %s, 5), summarized_at = now(),
                        ai_usage_id = %s
                  WHERE id = %s
@@ -2532,6 +2557,27 @@ def feed_save_summaries(results: Sequence[SummaryOut], ai_usage_id: int | None, 
                 (r.summary, list(r.entities), list(r.topics), r.sport_from_model, r.sport, r.sport,
                  r.category, r.claimable, r.drop, r.filtered_reason, r.attempts, ai_usage_id, r.story_id),
             )
+
+
+@dataclass(frozen=True)
+class SummaryRejection:
+    """One refused or missing summary (db/058 summary_rejections)."""
+    story_id: int
+    #: The story's attempt number this was: 1 or 2 (MAX_ATTEMPTS).
+    attempt: int
+    #: "copy: …", "invalid: …" or "missing: …" (feed/summarize.py results_for).
+    reason: str
+
+
+def feed_record_summary_rejections(rows: Sequence[SummaryRejection], *,
+                                   conn: psycopg.Connection | None = None) -> int:
+    """Append each rejection (db/058, append-only). Returns rows written."""
+    if not rows:
+        return 0
+    with _brief_conn(conn) as c, c.transaction(), c.cursor() as cur:
+        cur.executemany("INSERT INTO summary_rejections (story_id, attempt, reason) VALUES (%s, %s, %s)",
+                        [(r.story_id, max(1, min(r.attempt, 9)), r.reason[:500]) for r in rows])
+    return len(rows)
 
 
 # ---------------------------------------------------------------------------
@@ -3224,6 +3270,14 @@ def feed_why_jobs(story_ids: Sequence[int], *, conn: psycopg.Connection | None =
              WHERE v.id = ANY(%s) ORDER BY v.id
         """, (list(story_ids),)).fetchall()
     return [WhyJob(int(r[0]), r[1], r[2], r[3]) for r in rows]
+
+
+def feed_why_lines(story_ids: Sequence[int], *, conn: psycopg.Connection | None = None) -> dict[int, str | None]:
+    """The stored why-it-matters line of each real story (None: none yet):
+    the 'before' of a by-hand regeneration (record_regeneration)."""
+    with _brief_conn(conn) as c:
+        return {int(r[0]): r[1] for r in c.execute(
+            "SELECT id, why_it_matters FROM stories WHERE id = ANY(%s) AND NOT is_test", (list(story_ids),))}
 
 
 def feed_reset_why(story_ids: Sequence[int], *, conn: psycopg.Connection | None = None) -> int:

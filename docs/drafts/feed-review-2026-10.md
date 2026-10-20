@@ -1,5 +1,16 @@
 # Feed review, due Oct 19 (read 2026-10-20)
 
+**Owner's calls (2026-10-20), built on branch `feed-review-fixes`:**
+
+| # | Call | Status |
+|---|---|---|
+| 1 | **The Love-effects watch is extended to Sun 2026-10-26.** The owner reacts on Home and Sports this week. | Recorded; read on Oct 26 |
+| 2 | Retire the shadow drop: removed from the summary prompt and schema; `drop_category` kept as history (a new summary never overwrites it) | Built |
+| 3a | Shadow only: cosine ≥ 0.92 plus two shared proper names is logged as `would_join` (db/058); clustering unchanged | Built; **report after a week** |
+| 3b | The official "also announced" link | **Deferred** (owner, Oct 20); no code, no migration |
+| 4 | Store each summary rejection's reason: `summary_rejections` (db/058, append-only) | Built |
+| 5 | Dev-workflow why-lines must name what the repo lets you do; vague verbs and tool-name-only lines are refused | Built; day one re-run after deploy |
+
 Read-only. Proposals only, no code. Every figure was read with `db_inspect` on
 2026-10-20 unless it says otherwise.
 
@@ -129,6 +140,9 @@ topics. The later story is shown under the earlier one ("also announced
 in…"), not merged. Items are frozen, so a link is the only safe shape.
 **Migration:** yes, a new append-only `story_links` table.
 
+**DEFERRED (owner, 2026-10-20).** Not built. Revisit when official tech
+duplicates recur.
+
 ## 4. Headline-only summaries (Variety, Deadline, THR)
 
 **Finding: entertainment trades run out of attempts four to five times as
@@ -180,7 +194,19 @@ evidence. **Migration:** yes, either a `summary_rejections` table or a
   - All 8 were regenerated at **02:13 UTC Oct 15** (`ai_usage` 1312 and 1313).
     The queue only takes stories with `why_generated_at IS NULL`, and only the
     by-hand `feed_reset_repo_why` clears it. So a hand `--again` ran after the
-    grading. Who ran it, and with which prompt, is **pending**.
+    grading.
+  - **CLOSED (owner, 2026-10-20).** The Oct 15 session that fixed the
+    repo-line bug (`dc8cae6`, 02:14:05 UTC) ran it. That commit's message
+    says so: regenerating the day's 8 with PR #41's second-person prompt
+    stored 7 "General interest." over good lines, because the bare-key
+    lookup refused targets like "your dev workflow". The exact command was
+    not recovered: it is not in the owner's PowerShell history, nor among the
+    commands in that session's transcript between 00:00 and 02:13 UTC.
+  - **The guard:** every by-hand regeneration now writes a `regenerated`
+    event naming what, which ids, each id's old → new kind, and how it was
+    run (`ledger.record_regeneration`; `feed_profile --why/--repo-why
+    --again`, `morning_brief --generate` over an existing brief). A static
+    test fails if any other code resets a stored line without it.
 - **Every day since:** 3, 2, 1, 2, 2 of 8 "General interest." (Oct 15–19).
 
 **Proposed fixes:**

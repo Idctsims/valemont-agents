@@ -31,9 +31,16 @@ Sport (owner D8, 2026-10-12): for a multi-sport source (sources.toml
 sport_from = "model") the model is not told the source's sport, and its
 answer replaces the story's; the source's sport stays when it says none.
 
-DROP IS IN SHADOW (owner, 2026-10-11): stored on the story (db/033
-drop_category), filters nothing. DROP_LIVE flips it after the owner approves
-the 24-hour list; then a non-none drop also sets filtered_reason.
+DROP IS RETIRED (owner, 2026-10-20; feed review 2): the shadow classifier
+was never turned on, and in its last week ~9% of a sample of its drops was
+clearly wrong, 4 of 7 on a tier-1 follow (Alabama). The prompt no longer asks
+for it; stories.drop_category (db/033) stays as history and new stories leave
+it NULL.
+
+REJECTIONS ARE KEPT (db/058, owner, 2026-10-20): every summary the
+validator refuses, and every story an answer left out, writes a
+summary_rejections row (story, attempt, reason), so a review never depends on
+Railway's log retention again.
 
 Validation (validate()): known id, once; sentence and word counts; the copy
 check: no run of COPY_RUN consecutive words shared with the teaser or the
@@ -91,9 +98,7 @@ MAX_WORDS = 35  # owner, 2026-10-11 (was 45)
 COPY_RUN = 8
 MAX_ENTITIES = 10
 MAX_TOPICS = 6
-DROP_LIVE = False
 
-DROPS = ("gossip", "partisan_politics", "ai_hype", "crypto_price", "recap_no_storyline", "listicle", "none")
 SPORTS = ("cfb", "nfl", "nba", "f1", "golf", "none")
 
 SYSTEM = f"""You summarize news stories for one reader's private dashboard. For each story you get its id, headline, outlet, sport (if known) and teaser. Return one result per story.
@@ -111,16 +116,6 @@ sport: cfb, nfl, nba, f1 or golf when the story is about that sport, otherwise n
 
 {categories.PROMPT}
 {categories.MONEY_PROMPT}
-
-drop: classify against the reader's don't-care list. Pick the first that fits, else none.
-- gossip: celebrity gossip, dating, relationships, breakups, feuds between personalities, red-carpet looks. Business news about a celebrity's company, deal or earnings is NOT gossip.
-- partisan_politics: horse-race politics (polls, who is up or down, campaign trail) and culture-war fights. Policy that moves money (taxes, tariffs, regulation, antitrust, rates, budgets, labor law affecting a business or league) is none.
-- ai_hype: generic "AI will change everything" takes and vague predictions. A concrete AI product launch, funding round, deal, lawsuit or number is none.
-- crypto_price: crypto price chatter (up, down, predictions, "why it moved"). Crypto company business news (funding, deals, regulation, enforcement) is none.
-- recap_no_storyline: a plain game or event recap or result with no storyline beyond the score. A result that changes a playoff picture, a record, a firing, an injury, or a trade is none.
-- listicle: SEO lists and rankings with no news ("10 best...", "every X ranked"), shopping and deal posts.
-- none: everything else.
-ALWAYS none: sports-betting regulation, sportsbook and prediction-market business, and anything about Kalshi. Sports business (media rights, valuations, ownership, stadiums, NIL) is none.
 
 moves: almost always []. Add an item ONLY when the headline or teaser says a player, driver or golfer's move HAS happened: kind trade (traded to a new team), signing (signed with a new team or joined a tour), release (released or waived), retirement (retired).
 - Never for a rumour, talks, interest, a possibility, "could", "reportedly", "expected to", or a past move mentioned as background.
@@ -140,15 +135,13 @@ def schema() -> dict[str, Any]:
                 "items": {
                     "type": "object",
                     "additionalProperties": False,
-                    "required": ["id", "summary", "entities", "topics", "sport", "drop", "moves", "category",
-                                 "money"],
+                    "required": ["id", "summary", "entities", "topics", "sport", "moves", "category", "money"],
                     "properties": {
                         "id": {"type": "integer"},
                         "summary": {"type": "string"},
                         "entities": {"type": "array", "items": {"type": "string"}},
                         "topics": {"type": "array", "items": {"type": "string"}},
                         "sport": {"type": "string", "enum": list(SPORTS)},
-                        "drop": {"type": "string", "enum": list(DROPS)},
                         "category": {"type": "string", "enum": list(categories.CATEGORIES)},
                         "money": {"type": "boolean"},
                         "moves": {
@@ -252,7 +245,6 @@ class Valid:
     entities: tuple[str, ...]
     topics: tuple[str, ...]
     sport: str | None
-    drop: str
     moves: tuple[move_rules.RawMove, ...] = ()
     #: feed/category.py; None when the model gave none we know.
     category: str | None = None
@@ -274,15 +266,12 @@ def validate(item: dict[str, Any], job: ledger.SummaryJob) -> Valid:
         run = copied_run(summary, text)
         if run:
             raise CopyInvalid(f"copies {COPY_RUN} words from the {name}: {run!r}", run, summary)
-    drop = item.get("drop")
-    if drop not in DROPS:
-        raise SummaryInvalid(f"unknown drop {drop!r}")
     sport = item.get("sport")
     entities = tuple(dict.fromkeys(str(e).strip()[:80] for e in item.get("entities") or [] if str(e).strip()))
     topics = tuple(dict.fromkeys(t for t in (_TOPIC.sub("_", str(x).lower()).strip("_")[:40]
                                             for x in item.get("topics") or []) if t))
     return Valid(summary, entities[:MAX_ENTITIES], topics[:MAX_TOPICS],
-                 sport if sport in SPORTS and sport != "none" else None, drop,
+                 sport if sport in SPORTS and sport != "none" else None,
                  move_rules.parse(item.get("moves")),
                  categories.valid(item.get("category")), item.get("money"))
 
@@ -314,16 +303,20 @@ def results_for(group: Sequence[ledger.SummaryJob], payload: Any, *,
                 attempts: int = 1, model_sport: frozenset[str] = frozenset(),
                 found: list[tuple[int, str | None, tuple[move_rules.RawMove, ...]]] | None = None,
                 sports_names: frozenset[str] = frozenset(),
+                rejections: list[ledger.SummaryRejection] | None = None,
                 ) -> tuple[list[ledger.SummaryOut], list[str], list[Copied]]:
     """Every story in the group gets a SummaryOut: accepted, or summary None
     (`attempts` counted). Returns (results, problems for the log, the stories
     that failed ONLY the copy check, for the targeted retry). `model_sport`:
     the multi-sport source slugs (owner D8). Accepted stories with moves are
-    appended to `found` as (story id, its final sport, moves)."""
+    appended to `found` as (story id, its final sport, moves). Every story not
+    accepted is appended to `rejections` with its attempt and the reason
+    (db/058)."""
     by_id = {j.story_id: j for j in group}
     accepted: dict[int, ledger.SummaryOut] = {}
     problems: list[str] = []
     copied: dict[int, Copied] = {}
+    reasons: dict[int, str] = {}
     items = payload.get("stories") if isinstance(payload, dict) else None
     for item in items if isinstance(items, list) else []:
         sid = item.get("id") if isinstance(item, dict) else None
@@ -338,15 +331,16 @@ def results_for(group: Sequence[ledger.SummaryJob], payload: Any, *,
         except CopyInvalid as exc:
             problems.append(f"story {sid}: {exc}")
             copied[sid] = Copied(sid, exc.summary, exc.phrase)
+            reasons[sid] = f"copy: {exc}"
             continue
         except SummaryInvalid as exc:
             problems.append(f"story {sid}: {exc}")
+            reasons[sid] = f"invalid: {exc}"
             continue
         from_model = by_id[sid].source_slug in model_sport
         final_sport = story_sport(by_id[sid], v.sport, from_model)
         accepted[sid] = ledger.SummaryOut(
             story_id=sid, summary=v.summary, entities=v.entities, topics=v.topics, sport=v.sport,
-            drop=v.drop, filtered_reason=f"drop:{v.drop}" if DROP_LIVE and v.drop != "none" else None,
             # The business-of-sports question decides sports stories (owner,
             # 2026-10-13): a sport, or a sports entity among the entities.
             category=categories.decide(v.category, v.money, final_sport,
@@ -355,6 +349,11 @@ def results_for(group: Sequence[ledger.SummaryJob], payload: Any, *,
         if v.moves and found is not None:
             found.append((sid, final_sport, v.moves))
     missing = [sid for sid in by_id if sid not in accepted]
+    if rejections is not None:
+        absent = "missing: no usable answer (declined or not JSON)" if not isinstance(items, list) \
+            else "missing: the answer had no result for this story"
+        rejections.extend(ledger.SummaryRejection(sid, by_id[sid].attempts + attempts, reasons.get(sid, absent))
+                          for sid in missing)
     return ([accepted.get(sid) or ledger.SummaryOut(sid, None, attempts=attempts) for sid in by_id],
             problems + ([f"no valid result for {len(missing)} of {len(by_id)}"] if missing else []),
             list(copied.values()))
@@ -449,8 +448,10 @@ def summarize_group(group: Sequence[ledger.SummaryJob], *, client: Any = None,
     After the summaries are saved, any moves become proposals (feed/moves.py)."""
     first: list[int] = []
     found: list[tuple[int, str | None, tuple[move_rules.RawMove, ...]]] = []
+    rejections: list[ledger.SummaryRejection] = []
     results, problems, copied = results_for(group, _ask(user_message(group, model_sport), client, first, "group"),
-                                            model_sport=model_sport, found=found, sports_names=sports_names)
+                                            model_sport=model_sport, found=found, sports_names=sports_names,
+                                            rejections=rejections)
     run = SummaryRun()
     attempts_left = {j.story_id: MAX_ATTEMPTS - j.attempts - 1 for j in group}
     copied = [c for c in copied if attempts_left[c.story_id] > 0]
@@ -461,7 +462,7 @@ def summarize_group(group: Sequence[ledger.SummaryJob], *, client: Any = None,
         retried, retry_problems, _ = results_for(
             [j for j in group if j.story_id in retry_ids],
             _ask(retry_message(group, copied, model_sport), client, second, "retry"), attempts=2,
-            model_sport=model_sport, found=found, sports_names=sports_names)
+            model_sport=model_sport, found=found, sports_names=sports_names, rejections=rejections)
         problems += [f"retry: {p}" for p in retry_problems]
         results = [r for r in results if r.story_id not in retry_ids]
         run.retried = len(copied)
@@ -472,6 +473,9 @@ def summarize_group(group: Sequence[ledger.SummaryJob], *, client: Any = None,
     ledger.feed_save_summaries(results, first[-1] if first else None)
     if retried:
         ledger.feed_save_summaries(retried, second[-1] if second else None)
+    # db/058: every refusal and every omission, with its attempt (after the
+    # saves: a failure here never loses a summary, and it raises).
+    ledger.feed_record_summary_rejections(rejections)
     run.accepted = sum(1 for r in results + retried if r.summary is not None)
     run.rejected = len(results) + len(retried) - run.accepted
     # After the save: a failure here never loses a summary, and it raises.
