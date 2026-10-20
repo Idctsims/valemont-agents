@@ -6,8 +6,16 @@ Status: **design only, no code** (owner, 2026-10-20). Nothing here changes
 
 **Approved by the owner (2026-10-20):** Storage S3 access keys (Storage-scoped)
 are the credential (§4, option a); the Postgres fallback for week 6 if the new
-path is not ready by Tue 2026-10-27 (§9.4). **No archive code yet.** Still to
-confirm on the pricing page: the per-file limit and Storage egress (§10).
+path is not ready by Tue 2026-10-27 (§9.4). **No archive code yet.**
+
+**Confirmed on supabase.com, 2026-10-20** (each answer is quoted from the page
+named):
+
+| Question | Answer | Source |
+|---|---|---|
+| Free file storage | "1 GB file storage" | https://supabase.com/pricing |
+| Per-file upload limit | 50 MB: "For Free projects, the limit can't exceed 50 MB" (500 GB on Pro and up) | https://supabase.com/docs/guides/storage/uploads/file-limits |
+| Do Storage downloads count toward the 5 GB egress? | **Yes.** "Egress is incurred by all services" (Database, Auth, Storage, Edge Functions, Realtime, Log Drains); Storage egress is "data sent from Supabase Storage to the client when retrieving assets". Free has 5 GB uncached plus a separate 5 GB cached (CDN hits) quota, no over-usage billing, and a grace period after a notification. | https://supabase.com/docs/guides/platform/manage-your-usage/egress (quotas also on https://supabase.com/pricing) |
 
 ## 1. Why
 
@@ -151,8 +159,8 @@ them):
 | **Total** | **~6–7 MB gz** | **~75–90 MB (~8–9% of 1 GB)** |
 
 - **Margin:** even uncompressed (~22 MB a week, ~290 MB in all) it fits.
-- **Per-file limit:** Supabase Free's standard upload limit (50 MB; **to
-  confirm** on the current pricing page) is ~8× a week's largest file.
+- **Per-file limit:** 50 MB on Free (confirmed, see the table above), ~8×
+  a week's largest file.
 - **Postgres after the move:** markets and settlements grow ~0.5 MB a week
   (~7 MB by week 18), plus `archive_objects` (a few rows a week). The ~440 MB
   of §1 is avoided.
@@ -166,9 +174,10 @@ them):
 - **The January read:** the runner downloads every file once, **~75–90 MB**,
   plus week 5 and the markets and settlements from Postgres (~40 MB by then,
   read once). **~120–130 MB, one time.**
-- **Quota:** on Free, Storage downloads count toward the same monthly egress
-  quota as the database (**to confirm** on the pricing page). That is ~2.5%
-  of 5 GB. The runner reads each file once into memory, never in a loop. It
+- **Quota:** on Free, Storage downloads count toward the same 5 GB monthly
+  (uncached) egress as the database (confirmed, see the table above). That is
+  ~2.5% of 5 GB. A private bucket read with S3 keys is not a CDN cache hit, so
+  plan on it landing in the uncached quota. The runner reads each file once into memory, never in a loop. It
   checks hashes on the downloaded bytes, so no second download is needed.
 
 ## 8. How F1 and F2 read it in January
@@ -221,6 +230,6 @@ The `tests/` coverage for the new job uses synthetic rows only.
   keys, `boto3` as a dev-only dependency.
 - ~~[decide] The week 6 fallback date~~ **Approved (owner, Oct 20):** Postgres
   for week 6 if the Storage path is not ready by Tue 2026-10-27.
-- To confirm on the Supabase pricing page:
-  - the Free plan's Storage per-file upload limit;
-  - whether Storage downloads count toward the database's 5 GB egress.
+- ~~To confirm on the Supabase pricing page~~ **Confirmed 2026-10-20** (the
+  table at the top): 1 GB file storage, a 50 MB per-file limit, and Storage
+  downloads count toward the 5 GB egress.
