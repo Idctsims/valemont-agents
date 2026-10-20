@@ -1071,6 +1071,7 @@ absent row as "I never looked."
     - (d) Both tables RLS on, 1 policy each; triggers guard/immutable/no_truncate and stamp/immutable/no_truncate.
     - (e) Both tables and the view: anon nothing, authenticated select only, readonly select.
     - (f) `egress_samples` 0 rows (the worker that writes it is not deployed).
+    - **Merge gate on `chat5-fixes` after the paste:** `tests/` 1060 OK; full `tests_live -v`, every connection metered: **430 OK, 0 skipped**, ~2.69 MB read (2,751 KB, 977 s). The trailer freeze test was red on production before the paste (the same "is frozen" error) and is green after it.
     - Next new file: `db/058`.
   - **Rule (owner, 2026-10-12): the migration record updates in the same session a migration is verified, never deferred to a merge.** Record `applied_at` from `migration_log` and the verification, and move "Next new file" here and in MASTER_PLAN §"Migration numbering", in their own commit.
 - **Known intermittent `tests_live` skip (identified 2026-10-12):** `test_system_jobs_sql.SystemJobsSql.test_claim_retry_and_finish` skips with "another poller claimed the test job first" when the production worker's 10 s `job_queue` poller claims the test's `noop` job first (observed 2 of 60 isolated runs). By design (skip, not fail); not a broken invariant. Two sibling tests in the same file skip the same way ("another poller claimed/failed the test job first"). Since 2026-10-13 `tests_live` runs with `-v`, so a skip is named, not assumed.
