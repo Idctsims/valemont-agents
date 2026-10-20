@@ -1073,7 +1073,13 @@ absent row as "I never looked."
     - (e) Both tables and the view: anon nothing, authenticated select only, readonly select.
     - (f) `egress_samples` 0 rows (the worker that writes it is not deployed).
     - **Merge gate on `chat5-fixes` after the paste:** `tests/` 1060 OK; full `tests_live -v`, every connection metered: **430 OK, 0 skipped**, ~2.69 MB read (2,751 KB, 977 s). The trailer freeze test was red on production before the paste (the same "is frozen" error) and is green after it.
-    - Next new file: `db/058`.
+  - **`db/058_feed_review.sql` applied 2026-10-20 21:37:26 UTC** (`migration_log`; owner's paste, the self-test NOTICE shown). Branch `feed-review-fixes` (PR #60).
+    - `summary_rejections` (append-only, TRUNCATE-guarded, no foreign key so the prune is unaffected): every refused or missing summary, its attempt and reason (feed review item 4).
+    - `feed_similarity_log.kind` gains `would_join` (item 3a, shadow only).
+    - **A paste reported at ~21:25 UTC did not reach production** (no log row, no table, read via db_inspect at 21:25 and 21:28 UTC); the 21:37 paste did. Before trusting a paste, read its `migration_log` row.
+
+    **Verified via db_inspect the same session:** (a) the log row; (b) `summary_rejections` RLS on, 1 policy, triggers stamp/immutable/no_truncate, no foreign key, 0 rows; (c) anon nothing, authenticated select only, readonly select; (d) the kind CHECK lists `would_join`.
+    - Next new file: `db/059`.
   - **Rule (owner, 2026-10-12): the migration record updates in the same session a migration is verified, never deferred to a merge.** Record `applied_at` from `migration_log` and the verification, and move "Next new file" here and in MASTER_PLAN §"Migration numbering", in their own commit.
 - **Known intermittent `tests_live` skip (identified 2026-10-12):** `test_system_jobs_sql.SystemJobsSql.test_claim_retry_and_finish` skips with "another poller claimed the test job first" when the production worker's 10 s `job_queue` poller claims the test's `noop` job first (observed 2 of 60 isolated runs). By design (skip, not fail); not a broken invariant. Two sibling tests in the same file skip the same way ("another poller claimed/failed the test job first"). Since 2026-10-13 `tests_live` runs with `-v`, so a skip is named, not assumed.
   - **2026-10-13, cleared (owner):** a quiet Phase 3 run reported "314 tests, OK (skipped=1)" with no name. The full verbose rerun had **0 skips** (314 OK, 593 s). The owner's judgment: the plausible cause is this documented poller race, since every migration-gated skip cannot fire (all applied). One alternative was not ruled out: a class whose own `setUpClass` hits a transient "database unreachable" is also reported as one skip.
