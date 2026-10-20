@@ -1,5 +1,16 @@
 # Feed review, due Oct 19 (read 2026-10-20)
 
+**Owner's calls (2026-10-20), built on branch `feed-review-fixes`:**
+
+| # | Call | Status |
+|---|---|---|
+| 1 | **The Love-effects watch is extended to Sun 2026-10-26.** The owner reacts on Home and Sports this week. | Recorded; read on Oct 26 |
+| 2 | Retire the shadow drop: removed from the summary prompt and schema; `drop_category` kept as history (a new summary never overwrites it) | Built |
+| 3a | Shadow only: cosine ≥ 0.92 plus two shared proper names is logged as `would_join` (db/058); clustering unchanged | Built; **report after a week** |
+| 3b | The official "also announced" link | **Deferred** (owner, Oct 20); no code, no migration |
+| 4 | Store each summary rejection's reason: `summary_rejections` (db/058, append-only) | Built |
+| 5 | Dev-workflow why-lines must name what the repo lets you do; vague verbs and tool-name-only lines are refused | Built; day one re-run after deploy |
+
 Read-only. Proposals only, no code. Every figure was read with `db_inspect` on
 2026-10-20 unless it says otherwise.
 
@@ -128,6 +139,9 @@ items: same organization, published within 24 h, identical or ≥ 2 shared
 topics. The later story is shown under the earlier one ("also announced
 in…"), not merged. Items are frozen, so a link is the only safe shape.
 **Migration:** yes, a new append-only `story_links` table.
+
+**DEFERRED (owner, 2026-10-20).** Not built. Revisit when official tech
+duplicates recur.
 
 ## 4. Headline-only summaries (Variety, Deadline, THR)
 
