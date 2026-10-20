@@ -174,7 +174,7 @@ Views the app reads: `v_model_performance` (hit rate, ROI net of fees and CLV by
 | --- | --- | --- | --- | --- | --- |
 | Vercel | Next.js app, API routes, watchdog route | Hobby, free (personal use). **Live at `valemont-command.vercel.app`**; builds only when `apps/web` changes | 0 | Vercel account linked to GitHub; env: Supabase URL, publishable key, `OWNER_USER_ID`, VAPID keys, `SUPABASE_SECRET_KEY` (watchdog only), `WATCHDOG_TOKEN`, `WATCHDOG_PING_URL` | Cloudflare Pages |
 | Supabase | Postgres, Auth, Storage, pgvector, Edge Functions | Free: 500 MB DB, 1 GB storage, pauses after 7 idle days (the heartbeat prevents it) | 0 | Existing project; publishable key (browser), a dedicated `vercel-watchdog` secret key (server, one route), Session pooler URL, read-only role URL | Pro at $25 if the cap is hit |
-| Railway | All Python workers and the scheduler | **Hobby from Oct 13 (owner):** $5/month including $5 of usage. Free ($1 credit, 0.5 GB per service) until then: the system-jobs-only worker used about 45–50 MB; with the Chat 3 feed it rests at about 130 MB with ingest peaks about 155 MB (Oct 13), about $1.27/month of memory alone at about $10 per GB-month, past the $1 credit | 5 | Existing account | Fly.io or Render |
+| Railway | All Python workers and the scheduler | **Corrected Oct 20 (owner): the account stayed on the trial; the Oct 13 "Hobby" entry was wrong.** The trial ended and removed the worker at about 20:06 UTC Oct 19; the owner switched to **Free** ($1 credit, 0.5 GB per service) on Oct 20. The worker rests at about 141 MB (Oct 16–19), about $1.3–1.4/month of memory alone at about $10 per GB-month, past Free's $1, so on Free it lapses again mid-month. **Open owner decision: Hobby ($5/month including $5 of usage) vs an Oracle Cloud free VM vs Free** | 0 now; 5 on Hobby | Existing account | Fly.io or Render |
 | Claude API | Summaries, vision, Brief, Wags, Arsenal, reasoning | Pay as you go | Start: $5 prepaid, $20 cap (Oct 9; was $10) | Console API key with a monthly spend limit set (Chat 2) | Haiku-only mode via budget guard |
 | Embeddings | Learning engine, Lookbook similarity | Supabase built-in gte-small (384-dim) in Edge Functions, free | 0 | None | sentence-transformers on Railway |
 | Web Push | All push alerts | Self-hosted VAPID: `web-push` on Vercel, `pywebpush` on the worker, free. **Proven on a locked iPhone from both senders** | 0 | VAPID key pair in Vercel and Railway | Email digest |
@@ -450,7 +450,7 @@ Thirteen build chats after this one, each split into phases with a test you run 
 
 ### Chat 10 — Crypto Long-Term Home and Core Paper Bot
 
-**Set up in this chat:** Alpaca account and paper key pair (instant), CoinGecko Demo key. (Railway moved to Hobby earlier, on Oct 13, when the Chat 3 feed outgrew Free.)
+**Set up in this chat:** Alpaca account and paper key pair (instant), CoinGecko Demo key. (Railway: the Oct 13 "moved to Hobby" was wrong, corrected Oct 20; the trial ended Oct 19, Free from Oct 20, plan an open owner decision, section 4.)
 
 1. Long-Term Home: live prices, accumulation signals with reasoning, news strip.
    - [ ] BTC, ETH, SOL and XRP each show accumulate, hold or wait with a reason
@@ -507,8 +507,8 @@ The three most likely ways this build fails are silent worker death, data source
 | Supabase 500 MB cap | Medium within 6 months | Retention jobs, 384-dim embeddings, candle archive windowed (design needed, see §3), size alerts at 400 and 450 MB **(built)** |
 | Supabase project pauses | Low | The heartbeat writes every minute **(built)** |
 | Worker dies silently at 3 a.m. | **Mitigated (built, drilled)** | Railway restart policy and the repo's SIGTERM drain (seen working in Drill 2: clean shutdown on removal); worker health monitor; external watchdog pushes "Worker down" within 10 minutes; healthchecks.io emails if the watchdog stops; both drills passed Oct 8 |
-| Railway usage creeps past the plan's credit | Medium | One consolidated worker; RSS on every job's log line and in `job_health`. **Happened Oct 13:** the feed took the worker to about 130 MB, past Free's $1; moved to Hobby ($5 of usage included) |
-| ~~Railway trial ends (about Oct 18)~~ | Closed Oct 13 | On Hobby; no lapse and no hand redeploy |
+| Railway usage creeps past the plan's credit | **High (open)** | One consolidated worker; RSS on every job's log line and in `job_health`. The feed took the worker to about 130 MB (Oct 13), about 141 MB at rest by Oct 16–19: about $1.3–1.4/month of memory, past Free's $1 credit. On Free (from Oct 20) it lapses mid-month; the watchdog pushes "Worker down" and it needs a hand redeploy. **Open owner decision:** Hobby ($5) vs an Oracle Cloud free VM vs Free. (The Oct 13 "moved to Hobby" entry was wrong: the account was still on the trial.) |
+| Railway trial ends | **Happened ~20:06 UTC Oct 19** | Not closed Oct 13 as recorded (that entry was wrong). The trial ended and removed the worker; it was down ~23 h+ into Oct 20, the watchdog pushing every ~35 min. The owner switched to Free on Oct 20; redeploy waited on Railway's build outage (Oct 20). |
 | Supabase clock skew ("JWT issued at future") | Low, observed | Skew inside Supabase (API gateway vs PostgREST), not the caller, so no client clock fix applies. Watchdog read retried once; persistent failure returns 503 and reports `/fail` to healthchecks |
 | Vercel function time limits on Hobby | Medium | Nothing long-running on Vercel: AI generation, parsing and syncing happen on Railway, Vercel only reads and enqueues; watchdog has a hard time budget under 30 s |
 | Claude API cost spike | Low | Spend limit in the Anthropic console, `ai_usage` logging, budget guard **(built)**, Batch API for summaries |
@@ -581,7 +581,7 @@ Approved by Tsims on Oct 7, 2026: all six decisions below are locked. Chat 1 sta
 - [x] Betting runs on the market-consensus engine; the old NFL models stay research-only until a new model passes a pre-registered holdout (Read first, points 1–2)
 - [x] Amend CLAUDE.md: paper by default, live only by an explicit per-bot flip with separate keys and hard limits (point 5)
 - [x] Alpaca for the core bot; memecoin live mode as FOMO signals you execute by hand (point 6)
-- [x] Pay for Railway Hobby and the Claude API (about $40–60/month); everything else free (section 4). **Amended Oct 8:** Railway stays on the Free plan until the worker outgrows its $1 credit; the Claude API starts at $5 prepaid with a $10 cap. **Amended Oct 9:** the cap is $20/month. **Amended Oct 13:** Railway on Hobby (the feed worker rests at about 130 MB).
+- [x] Pay for Railway Hobby and the Claude API (about $40–60/month); everything else free (section 4). **Amended Oct 8:** Railway stays on the Free plan until the worker outgrows its $1 credit; the Claude API starts at $5 prepaid with a $10 cap. **Amended Oct 9:** the cap is $20/month. ~~**Amended Oct 13:** Railway on Hobby (the feed worker rests at about 130 MB).~~ **Corrected Oct 20:** that switch never happened; the trial ended Oct 19, Free from Oct 20, and the plan (Hobby vs Oracle free VM vs Free) is an open owner decision.
 - [x] Thirteen-chat sequence with Wags and the Morning Brief framework built in Chat 2 (section 6)
 
 **Owner decisions still parked** (recorded in CLAUDE.md, not part of this build's critical path): go-live of the existing Kalshi roster (`db/013`), the `nfl_ml` commit-window question, the crypto research track review, and the weekly NFL props archive run every Tuesday (first: Oct 13, week 5).
