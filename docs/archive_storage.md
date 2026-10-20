@@ -4,6 +4,11 @@ Status: **design only, no code** (owner, 2026-10-20). Nothing here changes
 `jobs/archive_nfl_props.py`, the db/011 and db/014 tables, or
 `docs/preregistration_nfl.md` §8. Owner decisions are marked **[decide]**.
 
+**Approved by the owner (2026-10-20):** Storage S3 access keys (Storage-scoped)
+are the credential (§4, option a); the Postgres fallback for week 6 if the new
+path is not ready by Tue 2026-10-27 (§9.4). **No archive code yet.** Still to
+confirm on the pricing page: the per-file limit and Storage egress (§10).
+
 ## 1. Why
 
 `jobs.archive_nfl_props` copies what F1 and F2 need (preregistration §8) into
@@ -212,9 +217,10 @@ The `tests/` coverage for the new job uses synthetic rows only.
 
 ## 10. Open for the owner
 
-- [decide] The credential: S3 keys with `boto3` as a dev-only dependency
-  (recommended), or the secret key over REST.
-- [decide] The week 6 fallback date (§9.4).
+- ~~[decide] The credential~~ **Approved (owner, Oct 20):** Storage S3 access
+  keys, `boto3` as a dev-only dependency.
+- ~~[decide] The week 6 fallback date~~ **Approved (owner, Oct 20):** Postgres
+  for week 6 if the Storage path is not ready by Tue 2026-10-27.
 - To confirm on the Supabase pricing page:
   - the Free plan's Storage per-file upload limit;
   - whether Storage downloads count toward the database's 5 GB egress.
