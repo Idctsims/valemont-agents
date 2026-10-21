@@ -36,21 +36,24 @@ const MOCK_CARDS: Omit<ArmCardIn, "canonical_key">[] = [
     origin: "Caesar led one legion across the Rubicon in 49 BC, which made civil war unavoidable.",
     meaning: "A decision that cannot be walked back.", deploy_line: "Once we sign this, we have crossed the Rubicon.",
     source_work: "Julius Caesar, 49 BC", quote: null, quote_by: null, source_kind: "wikipedia",
-    source_page: "Crossing the Rubicon", from_arsenal: false,
+    source_page: "Crossing the Rubicon", source_url: "https://en.wikipedia.org/wiki/Crossing_the_Rubicon",
+    from_arsenal: false,
   },
   {
     category: "finance_business", title: "See's Candies (mock)", room: "pitch",
     origin: "Berkshire bought See's in 1972 for $25 million; it has raised prices every year since.",
     meaning: "Pricing power is the moat.", deploy_line: "Our members pay more every year and thank us. That is See's Candies.",
     source_work: "Buffett, 2007 Berkshire Hathaway letter", quote: null, quote_by: null, source_kind: "wikipedia",
-    source_page: "See's Candies", from_arsenal: false,
+    source_page: "See's Candies", source_url: "https://en.wikipedia.org/wiki/See%27s_Candies", from_arsenal: false,
   },
   {
     category: "film_tv", title: "Never tell anybody outside the family (mock)", room: "negotiation",
     origin: "Vito Corleone rebukes Sonny for showing his hand to Sollozzo.",
     meaning: "Keep your read of the deal to yourself.", deploy_line: "I'll keep my thinking inside the family for now.",
     source_work: "The Godfather (1972)", quote: "Never tell anybody outside the family what you're thinking again.",
-    quote_by: "Vito Corleone", source_kind: "wikiquote", source_page: "The Godfather", from_arsenal: false,
+    // No link given: the card says "No source given".
+    quote_by: "Vito Corleone", source_kind: "wikiquote", source_page: "The Godfather", source_url: null,
+    from_arsenal: false,
   },
 ];
 

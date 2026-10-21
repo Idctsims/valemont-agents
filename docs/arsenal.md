@@ -777,3 +777,37 @@ quiz."
   - `ctx_arsenal` and `ctx_arsenal_brief`;
   - My Arsenal and the quiz without the marker;
   - the pool's stale-pending sweep, which reads pool and seed rows only.
+
+### 9.9 Owner runs and the pre-merge fixes (Oct 21)
+
+**Owner e2e runs (phone unless noted), on db/059 after its paste:**
+
+| Spec | Result |
+|---|---|
+| `arsenal-arm` | 7/7 passed |
+| `arsenal-quiz` | 3/3 passed |
+| `arsenal` (Phase 1, with Save on the cards) | 8/8 passed |
+| `screens-arsenal-p2` | phone 1/1 and desktop 1/1 passed |
+| `arsenal-saved` | 1 passed, **1 failed** ("Unsave leaves Undo", line 82), 4 did not run |
+
+**The fixes below were not re-run (owner, Oct 21).** No owner e2e re-runs for them; the owner checks them on the phone after the deploy. A run of `arsenal-saved` finished at 15:32:11 CDT (`.last-run.json`: "passed") and cleared the failed run's trace. It was not started from this session, and its file cannot show whether owner tests ran or skipped, so it is not counted.
+
+1. **The `arsenal-saved` failure was a real missing Undo, not a test race.**
+   - The trace was gone (cleared by the 15:32 run). The failed run's page snapshot showed "1 saved", with the unsaved card absent altogether.
+   - Unsave refreshes the page, and the server's list no longer holds the card, so its "Removed · Undo" line could never render, however long the test waited.
+   - Fixed: `lib/arsenal/saved-view.ts` (`listWithHeld`, `keptCount`) keeps every card the page removed until it is left. Unit-tested.
+2. **Arm Me cards show their Source link.**
+   - The model gives `source_url`, kept only as a plain https URL of at most 500 characters (`cleanSourceUrl`).
+   - A card shows the stored link first (a checked card's own page), else the model's, else "No source given".
+   - db/059 does not store the model's link, so a saved card's link in My Arsenal is the verifier's, once it settles.
+3. **The quiz masks the title** out of "Which reference fits this?" (`maskTitle`):
+   - the whole title, then each distinctive word of it;
+   - a short name only in the possessive form the title wrote ("See's", not "see").
+4. **The correct option says "Right answer"** in words (accent text on the accent-outlined option, tokens only, both themes), not only in colour.
+5. **The Save toggle reads "Saved" when saved**, visible and accessible name alike (`saveLabel`).
+6. **The four "Crossing the Rubicon (mock)" entries in My Arsenal are four different test cards** (refs 1260, 1263, 1271, 1274, keys `e2e_mock_<run>_1`), each saved once.
+   - They came from `screens-arsenal-p2`'s four mock requests: phone and desktop, night and day, 20:26–20:27 UTC. The mock gives every request fresh keys under the same three titles.
+   - Read via db_inspect: 0 targets listed twice in `v_arsenal_saved`, 0 real saves.
+   - A double save cannot make two entries: the view keeps the latest event per target, and the save guard refuses a second save ("already saved", under a per-target lock).
+
+Checks after the fixes: `tsc` clean; `pnpm lint` clean (tokens, contrast); `pnpm test:unit` 154 passed.

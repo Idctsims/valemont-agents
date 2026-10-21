@@ -102,13 +102,17 @@ export function QuizRunner({ quizId, questions, initial }: {
             <li key={i}>
               <button type="button" data-testid="quiz-option" data-state={state} disabled={!!given || busy}
                       onClick={() => choose(i)}
-                      className={`tap flex w-full items-center rounded-inner border px-4 py-3 text-left text-base text-pretty transition-colors ${
+                      className={`tap flex w-full items-center justify-between gap-3 rounded-inner border px-4 py-3 text-left text-base text-pretty transition-colors ${
                         state === "right" ? "border-accent text-accent"
                           : state === "wrong" ? "border-text-muted text-text-muted line-through"
                             : state === "other" ? "border-border text-text-muted"
                               : "border-border text-text hover:bg-surface-2"
                       }`}>
-                {o}
+                <span>{o}</span>
+                {/* Said in words, not only by colour (owner, Oct 21). */}
+                {state === "right" && (
+                  <span data-testid="quiz-right-label" className="label-mono shrink-0 text-accent">Right answer</span>
+                )}
               </button>
             </li>
           );

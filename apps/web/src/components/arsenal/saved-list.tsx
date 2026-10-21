@@ -7,6 +7,7 @@ import { CheckTag, RefCardBody, RoomPill, TestTag } from "@/components/arsenal/r
 import { UnverifiedReason } from "@/components/arsenal/unverified-reason";
 import { ChipFace } from "@/components/ui/chip";
 import type { SavedItem } from "@/lib/arsenal/saved";
+import { keptCount, listWithHeld, savedKey } from "@/lib/arsenal/saved-view";
 import {
   CATEGORIES, CATEGORY_LABEL, checkTagKind, ROOM_LABEL, ROOMS, type Category, type Room,
 } from "@/lib/arsenal/types";
@@ -19,7 +20,7 @@ import {
 // (a category filter shows references only: words have none). Unsave leaves
 // a line with Undo, so a slip costs one tap.
 
-const key = (i: SavedItem) => `${i.kind}:${i.id}`;
+const key = savedKey;
 
 export function SavedList({ items }: { items: SavedItem[] }) {
   const [room, setRoom] = useState<Room | null>(null);
@@ -57,11 +58,9 @@ export function SavedList({ items }: { items: SavedItem[] }) {
     });
   }
 
-  const live = new Set(items.map(key));
-  const all = [...items, ...[...held.values()].filter((i) => !live.has(key(i)))]
-    .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+  const all = listWithHeld(items, held);
   const shown = all.filter((i) => (!room || i.room === room) && (!category || (i.kind === "ref" && i.category === category)));
-  const kept = all.filter((i) => !removed.has(key(i))).length;
+  const kept = keptCount(all, removed);
   return (
     <div data-testid="saved-list" aria-busy={busy} className="lg:max-w-3xl">
       <p data-testid="saved-count" className="label-mono text-text-muted">{kept} saved</p>

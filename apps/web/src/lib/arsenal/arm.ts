@@ -46,6 +46,8 @@ export const armCardSchema = z.object({
   quote_by: z.string().nullable(),
   source_kind: z.enum(SOURCE_KINDS),
   source_page: z.string(),
+  /** The https URL of source_page, or null (owner, Oct 21: the card's Source link). */
+  source_url: z.string().nullable(),
   from_arsenal: z.boolean(),
 });
 export type ArmCardIn = z.infer<typeof armCardSchema>;
@@ -70,6 +72,13 @@ const clean =(v: unknown) => String(v ?? "").split(/\s+/).filter(Boolean).join("
 /** cards.py normalize_key. */
 export function normalizeKey(raw: unknown): string {
   return String(raw ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80).replace(/_+$/, "");
+}
+
+/** The model's source link, kept only as a plain https URL (db/054's
+ *  source_url CHECK: https, at most 500 characters); else null. */
+export function cleanSourceUrl(raw: unknown): string | null {
+  const url = String(raw ?? "").trim();
+  return /^https:\/\/[^\s"'<>]+$/.test(url) && url.length <= 500 ? url : null;
 }
 
 /** cards.py clean_quote: no wrapping quotation marks; null when absent or too long. */
@@ -104,7 +113,7 @@ export function validateArmCard(item: ArmCardIn): { card: ArmCardIn; why: null }
     card: {
       ...item, canonical_key: key, title: fields.title!, origin: fields.origin!, meaning: fields.meaning!,
       deploy_line: fields.deploy_line!, source_work: fields.source_work!, quote, quote_by: quoteBy,
-      source_page: clean(item.source_page).slice(0, 200),
+      source_page: clean(item.source_page).slice(0, 200), source_url: cleanSourceUrl(item.source_url),
     },
     why: null,
   };
@@ -142,7 +151,7 @@ export function armSystem(opts: { weights: Record<string, number>; arsenal: Arse
     arsenal,
     "",
     "THE RULES",
-    "- Well documented only: an English Wikipedia or Wikiquote page supports the origin. source_page names that page exactly.",
+    "- Well documented only: an English Wikipedia or Wikiquote page supports the origin. source_page names that page exactly; source_url is its https URL (https://en.wikipedia.org/wiki/... or https://en.wikiquote.org/wiki/...), or null when you are not sure of it.",
     "- Check the ending: if how it really ended undercuts the deploy line, reframe the line to fit what happened, or pick another reference.",
     "- A film or TV quote credits the character AND the work in quote_by. A quote is at most 15 words, exactly as said; when unsure, quote null.",
     "- source_work is always set.",

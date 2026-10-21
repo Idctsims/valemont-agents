@@ -132,7 +132,7 @@ function ArmCardItem({ c }: { c: ArmCard }) {
         category: c.category, title: c.title, sourceWork: c.source_work, origin: c.origin, quote: c.quote,
         quoteBy: c.quote_by, meaning: c.meaning, deployLine: c.deploy_line, room: c.room, sourceUrl: c.source_url,
         tag: checkTagKind({ verification: c.verification, status: c.status, saved, held: c.held }),
-        tagNote: c.verification_note, isTest: c.is_test, fromArsenal: c.in_arsenal,
+        tagNote: c.verification_note, isTest: c.is_test, fromArsenal: c.in_arsenal, sayNoSource: true,
       }}>
         <div className="-ml-2 mt-3 flex">
           <SaveButton refId={c.id} saved={saved} label={c.title} onChange={setSaved} />

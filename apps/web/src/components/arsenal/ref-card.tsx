@@ -28,6 +28,8 @@ export type CardData = {
   isTest: boolean;
   /** Arm Me: a seed, a dropped or a saved reference. */
   fromArsenal?: boolean;
+  /** Say "No source given" when there is no Source link (Arm Me). */
+  sayNoSource?: boolean;
 };
 
 export function RefCardBody({ c, children }: { c: CardData; children?: React.ReactNode }) {
@@ -64,6 +66,9 @@ export function RefCardBody({ c, children }: { c: CardData; children?: React.Rea
              className="tap inline-flex items-center gap-1 rounded-pill px-3 text-sm text-text-muted hover:bg-surface-2 hover:text-text">
             Source <ArrowSquareOut size={14} aria-hidden />
           </a>
+        )}
+        {!c.sourceUrl && c.sayNoSource && (
+          <span data-testid="card-no-source" className="px-3 text-sm text-text-muted">No source given</span>
         )}
       </div>
       {c.tag === "unverified" && c.tagNote && <UnverifiedReason note={c.tagNote} />}

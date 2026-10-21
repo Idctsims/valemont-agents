@@ -118,7 +118,11 @@ export function quoteCredit(category: Category, quoteBy: string | null, sourceWo
   return `${speaker} (${CREDIT} ${work})`;
 }
 
-export type RefStatus = "seed" | "pool" | "dropped" | "rejected" | "arm";
+/** The Save toggle's label, visible and accessible alike (owner, Oct 21:
+ *  it reads "Saved" when saved). */
+export const saveLabel = (saved: boolean) => (saved ? "Saved" : "Save");
+
+export type RefStatus ="seed" | "pool" | "dropped" | "rejected" | "arm";
 
 /** The small tag on a card (Phase 2, docs/arsenal.md §9.3, §9.5). A held
  *  outcome conflict reads as Unverified; an Arm Me card is "Unchecked until

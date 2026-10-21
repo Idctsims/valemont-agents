@@ -5,13 +5,15 @@ import { expect, test } from "@playwright/test";
 
 import { ARSENAL_VOICE, ARSENAL_VOICE_VERSION } from "../src/generated/arsenal-voice";
 import {
-  armPrompt, armProviderOptions, armSystem, FIRST_CARD_BAR_MS, normalizeKey, validateArmCard, type ArmCardIn,
+  armPrompt, armProviderOptions, armSystem, cleanSourceUrl, FIRST_CARD_BAR_MS, normalizeKey, validateArmCard,
+  type ArmCardIn,
 } from "../src/lib/arsenal/arm";
 import { parseArmLine } from "../src/lib/arsenal/arm-stream";
 import {
-  buildQuestions, nextCard, orderItems, quizSize, swapWord, weekStart, type QuizItem,
+  buildQuestions, MASK, maskTitle, nextCard, orderItems, quizSize, swapWord, weekStart, type QuizItem,
 } from "../src/lib/arsenal/quiz";
-import { checkTagKind, quoteCredit, workTitle } from "../src/lib/arsenal/types";
+import { keptCount, listWithHeld, savedKey } from "../src/lib/arsenal/saved-view";
+import { checkTagKind, quoteCredit, saveLabel, workTitle } from "../src/lib/arsenal/types";
 
 // The Arsenal's render-time quote credit (owner, 2026-10-16): a film or TV
 // quote credits the character AND the work, on cards written before the
@@ -69,7 +71,8 @@ const card = (over: Partial<ArmCardIn> = {}): ArmCardIn => ({
   canonical_key: "Crossing the Rubicon!", category: "history_military", title: "Crossing the Rubicon",
   origin: "Caesar crossed the Rubicon with one legion in 49 BC.", meaning: "No way back.",
   deploy_line: "Once we sign, we have crossed the Rubicon.", room: "boardroom", source_work: "Julius Caesar, 49 BC",
-  quote: null, quote_by: null, source_kind: "wikipedia", source_page: "Crossing the Rubicon", from_arsenal: false, ...over,
+  quote: null, quote_by: null, source_kind: "wikipedia", source_page: "Crossing the Rubicon", source_url: null,
+  from_arsenal: false, ...over,
 });
 
 test("a card is held to the pool's rules (cards.py validate_ref)", () => {
@@ -168,4 +171,55 @@ test("weeks start on Monday; FSRS: right is Good (due later), wrong is Again (du
   const twice = nextCard(good, true, new Date(good.due));
   expect(twice.reps).toBe(2);
   expect(Date.parse(twice.due)).toBeGreaterThan(Date.parse(good.due));
+});
+
+// ---------------------------------------------------------------- the owner's pre-merge fixes (Oct 21)
+
+test("My Arsenal: a card unsaved and then dropped by the refresh keeps its line (the missing Undo)", () => {
+  type I = { kind: "ref" | "word"; id: number; savedAt: string; title: string };
+  const a: I = { kind: "ref", id: 1, savedAt: "2026-10-21T10:00:00Z", title: "Rubicon" };
+  const b: I = { kind: "ref", id: 2, savedAt: "2026-10-21T11:00:00Z", title: "Medici" };
+  const w: I = { kind: "word", id: 1, savedAt: "2026-10-21T09:00:00Z", title: "optionality" };
+  const held = new Map([[savedKey(a), a]]);
+  // Before the refresh: the server still lists it. After: it does not; the held copy keeps it.
+  expect(listWithHeld([b, a, w], held).map(savedKey)).toEqual(["ref:2", "ref:1", "word:1"]);
+  expect(listWithHeld([b, w], held).map(savedKey)).toEqual(["ref:2", "ref:1", "word:1"]);
+  expect(keptCount(listWithHeld([b, w], held), new Set(["ref:1"]))).toBe(2);
+  // Undo: the server lists it again (a new save time); still one entry, now first.
+  const again = { ...a, savedAt: "2026-10-21T12:00:00Z" };
+  expect(listWithHeld([again, b, w], held).map((i) => `${savedKey(i)}@${i.savedAt.slice(11, 13)}`))
+    .toEqual(["ref:1@12", "ref:2@11", "word:1@09"]);
+  // A ref and a word with the same id are different targets.
+  expect(listWithHeld([w], new Map([[savedKey(a), a]]))).toHaveLength(2);
+});
+
+test("the Save toggle reads Saved when saved", () => {
+  expect(saveLabel(false)).toBe("Save");
+  expect(saveLabel(true)).toBe("Saved");
+});
+
+test("Arm Me's Source link: the model's https URL is kept, anything else is dropped", () => {
+  expect(cleanSourceUrl("https://en.wikipedia.org/wiki/Crossing_the_Rubicon")).toBe("https://en.wikipedia.org/wiki/Crossing_the_Rubicon");
+  for (const bad of [null, "", "http://en.wikipedia.org/wiki/X", "javascript:alert(1)", "https://x y", `https://e.com/${"a".repeat(500)}`]) {
+    expect(cleanSourceUrl(bad)).toBeNull();
+  }
+  expect(validateArmCard(card({ source_url: "https://en.wikiquote.org/wiki/The_Godfather" })).card?.source_url)
+    .toBe("https://en.wikiquote.org/wiki/The_Godfather");
+  expect(validateArmCard(card({ source_url: null })).card?.source_url).toBeNull();
+  expect(armSystem({ weights: {}, arsenal: [] })).toContain("source_url is its https URL");
+});
+
+test("the quiz masks the title out of 'Which reference fits this?'", () => {
+  expect(maskTitle("A Pyrrhic victory costs more than it wins.", "Pyrrhic victory")).toBe("A ____ costs more than it wins.");
+  expect(maskTitle("Once over the Rubicon, there is no way back.", "Crossing the Rubicon")).toBe("Once over the ____, there is no way back.");
+  expect(maskTitle("See's pricing power: raise every year.", "See's Candies (mock)")).toBe("____ pricing power: raise every year.");
+  expect(maskTitle("You see the price rise.", "See's Candies")).toBe("You see the price rise.");
+  expect(maskTitle("Keep your enemies closer than your friends.", "Keep your enemies closer")).toBe("____ than your friends.");
+  // Common short words stay; an unrelated meaning is untouched.
+  expect(maskTitle("No way back.", "The Rubicon")).toBe("No way back.");
+  const items = [1, 2, 3, 4].map((i) => ref(i, { title: `Gambit ${i}`, meaning: `Play the gambit ${i} early.` }));
+  for (const q of buildQuestions(items, { refs: [], words: [] }, NOW, seeded()).filter((x) => x.kind === "fits")) {
+    expect(q.prompt).not.toMatch(/gambit/i);
+    expect(q.prompt).toContain(MASK);
+  }
 });

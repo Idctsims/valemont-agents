@@ -162,6 +162,10 @@ export async function POST(req: Request) {
             continue;
           }
           if (shown.some((c) => c.id === card.id)) continue;
+          // The Source link: the stored one (a verified card's fetched page),
+          // else the model's. db/059 does not store the model's, so a saved
+          // card's link in My Arsenal is the verifier's once it settles.
+          if (!card.source_url) card.source_url = checked.card.source_url;
           if (card.in_arsenal && shown.some((c) => c.in_arsenal)) {
             notes.push(`a second From-your-Arsenal card (${card.canonical_key}) was not shown`);
             continue;

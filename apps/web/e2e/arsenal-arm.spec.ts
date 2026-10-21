@@ -136,6 +136,8 @@ test.describe("owner", () => {
     expect(box.height).toBeGreaterThanOrEqual(44);
     await save.click();
     await expect(save).toHaveAttribute("aria-pressed", "true");
+    await expect(save).toHaveAccessibleName("Saved");
+    await expect(save).toContainText("Saved");
     await expect(first.getByTestId("card-check")).toHaveText("Checking");
     await expect.poll(() => armVerifyJobs(id)).toBe(1);
     await save.click();

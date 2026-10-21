@@ -90,6 +90,37 @@ function pick(first: string[], rest: string[], not: string, n: number, rng: () =
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+export const MASK = "____";
+/** Short or common words are left: masking "the" would give nothing away but read badly. */
+const MASK_SKIP = new Set(["the", "and", "with", "from", "that", "this", "your", "into", "over", "what", "when",
+  "they", "them", "have", "just", "then", "than", "were", "will", "make", "made", "take", "took", "like", "about",
+  "only", "never", "every", "first", "last", "more", "most", "some"]);
+
+/**
+ * "Which reference fits this?" asks with the card's meaning, which often
+ * names the reference itself ("A Pyrrhic victory costs more than it wins").
+ * The title is masked out of it (owner, Oct 21): the whole title, then each
+ * distinctive word of it (4+ letters, not a common word, a possessive 's
+ * included), with runs of masks collapsed to one. A trailing parenthetical
+ * on the title ("(mock)", "(2010)") is not part of the name.
+ */
+export function maskTitle(text: string, title: string): string {
+  const name = title.replace(/\s*\([^()]*\)\s*$/, "").trim();
+  if (!name) return text;
+  let out = text.replace(new RegExp(escape(name), "gi"), MASK);
+  for (const raw of name.split(/[^\p{L}\p{N}'’]+/u)) {
+    const word = raw.replace(/['’]s$/i, "");
+    const possessive = word !== raw;
+    if (MASK_SKIP.has(word.toLowerCase())) continue;
+    // A short name masks only as the possessive the title wrote ("See's"),
+    // so a plain "see" in the meaning stays.
+    if (word.length < 4 && !(possessive && word.length >= 2)) continue;
+    const tail = word.length < 4 ? "['’]s" : "(?:['’]s)?";
+    out = out.replace(new RegExp(`(?<![\\p{L}\\p{N}])${escape(word)}${tail}(?![\\p{L}\\p{N}])`, "giu"), MASK);
+  }
+  return out.replace(new RegExp(`${MASK}(?:\\s+${MASK})+`, "g"), MASK);
+}
+
 /** Another word's sentence with this word swapped in for its own lemma, or
  *  null when that lemma is not in the sentence as written. The misuse is
  *  the distractor: the sentence was built around a different word. */
@@ -111,7 +142,7 @@ function question(item: QuizItem, kind: QuestionKind, saved: QuizItem[], pool: D
     const dropped = pool.refs.filter((r) => r.id !== item.id && !others.some((o) => o.id === r.id));
     const field = kind === "fits" ? "title" : "meaning";
     right = item[field];
-    prompt = kind === "fits" ? item.meaning : item.title;
+    prompt = kind === "fits" ? maskTitle(item.meaning, item.title) : item.title;
     wrong = pick(others.map((o) => o[field]), dropped.map((d) => d[field]), right, OPTIONS - 1, rng);
   } else {
     const others = saved.filter((s): s is Extract<QuizItem, { kind: "word" }> => s.kind === "word" && s.id !== item.id);
