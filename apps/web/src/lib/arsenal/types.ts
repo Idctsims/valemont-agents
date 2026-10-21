@@ -7,6 +7,11 @@ export type Room = "boardroom" | "pitch" | "negotiation" | "homies";
 export type Verification = "verified" | "corrected" | "unverified" | "pending";
 export type RefReaction = "love" | "not_interested" | "known";
 
+export const CATEGORIES = [
+  "finance_business", "history_military", "film_tv", "sports", "music_culture", "philosophy", "literature_myth",
+] as const satisfies readonly Category[];
+export const ROOMS = ["boardroom", "pitch", "negotiation", "homies"] as const satisfies readonly Room[];
+
 export const CATEGORY_LABEL: Record<Category, string> = {
   finance_business: "Finance & business",
   history_military: "History & war",
@@ -41,6 +46,8 @@ export type Ref = {
   isTest: boolean;
   /** The latest reaction (null: none, or taken back). */
   reaction: RefReaction | null;
+  /** In My Arsenal (db/059 v_arsenal_saved). */
+  saved: boolean;
 };
 
 export type Word = {
@@ -55,6 +62,7 @@ export type Word = {
   verification: Verification;
   isTest: boolean;
   reaction: RefReaction | null;
+  saved: boolean;
 };
 
 export type Drop = {
@@ -109,6 +117,33 @@ export function quoteCredit(category: Category, quoteBy: string | null, sourceWo
   if (!work || lower.includes(CREDIT) || lower.includes(work.toLowerCase())) return speaker;
   return `${speaker} (${CREDIT} ${work})`;
 }
+
+export type RefStatus = "seed" | "pool" | "dropped" | "rejected" | "arm";
+
+/** The small tag on a card (Phase 2, docs/arsenal.md §9.3, §9.5). A held
+ *  outcome conflict reads as Unverified; an Arm Me card is "Unchecked until
+ *  saved" until it is saved, then "Checking" until the verifier settles it;
+ *  a seed is the owner's own canon, never checked. */
+export type CheckTagKind = "checked" | "corrected" | "unverified" | "unchecked" | "checking" | "seed" | null;
+
+export function checkTagKind(c: { verification: Verification; status?: RefStatus; saved?: boolean; held?: boolean }): CheckTagKind {
+  if (c.held) return "unverified";
+  if (c.verification === "verified") return "checked";
+  if (c.verification === "corrected") return "corrected";
+  if (c.verification === "unverified") return "unverified";
+  if (c.status === "seed") return "seed";
+  if (c.status === "arm") return c.saved ? "checking" : "unchecked";
+  return null;
+}
+
+export const CHECK_TAG_LABEL: Record<Exclude<CheckTagKind, null>, string> = {
+  checked: "Checked",
+  corrected: "Corrected",
+  unverified: "Unverified",
+  unchecked: "Unchecked until saved",
+  checking: "Checking",
+  seed: "Your canon",
+};
 
 /** "Thu, Oct 16" for a YYYY-MM-DD date (no timezone shift). */
 export function dropDate(day: string): string {

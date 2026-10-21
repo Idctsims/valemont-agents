@@ -592,7 +592,9 @@ Code: `db/059_arsenal_phase2.sql`; `apps/web/src/app/api/arsenal/arm/route.ts`,
   situation of the form `existing: <key>` returns that key as card 2. The
   mock writes no `ai_usage` row.
 - **The e2e marker** (a verified `x-valemont-e2e` header, local builds only)
-  makes the request and its new cards `is_test`.
+  makes the request and its new cards `is_test`. **The mock answers only a
+  marked request** (400 otherwise), so no e2e run can write a real arm card
+  or a real request row.
 
 ### 9.4 Saves (My Arsenal)
 

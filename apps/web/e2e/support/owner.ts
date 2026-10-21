@@ -732,6 +732,102 @@ export async function arsenalReactions(id: number, column: "ref_id" | "word_id" 
   });
 }
 
+// ----------------------------------------------------------- Arsenal, Phase 2 (db/059)
+
+/** A TEST Arm Me card (db/059 add_test_arm_ref): status arm, pending, an
+ * e2e_ key. Returns its id and key. */
+export async function addTestArmRef(title: string, category = "history_military", room = "pitch"): Promise<{ id: number; key: string }> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.rpc("add_test_arm_ref", { p_marker: e2eMarker(), p_title: title, p_category: category, p_room: room });
+    if (error) throw new Error(`test arm ref failed: ${error.message}`);
+    const key = await supabase.from("arsenal_refs").select("canonical_key").eq("id", data as number).single();
+    if (key.error) throw new Error(`test arm ref read failed: ${key.error.message}`);
+    return { id: data as number, key: (key.data as { canonical_key: string }).canonical_key };
+  });
+}
+
+/** A test reference's canonical key (an existing key for Arm Me's mock). */
+export async function arsenalRefKey(id: number): Promise<string> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.from("arsenal_refs").select("canonical_key").eq("id", id).single();
+    if (error) throw new Error(`arsenal ref key read failed: ${error.message}`);
+    return (data as { canonical_key: string }).canonical_key;
+  });
+}
+
+/** A TEST save (or unsave) on a test reference or word (db/059 add_test_save). */
+export async function addTestSave(target: { refId?: number; wordId?: number }, action: "save" | "unsave" = "save"): Promise<number> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.rpc("add_test_save", {
+      p_marker: e2eMarker(), p_ref_id: target.refId ?? null, p_word_id: target.wordId ?? null, p_action: action,
+    });
+    if (error) throw new Error(`test save failed: ${error.message}`);
+    return data as number;
+  });
+}
+
+/** Unsave every currently saved TEST item (append-only unsave events, the
+ * test world only): the quiz spec's lock state starts from zero. */
+export async function clearTestSaves(): Promise<number> {
+  const saved = await asOwner(async (supabase) => {
+    const { data, error } = await supabase.from("v_arsenal_saved").select("ref_id, word_id").eq("is_test", true);
+    if (error) throw new Error(`test saves read failed: ${error.message}`);
+    return (data ?? []) as { ref_id: number | null; word_id: number | null }[];
+  });
+  for (const s of saved) await addTestSave(s.ref_id ? { refId: s.ref_id } : { wordId: s.word_id! }, "unsave");
+  return saved.length;
+}
+
+/** A reference's (or word's) arsenal_saves events, oldest first, with is_test. */
+export async function arsenalSaves(id: number, column: "ref_id" | "word_id" = "ref_id"): Promise<{ action: string; is_test: boolean }[]> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.from("arsenal_saves").select("action, is_test").eq(column, id).order("id");
+    if (error) throw new Error(`arsenal saves read failed: ${error.message}`);
+    return (data ?? []) as { action: string; is_test: boolean }[];
+  });
+}
+
+/** The arsenal_arm_verify jobs queued for a reference (db/059: one, ever). */
+export async function armVerifyJobs(refId: number): Promise<number> {
+  return asOwner(async (supabase) => {
+    const { count, error } = await supabase.from("job_queue").select("id", { count: "exact", head: true })
+      .eq("kind", "arsenal_arm_verify").eq("payload->>ref_id", String(refId));
+    if (error) throw new Error(`arm verify jobs read failed: ${error.message}`);
+    return count ?? 0;
+  });
+}
+
+/** The newest TEST arm_requests row: what the route recorded. */
+export async function lastTestArmRequest(): Promise<{ ref_ids: number[]; model: string; first_card_ms: number | null; total_ms: number | null; error: string | null } | null> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.from("arm_requests").select("ref_ids, model, first_card_ms, total_ms, error")
+      .eq("is_test", true).order("id", { ascending: false }).limit(1);
+    if (error) throw new Error(`arm request read failed: ${error.message}`);
+    return ((data ?? [])[0] ?? null) as never;
+  });
+}
+
+/** A quiz's review rows, in question order. */
+export async function quizReviews(quizId: number): Promise<{ question_no: number; correct: boolean; rating: string; is_test: boolean }[]> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.from("arsenal_quiz_reviews").select("question_no, correct, rating, is_test")
+      .eq("quiz_id", quizId).order("question_no");
+    if (error) throw new Error(`quiz reviews read failed: ${error.message}`);
+    return (data ?? []) as { question_no: number; correct: boolean; rating: string; is_test: boolean }[];
+  });
+}
+
+/** The newest TEST quiz of the week: its id and question count. */
+export async function lastTestQuiz(): Promise<{ id: number; questions: number } | null> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.from("arsenal_quizzes").select("id, questions").eq("is_test", true)
+      .order("id", { ascending: false }).limit(1);
+    if (error) throw new Error(`test quiz read failed: ${error.message}`);
+    const q = (data ?? [])[0] as { id: number; questions: unknown[] } | undefined;
+    return q ? { id: q.id, questions: q.questions.length } : null;
+  });
+}
+
 /** A title's history (watch_status), oldest first: what the spec checks. */
 export async function watchHistory(titleId: number): Promise<{ status: string; finished_at: string | null }[]> {
   return asOwner(async (supabase) => {

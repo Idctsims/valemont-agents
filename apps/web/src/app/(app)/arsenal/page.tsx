@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 
 import { headers } from "next/headers";
 
+import { ArmMe } from "@/components/arsenal/arm-me";
+import { ArsenalNav } from "@/components/arsenal/arsenal-nav";
 import { DropCards } from "@/components/arsenal/drop-cards";
 import { UnverifiedReason } from "@/components/arsenal/unverified-reason";
 import { Fold } from "@/components/ui/fold";
@@ -14,7 +16,8 @@ import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "The Arsenal" };
 
-// The Arsenal (Chat 5 Phase 1; docs/arsenal.md, db/054).
+// The Arsenal (Chat 5 Phases 1 and 2; docs/arsenal.md, db/054, db/059).
+//   Arm Me       describe the room; three references stream in (§9.3).
 //   Today        the Power Word, then three references in three categories,
 //                each with where it comes from, what it means, the line to
 //                deploy and its room; Checked or Corrected against its source.
@@ -35,7 +38,10 @@ export default async function ArsenalPage() {
   return (
     <>
       <PageHeader label="Culture" title="The Arsenal"
-                  summary="Three references and a Power Word a day, each checked against its source, with the line to use and the room it plays in." />
+                  summary="Three references and a Power Word a day, each checked against its source, with the line to use and the room it plays in.">
+        <ArsenalNav current="today" />
+      </PageHeader>
+      <ArmMe />
       {today ? (
         <DropCards key={today.id} word={today.word} refs={today.refs} />
       ) : (
