@@ -25,10 +25,14 @@ export function SavedList({ items }: { items: SavedItem[] }) {
   const [room, setRoom] = useState<Room | null>(null);
   const [category, setCategory] = useState<Category | null>(null);
   const [removed, setRemoved] = useState<Set<string>>(new Set());
+  // An unsaved item leaves the server's list at the next render (the action
+  // refreshes), so the list keeps it here: its "Removed · Undo" line stays.
+  const [held, setHeld] = useState<Map<string, SavedItem>>(new Map());
   const [busy, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   function toggle(item: SavedItem, save: boolean) {
+    if (!save) setHeld((h) => new Map(h).set(key(item), item));
     start(async () => {
       setRemoved((r) => {
         const next = new Set(r);
@@ -53,8 +57,11 @@ export function SavedList({ items }: { items: SavedItem[] }) {
     });
   }
 
-  const shown = items.filter((i) => (!room || i.room === room) && (!category || (i.kind === "ref" && i.category === category)));
-  const kept = items.length - removed.size;
+  const live = new Set(items.map(key));
+  const all = [...items, ...[...held.values()].filter((i) => !live.has(key(i)))]
+    .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+  const shown = all.filter((i) => (!room || i.room === room) && (!category || (i.kind === "ref" && i.category === category)));
+  const kept = all.filter((i) => !removed.has(key(i))).length;
   return (
     <div data-testid="saved-list" aria-busy={busy} className="lg:max-w-3xl">
       <p data-testid="saved-count" className="label-mono text-text-muted">{kept} saved</p>
@@ -63,7 +70,7 @@ export function SavedList({ items }: { items: SavedItem[] }) {
                value={category} onChange={setCategory} />
       {error && <p role="alert" data-testid="saved-error" className="mt-2 text-sm text-danger">{error}</p>}
 
-      {items.length === 0 ? (
+      {all.length === 0 ? (
         <p data-testid="saved-empty" className="mt-6 border-t border-border pt-4 text-base text-text-muted">
           Nothing saved yet. Save a card from today&apos;s drop or from Arm Me and it lands here.
         </p>
