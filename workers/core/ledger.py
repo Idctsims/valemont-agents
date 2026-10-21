@@ -4514,10 +4514,12 @@ def arsenal_pool_status(*, conn: psycopg.Connection | None = None) -> ArsenalPoo
 
 
 def arsenal_recent_keys(limit: int = 60, *, conn: psycopg.Connection | None = None) -> list[str]:
-    """The newest real canonical keys (not seeds): the prompt's never-repeat list."""
+    """The newest real pool keys: the prompt's never-repeat list. Pool rows
+    only (db/059): a burst of Arm Me cards must not push the pool's own keys
+    out of it; a pool card that repeats an arm card's key is a UNIQUE skip."""
     with _brief_conn(conn) as c:
         return [r[0] for r in c.execute(
-            "SELECT canonical_key FROM arsenal_refs WHERE NOT is_test AND origin_kind <> 'seed' "
+            "SELECT canonical_key FROM arsenal_refs WHERE NOT is_test AND origin_kind = 'pool' "
             "ORDER BY id DESC LIMIT %s", (limit,)).fetchall()]
 
 
@@ -4603,6 +4605,38 @@ def arsenal_record_outcome(ref_id: int, *, conflict: bool, votes: str, page: str
 def arsenal_queue_outcome(reason: str, *, conn: psycopg.Connection | None = None) -> int:
     """Queue one outcome check run (arsenal/outcome.py check_unchecked)."""
     return queue_enqueue(ARSENAL_OUTCOME_KIND, {"reason": reason}, datetime.now(timezone.utc), conn=conn)
+
+
+#: db/059: queued by the database when the owner saves a pending Arm Me card
+#: (arsenal_saves_queue_verify, once per reference ever); arsenal/arm.py.
+ARSENAL_ARM_VERIFY_KIND: Final = "arsenal_arm_verify"
+
+
+@dataclass(frozen=True)
+class ArsenalArmState:
+    """Where a saved Arm Me card stands (arsenal/arm.py)."""
+    status: str
+    verification: str
+    is_test: bool
+    #: An outcome check on record (db/057).
+    checked: bool
+    #: An active hold (db/056 v_arsenal_active_holds).
+    held: bool
+
+
+#: tests_live runs this exact text.
+ARSENAL_ARM_STATE_SQL: Final = """
+    SELECT r.status, r.verification, r.is_test,
+           EXISTS (SELECT 1 FROM arsenal_outcome_checks oc WHERE oc.ref_id = r.id),
+           EXISTS (SELECT 1 FROM v_arsenal_active_holds h WHERE h.ref_id = r.id)
+      FROM arsenal_refs r WHERE r.id = %s
+"""
+
+
+def arsenal_arm_state(ref_id: int, *, conn: psycopg.Connection | None = None) -> ArsenalArmState | None:
+    with _brief_conn(conn) as c:
+        r = c.execute(ARSENAL_ARM_STATE_SQL, (ref_id,)).fetchone()
+    return None if r is None else ArsenalArmState(r[0], r[1], bool(r[2]), bool(r[3]), bool(r[4]))
 
 
 @dataclass(frozen=True)

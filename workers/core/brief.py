@@ -441,8 +441,11 @@ def _screening_lines(t: Mapping[str, Any]) -> list[str]:
 def _arsenal_lines(t: Mapping[str, Any]) -> list[str]:
     """One line (db/054 ctx_arsenal_brief): today's Power Word and the
     strongest of today's three references with its room, and nothing else
-    (owner, 2026-10-16: name both, no closing exhortation). It is built
-    from the data in the AI brief too (DATA_LINE_SECTIONS)."""
+    (owner, 2026-10-16: name both, no closing exhortation). On a Monday with
+    at least 4 saved items (db/059 arsenal_quiz_line) it ends with the quiz:
+    the Monday quiz is announced here, never by its own push (owner,
+    2026-10-21). It is built from the data in the AI brief too
+    (DATA_LINE_SECTIONS)."""
     parts = []
     if t.get("power_word"):
         parts.append(f"Power Word: {t['power_word']}.")
@@ -450,6 +453,9 @@ def _arsenal_lines(t: Mapping[str, Any]) -> list[str]:
     if ref.get("title"):
         where = ARSENAL_ROOM_PHRASES.get(str(ref.get("room")), "")
         parts.append(f"Strongest reference: {ref['title']}" + (f", {where}" if where else "") + ".")
+    questions = (t.get("quiz") or {}).get("questions")
+    if isinstance(questions, int) and questions > 0:
+        parts.append(f"Quiz ready: {questions} on your saved Arsenal.")
     return [" ".join(parts)] if parts else []
 
 

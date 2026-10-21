@@ -114,6 +114,10 @@
                              three controls, then the outcome check of every
                              unchecked ready reference, each on the record; a
                              conflict holds (arsenal/outcome.py).
+    arsenal_arm_verify queued (job_queue kind arsenal_arm_verify, db/059):
+                             a saved Arm Me card, verified and then
+                             outcome-checked by the same machinery; queued
+                             once per card by the save (arsenal/arm.py).
     arsenal_drop     daily   05:30, then every 30 min to 21:30 America/Chicago,
                              and at boot: today's drop (db/054
                              arsenal_pick_drop, zero AI calls). A no-op once
@@ -137,6 +141,7 @@ from apscheduler.triggers.combining import OrTrigger
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
+from arsenal import arm as arsenal_arm
 from arsenal import collect as arsenal_collect
 from arsenal import drop as arsenal_drop
 from arsenal import outcome as arsenal_outcome
@@ -413,6 +418,9 @@ QUEUE_HANDLERS: dict[str, QueueHandler] = {
     # fails raises: job_health shows it, the queue retries, nothing drops.
     ledger.ARSENAL_OUTCOME_KIND: lambda payload: run_tracked(
         replace(ARSENAL_OUTCOME, fn=lambda: arsenal_outcome.outcome_job(payload))),
+    # db/059: a saved Arm Me card, queued once by the save's trigger.
+    ledger.ARSENAL_ARM_VERIFY_KIND: lambda payload: run_tracked(
+        replace(ARSENAL_ARM_VERIFY, fn=lambda: arsenal_arm.arm_verify_job(payload))),
 }
 
 
@@ -564,6 +572,10 @@ ARSENAL_VERIFY = SystemJob("arsenal_verify", 8 * 24 * 60 * 60, IntervalTrigger(d
 #: The same shape: run per queued outcome check (db/057), never scheduled.
 ARSENAL_OUTCOME = SystemJob("arsenal_outcome", 8 * 24 * 60 * 60, IntervalTrigger(days=8),
                             lambda: None, scheduled=False)
+#: Run per saved Arm Me card (db/059), never scheduled. Saves come when they
+#: come, so a year's interval: the monitor watches its failures, not its gaps.
+ARSENAL_ARM_VERIFY = SystemJob("arsenal_arm_verify", 366 * 24 * 60 * 60, IntervalTrigger(days=366),
+                               lambda: None, scheduled=False)
 
 
 def _chain(*jobs: SystemJob) -> None:
@@ -682,6 +694,7 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
                   arsenal_drop.drop_job, misfire_grace=1200, start_delay_s=480),
         ARSENAL_VERIFY,
         ARSENAL_OUTCOME,
+        ARSENAL_ARM_VERIFY,
     ]
     if env.get("HEALTH_DRILL", "").strip().lower() == "true":
         log.warning("HEALTH_DRILL=true: scheduling health_drill, which always fails")

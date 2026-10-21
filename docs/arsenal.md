@@ -623,7 +623,9 @@ Code: `db/059_arsenal_phase2.sql`; `apps/web/src/app/api/arsenal/arm/route.ts`,
   - Real saves only.
   - Saved references move category and room; saved words move room only (as
     reactions do).
-  - The function returns a `saves` column too.
+  - The function keeps db/054's signature (`loves` still counts reactions
+    only), so nothing that reads it changes; `ctx_arsenal` reports the saved
+    count.
 
 ### 9.5 Verify on save (worker, `arsenal/arm.py`)
 
