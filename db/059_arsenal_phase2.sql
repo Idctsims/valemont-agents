@@ -35,6 +35,11 @@
 --
 -- A self-test runs on paste (section 9), rolled back, and raises on any wrong
 -- result, so a bad paste applies nothing.
+-- FIRST PASTE (2026-10-21) failed and applied nothing: 42601 "syntax error at
+-- end of input" in arsenal_quiz_reviews_guard. plpgsql ends an IF condition at
+-- the first THEN, so a bare CASE ... THEN ... END inside one cut it short; the
+-- CASE is now parenthesized. Read back via db_inspect: no log row, no new
+-- table, the status CHECK and the refs guard still db/055's.
 -- ORDER (db/055's lesson): every table a trigger function reads is created
 -- before any statement that fires it. The fixture rule (db/053's): no
 -- explicit NULL into a NOT NULL column, defaults or not.
@@ -545,7 +550,8 @@ BEGIN
     IF NEW.correct IS DISTINCT FROM (NEW.chosen = (q ->> 'answer')::int) THEN
         RAISE EXCEPTION 'arsenal_quiz_reviews: correct disagrees with the stored answer';
     END IF;
-    IF NEW.rating <> CASE WHEN NEW.correct THEN 'good' ELSE 'again' END THEN
+    -- Parenthesized: plpgsql ends an IF condition at the first THEN, a CASE's included.
+    IF NEW.rating <> (CASE WHEN NEW.correct THEN 'good' ELSE 'again' END) THEN
         RAISE EXCEPTION 'arsenal_quiz_reviews: a right answer is rated good, a wrong one again';
     END IF;
     IF jsonb_typeof(NEW.fsrs_state) <> 'object'
