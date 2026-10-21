@@ -760,7 +760,9 @@ $$;
 -- ===================================================================== 7
 -- Test rows (e2e). Owner only, the verified e2e marker (db/051 e2e_marker_ok).
 
--- A TEST Arm Me card: status arm, pending, key e2e_<random>.
+-- A TEST Arm Me card: status arm, pending, key e2e_<random>. Its meaning
+-- names its title, so test cards differ in meaning too (the quiz's "What
+-- does it mean?" needs distinct meanings to choose from).
 CREATE OR REPLACE FUNCTION public.add_test_arm_ref(p_marker text, p_title text,
                                                    p_category text DEFAULT 'history_military',
                                                    p_room text DEFAULT 'pitch')
@@ -779,8 +781,8 @@ BEGIN
     INSERT INTO public.arsenal_refs (canonical_key, category, title, origin, meaning, deploy_line, room, source_work,
                                      source_kind, source_page, status, verification, origin_kind, is_test)
     VALUES (v_key, p_category, p_title, 'Where ' || p_title || ' comes from, in two short lines.',
-            'What it means when you use it.', 'The line you would actually say in the room.', p_room,
-            'Test work (2026)', 'wikipedia', 'Test page', 'arm', 'pending', 'arm_me', true)
+            left('What ' || p_title || ' means when you use it.', 300), 'The line you would actually say in the room.',
+            p_room, 'Test work (2026)', 'wikipedia', 'Test page', 'arm', 'pending', 'arm_me', true)
     RETURNING id INTO v_id;
     RETURN v_id;
 END;
