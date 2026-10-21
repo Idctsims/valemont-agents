@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { chicagoDay } from "@/lib/screening/types";
 
+import { savedKeys } from "./saved";
 import type { Drop, PastDrop, Ref, RefReaction, UnverifiedRef, Word } from "./types";
 
 // The Arsenal's reads (Chat 5 Phase 1; db/054), through the owner's session
@@ -44,11 +45,11 @@ async function latestReactions(supabase: SupabaseClient, column: "ref_id" | "wor
   return out;
 }
 
-function toRef(r: RefRow, reaction: RefReaction | null): Ref {
+function toRef(r: RefRow, reaction: RefReaction | null, saved: boolean): Ref {
   return {
     id: r.id, category: r.category, title: r.title, origin: r.origin, meaning: r.meaning, deployLine: r.deploy_line,
     room: r.room, sourceWork: r.source_work, quote: r.quote, quoteBy: r.quote_by, sourceUrl: r.source_url,
-    verification: r.verification, verificationNote: r.verification_note, isTest: r.is_test, reaction,
+    verification: r.verification, verificationNote: r.verification_note, isTest: r.is_test, reaction, saved,
   };
 }
 
@@ -62,11 +63,12 @@ export async function todayDrop(supabase: SupabaseClient, opts: { withTests?: bo
   if (error) throw new Error(`Couldn't read today's drop: ${error.message}`);
   const d = ((data ?? []) as DropRow[])[0];
   if (!d) return null;
-  const [refs, word, refReactions, wordReactions] = await Promise.all([
+  const [refs, word, refReactions, wordReactions, saved] = await Promise.all([
     supabase.from("arsenal_refs").select(REF_COLS).in("id", d.ref_ids),
     supabase.from("arsenal_words").select(WORD_COLS).eq("id", d.word_id).single(),
     latestReactions(supabase, "ref_id", d.ref_ids),
     latestReactions(supabase, "word_id", [d.word_id]),
+    savedKeys(supabase, d.ref_ids, [d.word_id]),
   ]);
   if (refs.error) throw new Error(`Couldn't read today's references: ${refs.error.message}`);
   if (word.error) throw new Error(`Couldn't read today's Power Word: ${word.error.message}`);
@@ -75,11 +77,11 @@ export async function todayDrop(supabase: SupabaseClient, opts: { withTests?: bo
   return {
     id: d.id, date: d.drop_date, isTest: d.is_test,
     refs: d.ref_ids.map((id) => byId.get(id)).filter((r): r is RefRow => !!r)
-      .map((r) => toRef(r, refReactions.get(r.id) ?? null)),
+      .map((r) => toRef(r, refReactions.get(r.id) ?? null, saved.has(`ref:${r.id}`))),
     word: {
       id: w.id, lemma: w.lemma, pronunciation: w.pronunciation, etymology: w.etymology, etymologyUrl: w.etymology_url,
       meaning: w.meaning, room: w.room, sentence: w.sentence, verification: w.verification, isTest: w.is_test,
-      reaction: wordReactions.get(w.id) ?? null,
+      reaction: wordReactions.get(w.id) ?? null, saved: saved.has(`word:${w.id}`),
     },
   };
 }

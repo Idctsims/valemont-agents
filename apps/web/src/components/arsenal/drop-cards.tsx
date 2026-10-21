@@ -2,21 +2,21 @@
 
 import { useOptimistic, useState, useTransition } from "react";
 
-import { ArrowSquareOut, Brain, EyeSlash, Heart } from "@phosphor-icons/react";
+import { Brain, EyeSlash, Heart } from "@phosphor-icons/react";
 
 import { reactToRef, reactToWord } from "@/app/(app)/arsenal/actions";
+import { RefCardBody, RoomPill, TestTag } from "@/components/arsenal/ref-card";
+import { SaveButton } from "@/components/arsenal/save-button";
 import { Fold } from "@/components/ui/fold";
 import type { ActionResult } from "@/lib/action-result";
-import {
-  CATEGORY_LABEL, ROOM_LABEL, quoteCredit, type Ref, type RefReaction, type Room, type Word,
-} from "@/lib/arsenal/types";
+import { checkTagKind, type Ref, type RefReaction, type Word } from "@/lib/arsenal/types";
 
 // Today's drop (Chat 5 Phase 1; db/054): the Power Word hero, then the three
 // cards in slot order. Love / Not interested / Already know it on each (the
 // word too), labelled under the icon; the pressed one again takes it back.
 // "Already know it" moves the card or the word into the "Already known" fold
 // (with Undo). Optimistic; the server render that follows each action
-// replaces it.
+// replaces it. Phase 2: Save (to My Arsenal) sits at the end of each row.
 
 type Target = { kind: "ref" | "word"; id: number };
 type Reactions = Record<string, RefReaction | null>;
@@ -76,8 +76,11 @@ export function DropCards({ word, refs }: { word: Word; refs: Ref[] }) {
           <RoomPill room={word.room} />
           {word.isTest && <TestTag />}
         </div>
-        <ReactionButtons label={word.lemma} testPrefix="word" current={reactions[wordKey] ?? null}
-                         onReact={(r) => react({ kind: "word", id: word.id }, r)} />
+        <div className="flex flex-wrap items-start gap-1">
+          <ReactionButtons label={word.lemma} testPrefix="word" current={reactions[wordKey] ?? null}
+                           onReact={(r) => react({ kind: "word", id: word.id }, r)} />
+          <div className="mt-3"><SaveButton wordId={word.id} saved={word.saved} label={word.lemma} testId="word-save" /></div>
+        </div>
       </section>}
 
       <ol data-testid="arsenal-cards" className="lg:max-w-3xl">
@@ -120,37 +123,18 @@ export function DropCards({ word, refs }: { word: Word; refs: Ref[] }) {
 }
 
 function Card({ r, current, onReact }: { r: Ref; current: RefReaction | null; onReact: (x: RefReaction | null) => void }) {
-  const credit = quoteCredit(r.category, r.quoteBy, r.sourceWork);
   return (
     <li data-testid="arsenal-card" data-ref-id={r.id} data-category={r.category} className="border-b border-border py-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <span data-testid="card-category" className="label-mono text-text-muted">{CATEGORY_LABEL[r.category]}</span>
-        <CheckTag verification={r.verification} note={r.verificationNote} />
-        {r.isTest && <TestTag />}
-      </div>
-      <h3 data-testid="card-title" className="mt-2 font-display text-3xl leading-tight text-text text-balance">{r.title}</h3>
-      <p data-testid="card-source-work" className="mt-1 text-sm italic text-text-muted">{r.sourceWork}</p>
-      <p data-testid="card-origin" className="mt-3 text-base text-text-muted text-pretty">{r.origin}</p>
-      {r.quote && (
-        <p data-testid="card-quote" className="mt-3 text-base text-text text-pretty">
-          “{r.quote}”{credit && <span data-testid="card-quote-by" className="text-text-muted"> — {credit}</span>}
-        </p>
-      )}
-      <p data-testid="card-meaning" className="mt-3 text-base text-text text-pretty">{r.meaning}</p>
-      <p data-testid="card-deploy"
-         className="mt-4 border-l-2 border-accent pl-3 font-display text-2xl leading-snug text-text text-pretty">
-        {r.deployLine}
-      </p>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <RoomPill room={r.room} />
-        {r.sourceUrl && (
-          <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" data-testid="card-source"
-             className="tap inline-flex items-center gap-1 rounded-pill px-3 text-sm text-text-muted hover:bg-surface-2 hover:text-text">
-            Source <ArrowSquareOut size={14} aria-hidden />
-          </a>
-        )}
-      </div>
-      <ReactionButtons label={r.title} testPrefix="card" current={current} onReact={onReact} />
+      <RefCardBody c={{
+        category: r.category, title: r.title, sourceWork: r.sourceWork, origin: r.origin, quote: r.quote,
+        quoteBy: r.quoteBy, meaning: r.meaning, deployLine: r.deployLine, room: r.room, sourceUrl: r.sourceUrl,
+        tag: checkTagKind({ verification: r.verification }), tagNote: r.verificationNote, isTest: r.isTest,
+      }}>
+        <div className="flex flex-wrap items-start gap-1">
+          <ReactionButtons label={r.title} testPrefix="card" current={current} onReact={onReact} />
+          <div className="mt-3"><SaveButton refId={r.id} saved={r.saved} label={r.title} /></div>
+        </div>
+      </RefCardBody>
     </li>
   );
 }
@@ -186,28 +170,3 @@ function ReactionButtons({ label, testPrefix, current, onReact }: {
   );
 }
 
-function RoomPill({ room }: { room: Room }) {
-  return (
-    <span data-testid="room-chip"
-          className="inline-flex h-8 items-center rounded-pill border border-border px-3 font-mono text-xs text-text">
-      {ROOM_LABEL[room]}
-    </span>
-  );
-}
-
-function CheckTag({ verification, note }: { verification: Ref["verification"]; note: string | null }) {
-  if (verification !== "verified" && verification !== "corrected") return null;
-  const corrected = verification === "corrected";
-  return (
-    <span data-testid="card-check" title={note ?? undefined}
-          className={`label-mono inline-flex h-6 items-center rounded-pill border px-2 normal-case tracking-normal ${
-            corrected ? "border-accent text-accent" : "border-text-muted text-text"
-          }`}>
-      {corrected ? "Corrected" : "Checked"}
-    </span>
-  );
-}
-
-function TestTag() {
-  return <span className="label-mono rounded-pill border border-text-muted px-2 normal-case tracking-normal text-text">test</span>;
-}

@@ -235,13 +235,20 @@ class Guards(ArsenalSqlCase):
 
     def test_truncate_is_refused_with_every_referencing_table_named(self) -> None:
         with _rolled_back() as conn:
-            # db/055's two tables reference refs and words: name them too once they exist.
-            extra = [t for t in ("arsenal_holds", "arsenal_reverifications", "arsenal_hold_releases",
-                                 "arsenal_outcome_checks")
-                     if conn.execute("SELECT to_regclass(%s)", (f"public.{t}",)).fetchone()[0] is not None]
-            self.refused(conn, "TRUNCATE " + ", ".join(["arsenal_pool_runs", "arsenal_refs", "arsenal_words",
-                                                        "arsenal_drops", "arsenal_reactions", *extra]),
-                         None, "TRUNCATE is refused")
+            # Every table that references one in the set, read from the catalog
+            # (db/042's lesson: TRUNCATE checks foreign keys before any trigger).
+            # Derived, not listed: db/055-057 and db/059 each added referencing
+            # tables (holds, re-verifications, releases, outcome checks; saves,
+            # quiz reviews), and a stale list fails on the FK, not the guard.
+            tables = {"arsenal_pool_runs", "arsenal_refs", "arsenal_words", "arsenal_drops", "arsenal_reactions"}
+            while True:
+                more = {r[0] for r in conn.execute(
+                    "SELECT DISTINCT c.conrelid::regclass::text FROM pg_constraint c "
+                    "WHERE c.contype = 'f' AND c.confrelid::regclass::text = ANY(%s)", (sorted(tables),)).fetchall()}
+                if more <= tables:
+                    break
+                tables |= more
+            self.refused(conn, "TRUNCATE " + ", ".join(sorted(tables)), None, "TRUNCATE is refused")
 
 
 # ============================================================ near-dup, weights
