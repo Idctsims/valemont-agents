@@ -483,6 +483,34 @@ Code: `db/059_arsenal_phase2.sql`; `apps/web/src/app/api/arsenal/arm/route.ts`,
   Per §6, the Vercel CLI is not used again in this phase until the owner logs
   in as `idctsims`. Nothing in this phase needs the CLI: deploys go through
   git.
+- **Baseline on `main` (6d9c7e5), Oct 21.**
+  - `tests/`: 1067 OK.
+  - `tests_live -v`, every connection metered (a wrapper sets
+    `core/egress.py`'s `MeteredCursor` on `psycopg.Connection.connect` and
+    `psycopg.connect`, with KB charged per test class): **434 OK, 0
+    skipped, 3,423 KB (~3.34 MB), 864 s.**
+  - **Where the reads go:**
+
+    | Class | Read | What it reads |
+    |---|---|---|
+    | `test_sports_sql.Categories` | 929 KB | `feed_for_you('home', 100000, …, 'deals')` twice, the whole real window, against CLAUDE.md §6's rule |
+    | `test_wags_sql.Snapshot` | 482 KB | `context_snapshot()`, every provider, growing with each pillar |
+    | `test_feed_rank_sql.ForYou` | 342 KB | |
+    | `test_sports_sql.Boosts` | 265 KB | |
+    | `test_screening_recs_sql.ForYou` | 244 KB | |
+    | everything else | < 105 KB per class | |
+
+  - **What added ~2 MB since the db/057 gate (2.69 MB)?** No per-class
+    numbers were kept at that gate, so the growth cannot be pinned to a
+    class. What can be said:
+    - the two biggest classes read real, growing data (the home window and
+      the full snapshot), so they grow with production, not with code;
+    - db/058's gate measured 4.71 MB, but this run measured 3.34 MB on the
+      same 434 tests, so a run's size also moves by ~1.4 MB with the data;
+    - every run is under the ~10 MB line.
+
+    Proposed, not done in this phase: bound `Categories` to its own
+    stories by id, as §6 asks.
 - **Reused as is:**
   - the web AI twin (`src/lib/ai/`): `checkBudget` (Sonnet; Haiku from 80%;
     refused at 100%; the 80/100 pushes), `recordUsage` (one `ai_usage` row,
