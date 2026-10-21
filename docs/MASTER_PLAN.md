@@ -393,7 +393,7 @@ Thirteen build chats after this one, each split into phases with a test you run 
 **Set up in this chat:** nothing new.
 
 1. Daily drop (2–3 references, rotating categories) and Power Word of the Day.
-   - [ ] Each card has origin, meaning, a deploy line and the room it plays in
+   - [x] Each card has origin, meaning, a deploy line and the room it plays in. **Phase 1 GREEN 2026-10-21 (owner).** Drop 331 (Oct 21, 10:30:00 UTC): refs 199 *Keep your enemies closer* (film_tv, negotiation), 711 *See's Candies* (finance_business, boardroom), 205 *Miracle on Ice* (sports, homies), each with an outcome check on record (`nnn`); Power Word 161 *incumbent* (pitch); rooms distinct; no top-up. Brief 1168 carried the Arsenal line ("Power Word: incumbent. Strongest reference: See's Candies, for the boardroom.") and the Screening line, pushed 09:45:00 Chicago (delivery 440 → notification 603, `sent`). Owner runs: `arsenal.spec` 8/8 phone; `screens-arsenal` phone and desktop, both themes. **Carried, non-blocking:** RSS 150 MB at rest ~20 h after boot (6 h read pending); the 544 vs 5,572 embedding-clear gap; verifier yield (~40%); the over-cap why-line trim.
 2. Arm Me box, My Arsenal saves, weekly quiz.
    - [ ] Arm Me returns three references for a typed situation in under 10 seconds
 3. Screening Room hook: marking a show finished drafts its references into the Arsenal.
