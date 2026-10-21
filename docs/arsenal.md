@@ -1,9 +1,9 @@
-# The Arsenal — design (Chat 5, Phase 1)
+# The Arsenal — design (Chat 5, Phases 1 and 2)
 
-Oct 15, 2026. Phase 1 only: the reference pool, verification, the daily drop
-and the Power Word. Arm Me, saves, the quiz (Phase 2) and the Screening Room
-hook (Phase 3) are out of scope; the schema leaves room for them
-(`origin_kind`, `source_title_id`).
+Oct 15, 2026. Phase 1: the reference pool, verification, the daily drop and
+the Power Word (§1–§8). **Phase 2 (Oct 21): Arm Me, My Arsenal saves and the
+Monday quiz, §9.** The Screening Room hook (Phase 3) is out of scope; the
+schema leaves room for it (`origin_kind`, `source_title_id`).
 
 Code: `db/054_arsenal.sql`, `workers/arsenal/`, `apps/web/src/app/(app)/arsenal/`.
 Voice: `prompts/arsenal_voice.md` (byte-identical copy in `workers/prompts/`).
@@ -456,3 +456,284 @@ Filled in after the first production run (Step 5). Anything not run is pending.
 - **arsenal_check (its queries through db_inspect):** repeated refs 0, repeated words 0, seeds dropped 0. Today (2026-10-16): drop 61, refs [194, 193, 202], word 37 (asymmetric), `topped_up` false, made at 10:30:01 UTC (05:30 Chicago). Its rooms were pitch, boardroom, pitch, and the word was pitch: the case db/055's room rule fixes.
 - **KB read (`job_health`, each job's last run only):** `arsenal_pool` ~5 KB; `arsenal_pool_collect`, `arsenal_drop`, `arsenal_verify` ~0 KB. The day's egress (19:06 UTC) was ~18.7 MB, with no Arsenal job in the top four. Per-run history is in the Railway logs and was not read.
 - **Worker RSS:** 141 MB at rest (heartbeat 19:18 UTC); the job peak was 149 MB during verification (06:05 UTC). This is one reading, not the 6 h curve the RAM rule asks for.
+
+---
+
+## 9. Phase 2 — Arm Me, My Arsenal, the Monday quiz (Oct 21)
+
+Code: `db/059_arsenal_phase2.sql`; `apps/web/src/app/api/arsenal/arm/route.ts`,
+`apps/web/src/lib/arsenal/` (`arm.ts`, `quiz.ts`), `/arsenal`, `/arsenal/saved`,
+`/arsenal/quiz`; `workers/arsenal/arm.py`. No Screening Room hook (Phase 3).
+
+### 9.1 Owner decisions (Chat 5 Phase 2 planning, Oct 21)
+
+- **Arm Me is fast first, verified on save.** The three cards stream straight
+  from the model; nothing is checked before they show. Saving a card is what
+  sends it through the same verifier and outcome check as the pool.
+- **A save is a strong Love.** It moves the category and room weights like
+  two Loves (below).
+- **The quiz runs on Mondays: 10 questions, no AI.** Monday's Brief announces
+  it in the Arsenal line. There is no separate push.
+- **Quiz scheduling is FSRS, with `ts-fsrs` as the scheduler only.**
+  `@open-spaced-repetition/binding` is not installed.
+
+### 9.2 Step 0 (Oct 21)
+
+- **Accounts.** `vercel whoami` printed **`toya-rn-7874`**, not `idctsims`.
+  Per §6, the Vercel CLI is not used again in this phase until the owner logs
+  in as `idctsims`. Nothing in this phase needs the CLI: deploys go through
+  git.
+- **Reused as is:**
+  - the web AI twin (`src/lib/ai/`): `checkBudget` (Sonnet; Haiku from 80%;
+    refused at 100%; the 80/100 pushes), `recordUsage` (one `ai_usage` row,
+    costed by `pricing.ts`), `languageModel` / `mockAllowed` (the mock only
+    when `VERCEL` is unset and `WAGS_MOCK=1`), `chatProviderOptions` (Sonnet
+    `between_tools` at effort low, Haiku thinking off), `usageOf`;
+  - `/api/wags`'s shape: owner only; a rate limit counted by the database's
+    clock; the `x-wags-e2e-rate-limit` / `x-wags-e2e-budget` headers,
+    honoured in mock mode only; plain-sentence refusals with a 4xx status;
+    `ai_usage` written from the final usage;
+  - `arsenal_weights()` (db/054), extended with saves (9.4);
+  - the worker's `verify.verify_ref` and `outcome.controls_gate` /
+    `verify.outcome_check` / `outcome.record`, unchanged.
+- **One Arm Me call, estimated from `pricing.ts` (= `core/ai.py` PRICING).**
+  The prompt is about 2,550 input tokens: the voice is ~950, the rooms,
+  rules and weights ~500, the owner's Arsenal list ~600 (~60 titles), the
+  schema ~300, and the situation plus the ask ~150. The output is ~650
+  tokens: 3 cards of ~180 tokens plus JSON framing. There is no thinking
+  (structured output, no tools).
+
+  | Model | Input | Output | Per call |
+  |---|---|---|---|
+  | Sonnet 5.5 | 2,550 × $2/M = $0.0051 | 650 × $10/M = $0.0065 | **~$0.012** |
+  | Haiku 5.5 (the 80% downgrade) | 2,550 × $0.10/M = $0.00026 | 650 × $0.50/M = $0.00033 | **~$0.0006** |
+
+  **No cache breakpoint.** Arm Me is sporadic, and a cache write costs 1.25×
+  the input rate. A second call inside 5 minutes would save ~$0.004, and a
+  call with no follow-up would pay ~$0.0013 more. 50 calls a month on Sonnet
+  is ~$0.60 against the $20 budget. Each verify-on-save costs about 1.6
+  verification reads, plus 3 controls × 3 reads, plus the card's 3 outcome
+  reads: ~14 Haiku calls, ~$0.006.
+
+### 9.3 Arm Me (`POST /api/arsenal/arm`, Vercel)
+
+**Request:** `{situation, room?}`.
+- `situation`: at most 600 characters, trimmed, not empty.
+- `room`: one of the four rooms, or absent.
+
+**Refusals, in order** (each a plain sentence; the page shows it):
+
+| Status | When |
+|---|---|
+| 400 / 413 | input |
+| 429 | the rate limit: **10 requests in a rolling 60 s**, counted by the database (`arsenal_arm_requests_since`) |
+| 402 | the budget is spent |
+| 503 | the budget or the rate limit could not be read, or the model is not configured |
+
+- **Budget:** non-critical. Sonnet; Haiku from 80% (the card stream says
+  "budget mode").
+- **The prompt:**
+  - `prompts/arsenal_voice.md`, generated into
+    `src/generated/arsenal-voice.ts` by `scripts/gen-voice.mjs`, like
+    `wags-voice.ts`. The output is gitignored, so the web never carries a
+    stale copy; `e2e/arsenal-unit.spec.ts` fails if the prompt stops
+    containing it or the version drifts from the file.
+  - Then: the four rooms with their real contexts (from the voice); the
+    current weights (`arsenal_weights()`); the owner's Arsenal (seeds, saved
+    and dropped references: key and title); and the rules:
+    - well documented only (a Wikipedia or Wikiquote page supports it);
+    - the outcome check: the real ending must not undercut the line;
+    - a film or TV quote credits the character and the work;
+    - a quote is at most 15 words;
+    - `source_work` is always set;
+    - at most ONE of the three may come from the owner's Arsenal
+      (`from_arsenal: true`, with its key). Fresh ones are preferred.
+  - With a room chip, all three cards play in that room.
+- **Streaming.** `streamText` with `output: Output.array({element})` (AI SDK
+  v6, pinned) and its `elementStream`. Each element arrives once it is
+  complete.
+  - The route answers with NDJSON: one `{"type":"card"}` line per card as it
+    lands, then `{"type":"done"}` or `{"type":"error","message"}`. The page
+    renders card 1 while cards 2 and 3 are still being written.
+  - `first_card_ms` is measured to the first card line written, and
+    `total_ms` to the end; both are server clocks from the request's start.
+- **Each card is upserted by `canonical_key`** (normalized as
+  `workers/arsenal/cards.py` `normalize_key` does) through
+  `arsenal_arm_card(card, marker)`. That function is owner only, SECURITY
+  DEFINER, and the only way an arm card is written.
+  - **The key exists:** the existing row comes back as it is, with its real
+    verification tag (Checked, Corrected, Unverified, or "Unchecked until
+    saved"). It is labelled **From your Arsenal** when it is a seed, a
+    dropped reference or a saved one.
+  - **The key is new:** it is inserted with status `arm`, verification
+    `pending` and origin_kind `arm_me`, and shown as **Unchecked until
+    saved**.
+  - **A second "From your Arsenal" card in one answer is not shown.** The
+    reason goes into the request's `note`.
+  - A real request never returns a test row (an `e2e_` key), and a test
+    request never writes a real one.
+- **Arm cards never enter a drop.** The picker takes `status = 'pool'` only,
+  and the drop guard refuses anything else. `arm` never changes status (like
+  `seed`).
+  - The pool's "recent keys" list now reads pool references only
+    (`origin_kind = 'pool'`), so a burst of Arm Me cards cannot push the
+    pool's own keys out of it.
+  - A pool card that repeats an arm card's key is skipped as a UNIQUE
+    duplicate (counted in `skipped_dup`, as today).
+- **Recorded:** one `arm_requests` row per request that reached the model
+  (`arsenal_arm_record`, append-only): situation, room_hint, model,
+  first_card_ms, total_ms, ai_usage_id, ref_ids (in order), error, note,
+  is_test.
+  - A refusal before the model (rate, budget, input) writes no row.
+  - A stream that fails or is aborted still records what arrived, with the
+    error.
+- **The mock model** (`src/lib/arsenal/mock.ts`, the `WAGS_MOCK` rule) streams
+  `{"elements":[…]}` slowly, so a spec can see card 1 before card 3. A
+  situation of the form `existing: <key>` returns that key as card 2. The
+  mock writes no `ai_usage` row.
+- **The e2e marker** (a verified `x-valemont-e2e` header, local builds only)
+  makes the request and its new cards `is_test`.
+
+### 9.4 Saves (My Arsenal)
+
+- **`arsenal_saves`** (append-only, TRUNCATE-guarded): one event per tap,
+  `save` | `unsave`, on a reference OR a word.
+  - `owner_id` defaults to `auth.uid()`.
+  - `is_test` is stamped from the target, as `arsenal_reactions` does.
+  - A redundant event (saving what is saved, unsaving what is not) is
+    refused, so the log stays meaningful.
+- **`v_arsenal_saved`** (security_invoker): the current saved set (the latest
+  event per target is `save`), with `saved_at`.
+- **Save everywhere:** the drop cards, the Power Word, Arm Me cards, and My
+  Arsenal (unsave, with Undo).
+- **A save of an `arm` reference that is still pending queues ONE
+  `arsenal_arm_verify` job** (job_queue), from the save's trigger. Exactly
+  once, held three ways:
+  - an advisory lock per reference;
+  - no job of that kind for that reference may exist yet;
+  - the reference must still be pending.
+
+  So save → unsave → save never queues twice.
+- **Weights** (`arsenal_weights()`, the db/054 formula with saves):
+
+  `weight = base × clamp(1 + 0.15·loves + 0.30·saves − 0.15·not_interested, 0.3, 2.0)`
+
+  - **A save counts as two Loves** (+0.30). It counts while the item is in
+    the current saved set; an unsave takes it back.
+  - Real saves only.
+  - Saved references move category and room; saved words move room only (as
+    reactions do).
+  - The function returns a `saves` column too.
+
+### 9.5 Verify on save (worker, `arsenal/arm.py`)
+
+The job_queue handler `arsenal_arm_verify` (payload `{ref_id}`) runs through
+`run_tracked`, so it has its own `job_health` row and RSS / KB-read line.
+
+1. **Verify.** If the reference is still pending, `verify.verify_item` runs:
+   the same retrieval, judge and coverage guard as a pool card.
+2. **Outcome check.** If it settled verified or corrected and has no outcome
+   check on record:
+   - the three controls run first, then the card's 3-read vote;
+   - the result is recorded through `outcome.record` (a conflict also writes
+     an `arsenal_holds` row);
+   - a control that comes out wrong raises `ControlsFailed`: nothing is
+     recorded, and the queue retries.
+3. **Test references are skipped with no AI call** ("skipped: test
+   reference"). The e2e spec reads the queued job back by the marker.
+
+Each step is idempotent, so a retry resumes where the last attempt stopped.
+
+**My Arsenal shows each saved card's state:**
+
+| State | Shown as |
+|---|---|
+| verified | Checked |
+| corrected | Corrected |
+| unverified | Unverified, with its reason (muted, two lines, "more") |
+| a held outcome conflict | Unverified, with the outcome reason |
+| still pending | "Checking…" |
+
+### 9.6 The Monday quiz (`/arsenal/quiz`, no AI)
+
+**The week** is the Monday (America/Chicago) on or before today. Monday's
+Brief announces it; it can be taken any day that week.
+
+**Built once, on first open** (`arsenal_quizzes`, append-only):
+- one real quiz per owner per week, by unique index;
+- re-opening resumes at the first unanswered question;
+- test quizzes are not unique; the newest test quiz of the week is the one
+  shown with the marker.
+
+**Item order:**
+1. Saved items that are FSRS-due, oldest due first. A never-reviewed item is
+   due from the moment it was saved.
+2. Then the rest, least recently reviewed first.
+
+**Questions: up to 10.**
+- Each reference yields "Which reference fits this?" and/or "What does it
+  mean?"; each word yields "Pick the sentence that uses it right."
+- Pass 1 asks each item once. A reference alternates kinds by its review
+  count.
+- With fewer than 10 items, pass 2 asks each reference its other kind.
+- So the quiz has `min(10, 2 × saved refs + saved words)` questions.
+
+| Kind | Prompt | Options |
+|---|---|---|
+| `fits` | the card's meaning | 4 titles |
+| `means` | the title | 4 meanings |
+| `sentence` | the word | 4 sentences: its own, and 3 other words' sentences with this word swapped in for theirs |
+
+- **Distractors** come from other saved items of the same type, then from
+  dropped references and words. They are always real for a real quiz and
+  test for a test quiz.
+- A question with fewer than 3 distractors is skipped.
+- Options are shuffled once, when the quiz is built.
+
+**Locked:** fewer than 4 saved items shows "Save at least 4 to unlock the
+quiz."
+
+**Answering.** One `arsenal_quiz_reviews` row per answer (append-only;
+`(quiz_id, question_no)` UNIQUE).
+- Correct is rated `good`, wrong is rated `again`.
+- `ts-fsrs` (`fsrs()` with its default parameters) computes the next card
+  from the item's latest review, or a new card. The row stores the state
+  after the answer (`fsrs_state`, ts-fsrs's Card as JSON) and `due_at`.
+- The database recomputes `correct` from the stored answer and refuses a
+  row that disagrees, or whose rating does not follow from it. The answer
+  index never reaches the browser before the answer.
+- **The end** shows the score and a review list: each question, the right
+  answer, and yours.
+
+**`arsenal_quiz_attempts` (MASTER_PLAN §3) is a VIEW** over
+`arsenal_quiz_reviews`: week_start, ref_id or word_id, correct.
+- The reviews already carry every column it names, append-only.
+- A second table would be a second copy that could disagree with the first.
+- The view keeps §3's name for readers, with one source of truth.
+
+### 9.7 Context
+
+- **`ctx_arsenal` gains:**
+  - `saved_count`;
+  - `recent_saves`: the 5 newest, with kind, title or word, room and
+    saved_at;
+  - `last_quiz`: `{week_start, score: "7/10", answered, questions}` for the
+    newest real quiz with an answer.
+- **`ctx_arsenal_brief`:** on Mondays (`owner_today()` is a Monday), with at
+  least 4 real saved items, it adds `quiz: {questions: N}`.
+  - The brief's one Arsenal line ends "Quiz ready: N on your saved
+    Arsenal." (`brief._arsenal_lines`, a data line).
+  - On a Monday with no drop, the line is the quiz alone.
+  - Any other day, nothing changes.
+
+### 9.8 Test rows
+
+- `add_test_arm_ref` and `add_test_save` take the verified e2e marker.
+  `arsenal_arm_card` and `arsenal_arm_record` take an optional marker, which
+  makes their rows test.
+- A test row is invisible to every real selector:
+  - the picker;
+  - `arsenal_weights`;
+  - `ctx_arsenal` and `ctx_arsenal_brief`;
+  - My Arsenal and the quiz without the marker;
+  - the pool's stale-pending sweep, which reads pool and seed rows only.
