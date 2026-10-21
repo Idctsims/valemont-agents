@@ -50,7 +50,22 @@ export const armCardSchema = z.object({
 });
 export type ArmCardIn = z.infer<typeof armCardSchema>;
 
-const clean = (v: unknown) => String(v ?? "").split(/\s+/).filter(Boolean).join(" ");
+/** The owner's latency bar (MASTER_PLAN §6 Chat 5): card 1 on the wire
+ *  within 10 s of the request's start, or the request says so. */
+export const FIRST_CARD_BAR_MS = 10_000;
+
+/**
+ * Arm Me's thinking, at its lowest, set explicitly (owner, Oct 21; Wags'
+ * settings, src/lib/ai/claude.ts chatProviderOptions): Sonnet 5.5 cannot turn
+ * thinking off, so `between_tools` (no upfront thinking) at effort `low`;
+ * Haiku 5.5, the 80% downgrade, has thinking `disabled`.
+ */
+export function armProviderOptions(modelId: string) {
+  if (modelId === "claude-haiku-5-5") return { anthropic: { thinking: { type: "disabled" as const } } };
+  return { anthropic: { thinking: { type: "between_tools" as const }, effort: "low" as const } };
+}
+
+const clean =(v: unknown) => String(v ?? "").split(/\s+/).filter(Boolean).join(" ");
 
 /** cards.py normalize_key. */
 export function normalizeKey(raw: unknown): string {

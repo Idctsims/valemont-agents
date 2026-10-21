@@ -1,13 +1,13 @@
 import { headers } from "next/headers";
 import { Output, streamText } from "ai";
 
-import { chatProviderOptions, languageModel, usageOf } from "@/lib/ai/claude";
+import { languageModel, usageOf } from "@/lib/ai/claude";
 import { checkBudget, recordUsage, type BudgetCheck } from "@/lib/ai/budget";
 import { mockAllowed } from "@/lib/ai/policy";
 import { CHEAPEST_MODEL, type Usage } from "@/lib/ai/pricing";
 import {
-  armCardSchema, armPrompt, armSystem, MAX_SITUATION, ROOMS, validateArmCard, type ArmCard, type ArmLine,
-  type ArsenalEntry,
+  armCardSchema, armPrompt, armProviderOptions, armSystem, FIRST_CARD_BAR_MS, MAX_SITUATION, ROOMS, validateArmCard,
+  type ArmCard, type ArmLine, type ArsenalEntry,
 } from "@/lib/arsenal/arm";
 import type { Room } from "@/lib/arsenal/types";
 import { requireOwner } from "@/lib/auth";
@@ -46,6 +46,9 @@ const refuse = (status: number, message: string) =>
 type Rpc = { data: unknown; error: { message: string } | null };
 
 export async function POST(req: Request) {
+  // The clock for first_card_ms and total_ms starts here, before anything
+  // else: auth, the rate limit, the budget, the prompt reads and the model
+  // all count, up to the moment card 1's line is written to the response.
   const started = performance.now();
   const user = await requireOwner();
   const supabase = await createClient();
@@ -111,7 +114,8 @@ export async function POST(req: Request) {
     prompt: armPrompt(situation, room),
     output: Output.array({ element: armCardSchema, name: "cards", description: "Exactly three Arsenal cards, best first." }),
     maxOutputTokens: MAX_OUTPUT_TOKENS,
-    providerOptions: chatProviderOptions(modelId),
+    // Thinking at its lowest, explicitly (arm.ts armProviderOptions = Wags').
+    providerOptions: armProviderOptions(modelId),
     abortSignal: req.signal,
   });
 
@@ -172,6 +176,12 @@ export async function POST(req: Request) {
         console.error("arm stream:", error);
       }
       const totalMs = Math.round(performance.now() - started);
+      // The 10 s bar is a stop for the owner, not something to tune around:
+      // a miss is said in the request's own row.
+      if (firstCardMs == null ? !req.signal.aborted : firstCardMs > FIRST_CARD_BAR_MS) {
+        notes.unshift(`first card over ${FIRST_CARD_BAR_MS / 1000} s (${firstCardMs ?? "none"} ms)`);
+        console.warn(`arm: first card ${firstCardMs ?? "never"} ms (bar ${FIRST_CARD_BAR_MS} ms)`);
+      }
 
       // Spend first: a call that is not on record is spend the budget cannot see.
       let usageId: number | null = null;

@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
 import { ARSENAL_VOICE, ARSENAL_VOICE_VERSION } from "../src/generated/arsenal-voice";
-import { armPrompt, armSystem, normalizeKey, validateArmCard, type ArmCardIn } from "../src/lib/arsenal/arm";
+import {
+  armPrompt, armProviderOptions, armSystem, FIRST_CARD_BAR_MS, normalizeKey, validateArmCard, type ArmCardIn,
+} from "../src/lib/arsenal/arm";
 import { parseArmLine } from "../src/lib/arsenal/arm-stream";
 import {
   buildQuestions, nextCard, orderItems, quizSize, swapWord, weekStart, type QuizItem,
@@ -54,6 +56,13 @@ test("Arm Me speaks the pool's voice: the prompt carries prompts/arsenal_voice.m
   expect(system).toContain("- crossing_the_rubicon: Crossing the Rubicon (seed)");
   expect(system).toContain("At most ONE of the three may come from HIS ARSENAL");
   expect(armPrompt("  Board call on the raise.  ", "boardroom")).toBe("The room: Board call on the raise.\nAll three play in the boardroom room.");
+});
+
+test("Arm Me's thinking is set explicitly at its lowest: Wags' settings", () => {
+  // src/lib/ai/claude.ts chatProviderOptions (server-only, so its values are pinned here).
+  expect(armProviderOptions("claude-sonnet-5-5")).toEqual({ anthropic: { thinking: { type: "between_tools" }, effort: "low" } });
+  expect(armProviderOptions("claude-haiku-5-5")).toEqual({ anthropic: { thinking: { type: "disabled" } } });
+  expect(FIRST_CARD_BAR_MS).toBe(10_000);
 });
 
 const card = (over: Partial<ArmCardIn> = {}): ArmCardIn => ({
