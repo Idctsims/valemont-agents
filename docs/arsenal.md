@@ -584,7 +584,15 @@ Code: `db/059_arsenal_phase2.sql`; `apps/web/src/app/api/arsenal/arm/route.ts`,
     lands, then `{"type":"done"}` or `{"type":"error","message"}`. The page
     renders card 1 while cards 2 and 3 are still being written.
   - `first_card_ms` is measured to the first card line written, and
-    `total_ms` to the end; both are server clocks from the request's start.
+    `total_ms` to the end; both are server clocks from the request's start
+    (the POST handler's first statement, so auth, the rate limit, the
+    budget, the prompt reads and the model all count).
+  - **The 10 s bar is a stop, not a tuning target (owner, Oct 21).** A real
+    request whose card 1 is over 10 s (or never comes) is reported, and the
+    request's own `note` says "first card over 10 s (N ms)".
+  - **Thinking is set explicitly at its lowest** (`armProviderOptions`,
+    Wags' settings): Sonnet `between_tools` at effort `low`; Haiku
+    `disabled`.
 - **Each card is upserted by `canonical_key`** (normalized as
   `workers/arsenal/cards.py` `normalize_key` does) through
   `arsenal_arm_card(card, marker)`. That function is owner only, SECURITY
