@@ -6,8 +6,10 @@ The same code as the worker's arsenal_pool and arsenal_pool_collect jobs
 (arsenal/pool.py, arsenal/collect.py). If a batch is already open (the
 worker's boot run submitted one), it waits on that one instead of
 submitting a second. Then every pending real item (this batch's and the
-seeds') is verified inline by arsenal/verify.py. Prints counts and cost
-only.
+seeds') is verified inline by arsenal/verify.py, and every reference that
+clears is outcome-checked (arsenal/outcome.py, the controls first). Prints
+counts and cost only. --refs sets the batch size (the thinnest categories
+first, cards.quota_split).
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ import sys
 import time
 from datetime import datetime, timezone
 
-from arsenal import collect, pool, verify
+from arsenal import cards, collect, outcome, pool, verify
 from core import ai, ledger
 from core.paths import load_env
 
@@ -28,6 +30,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--now", action="store_true", required=True, help="submit (or join) a batch now")
     parser.add_argument("--wait-min", type=int, default=120, help="give up waiting after this many minutes")
+    parser.add_argument("--refs", type=int, default=cards.POOL_REFS,
+                        help="references to request (split thinnest categories first)")
     args = parser.parse_args(argv)
 
     load_env()
@@ -36,7 +40,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"embedded: {pool.embed_missing()}")
         open_batch = ledger.arsenal_open_batch()
         if open_batch is None:
-            run_id, batch_id = pool.submit()
+            have = pool.category_have(ledger.arsenal_category_counts())
+            print("ready + in flight: " + ", ".join(f"{c} {n}" for c, n in have.items()))
+            run_id, batch_id = pool.submit(refs=args.refs)
             print(f"submitted: batch {batch_id} (run {run_id})")
             open_batch = ledger.arsenal_open_batch()
         else:
@@ -69,6 +75,11 @@ def main(argv: list[str] | None = None) -> int:
             outcomes[f"{target} {result}"] = outcomes.get(f"{target} {result}", 0) + 1
         print("verified: " + (", ".join(f"{k} {v}" for k, v in sorted(outcomes.items())) or "nothing pending"))
         ledger.arsenal_close_run_if_settled(open_batch.run_id)
+        # The outcome check (db/057), controls first, on everything that cleared.
+        try:
+            print("outcome: " + outcome.check_unchecked().job_note)
+        except outcome.ControlsFailed as exc:
+            print(f"outcome: REFUSED, nothing recorded: {exc}")
         for row in ledger.arsenal_run_rows(open_batch.run_id):
             counts = {k: v for k, v in row.items() if k not in ("id", "status", "batch_id", "model", "note") and v}
             print(f"run row {row['id']} {row['status']}: {counts}" + (f" | {row['note']}" if row["note"] else ""))

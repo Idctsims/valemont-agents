@@ -4523,6 +4523,51 @@ def arsenal_recent_keys(limit: int = 60, *, conn: psycopg.Connection | None = No
             "ORDER BY id DESC LIMIT %s", (limit,)).fetchall()]
 
 
+def arsenal_proposed(*, conn: psycopg.Connection | None = None) -> list[tuple[str, str]]:
+    """(canonical_key, title) of EVERY real reference ever proposed, any
+    status and origin, the seeds apart (they ride in the canon list): the
+    prompt's never-repeat list (owner, 2026-11-02: not the last 60; the Nov 1
+    batch lost 15 of 36 to near-duplicates of older cards)."""
+    with _brief_conn(conn) as c:
+        return [(r[0], r[1]) for r in c.execute(
+            "SELECT canonical_key, title FROM arsenal_refs WHERE NOT is_test AND status <> 'seed' "
+            "ORDER BY id").fetchall()]
+
+
+@dataclass(frozen=True)
+class ArsenalCategoryCount:
+    """One category's real pool references, active holds left out. ready:
+    verified or corrected with an outcome check on record (what the picker
+    can take). in_flight: on its way there (verification pending, or
+    verified with the check still to run)."""
+    ready: int
+    in_flight: int
+
+
+#: tests_live runs this exact text. ready matches ARSENAL_POOL_STATUS_SQL's
+#: refs_ready, split by category; in_flight is its refs_pending plus
+#: refs_unchecked (a pending item with an active hold is left out too).
+ARSENAL_CATEGORY_COUNTS_SQL: Final = """
+    SELECT r.category,
+           count(*) FILTER (WHERE r.verification IN ('verified', 'corrected')
+                              AND EXISTS (SELECT 1 FROM arsenal_outcome_checks oc WHERE oc.ref_id = r.id)),
+           count(*) FILTER (WHERE r.verification = 'pending'
+                               OR (r.verification IN ('verified', 'corrected')
+                                   AND NOT EXISTS (SELECT 1 FROM arsenal_outcome_checks oc WHERE oc.ref_id = r.id)))
+      FROM arsenal_refs r
+     WHERE NOT r.is_test AND r.status = 'pool'
+       AND NOT EXISTS (SELECT 1 FROM v_arsenal_active_holds h WHERE h.ref_id = r.id)
+     GROUP BY r.category
+"""
+
+
+def arsenal_category_counts(*, conn: psycopg.Connection | None = None) -> dict[str, ArsenalCategoryCount]:
+    """category -> its counts; a category with no pool row is absent."""
+    with _brief_conn(conn) as c:
+        return {r[0]: ArsenalCategoryCount(int(r[1]), int(r[2]))
+                for r in c.execute(ARSENAL_CATEGORY_COUNTS_SQL).fetchall()}
+
+
 def arsenal_recent_lemmas(limit: int = 60, *, conn: psycopg.Connection | None = None) -> list[str]:
     with _brief_conn(conn) as c:
         return [r[0] for r in c.execute(
@@ -4865,6 +4910,22 @@ def arsenal_settle_word(word_id: int, *, verification: str, note: str | None, pr
             """,
             (verification, note[:500] if note else None, pronunciation, etymology, etymology_url, word_id)).fetchone()
     return row is not None
+
+
+def arsenal_reverify_ref(ref_id: int, *, verification: str, note: str | None, by: str,
+                         source_url: str | None = None, origin: str | None = None, source_work: str | None = None,
+                         meaning: str | None = None, deploy_line: str | None = None, drop_quote: bool = False,
+                         conn: psycopg.Connection | None = None) -> int:
+    """db/055's ONE re-verification of an unverified pool reference, through
+    the worker-only arsenal_reverify_ref(): the new verdict and the record in
+    arsenal_reverifications (append-only), one transaction. The database
+    refuses anything else (already re-verified once, not unverified, not in
+    the pool). Returns the record's id."""
+    with _brief_conn(conn) as c:
+        return int(c.execute(
+            "SELECT arsenal_reverify_ref(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (ref_id, verification, note[:500] if note else None, by, source_url, origin, source_work, meaning,
+             deploy_line, drop_quote)).fetchone()[0])
 
 
 def arsenal_close_run_if_settled(run_id: int, *, conn: psycopg.Connection | None = None) -> bool:

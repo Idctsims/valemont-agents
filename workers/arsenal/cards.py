@@ -11,6 +11,7 @@ error; a quote over 15 words is dropped, not the card.
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
@@ -77,13 +78,54 @@ def category_weights(weights: Mapping[tuple[str, str], float]) -> dict[str, floa
     return {k: v for (dim, k), v in weights.items() if dim == "category"}
 
 
+#: The ready references a batch aims to leave in every category (owner,
+#: 2026-11-02: at least 4 each), and the share of requested references that
+#: reach ready: the Oct 16 to Nov 1 batches cleared 52-75% of what they
+#: inserted (near-duplicates and invalid cards never insert), so 0.5.
+TARGET_READY = 4
+EXPECTED_YIELD = 0.5
+
+
+def _largest_remainder(total: int, weights: Mapping[str, float]) -> dict[str, int]:
+    """`total` across CATEGORIES by weight, zero allowed; ties in CATEGORIES order."""
+    w = {c: max(0.0, float(weights.get(c, 0.0))) for c in CATEGORIES}
+    s = sum(w.values())
+    if total <= 0 or not s:
+        return {c: 0 for c in CATEGORIES}
+    shares = {c: total * w[c] / s for c in CATEGORIES}
+    out = {c: int(shares[c]) for c in CATEGORIES}
+    left = total - sum(out.values())
+    for c in sorted(CATEGORIES, key=lambda c: (-(shares[c] - int(shares[c])), CATEGORIES.index(c)))[:left]:
+        out[c] += 1
+    return out
+
+
+def quota_split(total: int, have: Mapping[str, int], weights: Mapping[str, float], *,
+                target: int = TARGET_READY, expected_yield: float = EXPECTED_YIELD) -> dict[str, int]:
+    """`total` references, the thinnest categories first (owner, 2026-11-02).
+
+    `have` is each category's ready plus in-flight count. A category short
+    of `target` needs ceil(shortfall / expected_yield) requests. When the
+    needs exceed `total`, `total` is split in proportion to them (the empty
+    categories get the most); otherwise each need is met and the rest
+    follows the weights (allocate's Love-driven split). Deterministic."""
+    need = {c: math.ceil(max(0, target - int(have.get(c, 0))) / expected_yield) for c in CATEGORIES}
+    if not sum(need.values()):
+        return allocate(total, weights)
+    if sum(need.values()) >= total:
+        return _largest_remainder(total, need)
+    rest = _largest_remainder(total - sum(need.values()), weights)
+    return {c: need[c] + rest[c] for c in CATEGORIES}
+
+
 # ---------------------------------------------------------------- prompt
 
 @dataclass(frozen=True)
 class PromptContext:
     """What every request carries in its cached system block."""
     seeds: Sequence[tuple[str, str, str]]
-    recent_keys: Sequence[str]
+    #: (canonical_key, title) of every reference ever proposed (ledger.arsenal_proposed).
+    proposed: Sequence[tuple[str, str]]
     recent_lemmas: Sequence[str]
     #: The owner's known words (db/055 word seeds): never a Power Word.
     known_lemmas: Sequence[str] = ()
@@ -101,7 +143,7 @@ FOR EACH REFERENCE
 - quote and quote_by: null unless you are certain of the exact words; at most 15 words.
 - A film or TV quote credits the character AND the work, never the real person alone: quote_by "Sean Parker (as written in The Social Network)".
 - Check the ending: if the reference's real outcome undercuts the deploy_line (Thermopylae was a total defeat, so it is never a pitch line about winning), reframe the line to fit what really happened, or choose another reference.
-- Never repeat a seed or a recent key, and never write the same reference under a different name.
+- Never repeat a seed or an already proposed reference, and never write the same reference under a different name.
 
 FOR EACH POWER WORD
 - lemma: one English word, lowercase.
@@ -112,16 +154,18 @@ FOR EACH POWER WORD
 
 
 def system_blocks(ctx: PromptContext) -> list[dict[str, Any]]:
-    """The voice, the rules, then the seeds and recent keys (cached: the two
-    requests of a batch, and the top-up, share it)."""
+    """The voice, the rules, then the seeds and every reference ever proposed
+    (cached: the two requests of a batch, and the top-up, share it)."""
     voice = load_arsenal_voice()
     taste = "\n".join(f"- {title} ({work}) [{key}]" for key, title, work in ctx.seeds)
-    recent = ", ".join(ctx.recent_keys) or "(none yet)"
+    # Compact: one "key: title" per reference, semicolon-separated (~170 cards ≈ 2k tokens).
+    recent = "; ".join(f"{key}: {title}" for key, title in ctx.proposed) or "(none yet)"
     lemmas = ", ".join(ctx.recent_lemmas) or "(none yet)"
     known = ", ".join(ctx.known_lemmas) or "(none)"
     rules = RULES.format(categories=", ".join(f"{c} ({CATEGORY_NOTES[c]})" for c in CATEGORIES))
     lists = ("THE OWNER'S CANON: taste to match, NEVER to repeat\n" + taste
-             + "\n\nRECENT KEYS: never repeat\n" + recent
+             + "\n\nEVERY REFERENCE ALREADY PROPOSED (key: title): never repeat, never the same story under "
+               "another name or another quote from the same scene\n" + recent
              + "\n\nKNOWN POWER WORDS: the owner already uses these; the register to match, never a Power Word\n"
              + known + "\n\nRECENT POWER WORDS: never repeat\n" + lemmas)
     return [

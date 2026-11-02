@@ -88,7 +88,7 @@ def card(**kw: Any) -> dict[str, Any]:
 
 class Prompt(NoDatabase):
     CTX = cards.PromptContext(seeds=[("crossing_the_rubicon", "Crossing the Rubicon", "Julius Caesar, 49 BC")],
-                              recent_keys=["the_medici_bank"], recent_lemmas=["asymmetric"])
+                              proposed=[("the_medici_bank", "The Medici Bank")], recent_lemmas=["asymmetric"])
 
     def test_system_blocks_voice_rules_then_the_cached_lists(self) -> None:
         blocks = cards.system_blocks(self.CTX)
@@ -451,7 +451,7 @@ class FilmQuoteCredit(unittest.TestCase):
         self.assertIn("(as written in The Social Network)", voice)
         self.assertIn("Thermopylae", voice)
         self.assertIn("never a Power Word", voice)
-        blocks = cards.system_blocks(cards.PromptContext(seeds=[], recent_keys=[], recent_lemmas=[],
+        blocks = cards.system_blocks(cards.PromptContext(seeds=[], proposed=[], recent_lemmas=[],
                                                          known_lemmas=["fiduciary", "inflection", "provenance"]))
         self.assertIn("as written in The Social Network", blocks[1]["text"])
         self.assertIn("Check the ending", blocks[1]["text"])
@@ -790,6 +790,7 @@ class OutcomeInThePool(NoDatabase):
     def test_a_top_up_whose_controls_fail_says_so_and_the_pick_fails_loudly(self) -> None:
         self.patch("arsenal_unchecked_refs", lambda: [ref(id=200, verification="verified")])
         for name, value in (("arsenal_seeds", lambda: []), ("arsenal_recent_keys", lambda n: []),
+                            ("arsenal_proposed", lambda: []),
                             ("arsenal_recent_lemmas", lambda n: []), ("arsenal_seed_lemmas", lambda: []),
                             ("arsenal_log_run", lambda kind, st, **kw: 11), ("arsenal_insert_ref", lambda c, **kw: 200),
                             ("arsenal_nearest", lambda v: None)):
@@ -811,6 +812,7 @@ class OutcomeInThePool(NoDatabase):
         self.patch("arsenal_unembedded", lambda: [])
         self.patch("arsenal_stale_pending", lambda hours: [])
         self.patch("arsenal_queue_outcome", lambda reason: queued.append(reason) or 5)
+        self.patch("arsenal_category_counts", full_counts)
         self.patch("arsenal_pool_status", lambda: status(refs_unchecked=3))
         self.assertIn("outcome check queued for 3 (job 5)", pool.pool_job(now=NOW).job_note)
         self.patch("arsenal_pool_status", lambda: status())
@@ -883,6 +885,13 @@ def status(**kw: Any) -> ledger.ArsenalPoolStatus:
     return ledger.ArsenalPoolStatus(**base)
 
 
+def full_counts(ready: int = 4, in_flight: int = 0, **per: tuple[int, int]) -> dict[str, ledger.ArsenalCategoryCount]:
+    """Every category at `ready` (+ `in_flight`), with per-category overrides."""
+    out = {c: ledger.ArsenalCategoryCount(ready, in_flight) for c in cards.CATEGORIES}
+    out.update({c: ledger.ArsenalCategoryCount(*v) for c, v in per.items()})
+    return out
+
+
 class Pool(NoDatabase):
     def test_when_a_batch_is_submitted(self) -> None:
         ob = ledger.ArsenalOpenBatch(1, "msgbatch_x", "claude-sonnet-5-5", NOW)
@@ -907,8 +916,9 @@ class Pool(NoDatabase):
         self.patch("arsenal_unembedded", lambda: [])
         self.patch("arsenal_stale_pending", lambda hours: [])
         self.patch("arsenal_pool_status", lambda: status(refs_ready=0, words_ready=0, last_submitted_at=None))
+        self.patch("arsenal_category_counts", full_counts)
         self.patch("arsenal_seeds", lambda: [("x_seed", "X", "Work")])
-        self.patch("arsenal_recent_keys", lambda n: [])
+        self.patch("arsenal_proposed", lambda: [])
         self.patch("arsenal_recent_lemmas", lambda n: [])
         self.patch("arsenal_seed_lemmas", lambda: ["seedword"])
         self.patch("arsenal_weights", lambda: {("category", c): 1.0 for c in cards.CATEGORIES})
@@ -922,6 +932,98 @@ class Pool(NoDatabase):
         self.assertEqual(logged[0][:2], ("batch", "submitted"))
         self.assertEqual((logged[0][2]["refs_requested"], logged[0][2]["words_requested"]), (36, 12))
         self.assertIn("submitted msgbatch_1", run.job_note)
+
+
+class Refill(NoDatabase):
+    """Owner, 2026-11-02: refill whenever a category runs thin, thinnest first,
+    and never repeat anything ever proposed."""
+
+    def test_a_thin_category_submits_even_mid_week(self) -> None:
+        thin = full_counts(sports=(1, 1))  # 2 ready or in flight: under 3
+        go, why = pool.should_submit(status(), NOW, thin)
+        self.assertTrue(go)
+        self.assertIn("category short", why)
+        self.assertIn("sports 2", why)
+        # At 3 it holds; the weekly rule is unchanged (status() is 2 days old).
+        self.assertFalse(pool.should_submit(status(), NOW, full_counts(sports=(2, 1)))[0])
+        self.assertFalse(pool.should_submit(status(), NOW, full_counts())[0])
+
+    def test_in_flight_counts_so_a_verifying_batch_does_not_trigger_another(self) -> None:
+        self.assertFalse(pool.should_submit(status(), NOW, full_counts(film_tv=(0, 5)))[0])
+        # An open batch still wins over a thin category.
+        ob = ledger.ArsenalOpenBatch(1, "msgbatch_x", "claude-sonnet-5-5", NOW)
+        self.assertFalse(pool.should_submit(status(open_batch=ob), NOW, full_counts(film_tv=(0, 0)))[0])
+
+    def test_the_refill_waits_out_the_gap(self) -> None:
+        recent = status(last_submitted_at=NOW - timedelta(hours=11))
+        go, why = pool.should_submit(recent, NOW, full_counts(music_culture=(0, 0)))
+        self.assertFalse(go)
+        self.assertIn("refill gap 12 h", why)
+        self.assertTrue(pool.should_submit(status(last_submitted_at=NOW - pool.REFILL_GAP), NOW,
+                                           full_counts(music_culture=(0, 0)))[0])
+        # A category absent from the counts (no pool row at all) is thin too.
+        absent = {c: n for c, n in full_counts().items() if c != "philosophy"}
+        self.assertEqual(pool.thin_categories(absent), [("philosophy", 0)])
+
+    def test_without_counts_the_old_rules_hold(self) -> None:
+        self.assertFalse(pool.should_submit(status(), NOW)[0])
+        self.assertTrue(pool.should_submit(status(last_submitted_at=NOW - timedelta(days=6)), NOW)[0])
+
+    def test_the_quota_fills_the_thinnest_first(self) -> None:
+        weights = {c: 1.0 for c in cards.CATEGORIES}
+        # Tonight's pool: 4 ready in two categories, five empty.
+        have = {"history_military": 2, "literature_myth": 2}
+        split = cards.quota_split(40, have, weights)
+        self.assertEqual(sum(split.values()), 40)
+        empty = [c for c in cards.CATEGORIES if c not in have]
+        # Needs: 8 per empty category, 4 per half-full one (48 > 40): proportional.
+        self.assertTrue(all(split[c] >= 6 for c in empty), split)
+        self.assertTrue(all(split[c] < min(split[e] for e in empty) for c in have), split)
+
+    def test_the_quota_meets_every_need_then_follows_the_weights(self) -> None:
+        weights = {c: 1.0 for c in cards.CATEGORIES} | {"sports": 3.0}
+        split = cards.quota_split(36, {c: 4 for c in cards.CATEGORIES} | {"film_tv": 2}, weights)
+        self.assertEqual(sum(split.values()), 36)
+        self.assertGreaterEqual(split["film_tv"], 4)  # ceil(2 / 0.5)
+        self.assertGreater(split["sports"], split["finance_business"])
+        # Nothing short: the plain weighted allocation, every category at least one.
+        self.assertEqual(cards.quota_split(36, {c: 9 for c in cards.CATEGORIES}, weights),
+                         cards.allocate(36, weights))
+
+    def test_the_prompt_carries_every_proposed_key_and_title(self) -> None:
+        proposed = [(f"key_{i}", f"Title {i}") for i in range(200)]
+        ctx = cards.PromptContext(seeds=[], proposed=proposed, recent_lemmas=[])
+        text = cards.system_blocks(ctx)[2]["text"]
+        self.assertIn("key_0: Title 0", text)
+        self.assertIn("key_199: Title 199", text)  # not only the last 60
+        self.assertIn("EVERY REFERENCE ALREADY PROPOSED", text)
+        self.patch("arsenal_seeds", lambda: [])
+        self.patch("arsenal_proposed", lambda: proposed)
+        self.patch("arsenal_recent_lemmas", lambda n: [])
+        self.patch("arsenal_seed_lemmas", lambda: [])
+        self.assertEqual(len(pool.context().proposed), 200)
+
+    def test_submit_sends_the_quota_split(self) -> None:
+        submitted: list[dict] = []
+        logged: list[dict] = []
+        self.patch("arsenal_category_counts", lambda: {"history_military": ledger.ArsenalCategoryCount(2, 0),
+                                                       "literature_myth": ledger.ArsenalCategoryCount(2, 0)})
+        self.patch("arsenal_weights", lambda: {("category", c): 1.0 for c in cards.CATEGORIES})
+        for name in ("arsenal_seeds", "arsenal_proposed", "arsenal_seed_lemmas"):
+            self.patch(name, lambda: [])
+        self.patch("arsenal_recent_lemmas", lambda n: [])
+        self.patch("arsenal_log_run", lambda kind, st, **kw: logged.append(kw) or 7)
+        with mock.patch.object(ai, "submit_batch",
+                               lambda **kw: submitted.append(kw) or ("msgbatch_q", kw["model"])):
+            pool.submit(refs=40)
+        self.assertEqual(logged[0]["refs_requested"], 40)
+        message = submitted[0]["requests"][0].params["messages"][0]["content"]
+        self.assertIn("Write 40 references", message)
+        self.assertIn("finance_business 7", message)
+
+    def test_the_job_runs_every_six_hours(self) -> None:
+        from core import system_jobs
+        self.assertEqual(system_jobs.ARSENAL_POOL_S, 6 * 60 * 60)
 
 
 # ===================================================================== collect
@@ -1079,6 +1181,7 @@ class Drop(NoDatabase):
                                                           last_submitted_at=None))
         self.patch("arsenal_seeds", lambda: [])
         self.patch("arsenal_recent_keys", lambda n: [])
+        self.patch("arsenal_proposed", lambda: [])
         self.patch("arsenal_recent_lemmas", lambda n: [])
         self.patch("arsenal_seed_lemmas", lambda: ["seedword"])
         self.patch("arsenal_log_run", lambda kind, st, **kw: 12)
@@ -1128,6 +1231,7 @@ class Drop(NoDatabase):
         settled: list[str] = []
         self.patch("arsenal_seeds", lambda: [])
         self.patch("arsenal_recent_keys", lambda n: [])
+        self.patch("arsenal_proposed", lambda: [])
         self.patch("arsenal_recent_lemmas", lambda n: [])
         self.patch("arsenal_seed_lemmas", lambda: ["seedword"])
         self.patch("arsenal_log_run", lambda kind, st, **kw: logged.append((kind, st)) or 11)

@@ -100,10 +100,12 @@
                              for the day just closed), carried across a
                              restart; ONE push a day past egress.ALERT_MB
                              (owner, 2026-10-15).
-    arsenal_pool     weekly  Sunday 03:30 America/Chicago, and at boot: embeds
-                             unembedded references, requeues stale pending
-                             items, and submits ONE Message Batch (30 refs, 10
-                             words) when the week is due or the pool is short
+    arsenal_pool     6 h     03:30, 09:30, 15:30, 21:30 America/Chicago, and at
+                             boot: embeds unembedded references, requeues stale
+                             pending items, and submits ONE Message Batch (36
+                             refs, 12 words) when the week is due, the pool is
+                             short, or any category is under 3 ready or in
+                             flight (at most every 12 h; owner, 2026-11-02)
                              (arsenal/pool.py, db/054).
     arsenal_pool_collect 10 min: reads an ended batch, inserts its cards
                              pending, queues one arsenal_verify per item.
@@ -565,6 +567,8 @@ FEED_REPO_WHY = SystemJob("feed_repo_why", FEED_INTERVAL_S, IntervalTrigger(seco
 # db/054, workers/arsenal/ (docs/arsenal.md §4).
 
 ARSENAL_COLLECT_S = 10 * 60
+#: arsenal_pool's cadence (owner, 2026-11-02: refill when a category runs thin).
+ARSENAL_POOL_S = 6 * 60 * 60
 #: Run per queued item by the job_queue handler, never by the scheduler; a
 #: pool runs weekly, so 8 days keeps it from reading stale between batches.
 ARSENAL_VERIFY = SystemJob("arsenal_verify", 8 * 24 * 60 * 60, IntervalTrigger(days=8),
@@ -682,7 +686,7 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
                   screening_recs.release_push_job, misfire_grace=1800, start_delay_s=360),
         SystemJob("feed_prune", 24 * 60 * 60, CronTrigger(hour=3, minute=15, timezone=OWNER_TZ),
                   feed_prune, misfire_grace=3600, run_at_boot=False),
-        SystemJob("arsenal_pool", WEEK_S, CronTrigger(day_of_week="sun", hour=3, minute=30, timezone=OWNER_TZ),
+        SystemJob("arsenal_pool", ARSENAL_POOL_S, CronTrigger(hour="3,9,15,21", minute=30, timezone=OWNER_TZ),
                   arsenal_pool.pool_job, misfire_grace=3600, start_delay_s=420),
         SystemJob("arsenal_pool_collect", ARSENAL_COLLECT_S, IntervalTrigger(seconds=ARSENAL_COLLECT_S),
                   arsenal_collect.collect_job, misfire_grace=300, start_delay_s=450),
