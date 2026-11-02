@@ -1221,23 +1221,52 @@ class JobHealth:
     last_error: str | None
     consecutive_failures: int
     alert_state: AlertState
-    #: Server-computed: last_ok_at (or, if never ok, the last update) is older
+    #: job_stale() on the database clock: the reference (see there) is older
     #: than twice the expected interval.
     stale: bool
 
 
-def job_register(job: str, expected_interval_s: int) -> None:
+def job_stale(now: datetime, expected_interval_s: int, last_ok_at: datetime | None, updated_at: datetime | None,
+              interval_changed_at: datetime | None) -> bool:
+    """Stale: the reference moment is older than twice the expected interval.
+    The reference is the last good run (or, if never ok, the last update),
+    or the moment the interval last CHANGED when that is later (db/060;
+    owner, 2026-11-02): a job moved from weekly to 6-hourly is not stale
+    until 12 h after the change, not 12 h after its last weekly run (the false
+    "arsenal_pool needs attention" of 2026-11-02 21:18 UTC). Pure."""
+    ref = last_ok_at or updated_at
+    if interval_changed_at is not None and (ref is None or interval_changed_at > ref):
+        ref = interval_changed_at
+    return ref is not None and now - ref > timedelta(seconds=2 * expected_interval_s)
+
+
+#: tests_live runs these texts. interval_changed_at moves ONLY when the
+#: stored interval differs (a plain re-registration at boot leaves it).
+JOB_REGISTER_SQL: Final = """
+    INSERT INTO job_health (job, expected_interval_s) VALUES (%s, %s)
+    ON CONFLICT (job) DO UPDATE SET
+        expected_interval_s = EXCLUDED.expected_interval_s,
+        interval_changed_at = CASE WHEN job_health.expected_interval_s <> EXCLUDED.expected_interval_s
+                                   THEN now() ELSE job_health.interval_changed_at END,
+        retired_at = NULL
+"""
+
+JOB_HEALTH_ROWS_SQL: Final = """
+    SELECT job, expected_interval_s, last_ok_at, last_error, consecutive_failures,
+           alert_state, now(), updated_at, interval_changed_at
+      FROM job_health
+     -- Retired jobs (db/023) are history, not health: kept, not watched.
+     WHERE retired_at IS NULL
+     ORDER BY job
+"""
+
+
+def job_register(job: str, expected_interval_s: int, *, conn: psycopg.Connection | None = None) -> None:
     """Create the job's row, or update its interval. Never resets its state.
-    A retired job (db/023) that is scheduled again is un-retired: it is live."""
-    with _pool().connection() as conn:
-        conn.execute(
-            """
-            INSERT INTO job_health (job, expected_interval_s) VALUES (%s, %s)
-            ON CONFLICT (job) DO UPDATE SET expected_interval_s = EXCLUDED.expected_interval_s,
-                                            retired_at = NULL
-            """,
-            (job, expected_interval_s),
-        )
+    A retired job (db/023) that is scheduled again is un-retired: it is live.
+    A changed interval stamps interval_changed_at (db/060)."""
+    with _brief_conn(conn) as c:
+        c.execute(JOB_REGISTER_SQL, (job, expected_interval_s))
 
 
 def job_started(job: str) -> None:
@@ -1296,21 +1325,12 @@ def job_failed(job: str, error: str) -> None:
         )
 
 
-def job_health_rows() -> list[JobHealth]:
-    with _pool().connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT job, expected_interval_s, last_ok_at, last_error, consecutive_failures,
-                   alert_state,
-                   now() - coalesce(last_ok_at, updated_at)
-                       > make_interval(secs => 2 * expected_interval_s) AS stale
-              FROM job_health
-             -- Retired jobs (db/023) are history, not health: kept, not watched.
-             WHERE retired_at IS NULL
-             ORDER BY job
-            """
-        ).fetchall()
-    return [JobHealth(*r) for r in rows]
+def job_health_rows(*, conn: psycopg.Connection | None = None) -> list[JobHealth]:
+    """Every live job; `stale` by job_stale() on the DATABASE clock (now() is
+    read in the same query, so worker clock skew never moves it)."""
+    with _brief_conn(conn) as c:
+        rows = c.execute(JOB_HEALTH_ROWS_SQL).fetchall()
+    return [JobHealth(r[0], r[1], r[2], r[3], r[4], r[5], job_stale(r[6], r[1], r[2], r[7], r[8])) for r in rows]
 
 
 def set_job_alert_state(job: str, state: AlertState) -> None:

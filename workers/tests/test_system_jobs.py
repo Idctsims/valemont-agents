@@ -12,6 +12,7 @@ import sys
 import unittest
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Any
 from unittest import mock
 
@@ -19,6 +20,10 @@ from core import jobs, ledger, push, system_jobs
 from core.jobs import SystemJob, describe, run_tracked
 from core.ledger import JobHealth, QueuedJob
 from core.orchestrator import Orchestrator
+
+
+#: The real reader, captured before any test patches it (IntervalChange).
+REAL_JOB_HEALTH_ROWS = ledger.job_health_rows
 
 
 def _refuse_database(*a: Any, **k: Any) -> Any:
@@ -235,6 +240,72 @@ class HealthMonitor(SystemTestCase):
         self.ledger.health = [row("old_job", failures=9, stale=True)]
         system_jobs.check_health(self.WATCHED)
         self.assertEqual(self.pushes, [])
+
+
+class IntervalChange(SystemTestCase):
+    """db/060 (owner, 2026-11-02): a job's staleness restarts when its
+    expected interval changes. PR #64 moved arsenal_pool from a week to 6 h;
+    measured from its last weekly run (Nov 1 09:30 UTC) it read stale at the
+    next boot and pushed a false "needs attention" at 21:18 UTC."""
+
+    from datetime import datetime as _dt, timezone as _tz
+    LAST_OK = _dt(2026, 11, 1, 9, 30, tzinfo=_tz.utc)
+    CHANGED = _dt(2026, 11, 2, 21, 17, tzinfo=_tz.utc)
+    SIX_H = 6 * 60 * 60
+
+    def test_an_interval_change_restarts_the_clock(self) -> None:
+        at_boot = self.CHANGED + timedelta(minutes=1)
+        # The bug: measured from the last good run, 36 h > 2 x 6 h.
+        self.assertTrue(ledger.job_stale(at_boot, self.SIX_H, self.LAST_OK, at_boot, None))
+        # The fix: from the change, 1 minute < 12 h.
+        self.assertFalse(ledger.job_stale(at_boot, self.SIX_H, self.LAST_OK, at_boot, self.CHANGED))
+        # The restart is a grace, not an exemption: 12 h after the change with no run, it is stale.
+        later = self.CHANGED + timedelta(hours=12, seconds=1)
+        self.assertTrue(ledger.job_stale(later, self.SIX_H, self.LAST_OK, later, self.CHANGED))
+        # A good run after the change counts from that run.
+        ran = self.CHANGED + timedelta(hours=2)
+        self.assertFalse(ledger.job_stale(ran + timedelta(hours=11), self.SIX_H, ran, ran, self.CHANGED))
+        self.assertTrue(ledger.job_stale(ran + timedelta(hours=13), self.SIX_H, ran, ran, self.CHANGED))
+
+    def test_without_a_change_the_old_rule_holds(self) -> None:
+        now = self.LAST_OK + timedelta(minutes=121)
+        self.assertTrue(ledger.job_stale(now, 60, self.LAST_OK, now, None))
+        self.assertFalse(ledger.job_stale(self.LAST_OK + timedelta(seconds=119), 60, self.LAST_OK, now, None))
+        # Never ok: from the last update, as before.
+        self.assertTrue(ledger.job_stale(now, 60, None, self.LAST_OK, None))
+        self.assertFalse(ledger.job_stale(now, 60, None, None, None))
+        # An older change never makes a fresher run look stale.
+        self.assertFalse(ledger.job_stale(now, 7200, self.LAST_OK, now, self.LAST_OK - timedelta(days=3)))
+
+    def test_rows_are_judged_on_the_database_clock(self) -> None:
+        db_now = self.CHANGED + timedelta(minutes=1)
+        raw = [("arsenal_pool", self.SIX_H, self.LAST_OK, None, 0, "ok", db_now, db_now, self.CHANGED),
+               ("heartbeat", 60, self.LAST_OK, None, 0, "ok", db_now, db_now, None)]
+        conn = mock.Mock()
+        conn.execute.return_value.fetchall.return_value = raw
+        # SystemTestCase patches ledger.job_health_rows; this is the real one, given a fake connection.
+        real = REAL_JOB_HEALTH_ROWS(conn=conn)
+        self.assertEqual({r.job: r.stale for r in real}, {"arsenal_pool": False, "heartbeat": True})
+        self.assertEqual(conn.execute.call_args[0][0], ledger.JOB_HEALTH_ROWS_SQL)
+
+    def test_the_register_sql_stamps_only_a_real_change(self) -> None:
+        sql = " ".join(ledger.JOB_REGISTER_SQL.split())
+        self.assertIn("interval_changed_at = CASE WHEN job_health.expected_interval_s <> "
+                      "EXCLUDED.expected_interval_s THEN now() ELSE job_health.interval_changed_at END", sql)
+        self.assertIn("interval_changed_at", ledger.JOB_HEALTH_ROWS_SQL)
+        migration = (Path(__file__).resolve().parents[2] / "db" / "060_job_interval_changed.sql").read_text(
+            encoding="utf-8")
+        self.assertIn("ADD COLUMN IF NOT EXISTS interval_changed_at timestamptz", migration)
+
+    def test_no_false_alert_right_after_the_change(self) -> None:
+        # The monitor acts on `stale` as computed: with the change it is False, so no push.
+        self.ledger.health = [row("arsenal_pool", interval=self.SIX_H, stale=False)]
+        system_jobs.check_health({"arsenal_pool"})
+        self.assertEqual(self.pushes, [])
+        # ...and the same row judged by the old rule would have pushed.
+        self.ledger.health = [row("arsenal_pool", interval=self.SIX_H, stale=True)]
+        system_jobs.check_health({"arsenal_pool"})
+        self.assertEqual([p.title for p in self.pushes], ["arsenal_pool needs attention"])
 
 
 class ExternalWatchdog(SystemTestCase):

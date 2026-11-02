@@ -187,5 +187,55 @@ class SystemJobsSql(unittest.TestCase):
         self.assertEqual(status, [("failed",)])
 
 
+class IntervalChangedSql(unittest.TestCase):
+    """db/060: JOB_REGISTER_SQL stamps interval_changed_at only when the
+    interval really changes, and JOB_HEALTH_ROWS_SQL feeds job_stale so a
+    changed job reads fresh. One transaction, always rolled back: nothing is
+    written, so the deployed health monitor never sees the row. Skips until
+    db/060 is pasted."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        if not os.getenv("DATABASE_URL"):
+            raise unittest.SkipTest("DATABASE_URL is not set")
+        try:
+            has = _sql("SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' "
+                       "AND table_name = 'job_health' AND column_name = 'interval_changed_at')")[0][0]
+        except Exception as exc:
+            raise unittest.SkipTest(f"database unreachable: {type(exc).__name__}")
+        if not has:
+            raise unittest.SkipTest("db/060 not pasted")
+
+    def test_only_a_real_change_stamps_and_the_job_reads_fresh(self) -> None:
+        job = "tests_live_interval"
+        with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+            try:
+                def changed() -> object:
+                    return conn.execute("SELECT interval_changed_at FROM job_health WHERE job = %s",
+                                        (job,)).fetchone()[0]
+
+                ledger.job_register(job, 7 * 24 * 3600, conn=conn)
+                self.assertIsNone(changed())  # a new row is not a change
+                # A weekly job last ok 36 h ago: fresh by the weekly rule.
+                conn.execute("UPDATE job_health SET last_ok_at = now() - interval '36 hours', "
+                             "updated_at = now() - interval '36 hours' WHERE job = %s", (job,))
+                ledger.job_register(job, 7 * 24 * 3600, conn=conn)
+                self.assertIsNone(changed())  # the same interval at boot: not a change
+                ledger.job_register(job, 6 * 3600, conn=conn)
+                stamped = changed()
+                self.assertIsNotNone(stamped)
+                [row] = [r for r in ledger.job_health_rows(conn=conn) if r.job == job]
+                self.assertFalse(row.stale)  # 36 h > 12 h, but the change was just now
+                ledger.job_register(job, 6 * 3600, conn=conn)
+                self.assertEqual(changed(), stamped)  # re-registering keeps the stamp
+                # 13 h after the change with no run: stale again.
+                conn.execute("UPDATE job_health SET interval_changed_at = now() - interval '13 hours' "
+                             "WHERE job = %s", (job,))
+                [row] = [r for r in ledger.job_health_rows(conn=conn) if r.job == job]
+                self.assertTrue(row.stale)
+            finally:
+                conn.rollback()
+
+
 if __name__ == "__main__":
     unittest.main()
