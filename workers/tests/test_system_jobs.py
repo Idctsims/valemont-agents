@@ -377,10 +377,12 @@ class Registry(unittest.TestCase):
         # db/054 (Chat 5): the pool Sundays 03:30, the drop daily 05:30 (both
         # Chicago, both at boot), collect every 10 min; verify runs per queued
         # item, never on its own.
-        self.assertEqual((built["arsenal_pool"].trigger.fields[4].expressions[0].first,
-                          built["arsenal_pool"].trigger.fields[5].expressions[0].first,
-                          built["arsenal_pool"].trigger.fields[6].expressions[0].first,
-                          str(built["arsenal_pool"].trigger.timezone)), (6, 3, 30, "America/Chicago"))
+        # arsenal_pool: every 6 h at :30 Chicago (03:30 Sunday is still a run),
+        # so a thin category refills the same day (owner, 2026-11-02).
+        pool_trigger = built["arsenal_pool"].trigger
+        self.assertEqual((str(pool_trigger.fields[4]), str(pool_trigger.fields[5]), str(pool_trigger.fields[6]),
+                          str(pool_trigger.timezone)), ("*", "3,9,15,21", "30", "America/Chicago"))
+        self.assertEqual(built["arsenal_pool"].expected_interval_s, 6 * 60 * 60)
         # The drop: 05:30, then every 30 min to 21:30 (a deferred drop retries; owner, 2026-10-16).
         first, retries = built["arsenal_drop"].trigger.triggers
         self.assertEqual((first.fields[5].expressions[0].first, first.fields[6].expressions[0].first,

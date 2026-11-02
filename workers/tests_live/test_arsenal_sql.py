@@ -343,6 +343,35 @@ class Access(ArsenalSqlCase):
 # ============================================================ test rows hidden
 
 class TestRowsHidden(ArsenalSqlCase):
+    def test_the_refill_counts_and_the_proposed_list(self) -> None:
+        """ARSENAL_CATEGORY_COUNTS_SQL agrees with the pool status, moves for
+        a real ready or in-flight reference, never for a test one; the
+        proposed list carries every real key and title, no test row
+        (owner, 2026-11-02). Aggregates the worker reads: 7 rows, and the
+        ~200 keys and titles."""
+        if not self.has_checks:
+            self.skipTest("db/057 not pasted")
+        with _rolled_back() as conn:
+            def totals() -> tuple[dict[str, ledger.ArsenalCategoryCount], ledger.ArsenalPoolStatus]:
+                return ledger.arsenal_category_counts(conn=conn), ledger.arsenal_pool_status(conn=conn)
+
+            counts0, status0 = totals()
+            self.assertEqual(sum(n.ready for n in counts0.values()), status0.refs_ready)
+            self.assertEqual(sum(n.in_flight for n in counts0.values()), status0.refs_pending + status0.refs_unchecked)
+            ready = self.ref(conn, "sports")
+            self.ref(conn, "sports", checked=False)
+            test_ref = self.ref(conn, "sports", test=True)
+            counts1, status1 = totals()
+            before = counts0.get("sports", ledger.ArsenalCategoryCount(0, 0))
+            self.assertEqual(counts1["sports"], ledger.ArsenalCategoryCount(before.ready + 1, before.in_flight + 1))
+            self.assertEqual(sum(n.ready for n in counts1.values()), status1.refs_ready)
+            proposed = dict(ledger.arsenal_proposed(conn=conn))
+            key, test_key = (conn.execute("SELECT canonical_key FROM arsenal_refs WHERE id = %s", (i,)).fetchone()[0]
+                             for i in (ready, test_ref))
+            self.assertEqual(proposed[key], f"TL {key}")
+            self.assertNotIn(test_key, proposed)
+            self.assertFalse(any(k in proposed for k, _, _ in ledger.arsenal_seeds(conn=conn)))
+
     def test_a_test_drop_today_is_invisible_to_every_real_selector(self) -> None:
         with _rolled_back() as conn:
             today = ledger.arsenal_owner_today(conn=conn)

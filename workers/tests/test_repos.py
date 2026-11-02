@@ -783,8 +783,12 @@ class RegenerationIsOnTheRecord(unittest.TestCase):
                 self.assertTrue("_record(" in text or "record_regeneration(" in text, py.name)
         self.assertEqual(callers, ["why.py"])
         self.assertIn("record_regeneration(", (root / "scripts" / "morning_brief.py").read_text(encoding="utf-8"))
-        # arsenal_reverify is a dry run: it settles nothing, so it records nothing.
-        self.assertIn("It NEVER settles anything", (root / "scripts" / "arsenal_reverify.py").read_text(encoding="utf-8"))
+        # arsenal_reverify settles only with --write, and only through db/055's
+        # recorded re-verification (arsenal_reverifications), never a bare UPDATE.
+        reverify = (root / "scripts" / "arsenal_reverify.py").read_text(encoding="utf-8")
+        self.assertIn("Without --write it NEVER settles anything", reverify)
+        self.assertIn("ledger.arsenal_reverify_ref(", reverify)
+        self.assertNotIn("UPDATE", reverify)
 
     def test_the_line_kinds(self) -> None:
         self.assertEqual([why.line_kind(x) for x in (None, "", why.GENERAL, "Can add X to your dashboard.")],

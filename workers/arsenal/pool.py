@@ -1,17 +1,22 @@
-"""arsenal_pool: the weekly Message Batch, and the drop's synchronous top-up.
+"""arsenal_pool: the Message Batch, and the drop's synchronous top-up.
 
-Sundays 03:30 Chicago, and at boot. Each run first embeds any real
-reference that has no embedding yet (the seeds, at first: the
-near-duplicate check must see them) and queues verification again for
-anything pending over a day with no job. Then it SUBMITS (should_submit)
-when no batch is open and either the last submission is 6+ days old (the
-Sunday run) or the pool is short: under 21 references or 7 words, counting
-verified, corrected and pending.
+Every 6 hours (03:30, 09:30, 15:30, 21:30 Chicago; Sunday 03:30 is the
+weekly one), and at boot. Each run first embeds any real reference that has
+no embedding yet (the seeds, at first: the near-duplicate check must see
+them) and queues verification again for anything pending over a day with no
+job. Then it SUBMITS (should_submit) when no batch is open and:
+  * the pool is short: under 21 references or 7 words, counting verified,
+    corrected and pending; or
+  * any category holds under REFILL_BELOW ready or in-flight references,
+    at most once per REFILL_GAP (owner, 2026-11-02: refill whenever a
+    category runs thin, not only weekly); or
+  * the last submission is 6+ days old (the weekly batch).
 
 One batch, two requests (Sonnet, non-critical; the 80% budget downgrade
-applies): POOL_REFS references split across the categories by the current
-weights, and POOL_WORDS Power Words. The system blocks carry the voice, the
-rules, and the seeds and recent keys (cached).
+applies): POOL_REFS references, the thinnest categories first and the rest
+by the current weights (cards.quota_split), and POOL_WORDS Power Words. The
+system blocks carry the voice, the rules, the seeds and every reference
+ever proposed (cached).
 
 The top-up (drop.py, when today's pick would be short): ONE synchronous
 Sonnet call for TOPUP_REFS references in the thinnest categories and
@@ -24,7 +29,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from arsenal import cards, collect, outcome, verify
 from core import ai, ledger
@@ -38,6 +43,13 @@ RESUBMIT_AFTER = timedelta(days=6)
 #: Seven days of drops.
 MIN_REFS = 21
 MIN_WORDS = 7
+#: The refill rule (owner, 2026-11-02): any category under this many ready
+#: or in-flight references submits a batch, not only the weekly run. A drop
+#: needs 3 categories; at 3 each the pool holds a few days in every one.
+REFILL_BELOW = 3
+#: ...at most once per this gap: a category whose cards keep failing
+#: verification must not resubmit on every 6-hourly run.
+REFILL_GAP = timedelta(hours=12)
 #: The first batch's 30 references took 7,352 output tokens; 36 need ~8,800.
 REFS_MAX_TOKENS = 14_000
 WORDS_MAX_TOKENS = 3_000
@@ -45,13 +57,26 @@ TOPUP_MAX_TOKENS = 5_000
 
 
 def context() -> cards.PromptContext:
-    return cards.PromptContext(seeds=ledger.arsenal_seeds(), recent_keys=ledger.arsenal_recent_keys(60),
+    return cards.PromptContext(seeds=ledger.arsenal_seeds(), proposed=ledger.arsenal_proposed(),
                                recent_lemmas=ledger.arsenal_recent_lemmas(60),
                                known_lemmas=ledger.arsenal_seed_lemmas())
 
 
-def should_submit(status: ledger.ArsenalPoolStatus, now: datetime) -> tuple[bool, str]:
-    """(submit?, why). Pure."""
+def category_have(counts: Mapping[str, ledger.ArsenalCategoryCount]) -> dict[str, int]:
+    """Each category's ready plus in-flight references (0 when absent)."""
+    return {c: (counts[c].ready + counts[c].in_flight) if c in counts else 0 for c in cards.CATEGORIES}
+
+
+def thin_categories(counts: Mapping[str, ledger.ArsenalCategoryCount]) -> list[tuple[str, int]]:
+    """(category, ready + in flight) for every category under REFILL_BELOW.
+    In-flight counts: a batch still verifying must not trigger another."""
+    return [(c, n) for c, n in category_have(counts).items() if n < REFILL_BELOW]
+
+
+def should_submit(status: ledger.ArsenalPoolStatus, now: datetime,
+                  counts: Mapping[str, ledger.ArsenalCategoryCount] | None = None) -> tuple[bool, str]:
+    """(submit?, why). Pure. `counts` (per category) adds the refill rule:
+    any category under REFILL_BELOW, at most once per REFILL_GAP."""
     if status.open_batch is not None:
         return False, f"batch {status.open_batch.batch_id} is open"
     # Awaiting the outcome check (db/057) is on its way to ready, like pending.
@@ -59,9 +84,17 @@ def should_submit(status: ledger.ArsenalPoolStatus, now: datetime) -> tuple[bool
     words = status.words_ready + status.words_pending
     if refs < MIN_REFS or words < MIN_WORDS:
         return True, f"pool short: {refs} refs, {words} words (verified or pending)"
-    if status.last_submitted_at is None or now - status.last_submitted_at >= RESUBMIT_AFTER:
+    thin = thin_categories(counts) if counts is not None else []
+    thin_text = ", ".join(f"{c} {n}" for c, n in thin)
+    since = None if status.last_submitted_at is None else now - status.last_submitted_at
+    if thin and (since is None or since >= REFILL_GAP):
+        return True, f"category short (under {REFILL_BELOW} ready or in flight): {thin_text}"
+    if since is None or since >= RESUBMIT_AFTER:
         return True, "weekly batch due"
-    return False, f"pool fine: {refs} refs, {words} words; last batch {(now - status.last_submitted_at).days} d ago"
+    if thin:
+        return False, (f"category short ({thin_text}), but the last batch was {since.total_seconds() / 3600:.1f} h ago "
+                       f"(refill gap {REFILL_GAP.total_seconds() / 3600:.0f} h)")
+    return False, f"pool fine: {refs} refs, {words} words; last batch {since.days} d ago"
 
 
 def batch_requests(ctx: cards.PromptContext, split: dict[str, int], words: int) -> list[ai.BatchRequest]:
@@ -76,9 +109,12 @@ def batch_requests(ctx: cards.PromptContext, split: dict[str, int], words: int) 
             ai.BatchRequest("words", params(cards.words_message(words), cards.words_schema()), WORDS_MAX_TOKENS)]
 
 
-def submit(*, client: Any = None) -> tuple[int, str]:
-    """Submit the weekly batch and log it. Returns (run id, batch id)."""
-    split = cards.allocate(cards.POOL_REFS, cards.category_weights(ledger.arsenal_weights()))
+def submit(*, client: Any = None, refs: int = cards.POOL_REFS) -> tuple[int, str]:
+    """Submit a batch and log it: `refs` references with the thinnest
+    categories first (cards.quota_split), then by the weights. Returns
+    (run id, batch id)."""
+    split = cards.quota_split(refs, category_have(ledger.arsenal_category_counts()),
+                              cards.category_weights(ledger.arsenal_weights()))
     batch_id, model = ai.submit_batch(requests=batch_requests(context(), split, cards.POOL_WORDS), model=MODEL,
                                       client=client)
     run_id = ledger.arsenal_log_run("batch", "submitted", batch_id=batch_id, model=model,
@@ -128,7 +164,7 @@ def pool_job(*, client: Any = None, now: datetime | None = None, embed: collect.
         # A check that failed or never ran (db/057): its references cannot drop until one passes.
         job = ledger.arsenal_queue_outcome("arsenal_pool: unchecked references")
         notes.append(f"outcome check queued for {status.refs_unchecked} (job {job})")
-    go, why = should_submit(status, now or datetime.now(timezone.utc))
+    go, why = should_submit(status, now or datetime.now(timezone.utc), ledger.arsenal_category_counts())
     notes.append(why)
     if go:
         _, batch_id = submit(client=client)
