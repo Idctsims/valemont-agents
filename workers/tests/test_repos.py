@@ -805,6 +805,26 @@ class RepoStoriesInTheEngine(unittest.TestCase):
         for name in ("filtered_stories_deleted", "unreacted_stories_deleted"):
             self.assertIn("repo_surfacings", ledger.FEED_PRUNE_SQL[name])
 
+    def test_the_prune_window_and_its_dry_run(self) -> None:
+        """Owner, 2026-11-02: kept stories at 21 days; every protection on
+        both story rules (trailers included); the dry run only SELECTs."""
+        self.assertEqual((ledger.KEPT_STORY_DAYS, ledger.FILTERED_STORY_DAYS), (21, 30))
+        self.assertIn("interval '21 days'", ledger.FEED_PRUNE_SQL["unreacted_stories_deleted"])
+        self.assertIn("interval '30 days'", ledger.FEED_PRUNE_SQL["filtered_stories_deleted"])
+        for name in ("filtered_stories_deleted", "unreacted_stories_deleted"):
+            for guard in ("feed_reactions", "entity_link_proposals", "tech_credit_pushes", "repo_surfacings",
+                          "title_trailers"):
+                self.assertIn(guard, ledger.FEED_PRUNE_SQL[name], (name, guard))
+        dry = [ledger.FEED_PRUNE_STORY_DRY_RUN_SQL, *ledger.FEED_PRUNE_OTHER_DRY_RUN_SQL.values()]
+        for sql in dry:
+            self.assertNotRegex(sql.upper(), r"\b(DELETE|UPDATE|INSERT|TRUNCATE)\b")
+        # Every prune step has a dry run.
+        self.assertEqual(set(ledger.FEED_PRUNE_SQL),
+                         set(ledger.FEED_PRUNE_OTHER_DRY_RUN_SQL) | {"filtered_stories_deleted",
+                                                                     "unreacted_stories_deleted"})
+        script = (Path(__file__).resolve().parents[1] / "scripts" / "feed_prune.py").read_text(encoding="utf-8")
+        self.assertNotIn("ledger.feed_prune(", script)
+
     def test_ingest_never_fetches_the_github_source(self) -> None:
         import inspect
         self.assertIn("kind NOT IN ('github', 'tmdb')", inspect.getsource(ledger.feed_active_sources))

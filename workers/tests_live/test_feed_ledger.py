@@ -343,17 +343,20 @@ class Prune(FeedLedgerCase):
             if conn.execute("SELECT to_regclass('public.entity_link_proposals')").fetchone()[0] is None:
                 raise unittest.SkipTest("the prune reads entity_link_proposals: db/042 not pasted")
 
-    def test_the_prune_never_touches_a_kept_story(self) -> None:
+    def test_the_prune_keeps_a_kept_story_inside_its_window(self) -> None:
+        """A kept story inside KEPT_STORY_DAYS (21 from 2026-11-02, was 90)
+        stays while a 40-day filtered one goes with its item. The 21-day
+        delete itself: test_feed_rank_sql.Prune."""
         with _rolled_back() as conn:
             src = self.make_source(conn)
             kept, kept_item = ledger.feed_new_story(src, _item(), unit(0), unit(0), filtered_reason=None, seed=None, conn=conn)
             gone, gone_item = ledger.feed_new_story(src, _item(), unit(1), unit(1), filtered_reason="title_regex:1",
                                                     seed=None, conn=conn)
             young, _ = ledger.feed_new_story(src, _item(), unit(2), unit(2), filtered_reason="title_regex:1", seed=None, conn=conn)
-            # Age the kept and the first filtered story to 40 days.
-            for sid in (kept, gone):
-                conn.execute("UPDATE stories SET first_seen_at = now() - interval '40 days', "
-                             "last_seen_at = now() - interval '40 days' WHERE id = %s", (sid,))
+            # The kept story at 20 days (inside its 21), the first filtered one at 40 (past its 30).
+            for sid, days in ((kept, 20), (gone, 40)):
+                conn.execute("UPDATE stories SET first_seen_at = now() - make_interval(days => %s), "
+                             "last_seen_at = now() - make_interval(days => %s) WHERE id = %s", (days, days, sid))
             counts = ledger.feed_prune(conn=conn)
             self.assertEqual(set(counts), set(ledger.FEED_PRUNE_SQL))
             alive = {r[0] for r in conn.execute("SELECT id FROM stories WHERE id = ANY(%s)", ([kept, gone, young],))}

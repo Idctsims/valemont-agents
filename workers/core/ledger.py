@@ -2787,31 +2787,44 @@ def feed_recategorize(moves: Sequence[tuple[int, str, str]], *, conn: psycopg.Co
 #: entity_link_proposals.story_id and tech_credit_pushes.story_id are ON
 #: DELETE RESTRICT, so a delete that reached one would fail the whole prune;
 #: every story delete here excludes them first).
+#: Kept (unfiltered) stories go this long after they were last seen, unless
+#: protected (owner, 2026-11-02: 21 days, was 90; the feed grows ~39 MB a
+#: week on disk and nothing had ever been pruned under the 90-day rule).
+KEPT_STORY_DAYS: Final = 21
+FILTERED_STORY_DAYS: Final = 30
+
+#: A story the prune never deletes: any reaction, a move proposal, a
+#: free-credits push or a repo surfacing (each refuses the delete by FK), or
+#: an item that is a title's trailer (title_trailers.item_id is ON DELETE
+#: CASCADE, so deleting the story would silently take the trailer off its
+#: title's page; owner, 2026-11-02, "protected stories never touched").
+_PRUNE_PROTECTED: Final = """
+           AND NOT EXISTS (SELECT 1 FROM feed_reactions r WHERE r.story_id = st.id)
+           AND NOT EXISTS (SELECT 1 FROM entity_link_proposals p WHERE p.story_id = st.id)
+           AND NOT EXISTS (SELECT 1 FROM tech_credit_pushes t WHERE t.story_id = st.id)
+           AND NOT EXISTS (SELECT 1 FROM repo_surfacings rs WHERE rs.story_id = st.id)
+           AND NOT EXISTS (SELECT 1 FROM content_items ci JOIN title_trailers tt ON tt.item_id = ci.id
+                            WHERE ci.story_id = st.id)"""
+
+#: The two story rules' WHERE (FROM stories st), shared by the prune and its dry run.
+_PRUNE_STORY_WHERE: Final = {
+    "filtered_stories_deleted":
+        f"st.filtered_reason IS NOT NULL AND st.last_seen_at < now() - interval '{FILTERED_STORY_DAYS} days'"
+        + _PRUNE_PROTECTED,
+    # Kept stories, KEPT_STORY_DAYS after they were last seen, unless protected.
+    "unreacted_stories_deleted":
+        f"st.filtered_reason IS NULL AND st.last_seen_at < now() - interval '{KEPT_STORY_DAYS} days'"
+        + _PRUNE_PROTECTED,
+}
+
 FEED_PRUNE_SQL: Final = {
     "embeddings_cleared": """
         UPDATE content_items SET embedding = NULL, title_embedding = NULL
          WHERE (embedding IS NOT NULL OR title_embedding IS NOT NULL)
            AND fetched_at < now() - interval '72 hours'
     """,
-    "filtered_stories_deleted": """
-        DELETE FROM stories st
-         WHERE st.filtered_reason IS NOT NULL AND st.last_seen_at < now() - interval '30 days'
-           AND NOT EXISTS (SELECT 1 FROM feed_reactions r WHERE r.story_id = st.id)
-           AND NOT EXISTS (SELECT 1 FROM entity_link_proposals p WHERE p.story_id = st.id)
-           AND NOT EXISTS (SELECT 1 FROM tech_credit_pushes t WHERE t.story_id = st.id)
-           AND NOT EXISTS (SELECT 1 FROM repo_surfacings rs WHERE rs.story_id = st.id)
-    """,
-    # Kept stories, 90 days after they were last seen, unless reacted to or
-    # named by a move proposal, a push or a repo surfacing (db/049: the
-    # surfacing record is append-only and refuses the delete).
-    "unreacted_stories_deleted": """
-        DELETE FROM stories st
-         WHERE st.filtered_reason IS NULL AND st.last_seen_at < now() - interval '90 days'
-           AND NOT EXISTS (SELECT 1 FROM feed_reactions r WHERE r.story_id = st.id)
-           AND NOT EXISTS (SELECT 1 FROM entity_link_proposals p WHERE p.story_id = st.id)
-           AND NOT EXISTS (SELECT 1 FROM tech_credit_pushes t WHERE t.story_id = st.id)
-           AND NOT EXISTS (SELECT 1 FROM repo_surfacings rs WHERE rs.story_id = st.id)
-    """,
+    "filtered_stories_deleted": "DELETE FROM stories st WHERE " + _PRUNE_STORY_WHERE["filtered_stories_deleted"],
+    "unreacted_stories_deleted": "DELETE FROM stories st WHERE " + _PRUNE_STORY_WHERE["unreacted_stories_deleted"],
     # Superseded scores (a newer row exists for the story and pillar) after 7 days.
     "story_scores_superseded_deleted": """
         DELETE FROM story_scores s
@@ -2840,6 +2853,64 @@ FEED_PRUNE_SQL: Final = {
 def feed_prune(*, conn: psycopg.Connection | None = None) -> dict[str, int]:
     with _brief_conn(conn) as c, c.transaction():
         return {name: c.execute(sql).rowcount for name, sql in FEED_PRUNE_SQL.items()}
+
+
+#: One story rule's dry run: the stories it would delete and every row that
+#: goes with them (content_items, story_scores and feed_similarity_log
+#: cascade from stories; similarity rows also cascade from their item).
+#: protected_trailers counts trailer links among them and must be 0.
+#: SELECTs only. tests_live runs this exact text.
+FEED_PRUNE_STORY_DRY_RUN_SQL: Final = """
+    WITH doomed AS (SELECT st.id FROM stories st WHERE {where}),
+         items AS (SELECT ci.id FROM content_items ci WHERE ci.story_id IN (SELECT id FROM doomed))
+    SELECT (SELECT count(*) FROM doomed),
+           (SELECT count(*) FROM items),
+           (SELECT count(*) FROM story_scores s WHERE s.story_id IN (SELECT id FROM doomed)),
+           (SELECT count(*) FROM feed_similarity_log l
+             WHERE l.story_id IN (SELECT id FROM doomed) OR l.item_id IN (SELECT id FROM items)),
+           (SELECT count(*) FROM title_trailers t WHERE t.item_id IN (SELECT id FROM items))
+"""
+
+#: The other steps' dry runs: the rows each would touch. SELECTs only.
+FEED_PRUNE_OTHER_DRY_RUN_SQL: Final = {
+    "embeddings_cleared": """
+        SELECT count(*) FROM content_items
+         WHERE (embedding IS NOT NULL OR title_embedding IS NOT NULL) AND fetched_at < now() - interval '72 hours'
+    """,
+    "story_scores_superseded_deleted": """
+        SELECT count(*) FROM story_scores s
+         WHERE s.scored_at < now() - interval '7 days'
+           AND EXISTS (SELECT 1 FROM story_scores n WHERE n.story_id = s.story_id AND n.pillar = s.pillar
+                         AND (n.scored_at, n.id) > (s.scored_at, s.id))
+    """,
+    "interest_profiles_deleted": """
+        SELECT count(*) FROM interest_profiles p
+         WHERE p.built_at < now() - interval '90 days'
+           AND EXISTS (SELECT 1 FROM interest_profiles n WHERE n.pillar = p.pillar AND (n.built_at, n.id) > (p.built_at, p.id))
+    """,
+    "seeded_items_deleted": "SELECT count(*) FROM content_items WHERE seeded AND fetched_at < now() - interval '30 days'",
+    "similarity_log_deleted": "SELECT count(*) FROM feed_similarity_log WHERE created_at < now() - interval '30 days'",
+}
+
+STORY_DRY_RUN_TABLES: Final = ("stories", "content_items", "story_scores", "feed_similarity_log",
+                               "protected_trailers")
+
+
+def feed_prune_dry_run(*, conn: psycopg.Connection | None = None) -> dict[str, dict[str, int]]:
+    """What feed_prune would do now, by step and table, deleting nothing
+    (SELECTs only, read-only transaction). The story steps count their
+    cascades; the counts overlap where one row matches two steps (a story's
+    similarity row older than 30 days), so they are not summed."""
+    with _brief_conn(conn) as c, c.transaction():
+        if conn is None:
+            c.execute("SET TRANSACTION READ ONLY")
+        out: dict[str, dict[str, int]] = {}
+        for name, where in _PRUNE_STORY_WHERE.items():
+            row = c.execute(FEED_PRUNE_STORY_DRY_RUN_SQL.format(where=where)).fetchone()
+            out[name] = dict(zip(STORY_DRY_RUN_TABLES, (int(v) for v in row)))
+        for name, sql in FEED_PRUNE_OTHER_DRY_RUN_SQL.items():
+            out[name] = {"rows": int(c.execute(sql).fetchone()[0])}
+    return out
 
 
 # ---------------------------------------------------------------------------
