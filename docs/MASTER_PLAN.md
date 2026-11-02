@@ -93,7 +93,7 @@ One Supabase Postgres database, `public` schema, migrations continuing at `db/01
 - `anon` holds no privilege on any public table, current or future; the signed-in role holds no write privilege on any ledger or archive table.
 - Pattern for every new app table: RLS on, policies `TO authenticated` using `owner_id = auth.uid()`, anon revoked.
 
-**Free-tier budget (500 MB).** Embeddings use 384 dimensions (about 1.5 KB per item). Unreacted news older than 90 days is pruned nightly; anything you reacted to is kept. Lookbook uploads are compressed to WebP in Storage (1 GB); Pinterest pins store URLs only. A nightly job logs table sizes and pushes an alert at 400 MB. **(as built)** The `db_size` system job runs daily at 03:00 Chicago and at every boot; it pushes once at 400 MB and once at 450 MB. Database size on Oct 8: about 15 MB.
+**Free-tier budget (500 MB).** Embeddings use 384 dimensions (about 1.5 KB per item). Unreacted news older than 90 days is pruned nightly; anything you reacted to is kept. **Amended 2026-11-02 (owner): unreacted kept stories go at 21 days.** That takes effect when the `feed-retention-21d` PR merges; it was 90 until then. Protected stories are never pruned: any reaction, move proposal, free-credits push, repo surfacing, or a title's trailer. The database was 223 MB on Nov 2, growing ~6.8 MB a day. Lookbook uploads are compressed to WebP in Storage (1 GB); Pinterest pins store URLs only. A nightly job logs table sizes and pushes an alert at 400 MB. **(as built)** The `db_size` system job runs daily at 03:00 Chicago and at every boot; it pushes once at 400 MB and once at 450 MB. Database size on Oct 8: about 15 MB.
 
 **Open design question (not urgent):** `kalshi_candles` is immutable and TRUNCATE-proof, so the "retention window" below can't be a plain delete. When storage gets tight, it needs a deliberate design (archive and drop by partition, or a pre-registered exception), never a weakened guard.
 
@@ -245,6 +245,18 @@ The one cross-pillar link to watch is Screening Room into the Arsenal: finished 
 Thirteen build chats after this one, each split into phases with a test you run yourself. Frameworks come first (auth, push, scheduler, context layer, Morning Brief), so every later pillar plugs into Wags and the Brief the day it ships. The first version is done only when Chat 13's end-to-end test passes with all 16 pillars live.
 
 **Every chat follows the same contract:** read this plan and CLAUDE.md, ask questions, search GitHub, deliver phased Claude Code prompts, list keys needed, and close with all checkboxes ticked. Every new worker also registers a Wags context provider and a Morning Brief section in the same chat.
+
+**Sequence change (owner, 2026-11-02).** The chats below keep their numbers, but they are built in this order:
+
+1. Chat 5 (Arsenal), to its close.
+2. **Chat 7**: sports data layer and Game Day.
+3. **Chat 8**: betting (consensus engine, Parlay Generator).
+4. **Chats 10–12**: crypto (Long-Term Home and Core Paper Bot, Memecoin Paper Bot, Kalshi 15-min BTC).
+5. **Chat 6**: the Lookbook, which moves last, before Chat 13.
+
+Chat 9 (Slip Analyzer, Manual Entry, Live Bet Tracker) was not placed in that order; ask the owner where it goes.
+
+**Railway Hobby is required before Chat 8 starts** (owner). The Free plan's $1 credit is below the worker's memory cost today (Current State, "Railway"). The worker must not lapse once betting work depends on it.
 
 **(as built) Working rules added during Chat 1, all in CLAUDE.md §6:**
 - Native Windows PowerShell 5.1: no `&&`, `||`, ternaries or `??`.
@@ -401,6 +413,8 @@ Thirteen build chats after this one, each split into phases with a test you run 
 
 ### Chat 6 — The Lookbook and the vision service
 
+**Moved last (owner, 2026-11-02):** it is built after Chats 7, 8 and 10–12, just before Chat 13 (§6, "Sequence change").
+
 **Set up in this chat:** Pinterest app credentials (applied for Oct 8, pending), Unsplash and Pexels keys.
 
 1. Shared vision service: image in, structured JSON out, confidence per field.
@@ -423,6 +437,8 @@ Thirteen build chats after this one, each split into phases with a test you run 
    - [ ] Tapping a game opens its detail page (bets attach in Chat 9)
 
 ### Chat 8 — Betting: consensus engine and Parlay Generator
+
+**Prerequisite (owner, 2026-11-02): Railway Hobby is funded before this chat starts.**
 
 **Set up in this chat:** The Odds API free key. Kalshi needs none.
 

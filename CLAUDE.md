@@ -441,6 +441,8 @@ each in phases with a "done when" checklist). It supersedes the former steps
 - **Chat 5, Phase 1** (the Arsenal: pool, verification, outcome check, daily drop, Power Word; `docs/arsenal.md`) ✓ **GREEN 2026-10-21 (owner)**. PRs #53–#57 and `chat5-fixes`; migrations db/054–db/057. Evidence, read via db_inspect on Oct 21: **drop 331** (10:30:00 UTC; refs 199 film_tv / negotiation, 711 finance_business / boardroom, 205 sports / homies, each with an outcome check on record (5, 15, 7, all `nnn`); word 161 *incumbent*, pitch; rooms distinct; no top-up); **brief 1168** (Sonnet, not a fallback; Arsenal line "Power Word: incumbent. Strongest reference: See's Candies, for the boardroom."; Screening line "Tonight's top pick: Love Actually on Netflix, because you loved Holidate."), pushed 14:45:00 UTC (09:45 Chicago), delivery 440 → notification 603 `sent`. Owner runs: `arsenal.spec` 8/8 (phone), `screens-arsenal` phone and desktop, both themes.
   - **Carried, non-blocking:** worker RSS 150 MB at rest ~20 h after the 21:51 UTC Oct 20 boot (141 MB at 22:53 UTC; the 6 h read is pending); `feed_prune` cleared 544 embeddings on Oct 21 against the 5,572 reported blocked Oct 18–19 (the gap is unexplained); verifier yield (~40% of a batch clears); the over-cap why-line trim.
 - **Chat 5, Phase 2** (Arm Me, My Arsenal saves, the Monday quiz; `docs/arsenal.md` §9) ← **you are here**. PR #62; db/059 applied 19:52:26 UTC Oct 21; merge gate `tests_live -v` 453 OK, 0 skipped, ~3.31 MB. **Owner e2e on db/059 (Oct 21, phone):** `arsenal-arm` 7/7, `arsenal-quiz` 3/3, `arsenal` 8/8, `screens-arsenal-p2` phone 1/1 and desktop 1/1; `arsenal-saved` 1 passed, 1 failed (a real missing Undo), 4 not run. **The pre-merge fixes (the Undo, Arm Me's Source link, the quiz's masked title and "Right answer" label, "Saved") were not re-run (owner, Oct 21)**: unit tests, lint and tsc only; the owner checks them on the phone after the deploy. Pending: those phone checks, the first real Arm Me call (card 1 under 10 s, a stop if not), 5 real requests, verify-on-save results, Monday Oct 26's quiz line, worker RSS, the Arsenal jobs' KB read; then the `Categories` egress fix, its own PR.
+  - **As of Nov 2:** 0 real Arm Me requests; 2 saves (the quiz needs 4; no quiz yet). The verifier yield fix is open: 41 unverified references wait on it.
+- **Next, by the sequence change (owner, 2026-11-02):** Chat 7 (sports data layer, Game Day), then Chat 8 (betting; **Railway Hobby funded first**), then Chats 10–12 (crypto). Chat 6 (Lookbook) moves last, before Chat 13. Chat 9's place is not set. MASTER_PLAN §6.
 
 Reason for deploying at step 4 and not at the end: "works locally, dies
 silently at 3am in production" is the classic failure here. Hit it while
@@ -981,6 +983,23 @@ absent row as "I never looked."
 ---
 
 ## Current State (2026-10-09)
+
+- **2026-11-02 (owner back after Oct 23 – Nov 2; read via db_inspect unless said otherwise):**
+  - **The worker ran the whole time.** There was no gap over 16 min in the 15-min egress samples from Oct 21, no "Worker down" push, and two `job_queue` blips that recovered within 2 min (Oct 22, Nov 1). Drops ran on all 11 days Oct 23 – Nov 2, with no top-up. The brief was pushed on all 12 days Oct 22 – Nov 2. **The Railway CLI is logged out on this machine**, so the deployment, uptime and credit are unread; the owner logs in.
+  - **Arsenal pool rescue.** On Nov 2 the ready pool was down to 4 references in 2 categories (a drop needs 3), and the Nov 1 batch lost 15 of 36 cards to near-duplicates.
+    - Re-verified the 53 unverified: 12 cleared and were written through db/055 (`scripts.arsenal_reverify --write`, changed verdicts only). Outcome check 3/3 controls, 0 held.
+    - **The other 41 are HELD, not re-verified (owner): they wait for the verifier yield fix.**
+    - Batch run 65 (40 references, the new quotas and full avoid list): 38 inserted, 3 near-duplicates, 15 cleared, $0.131. The worker held ref 1379 (Jay-Z and Tidal, an outcome conflict).
+    - Ready pool after: 30 references, 28 words. music_culture had 2 (film_tv 3, finance_business 3).
+  - **PR #63** (merge `3473f6a`, 21:15:32 UTC): `would_join` retired; summary cap 40 words (Tech too).
+  - **PR #64** (merge `36a63c6`, 21:15:35 UTC): `arsenal_pool` every 6 h; any category under 3 ready or in flight refills, at most every 12 h; quotas toward the thinnest categories; the avoid list is every reference ever proposed.
+    - The worker rebooted ~21:17 UTC (`capital_snapshot` and `db_size` boot runs, RSS 75 MB).
+    - **A false "arsenal_pool needs attention" push went out at 21:18 (notification 713).** The new 6 h interval made Nov 1's last run "stale". The boot run is meant to clear it.
+    - The first refill the rule triggers: pending (the refill gap runs to ~08:30 UTC Nov 3).
+  - **Retention decision (owner): unreacted kept stories at 21 days** (was 90); protected stories are never touched. The dry run on production found 1,544 stories, 1,782 items, 1,697 scores and 4,638 similarity rows, with 0 trailer links. Branch `feed-retention-21d` adds a trailer guard (title_trailers cascades from content_items) and `scripts.feed_prune --dry-run`; no migration. **Not merged until the owner has seen the counts.** Clearing centroids and a 14-day similarity log are NOT approved: the readers are listed in `docs/feed_retention_readers.md`, decide after.
+  - **Database 223 MB** (87.6 MB on Oct 13; ~6.8 MB a day, almost all feed). The NFL props archive at ~34 MB a week cannot go into Postgres (MASTER_PLAN §3).
+  - **Claude API spend: October $3.49 (5,625 calls; feed_summarize $2.28); November to Nov 2 $0.33.**
+  - **Sequence change (owner): after Chat 5 → Chat 7 (sports data layer) → Chat 8 (betting) → Chats 10–12 (crypto); Chat 6 Lookbook moves last.** Railway Hobby is required before Chat 8. MASTER_PLAN §6.
 
 - **Owner decisions, 2026-10-09:**
   - AI budget: **$20/month**. `AI_MONTHLY_BUDGET_USD` is set to it in Chat 2 Phase 4 (the code default is still $10).
