@@ -994,9 +994,12 @@ absent row as "I never looked."
   - **PR #63** (merge `3473f6a`, 21:15:32 UTC): `would_join` retired; summary cap 40 words (Tech too).
   - **PR #64** (merge `36a63c6`, 21:15:35 UTC): `arsenal_pool` every 6 h; any category under 3 ready or in flight refills, at most every 12 h; quotas toward the thinnest categories; the avoid list is every reference ever proposed.
     - The worker rebooted ~21:17 UTC (`capital_snapshot` and `db_size` boot runs, RSS 75 MB).
-    - **A false "arsenal_pool needs attention" push went out at 21:18 (notification 713).** The new 6 h interval made Nov 1's last run "stale". The boot run is meant to clear it.
-    - The first refill the rule triggers: pending (the refill gap runs to ~08:30 UTC Nov 3).
-  - **Retention decision (owner): unreacted kept stories at 21 days** (was 90); protected stories are never touched. The dry run on production found 1,544 stories, 1,782 items, 1,697 scores and 4,638 similarity rows, with 0 trailer links. Branch `feed-retention-21d` adds a trailer guard (title_trailers cascades from content_items) and `scripts.feed_prune --dry-run`; no migration. **Not merged until the owner has seen the counts.** Clearing centroids and a 14-day similarity log are NOT approved: the readers are listed in `docs/feed_retention_readers.md`, decide after.
+    - **A false "arsenal_pool needs attention" push went out at 21:18 (notification 713).** The new 6 h interval made Nov 1's last run "stale". The boot run cleared it: "Recovered" at 21:24 UTC (notification 715).
+    - **Both PRs are live:**
+      - #64: the 21:30 UTC run's note reads "category short (music_culture 2), but the last batch was 1.0 h ago (refill gap 12 h)".
+      - #63: 0 `would_join` rows since the reboot.
+    - **The first refill the rule triggers: pending.** The gap ends ~08:30 UTC Nov 3, so the 09:30 UTC (03:30 Chicago) run should submit it.
+  - **Retention decision (owner): unreacted kept stories at 21 days** (was 90); protected stories are never touched. The dry run on production found 1,544 stories, 1,782 items, 1,697 scores and 4,638 similarity rows, with 0 trailer links. PR #65 (`feed-retention-21d`) adds a trailer guard (title_trailers cascades from content_items) and `scripts.feed_prune --dry-run`; no migration. Gate: `tests_live -v` 455 OK, 0 skipped. **Not merged until the owner has seen the counts.** Clearing centroids and a 14-day similarity log are NOT approved: the readers are listed in `docs/feed_retention_readers.md`, decide after.
   - **Database 223 MB** (87.6 MB on Oct 13; ~6.8 MB a day, almost all feed). The NFL props archive at ~34 MB a week cannot go into Postgres (MASTER_PLAN §3).
   - **Claude API spend: October $3.49 (5,625 calls; feed_summarize $2.28); November to Nov 2 $0.33.**
   - **Sequence change (owner): after Chat 5 → Chat 7 (sports data layer) → Chat 8 (betting) → Chats 10–12 (crypto); Chat 6 Lookbook moves last.** Railway Hobby is required before Chat 8. MASTER_PLAN §6.
