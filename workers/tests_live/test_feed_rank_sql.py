@@ -446,6 +446,37 @@ class Prune(RankSqlCase):
                                                ([kept_reacted, kept_quiet, filt_reacted, filt_quiet],))}
             self.assertEqual(left, {kept_reacted, filt_reacted})
 
+    def test_kept_stories_go_at_21_days_and_a_trailer_story_never(self) -> None:
+        """Owner, 2026-11-02: unreacted kept stories at 21 days (was 90); a
+        story carrying a title's trailer is protected (title_trailers
+        cascades from content_items). The dry run counts exactly the rows
+        the prune then deletes, and deletes nothing itself."""
+        with _rolled_back() as conn:
+            src = self.source(conn)
+            old, young, trailer, reacted = (self.story(conn, src) for _ in range(4))
+            conn.execute("UPDATE stories SET first_seen_at = now() - interval '23 days', "
+                         "last_seen_at = now() - interval '22 days' WHERE id = ANY(%s)", ([old, trailer, reacted],))
+            conn.execute("UPDATE stories SET first_seen_at = now() - interval '21 days', "
+                         "last_seen_at = now() - interval '20 days' WHERE id = %s", (young,))
+            conn.execute("INSERT INTO title_trailers (item_id, status) "
+                         "SELECT id, 'unmatched' FROM content_items WHERE story_id = %s", (trailer,))
+            self.react(conn, reacted, "open")
+            ids = [old, young, trailer, reacted]
+            before = ledger.feed_prune_dry_run(conn=conn)["unreacted_stories_deleted"]
+            self.assertEqual(before["protected_trailers"], 0)
+            # The dry run deleted nothing.
+            self.assertEqual(conn.execute("SELECT count(*) FROM stories WHERE id = ANY(%s)", (ids,)).fetchone()[0], 4)
+            old_items = conn.execute("SELECT count(*) FROM content_items WHERE story_id = %s", (old,)).fetchone()[0]
+            counts = ledger.feed_prune(conn=conn)
+            self.assertEqual(counts["unreacted_stories_deleted"], before["stories"])
+            left = {r[0] for r in conn.execute("SELECT id FROM stories WHERE id = ANY(%s)", (ids,))}
+            self.assertEqual(left, {young, trailer, reacted})
+            self.assertGreaterEqual(old_items, 1)
+            self.assertEqual(conn.execute("SELECT count(*) FROM content_items WHERE story_id = %s",
+                                          (old,)).fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT count(*) FROM title_trailers tt JOIN content_items ci "
+                                          "ON ci.id = tt.item_id WHERE ci.story_id = %s", (trailer,)).fetchone()[0], 1)
+
     def test_superseded_scores_go_after_seven_days_and_the_latest_stays(self) -> None:
         with _rolled_back() as conn:
             sid = self.story(conn, self.source(conn))
