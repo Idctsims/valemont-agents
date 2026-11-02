@@ -251,10 +251,11 @@ Thirteen build chats after this one, each split into phases with a test you run 
 1. Chat 5 (Arsenal), to its close.
 2. **Chat 7**: sports data layer and Game Day.
 3. **Chat 8**: betting (consensus engine, Parlay Generator).
-4. **Chats 10–12**: crypto (Long-Term Home and Core Paper Bot, Memecoin Paper Bot, Kalshi 15-min BTC).
-5. **Chat 6**: the Lookbook, which moves last, before Chat 13.
+4. **Chat 9**: Slip Analyzer, Manual Entry, Live Bet Tracker. It comes right after Chat 8 because it needs the consensus engine and the bets Chat 8 generates.
+5. **Chats 10–12**: crypto (Long-Term Home and Core Paper Bot, Memecoin Paper Bot, Kalshi 15-min BTC).
+6. **Chat 6**: the Lookbook, which moves last, before Chat 13.
 
-Chat 9 (Slip Analyzer, Manual Entry, Live Bet Tracker) was not placed in that order; ask the owner where it goes.
+In short: 7 → 8 → 9 → 10–12 → 6 (Lookbook) → 13.
 
 **Railway Hobby is required before Chat 8 starts** (owner). The Free plan's $1 credit is below the worker's memory cost today (Current State, "Railway"). The worker must not lapse once betting work depends on it.
 
@@ -413,7 +414,7 @@ Chat 9 (Slip Analyzer, Manual Entry, Live Bet Tracker) was not placed in that or
 
 ### Chat 6 — The Lookbook and the vision service
 
-**Moved last (owner, 2026-11-02):** it is built after Chats 7, 8 and 10–12, just before Chat 13 (§6, "Sequence change").
+**Moved last (owner, 2026-11-02):** it is built after Chats 7, 8, 9 and 10–12, just before Chat 13 (§6, "Sequence change").
 
 **Set up in this chat:** Pinterest app credentials (applied for Oct 8, pending), Unsplash and Pexels keys.
 
