@@ -15,6 +15,8 @@ type Row = {
   consecutive_failures: number;
   alert_state: "ok" | "alerted";
   updated_at: string;
+  // db/060: when the expected interval last changed (null until it does).
+  interval_changed_at: string | null;
 };
 
 function ago(iso: string | null, now: number): string {
@@ -30,11 +32,14 @@ function every(s: number): string {
   return s % 86400 === 0 ? `${s / 86400}d` : s % 3600 === 0 ? `${s / 3600}h` : s % 60 === 0 ? `${s / 60}m` : `${s}s`;
 }
 
-// Same rule as the worker's health monitor (core/system_jobs.py): two
-// failures in a row, or no success within twice the expected interval.
+// Same rule as the worker's health monitor (core/system_jobs.py, and
+// core/ledger.py job_stale): two failures in a row, or no success within
+// twice the expected interval, counted from the later of the last success
+// and the last interval change (db/060; owner, 2026-11-02).
 function status(r: Row, now: number): { status: LegStatus; label: string } {
   if (r.consecutive_failures >= 2) return { status: "danger", label: "Failing" };
-  const ref = Date.parse(r.last_ok_at ?? r.updated_at);
+  const changed = r.interval_changed_at ? Date.parse(r.interval_changed_at) : -Infinity;
+  const ref = Math.max(Date.parse(r.last_ok_at ?? r.updated_at), changed);
   if (now - ref > 2 * r.expected_interval_s * 1000) return { status: "danger", label: "Stale" };
   if (r.consecutive_failures === 1) return { status: "on-pace", label: "1 failure" };
   // A good run that stopped at its cap (feed_summarize's daily cap, owner
@@ -48,7 +53,7 @@ export default async function HealthPage() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("job_health")
-    .select("job, expected_interval_s, last_ok_at, last_error, consecutive_failures, alert_state, updated_at")
+    .select("job, expected_interval_s, last_ok_at, last_error, consecutive_failures, alert_state, updated_at, interval_changed_at")
     // Retired jobs (db/023) keep their row as history but are off the board.
     .is("retired_at", null)
     .order("job");
