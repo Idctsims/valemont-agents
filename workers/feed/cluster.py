@@ -25,14 +25,12 @@ Guards:
 Every join, every near miss (NEAR_MISS_FROM <= cosine < JOIN_COSINE, not
 joined) and every overflow is logged in feed_similarity_log with both scores.
 
-SHADOW (owner, 2026-10-20; feed review 3a, docs/drafts/feed-review-2026-10.md):
-a near miss with cosine >= WOULD_JOIN_COSINE (0.92) whose title shares at
-least WOULD_JOIN_NAMES (2) proper names with the candidate's best member is
-ALSO logged as kind 'would_join' (db/058). It joins nothing: the clustering
-rule above is unchanged until the owner reads a week of these pairs.
-"Proper name" is a capitalized token that is not a function word or a common
-headline word (shared_names); Title Case headlines make that approximate,
-which is what the week's read is for.
+The 'would_join' shadow (feed review 3a, db/058; Oct 20 to Nov 2) is RETIRED
+(owner, 2026-11-02): of 25 sampled pairs, 4 were the same news and 4 the
+same game's previews; the rest were different games, players or shop pages.
+Nothing logs it any more; its 5,878 rows stay in feed_similarity_log as
+history (the 30-day prune ages them out) and db/058's CHECK still admits the
+kind.
 
 The lead item is the one from the lowest source priority number, ties to the
 earliest published, then the lowest id; an item with no url (a failed Google
@@ -57,22 +55,9 @@ FUZZ_MIN_COSINE = 0.90
 NEAR_MISS_FROM = 0.88
 CANDIDATE_HOURS = 48
 MAX_ITEMS = 25
-#: The shadow join (owner, 2026-10-20): logged, never applied.
-WOULD_JOIN_COSINE = 0.92
-WOULD_JOIN_NAMES = 2
 
 _PUNCT = re.compile(r"[^\w\s]")
 _WS = re.compile(r"\s+")
-_TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9.'&-]*")
-#: Capitalized but not a name: function words and the words Title Case
-#: headlines capitalize most (feed review 3a's sample).
-_NOT_NAMES = frozenset(
-    "a an the and or but nor so yet in on at to for of with by from as into onto over under after before about "
-    "against between during without within it its this that these those he she they we you i his her their our "
-    "your who which what when where why how is are was were be been has have had will would can could may might "
-    "should not no vs live updates update preview prediction predictions picks pick odds game games week season "
-    "win wins won loss losses beat beats lead leads first new top best how watch report news takeaways keys "
-    "recap breaking official says said day night time today tonight more after".split())
 
 
 def normalize_title(title: str) -> str:
@@ -99,7 +84,7 @@ class Score:
     story_id: int
     cosine: float
     fuzz: float
-    #: The best member's title (for the shadow join's name check).
+    #: The best member's title.
     title: str = ""
 
 
@@ -113,9 +98,6 @@ class Decision:
     near_misses: tuple[Score, ...] = field(default=())
     #: A story the item matched but could not join because it was full.
     overflow: Score | None = None
-    #: Shadow only (owner, 2026-10-20): near misses the 0.92 + two-names rule
-    #: would join. Logged as 'would_join'; never joined.
-    would_join: tuple[Score, ...] = field(default=())
 
 
 def best_member(vector: Sequence[float], norm_title: str, cand: Candidate) -> Score:
@@ -127,26 +109,6 @@ def best_member(vector: Sequence[float], norm_title: str, cand: Candidate) -> Sc
             best_cos, best_title = c, m.title
     return Score(cand.story_id, best_cos, float(fuzz.token_set_ratio(norm_title, normalize_title(best_title))),
                  best_title)
-
-
-def names(title: str) -> set[str]:
-    """The title's proper-name tokens, lowercased: capitalized, at least two
-    letters, not a function word or a common headline word."""
-    out = set()
-    for raw in _TOKEN.findall(title):
-        w = raw.strip(".'&-")
-        if len(w) >= 2 and w[0].isupper() and w.lower() not in _NOT_NAMES:
-            out.add(w.lower())
-    return out
-
-
-def shared_names(a: str, b: str) -> set[str]:
-    return names(a) & names(b)
-
-
-def would_join(title: str, s: Score) -> bool:
-    """The shadow rule (never applied): cosine >= 0.92 and two shared names."""
-    return s.cosine >= WOULD_JOIN_COSINE and len(shared_names(title, s.title)) >= WOULD_JOIN_NAMES
 
 
 def joins(s: Score) -> str | None:
@@ -178,8 +140,7 @@ def assign(vector: Sequence[float], title: str, candidates: Sequence[Candidate])
                          and (chosen is None or s.story_id != chosen.story_id)),
                         key=lambda s: -s.cosine))
     return Decision(chosen.story_id if chosen else None, joins(chosen) if chosen else None,
-                    best, near, overflow if chosen is None else None,
-                    tuple(s for s in near if would_join(title, s)))
+                    best, near, overflow if chosen is None else None)
 
 
 def running_mean(centroid: Sequence[float], count: int, vector: Sequence[float]) -> list[float]:

@@ -15,7 +15,7 @@ headline-only. The Home/Sports queue leaves tech stories out
 headline (feed_for_you lists an unscored tech story; db/045).
 
 Per story the model returns summary (the Home rules: at most 2 sentences and
-35 words, nothing beyond the teaser, no 8-word run copied), entities, topics,
+40 words, nothing beyond the teaser, no 8-word run copied), entities, topics,
 `category` and `claimable` (the owner's one yes/no question, CREDITS_QUESTION).
 
 category (decide()): an official story takes the model's category; a

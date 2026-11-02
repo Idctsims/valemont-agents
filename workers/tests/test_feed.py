@@ -208,24 +208,21 @@ class Assignment(unittest.TestCase):
         self.assertIsNone(cluster.assign(at_cos(0.87), "Vaughn Taylor makes birdie on No. 13 at Constellation FURYK & FRIENDS",
                                          [furyk]).story_id)
 
-    def test_the_shadow_join_logs_but_never_joins(self) -> None:
-        """Feed review 3a (owner, 2026-10-20): cosine >= 0.92 and two shared
-        proper names is logged as would_join; clustering is unchanged."""
-        self.assertEqual((cluster.WOULD_JOIN_COSINE, cluster.WOULD_JOIN_NAMES), (0.92, 2))
+    def test_the_shadow_join_is_retired(self) -> None:
+        """Feed review 3a's would_join shadow ran Oct 20 to Nov 2 and is
+        retired (owner, 2026-11-02): a 0.938 near miss stays a near miss and
+        nothing else is computed or logged for it."""
         georgia = story(22079, ("No. 1 Georgia turns the ball over three times as Auburn shocks the Bulldogs", unit(0)))
         title = "Trio of turnovers haunts No. 1 Georgia in upset loss vs. Auburn"
         d = cluster.assign(at_cos(0.938), title, [georgia])
-        self.assertIsNone(d.story_id)                       # still no join
+        self.assertIsNone(d.story_id)
         self.assertEqual([s.story_id for s in d.near_misses], [22079])
-        self.assertEqual([s.story_id for s in d.would_join], [22079])
-        self.assertEqual(cluster.shared_names(title, georgia.members[0].title), {"georgia", "auburn"})
-        # Below 0.92, or one shared name, or only headline words: no would_join.
-        self.assertEqual(cluster.assign(at_cos(0.915), title, [georgia]).would_join, ())
-        self.assertEqual(cluster.assign(at_cos(0.93), "Georgia falls in a shocker", [georgia]).would_join, ())
-        preview = story(5, ("Week 7 Preview: Live Updates And Picks", unit(0)))
-        self.assertEqual(cluster.assign(at_cos(0.93), "Live Updates, Picks and Odds: Week 7", [preview]).would_join, ())
-        # A real join is not also a would_join.
-        self.assertEqual(cluster.assign(at_cos(0.95), title, [georgia]).would_join, ())
+        self.assertFalse(hasattr(d, "would_join"))
+        for gone in ("would_join", "WOULD_JOIN_COSINE", "shared_names"):
+            self.assertFalse(hasattr(cluster, gone), gone)
+        from pathlib import Path
+        root = Path(__file__).resolve().parents[1]
+        self.assertNotIn('"would_join"', (root / "feed" / "ingest.py").read_text(encoding="utf-8"))
 
     def test_the_best_member_counts_not_the_first(self) -> None:
         s = story(7, ("old angle", unit(5)), ("Verstappen takes pole in Singapore", unit(0)))
@@ -561,11 +558,15 @@ class SummaryValidator(unittest.TestCase):
         self.assertEqual(v.sport, "nfl")
 
     def test_too_long(self) -> None:
-        self.assertEqual((summarize.MAX_WORDS, summarize.MAX_SENTENCES), (35, 2))
-        summarize.validate(dict(GOOD, summary=" ".join(["word"] * 35) + "."), job(1))
-        with self.assertRaisesRegex(summarize.SummaryInvalid, "36 words; the cap is 35"):
-            summarize.validate(dict(GOOD, summary=" ".join(["word"] * 36) + "."), job(1))
-        self.assertIn("at most 35 words", summarize.SYSTEM)
+        # 40 words (owner, 2026-11-02; was 35): the shared cap, Tech too.
+        self.assertEqual((summarize.MAX_WORDS, summarize.MAX_SENTENCES), (40, 2))
+        summarize.validate(dict(GOOD, summary=" ".join(["word"] * 40) + "."), job(1))
+        with self.assertRaisesRegex(summarize.SummaryInvalid, "41 words; the cap is 40"):
+            summarize.validate(dict(GOOD, summary=" ".join(["word"] * 41) + "."), job(1))
+        self.assertIn("at most 40 words", summarize.SYSTEM)
+        from feed import tech
+        self.assertEqual(tech.MAX_WORDS, 40)
+        self.assertIn("at most 40 words", tech.SYSTEM)
         with self.assertRaisesRegex(summarize.SummaryInvalid, "sentences"):
             summarize.validate(dict(GOOD, summary="One. Two. Three."), job(1))
 
