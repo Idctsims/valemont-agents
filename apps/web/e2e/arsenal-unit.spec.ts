@@ -5,10 +5,10 @@ import { expect, test } from "@playwright/test";
 
 import { ARSENAL_VOICE, ARSENAL_VOICE_VERSION } from "../src/generated/arsenal-voice";
 import {
-  armPrompt, armProviderOptions, armSystem, cleanSourceUrl, FIRST_CARD_BAR_MS, normalizeKey, validateArmCard,
-  type ArmCardIn,
+  ARSENAL_CAP, armPrompt, armProviderOptions, armSystem, ArmSlate, ASK_CARDS, cleanSourceUrl, fillPrompt, normalizeKey,
+  rankArsenal, SHOW_CARDS, SLOW_REQUEST_MS, validateArmCard, type ArmCardIn, type ArsenalEntry,
 } from "../src/lib/arsenal/arm";
-import { parseArmLine } from "../src/lib/arsenal/arm-stream";
+import { parseArmLine, type ArmCard } from "../src/lib/arsenal/arm-stream";
 import {
   buildQuestions, MASK, maskTitle, nextCard, orderItems, quizSize, swapWord, weekStart, type QuizItem,
 } from "../src/lib/arsenal/quiz";
@@ -56,15 +56,80 @@ test("Arm Me speaks the pool's voice: the prompt carries prompts/arsenal_voice.m
   expect(system).toContain(ARSENAL_VOICE);
   expect(system).toContain("category:film_tv 1.30");
   expect(system).toContain("- crossing_the_rubicon: Crossing the Rubicon (seed)");
-  expect(system).toContain("At most ONE of the three may come from HIS ARSENAL");
-  expect(armPrompt("  Board call on the raise.  ", "boardroom")).toBe("The room: Board call on the raise.\nAll three play in the boardroom room.");
+  expect(system).toContain("At most ONE card may come from HIS ARSENAL");
+  expect(system).toContain("Give him exactly 4 references");
+  expect(armPrompt("  Board call on the raise.  ", "boardroom")).toBe("The room: Board call on the raise.\nAll of them play in the boardroom room.");
+});
+
+// ------------------------------------------------- always three (owner, 2026-11-03)
+
+const shownCard = (id: number, key: string, inArsenal = false): ArmCard => ({
+  id, canonical_key: key, category: "history_military", title: key, origin: "o", meaning: "m", deploy_line: "d",
+  room: "boardroom", source_work: "w", quote: null, quote_by: null, source_url: null, verification: "pending",
+  verification_note: null, status: inArsenal ? "dropped" : "arm", is_test: false, existing: inArsenal, held: false,
+  saved: false, in_arsenal: inArsenal,
+});
+
+test("request 28 replayed: a second From-your-Arsenal card is skipped and the spare fills its slot", () => {
+  expect([ASK_CARDS, SHOW_CARDS]).toEqual([4, 3]);
+  const slate = new ArmSlate();
+  // As on Nov 3: 1961 fresh, 714 from his Arsenal, then neil_mccauley_30_second_rule (also his).
+  expect(slate.offer(shownCard(1961, "fresh_one"))).toBe(true);
+  expect(slate.offer(shownCard(714, "apple_microsoft_150m", true))).toBe(true);
+  expect(slate.offer(shownCard(9, "neil_mccauley_30_second_rule", true))).toBe(false);
+  expect(slate.missing).toBe(1);
+  // The fourth card, the spare: shown, so three.
+  expect(slate.offer(shownCard(1999, "spare_card"))).toBe(true);
+  expect(slate.shown.map((c) => c.id)).toEqual([1961, 714, 1999]);
+  expect(slate.full).toBe(true);
+  expect(slate.notes).toEqual(["a second From-your-Arsenal card (neil_mccauley_30_second_rule) was not shown"]);
+});
+
+test("request 29 replayed with no spare: the slate is short, so the route's fill-up call asks for fresh ones", () => {
+  const slate = new ArmSlate();
+  slate.offer(shownCard(714, "apple_microsoft_150m", true));
+  slate.offer(shownCard(1962, "the_cleveland_massacre"));
+  slate.offer(shownCard(8, "moneyball_oakland", true)); // suppressed, as on Nov 3
+  slate.skip("left out: origin missing or out of bounds"); // the spare was invalid
+  expect(slate.full).toBe(false);
+  expect(slate.missing).toBe(1);
+  const fill = fillPrompt("Board call on the raise", "pitch", slate.missing + 1, slate.keys());
+  expect(fill).toContain("Give exactly 2 more, each fresh: from_arsenal false");
+  expect(fill).toContain("apple_microsoft_150m, the_cleveland_massacre");
+  expect(slate.offer(shownCard(2001, "fresh_fill"))).toBe(true);
+  expect(slate.offer(shownCard(2002, "fresh_fill_spare"))).toBe(false); // full: the spare is not needed
+  expect(slate.shown).toHaveLength(3);
+});
+
+test("a duplicate never takes a slot", () => {
+  const slate = new ArmSlate();
+  slate.offer(shownCard(5, "same"));
+  expect(slate.offer(shownCard(5, "same"))).toBe(false);
+  expect(slate.notes).toEqual(["a duplicate (same) was left out"]);
+});
+
+test("HIS ARSENAL is capped to the most relevant, words first, then saved, room and taste", () => {
+  const many: ArsenalEntry[] = Array.from({ length: 80 }, (_, i) => ({
+    key: `ref_${i}`, title: `Reference ${i}`, kind: "dropped", category: "sports", room: "homies", id: i,
+  }));
+  many.push({ key: "see_s_candies", title: "See's Candies pricing", kind: "seed", category: "finance_business", room: "pitch", id: 200 });
+  many.push({ key: "old_save", title: "An old save", kind: "saved", category: "philosophy", room: "homies", id: 1 });
+  const top = rankArsenal(many, "pitching our pricing to investors", { "category:sports": 0.8 }, "pitch");
+  expect(top).toHaveLength(ARSENAL_CAP);
+  expect(top[0].key).toBe("see_s_candies"); // shares "pricing"
+  expect(top[1].key).toBe("old_save"); // saved
+  expect(top[2].id).toBe(79); // then newest
+  expect(rankArsenal(many.slice(0, 3), "x", {}, null)).toHaveLength(3);
+});
+
+test("the speed bar is well under a minute, not 10 s", () => {
+  expect(SLOW_REQUEST_MS).toBe(60_000);
 });
 
 test("Arm Me's thinking is set explicitly at its lowest: Wags' settings", () => {
   // src/lib/ai/claude.ts chatProviderOptions (server-only, so its values are pinned here).
   expect(armProviderOptions("claude-sonnet-5-5")).toEqual({ anthropic: { thinking: { type: "between_tools" }, effort: "low" } });
   expect(armProviderOptions("claude-haiku-5-5")).toEqual({ anthropic: { thinking: { type: "disabled" } } });
-  expect(FIRST_CARD_BAR_MS).toBe(10_000);
 });
 
 const card = (over: Partial<ArmCardIn> = {}): ArmCardIn => ({

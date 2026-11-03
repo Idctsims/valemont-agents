@@ -587,9 +587,31 @@ Code: `db/059_arsenal_phase2.sql`; `apps/web/src/app/api/arsenal/arm/route.ts`,
     `total_ms` to the end; both are server clocks from the request's start
     (the POST handler's first statement, so auth, the rate limit, the
     budget, the prompt reads and the model all count).
-  - **The 10 s bar is a stop, not a tuning target (owner, Oct 21).** A real
-    request whose card 1 is over 10 s (or never comes) is reported, and the
-    request's own `note` says "first card over 10 s (N ms)".
+  - ~~**The 10 s bar is a stop, not a tuning target (owner, Oct 21).**~~
+    **Superseded 2026-11-03 (owner): the 10 s target is dropped; Arm Me's
+    speed bar is "well under a minute."** The first 5 real requests (Nov 3;
+    25, 28–31) took 9.2–11.5 s in total (first card 4.8–7.5 s) and pass. No
+    split into pick and card calls, and no timing instrumentation. A request
+    over 60 s says so in its own `note` (`SLOW_REQUEST_MS`).
+  - **Always three cards (owner, 2026-11-03).** Requests 28 and 29 showed
+    two: the model wrote a fresh-looking card whose key was already in the
+    Arsenal (`neil_mccauley_30_second_rule`, `moneyball_oakland`), the
+    database returned it as "From your Arsenal", and a second one is never
+    shown. Now:
+    - the model is asked for **four**, best first, and the page shows the
+      first three that pass (`ArmSlate`: no second From-your-Arsenal card,
+      no duplicate, no invalid card; each one left out is named in the note);
+    - if a slot is still empty when the stream ends, **one fill-up call**
+      asks for fresh cards (missing + 1, `from_arsenal` false, none of the
+      keys shown or listed), and its usage joins the same `ai_usage` row;
+    - two cards are never the design; if the fill-up still leaves one short,
+      the request records the error.
+  - **HIS ARSENAL is capped to 30 entries (owner, 2026-11-03),** ranked by
+    `rankArsenal`: 3 per word shared with the situation, +2 saved, +1 in the
+    picked room, plus the category's weight; newer first on ties. It was
+    every seed, dropped and saved reference (~90 on Nov 3, ~1,750 tokens of
+    the ~5,200 input). A key left out is not lost: written anyway, it comes
+    back as the owner's and counts as the one From-your-Arsenal card.
   - **Thinking is set explicitly at its lowest** (`armProviderOptions`,
     Wags' settings): Sonnet `between_tools` at effort `low`; Haiku
     `disabled`.
