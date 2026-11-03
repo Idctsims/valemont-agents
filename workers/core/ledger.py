@@ -5158,10 +5158,59 @@ def arsenal_title_hook_draft(hook_id: int, title_id: int, refs: Sequence[tuple[A
             dup += word_id is None
         status = "drafted" if ids else "failed"
         full_note = "; ".join(x for x in (note, f"{dup} already in the Arsenal" if dup else None) if x) or None
-        c.execute("UPDATE arsenal_title_hooks SET status = %s, ref_ids = %s, word_id = %s, ai_usage_id = %s, note = %s "
-                  "WHERE id = %s",
-                  (status, ids, word_id, ai_usage_id, full_note[:500] if full_note else None, hook_id))
+        c.execute(HOOK_SETTLE_SQL, {"status": status, "ref_ids": ids, "word_id": word_id, "usage": ai_usage_id,
+                                    "note": full_note, "id": hook_id})
     return HookDraft(status, tuple(ids), word_id, dup)
+
+
+#: The hook's one move. Its note is APPENDED to any note it already carries
+#: (a backfill's "backfill (by ...)" survives the draft).
+HOOK_SETTLE_SQL: Final = """
+    UPDATE arsenal_title_hooks
+       SET status = %(status)s, ref_ids = %(ref_ids)s::bigint[], word_id = %(word_id)s, ai_usage_id = %(usage)s,
+           note = left(nullif(concat_ws('; ', note, %(note)s::text), ''), 500)
+     WHERE id = %(id)s
+"""
+
+
+#: BACKFILL (owner, 2026-11-03): real titles currently Finished with no hook
+#: (finished before db/062), oldest finish first, each with its latest
+#: finished move (the hook's watch_status_id). tests_live runs this text.
+ARSENAL_HOOK_BACKFILL_SQL: Final = """
+    SELECT c.title_id, t.name,
+           (SELECT w.id FROM watch_status w WHERE w.title_id = c.title_id AND w.status = 'finished'
+             ORDER BY w.created_at DESC, w.id DESC LIMIT 1)
+      FROM v_watch_current c
+      JOIN titles t ON t.id = c.title_id
+     WHERE c.status = 'finished' AND NOT c.is_test AND NOT t.is_test
+       AND NOT EXISTS (SELECT 1 FROM arsenal_title_hooks h WHERE h.title_id = c.title_id)
+     ORDER BY c.finished_at, c.title_id
+"""
+
+
+def arsenal_hook_backfill_candidates(*, conn: psycopg.Connection | None = None) -> list[tuple[int, str, int]]:
+    """(title_id, name, watch_status_id) of every real Finished title with no hook."""
+    with _brief_conn(conn) as c:
+        return [(int(r[0]), r[1], int(r[2])) for r in c.execute(ARSENAL_HOOK_BACKFILL_SQL).fetchall()]
+
+
+def arsenal_hook_backfill(title_id: int, watch_status_id: int, by: str, *,
+                          conn: psycopg.Connection | None = None) -> int | None:
+    """ONE transaction: the title's hook (queued, its note "backfill (by
+    ...)") and ONE arsenal_title_hook job, as db/062's trigger would have
+    written them. None (and nothing written) when the title already has a
+    hook: once per title still holds."""
+    with _brief_conn(conn) as c, c.transaction():
+        row = c.execute(
+            "INSERT INTO arsenal_title_hooks (title_id, watch_status_id, note) VALUES (%s, %s, %s) "
+            "ON CONFLICT (title_id) DO NOTHING RETURNING id",
+            (title_id, watch_status_id, f"backfill ({by})"[:500])).fetchone()
+        if row is None:
+            return None
+        hook_id = int(row[0])
+        c.execute("INSERT INTO job_queue (kind, payload) VALUES (%s, %s)",
+                  (ARSENAL_TITLE_HOOK_KIND, Jsonb({"hook_id": hook_id, "title_id": title_id, "backfill": by[:200]})))
+    return hook_id
 
 
 def arsenal_title_hook_fail(hook_id: int, note: str, *, ai_usage_id: int | None = None, rerun_by: str | None = None,
@@ -5169,8 +5218,8 @@ def arsenal_title_hook_fail(hook_id: int, note: str, *, ai_usage_id: int | None 
     """The hook's one move to failed (the model refused, or no card passed)."""
     with _brief_conn(conn) as c, c.transaction():
         _hook_rerun(c, hook_id, rerun_by)
-        c.execute("UPDATE arsenal_title_hooks SET status = 'failed', ai_usage_id = %s, note = %s WHERE id = %s",
-                  (ai_usage_id, note[:500], hook_id))
+        c.execute(HOOK_SETTLE_SQL, {"status": "failed", "ref_ids": [], "word_id": None, "usage": ai_usage_id,
+                                    "note": note, "id": hook_id})
 
 
 #: STRANDED HOOKS (arsenal/hook.py sweep_job): real hooks whose job failed

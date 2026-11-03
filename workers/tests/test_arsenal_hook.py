@@ -360,6 +360,58 @@ class Credit(NoDatabase):
         self.assertEqual(hook.sweep_job(run_one=flaky).job_note, "no stranded hooks")
 
 
+class Backfill(NoDatabase):
+    """Owner, 2026-11-03: the real titles Finished before db/062 are queued
+    once each by a recorded run (scripts.arsenal_title_hook --backfill)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        from scripts import arsenal_title_hook as script
+        self.script = script
+        self.queued: list[tuple] = []
+        self.patch("arsenal_hook_backfill_candidates", lambda: [(11, "Heat", 101), (12, "Ozark", 102)])
+        self.patch("arsenal_hook_backfill", lambda t, ws, by: self.queued.append((t, ws, by)) or (None if t == 12 else 900))
+        self.patch("close_pool", lambda: None)
+        p = mock.patch.object(script, "load_env", lambda: None)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def run_main(self, *argv: str) -> tuple[int, str]:
+        import contextlib
+        import io
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = self.script.main(list(argv))
+        return code, out.getvalue()
+
+    def test_a_dry_run_lists_and_writes_nothing(self) -> None:
+        code, out = self.run_main("--backfill", "--by", "owner Nov 3", "--dry-run")
+        self.assertEqual((code, self.queued), (0, []))
+        self.assertIn("2 real Finished title(s) with no hook (dry run: nothing written)", out)
+        self.assertIn("title 11 'Heat': would queue (finish 101)", out)
+
+    def test_each_title_is_queued_once_with_who(self) -> None:
+        code, out = self.run_main("--backfill", "--by", " owner Nov 3 ")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.queued, [(11, 101, "owner Nov 3"), (12, 102, "owner Nov 3")])
+        self.assertIn("title 11 'Heat': hook 900 queued", out)
+        self.assertIn("title 12 'Ozark': has a hook now; skipped", out)
+
+    def test_who_is_required_and_flags_do_not_mix(self) -> None:
+        for argv in (["--backfill"], ["--hook", "5", "--rerun"], ["--hook", "5", "--dry-run"],
+                     ["--backfill", "--rerun", "--by", "x"], ["--hook", "5", "--backfill", "--by", "x"]):
+            with self.subTest(argv=argv), self.assertRaises(SystemExit), \
+                    mock.patch("sys.stderr", new=__import__("io").StringIO()):
+                self.script.main(argv)
+        self.assertEqual(self.queued, [])
+
+    def test_the_sql_takes_real_finished_titles_with_no_hook_and_the_note_survives(self) -> None:
+        sql = ledger.ARSENAL_HOOK_BACKFILL_SQL
+        for part in ("c.status = 'finished'", "NOT c.is_test", "NOT EXISTS (SELECT 1 FROM arsenal_title_hooks h"):
+            self.assertIn(part, sql)
+        self.assertIn("concat_ws('; ', note, %(note)s::text)", ledger.HOOK_SETTLE_SQL)
+
+
 class LedgerText(unittest.TestCase):
     def test_a_title_card_is_written_with_its_origin_and_title(self) -> None:
         self.assertIn("source_title_id, embedding", ledger.ARSENAL_INSERT_REF_SQL)

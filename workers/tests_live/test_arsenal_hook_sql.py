@@ -191,6 +191,24 @@ class WorkerWrite(HookCase):
             self.assertEqual(d.status, "drafted")
             self.assertEqual(conn.execute("SELECT old_status, by_whom FROM arsenal_title_hook_reruns WHERE hook_id = %s",
                                           (hook_id,)).fetchall(), [("failed", "tests_live")])
+            # The note is appended, never replaced: the failure stays on record.
+            self.assertEqual(ledger.arsenal_title_hook(hook_id, conn=conn).note, "tl: no card passed; rerun")
+
+    def test_backfill_takes_only_titles_with_no_hook_and_never_a_second(self) -> None:
+        with _rolled_back() as conn:
+            tid, hook_id = self.finished(conn)
+            jobs = self.jobs(conn, tid)
+            ws = conn.execute("SELECT watch_status_id FROM arsenal_title_hooks WHERE id = %s", (hook_id,)).fetchone()[0]
+            self.assertNotIn(tid, [t for t, _, _ in ledger.arsenal_hook_backfill_candidates(conn=conn)])
+            self.assertIsNone(ledger.arsenal_hook_backfill(tid, ws, "tests_live", conn=conn))
+            self.assertEqual((len(self.hooks(conn, tid)), self.jobs(conn, tid)), (1, jobs))
+            # Every candidate is a real title currently Finished, with no hook (the
+            # production read; ids, names and a move id only).
+            for t, _, ws_id in ledger.arsenal_hook_backfill_candidates(conn=conn):
+                self.assertEqual(conn.execute(
+                    "SELECT c.status, c.is_test, EXISTS (SELECT 1 FROM arsenal_title_hooks h WHERE h.title_id = c.title_id), "
+                    "(SELECT w.title_id FROM watch_status w WHERE w.id = %s) FROM v_watch_current c WHERE c.title_id = %s",
+                    (ws_id, t)).fetchone(), ("finished", False, False, t))
 
     def test_context_lists_real_hooks_only(self) -> None:
         with _rolled_back() as conn:
