@@ -115,4 +115,36 @@ test.describe("owner", () => {
     await expect(page).toHaveURL(new RegExp(`${titlePage()}$`));
     await expect(page.getByTestId("title-arsenal")).toBeVisible();
   });
+
+  test("a long title's From line ends in an ellipsis at 390 px, never clipped", async () => {
+    const long = `${P}The Extraordinarily Long and Winding Saga of the Family Business That Would Not Sell ${stamp}`;
+    const t = await addTestTitle({ kind: "movie", name: long });
+    await page.goto(`/screening/title/movie/${t.tmdbId}`);
+    await page.getByTestId("shelf-finished").click();
+    await expect(page.getByTestId("shelf-buttons")).toHaveAttribute("aria-busy", "false");
+    await addTestTitleHookCards(t.id, 1);
+    const [cardId] = await titleHookCards(t.id);
+    await addTestSave({ refId: cardId });
+
+    expect(page.viewportSize()!.width).toBe(390);
+    await page.goto("/arsenal/saved");
+    const item = page.locator(`[data-testid="saved-item"][data-id="${cardId}"]`);
+    const name = item.getByTestId("card-from-title-name");
+    await expect(item.getByTestId("card-from-title")).toHaveText(long); // the whole name is still there
+    await expect(item.getByTestId("card-from-title")).toHaveAttribute("title", long);
+    const box = await name.evaluate((el) => {
+      const s = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      const card = el.closest('[data-testid="saved-item"]')!.getBoundingClientRect();
+      return { overflow: s.textOverflow, wrap: s.whiteSpace, hidden: s.overflowX, cut: el.scrollWidth > el.clientWidth,
+               right: r.right, cardRight: card.right, page: document.documentElement.scrollWidth };
+    });
+    expect(box.overflow).toBe("ellipsis");
+    expect(box.wrap).toBe("nowrap");
+    expect(box.hidden).toBe("hidden");
+    expect(box.cut).toBe(true); // long enough that it really truncates
+    expect(box.right).toBeLessThanOrEqual(box.cardRight + 0.5);
+    expect(box.right).toBeLessThanOrEqual(390);
+    expect(box.page).toBeLessThanOrEqual(390); // no horizontal page scroll
+  });
 });

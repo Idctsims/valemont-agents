@@ -51,11 +51,14 @@ export function RefCardBody({ c, children }: { c: CardData; children?: React.Rea
         {c.isTest && <TestTag />}
       </div>
       {c.fromTitle && (
-        <p className="flex items-center gap-1 text-sm text-text-muted">
-          From
-          <Link href={c.fromTitle.href} data-testid="card-from-title"
-                className="tap inline-flex min-w-0 items-center truncate px-1 text-accent underline-offset-2 hover:underline">
-            {c.fromTitle.name}
+        // One line: a long title ends in an ellipsis, never clipped mid-glyph
+        // (owner, Nov 3). The ellipsis lives on the inner span: in a flex row
+        // a bare text node is an anonymous item that text-overflow cannot cut.
+        <p className="flex w-full min-w-0 items-center gap-1 text-sm text-text-muted">
+          <span className="shrink-0">From</span>
+          <Link href={c.fromTitle.href} data-testid="card-from-title" title={c.fromTitle.name}
+                className="tap flex min-w-0 items-center px-1 text-accent underline-offset-2 hover:underline">
+            <span data-testid="card-from-title-name" className="min-w-0 truncate">{c.fromTitle.name}</span>
           </Link>
         </p>
       )}
