@@ -125,6 +125,14 @@
     arsenal_arm_sweep 6 h    and 9 min after boot: saved Arm Me cards whose one
                              verify job failed for good, finished directly,
                              at most 5 a run (arsenal/arm.py sweep_job).
+    arsenal_title_hook queued (job_queue kind arsenal_title_hook, db/062):
+                             a title first marked finished drafts 3-5
+                             references and a Power Word (Sonnet), then each
+                             is verified and outcome-checked; once per title,
+                             ever (arsenal/hook.py).
+    arsenal_title_hook_sweep 6 h, 11 min after boot: hooks whose one job
+                             failed for good, finished directly, at most 3 a
+                             run (arsenal/hook.py sweep_job).
     arsenal_drop     daily   05:30, then every 30 min to 21:30 America/Chicago,
                              and at boot: today's drop (db/054
                              arsenal_pick_drop, zero AI calls). A no-op once
@@ -151,6 +159,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from arsenal import arm as arsenal_arm
 from arsenal import collect as arsenal_collect
 from arsenal import drop as arsenal_drop
+from arsenal import hook as arsenal_hook
 from arsenal import outcome as arsenal_outcome
 from arsenal import pool as arsenal_pool
 from arsenal import verify as arsenal_verify
@@ -440,6 +449,9 @@ QUEUE_HANDLERS: dict[str, QueueHandler] = {
     # db/059: a saved Arm Me card, queued once by the save's trigger.
     ledger.ARSENAL_ARM_VERIFY_KIND: lambda payload: run_tracked(
         replace(ARSENAL_ARM_VERIFY, fn=lambda: arsenal_arm.arm_verify_job(payload))),
+    # db/062: a title first marked finished, queued once ever by its trigger.
+    ledger.ARSENAL_TITLE_HOOK_KIND: lambda payload: run_tracked(
+        replace(ARSENAL_TITLE_HOOK, fn=lambda: arsenal_hook.hook_job(payload))),
 }
 
 
@@ -603,6 +615,9 @@ ARSENAL_OUTCOME = SystemJob("arsenal_outcome", 8 * 24 * 60 * 60, IntervalTrigger
 #: come, so a year's interval: the monitor watches its failures, not its gaps.
 ARSENAL_ARM_VERIFY = SystemJob("arsenal_arm_verify", 366 * 24 * 60 * 60, IntervalTrigger(days=366),
                                lambda: None, scheduled=False)
+#: Run per finished title (db/062), never scheduled: finishes are sporadic.
+ARSENAL_TITLE_HOOK = SystemJob("arsenal_title_hook", 366 * 24 * 60 * 60, IntervalTrigger(days=366),
+                               lambda: None, scheduled=False)
 
 
 def _chain(*jobs: SystemJob) -> None:
@@ -734,6 +749,10 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
         # Saved Arm Me cards whose one verify job failed for good (arsenal/arm.py).
         SystemJob(arsenal_arm.SWEEP_JOB, arsenal_arm.SWEEP_S, IntervalTrigger(seconds=arsenal_arm.SWEEP_S),
                   arsenal_arm.sweep_job, misfire_grace=3600, start_delay_s=540),
+        ARSENAL_TITLE_HOOK,
+        # Hooks whose one job failed for good (arsenal/hook.py).
+        SystemJob(arsenal_hook.SWEEP_JOB, arsenal_hook.SWEEP_S, IntervalTrigger(seconds=arsenal_hook.SWEEP_S),
+                  arsenal_hook.sweep_job, misfire_grace=3600, start_delay_s=660),
     ]
     if env.get("HEALTH_DRILL", "").strip().lower() == "true":
         log.warning("HEALTH_DRILL=true: scheduling health_drill, which always fails")

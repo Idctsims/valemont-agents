@@ -174,8 +174,19 @@ class WatchHistory(ScreeningSqlCase):
         with _rolled_back() as conn:
             tid = self.title(conn)
             self.move(conn, tid, "want")
+            # Every table that references watch_status, from the catalog (db/042's
+            # lesson: TRUNCATE checks foreign keys before any trigger; db/062's
+            # arsenal_title_hooks references it).
+            tables = {"watch_status"}
+            while True:
+                more = {r[0] for r in conn.execute(
+                    "SELECT DISTINCT c.conrelid::regclass::text FROM pg_constraint c "
+                    "WHERE c.contype = 'f' AND c.confrelid::regclass::text = ANY(%s)", (sorted(tables),)).fetchall()}
+                if more <= tables:
+                    break
+                tables |= more
             for sql in ("UPDATE watch_status SET status = 'finished' WHERE title_id = %(t)s",
-                        "DELETE FROM watch_status WHERE title_id = %(t)s", "TRUNCATE watch_status"):
+                        "DELETE FROM watch_status WHERE title_id = %(t)s", "TRUNCATE " + ", ".join(sorted(tables))):
                 with self.subTest(sql=sql[:20]), self.assertRaises(psycopg.errors.RaiseException), conn.transaction():
                     conn.execute(sql, {"t": tid})
 

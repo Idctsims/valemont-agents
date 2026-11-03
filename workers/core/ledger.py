@@ -5035,23 +5035,29 @@ def arsenal_near_dup(vector: Sequence[float], threshold: float, *, conn: psycopg
                               (_vec_text(vector), threshold)).fetchone()[0])
 
 
+#: tests/ checks the text: a pool card, or (db/062) a finished title's card.
+ARSENAL_INSERT_REF_SQL: Final = """
+    INSERT INTO arsenal_refs (canonical_key, category, title, origin, meaning, deploy_line, room, source_work,
+                              quote, quote_by, source_kind, source_page, status, origin_kind, pool_run_id,
+                              source_title_id, embedding)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pool', %s, %s, %s, %s::extensions.halfvec)
+    ON CONFLICT (canonical_key) DO NOTHING
+    RETURNING id
+"""
+
+
 def arsenal_insert_ref(card: ArsenalCardIn, *, pool_run_id: int | None, vector: Sequence[float] | None,
-                       conn: psycopg.Connection | None = None) -> int | None:
+                       source_title_id: int | None = None, conn: psycopg.Connection | None = None) -> int | None:
     """A new real pool reference, pending. None when the key already exists
-    (UNIQUE canonical_key: never a repeat)."""
+    (UNIQUE canonical_key: never a repeat). With `source_title_id` it is a
+    finished title's card (db/062 origin 'title_hook')."""
+    origin = "pool" if source_title_id is None else "title_hook"
     with _brief_conn(conn) as c:
         row = c.execute(
-            """
-            INSERT INTO arsenal_refs (canonical_key, category, title, origin, meaning, deploy_line, room, source_work,
-                                      quote, quote_by, source_kind, source_page, status, origin_kind, pool_run_id,
-                                      embedding)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pool', 'pool', %s, %s::extensions.halfvec)
-            ON CONFLICT (canonical_key) DO NOTHING
-            RETURNING id
-            """,
+            ARSENAL_INSERT_REF_SQL,
             (card.canonical_key, card.category, card.title, card.origin, card.meaning, card.deploy_line, card.room,
-             card.source_work, card.quote, card.quote_by, card.source_kind, card.source_page, pool_run_id,
-             _vec_text(vector) if vector is not None else None)).fetchone()
+             card.source_work, card.quote, card.quote_by, card.source_kind, card.source_page, origin, pool_run_id,
+             source_title_id, _vec_text(vector) if vector is not None else None)).fetchone()
     return None if row is None else int(row[0])
 
 
@@ -5064,6 +5070,140 @@ def arsenal_insert_word(word: ArsenalWordIn, *, pool_run_id: int | None,
             "ON CONFLICT (lemma) DO NOTHING RETURNING id",
             (word.lemma, word.meaning, word.room, word.sentence, pool_run_id)).fetchone()
     return None if row is None else int(row[0])
+
+
+# ------------------------------------------------- the Screening Room hook (db/062)
+
+#: Queued by the database when a title is first marked finished
+#: (watch_status_title_hook, once per title ever); arsenal/hook.py.
+ARSENAL_TITLE_HOOK_KIND: Final = "arsenal_title_hook"
+
+
+@dataclass(frozen=True)
+class ArsenalTitleHook:
+    id: int
+    title_id: int
+    status: str
+    ref_ids: tuple[int, ...]
+    word_id: int | None
+    is_test: bool
+    created_at: datetime
+    settled_at: datetime | None
+    note: str | None
+
+
+def arsenal_title_hook(hook_id: int, *, conn: psycopg.Connection | None = None) -> ArsenalTitleHook | None:
+    with _brief_conn(conn) as c:
+        r = c.execute("SELECT id, title_id, status, ref_ids, word_id, is_test, created_at, settled_at, note "
+                      "FROM arsenal_title_hooks WHERE id = %s", (hook_id,)).fetchone()
+    return None if r is None else ArsenalTitleHook(int(r[0]), int(r[1]), r[2], tuple(int(x) for x in r[3] or ()),
+                                                   None if r[4] is None else int(r[4]), bool(r[5]), r[6], r[7], r[8])
+
+
+@dataclass(frozen=True)
+class TitleForHook:
+    """What the hook's prompt reads of a finished title (db/051, db/053)."""
+    id: int
+    name: str
+    kind: str
+    year: int | None
+    overview: str | None
+    genres: tuple[str, ...]
+    keywords: tuple[str, ...]
+
+
+def arsenal_title_for_hook(title_id: int, *, conn: psycopg.Connection | None = None) -> TitleForHook | None:
+    with _brief_conn(conn) as c:
+        r = c.execute("SELECT id, name, kind, extract(year FROM release_date)::int, overview, genres, keywords "
+                      "FROM titles WHERE id = %s", (title_id,)).fetchone()
+    return None if r is None else TitleForHook(int(r[0]), r[1], r[2], r[3], r[4], tuple(r[5] or ()), tuple(r[6] or ()))
+
+
+@dataclass(frozen=True)
+class HookDraft:
+    """What arsenal_title_hook_draft wrote: the hook's new state."""
+    status: str
+    ref_ids: tuple[int, ...]
+    word_id: int | None
+    skipped_dup: int
+
+
+def _hook_rerun(c: psycopg.Connection, hook_id: int, rerun_by: str | None) -> None:
+    if rerun_by is not None:
+        c.execute("INSERT INTO arsenal_title_hook_reruns (hook_id, old_status, by_whom) VALUES (%s, 'failed', %s)",
+                  (hook_id, rerun_by[:200]))
+
+
+def arsenal_title_hook_draft(hook_id: int, title_id: int, refs: Sequence[tuple[ArsenalCardIn, Sequence[float] | None]],
+                             word: ArsenalWordIn | None, *, ai_usage_id: int | None, note: str | None,
+                             rerun_by: str | None = None, conn: psycopg.Connection | None = None) -> HookDraft:
+    """ONE transaction: the cards (title_hook, pool, pending), the word, and
+    the hook's one move: drafted with what was written, or failed when no
+    card was (a key that exists is a UNIQUE skip, counted). A hand re-run of
+    a failed hook (`rerun_by`) writes its arsenal_title_hook_reruns row first,
+    which db/062's guard requires."""
+    with _brief_conn(conn) as c, c.transaction():
+        _hook_rerun(c, hook_id, rerun_by)
+        ids: list[int] = []
+        dup = 0
+        for card, vec in refs:
+            new_id = arsenal_insert_ref(card, pool_run_id=None, vector=vec, source_title_id=title_id, conn=c)
+            if new_id is None:
+                dup += 1
+            else:
+                ids.append(new_id)
+        word_id = None
+        if ids and word is not None:
+            word_id = arsenal_insert_word(word, pool_run_id=None, conn=c)
+            dup += word_id is None
+        status = "drafted" if ids else "failed"
+        full_note = "; ".join(x for x in (note, f"{dup} already in the Arsenal" if dup else None) if x) or None
+        c.execute("UPDATE arsenal_title_hooks SET status = %s, ref_ids = %s, word_id = %s, ai_usage_id = %s, note = %s "
+                  "WHERE id = %s",
+                  (status, ids, word_id, ai_usage_id, full_note[:500] if full_note else None, hook_id))
+    return HookDraft(status, tuple(ids), word_id, dup)
+
+
+def arsenal_title_hook_fail(hook_id: int, note: str, *, ai_usage_id: int | None = None, rerun_by: str | None = None,
+                            conn: psycopg.Connection | None = None) -> None:
+    """The hook's one move to failed (the model refused, or no card passed)."""
+    with _brief_conn(conn) as c, c.transaction():
+        _hook_rerun(c, hook_id, rerun_by)
+        c.execute("UPDATE arsenal_title_hooks SET status = 'failed', ai_usage_id = %s, note = %s WHERE id = %s",
+                  (ai_usage_id, note[:500], hook_id))
+
+
+#: STRANDED HOOKS (arsenal/hook.py sweep_job): real hooks whose job failed
+#: for good: still queued, or drafted with a card or the word still pending,
+#: or a checked card with no outcome check on record; with no
+#: arsenal_title_hook job queued or running for them, written more than
+#: `min_age_h` hours ago. Oldest first. tests_live runs this exact text.
+ARSENAL_STRANDED_HOOKS_SQL: Final = """
+    SELECT h.id
+      FROM arsenal_title_hooks h
+     WHERE NOT h.is_test
+       AND (h.status = 'queued'
+            OR (h.status = 'drafted'
+                AND (EXISTS (SELECT 1 FROM arsenal_refs r
+                              WHERE r.id = ANY (h.ref_ids)
+                                AND (r.verification = 'pending'
+                                     OR (r.verification IN ('verified', 'corrected')
+                                         AND NOT EXISTS (SELECT 1 FROM arsenal_outcome_checks oc
+                                                          WHERE oc.ref_id = r.id))))
+                     OR EXISTS (SELECT 1 FROM arsenal_words w WHERE w.id = h.word_id AND w.verification = 'pending'))))
+       AND NOT EXISTS (SELECT 1 FROM job_queue q
+                        WHERE q.kind = 'arsenal_title_hook' AND q.payload ->> 'hook_id' = h.id::text
+                          AND q.status IN ('queued', 'running'))
+       AND h.created_at < now() - make_interval(hours => %(min_age_h)s)
+     ORDER BY h.created_at, h.id
+     LIMIT %(limit)s
+"""
+
+
+def arsenal_stranded_title_hooks(limit: int, min_age_h: int, *, conn: psycopg.Connection | None = None) -> list[int]:
+    with _brief_conn(conn) as c:
+        return [int(r[0]) for r in c.execute(ARSENAL_STRANDED_HOOKS_SQL,
+                                             {"limit": limit, "min_age_h": min_age_h}).fetchall()]
 
 
 def arsenal_unembedded(*, conn: psycopg.Connection | None = None) -> list[tuple[int, str, str]]:
