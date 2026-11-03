@@ -12,6 +12,7 @@ import { CATEGORIES, ROOMS, quoteCredit, type Category, type Room } from "./type
 
 export { CATEGORIES, ROOMS };
 export { MAX_SITUATION, parseArmLine, type ArmCard, type ArmLine } from "./arm-stream";
+import type { ArmCard } from "./arm-stream";
 export const SOURCE_KINDS = ["wikipedia", "wikiquote", "other"] as const;
 
 export const MAX_QUOTE_WORDS = 15;
@@ -52,9 +53,19 @@ export const armCardSchema = z.object({
 });
 export type ArmCardIn = z.infer<typeof armCardSchema>;
 
-/** The owner's latency bar (MASTER_PLAN §6 Chat 5): card 1 on the wire
- *  within 10 s of the request's start, or the request says so. */
-export const FIRST_CARD_BAR_MS = 10_000;
+/** The owner's speed bar (2026-11-03, replacing the dropped 10 s target):
+ *  "well under a minute". A request slower than this says so in its row. */
+export const SLOW_REQUEST_MS = 60_000;
+
+/** Cards shown, always (owner, 2026-11-03: never 2). */
+export const SHOW_CARDS = 3;
+/** Cards asked for: one spare fills a suppressed slot. */
+export const ASK_CARDS = 4;
+/** The fill-up call asks for this many more than are missing. */
+export const FILL_SPARE = 1;
+/** HIS ARSENAL in the prompt: the most relevant entries only (owner,
+ *  2026-11-03: ~30 titles and keys; it was all ~90, ~1,750 tokens). */
+export const ARSENAL_CAP = 30;
 
 /**
  * Arm Me's thinking, at its lowest, set explicitly (owner, Oct 21; Wags'
@@ -120,7 +131,96 @@ export function validateArmCard(item: ArmCardIn): { card: ArmCardIn; why: null }
 }
 
 /** "The Godfather (1972) — the Arsenal key never_tell_anybody…" lines. */
-export type ArsenalEntry = { key: string; title: string; kind: "seed" | "dropped" | "saved" };
+export type ArsenalEntry = {
+  key: string;
+  title: string;
+  kind: "seed" | "dropped" | "saved";
+  category?: Category;
+  room?: Room;
+  /** arsenal_refs.id: newer breaks ties. */
+  id?: number;
+};
+
+const STOP = new Set(["the", "and", "for", "with", "that", "this", "from", "into", "about", "your", "have", "will",
+  "what", "when", "they", "them", "their", "then", "than", "been", "were", "just", "call", "meeting"]);
+
+function words(text: string): Set<string> {
+  return new Set(text.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !STOP.has(w)));
+}
+
+/**
+ * The ARSENAL_CAP entries most relevant to this request, best first (owner,
+ * 2026-11-03). Score: 3 per word shared with the situation (title and key,
+ * words of 4+ letters), +2 saved (he chose it), +1 in the room he picked,
+ * plus the category's weight (his taste). Ties: newer first. A key left out
+ * is not lost: if the model writes it anyway, the database returns it as
+ * his own ("From your Arsenal") and ArmSlate counts it as one.
+ */
+export function rankArsenal(entries: ArsenalEntry[], situation: string, weights: Record<string, number>,
+  room: Room | null, cap: number = ARSENAL_CAP): ArsenalEntry[] {
+  const want = words(situation);
+  const score = (e: ArsenalEntry) => {
+    let s = 0;
+    for (const w of words(`${e.title} ${e.key.replace(/_/g, " ")}`)) if (want.has(w)) s += 3;
+    if (e.kind === "saved") s += 2;
+    if (room && e.room === room) s += 1;
+    return s + (e.category ? weights[`category:${e.category}`] ?? 1 : 1);
+  };
+  return entries
+    .map((e) => ({ e, s: score(e) }))
+    .sort((a, b) => b.s - a.s || (b.e.id ?? 0) - (a.e.id ?? 0))
+    .slice(0, cap)
+    .map((x) => x.e);
+}
+
+/**
+ * Which cards are shown (owner, 2026-11-03: always SHOW_CARDS, never 2). Pure,
+ * so e2e/arsenal-unit.spec.ts replays requests 28 and 29. Every card left out
+ * says why in the request's note: a spare not needed, a duplicate, or a
+ * second "From your Arsenal" card (at most one is shown).
+ */
+export class ArmSlate {
+  readonly shown: ArmCard[] = [];
+  readonly notes: string[] = [];
+
+  constructor(readonly size: number = SHOW_CARDS) {}
+
+  get full(): boolean {
+    return this.shown.length >= this.size;
+  }
+
+  get missing(): number {
+    return Math.max(this.size - this.shown.length, 0);
+  }
+
+  /** The keys a fill-up call must not write again. */
+  keys(): string[] {
+    return this.shown.map((c) => c.canonical_key);
+  }
+
+  /** A stored card: true when it is shown. */
+  offer(card: ArmCard): boolean {
+    if (this.full) {
+      this.notes.push(`a spare card (${card.canonical_key}) was not needed`);
+      return false;
+    }
+    if (this.shown.some((c) => c.id === card.id)) {
+      this.notes.push(`a duplicate (${card.canonical_key}) was left out`);
+      return false;
+    }
+    if (card.in_arsenal && this.shown.some((c) => c.in_arsenal)) {
+      this.notes.push(`a second From-your-Arsenal card (${card.canonical_key}) was not shown`);
+      return false;
+    }
+    this.shown.push(card);
+    return true;
+  }
+
+  /** A card that never reached the database (invalid, not stored). */
+  skip(why: string): void {
+    this.notes.push(why);
+  }
+}
 
 /**
  * The system prompt: the voice (the pool's own, generated from
@@ -140,14 +240,14 @@ export function armSystem(opts: { weights: Record<string, number>; arsenal: Arse
     ARSENAL_VOICE,
     "",
     "ARM ME",
-    "Tsims describes a room he is about to walk into. Give him exactly THREE references that fit it, each a full card, best first.",
+    `Tsims describes a room he is about to walk into. Give him exactly ${ASK_CARDS} references that fit it, each a full card, best first. He sees the first three that pass; the fourth is the spare.`,
     "",
     "THE CATEGORIES",
     ...CATEGORIES.map((c) => `- ${c}: ${CATEGORY_NOTES[c]}`),
     "",
     `HIS TASTE (weights from his reactions and saves; 1.00 is neutral, higher is more of what he likes): ${weights}`,
     "",
-    "HIS ARSENAL (references he already has: seeds, saved, dropped)",
+    "HIS ARSENAL (the ones he already has that fit best: seeds, saved, dropped; he has more)",
     arsenal,
     "",
     "THE RULES",
@@ -156,8 +256,17 @@ export function armSystem(opts: { weights: Record<string, number>; arsenal: Arse
     "- A film or TV quote credits the character AND the work in quote_by. A quote is at most 15 words, exactly as said; when unsure, quote null.",
     "- source_work is always set.",
     "- canonical_key: snake_case naming the reference itself (crossing_the_rubicon).",
-    "- At most ONE of the three may come from HIS ARSENAL: then use its key exactly and set from_arsenal true. Prefer fresh ones; from_arsenal is false for every other card.",
-    "- The three should not repeat a category unless the room demands it.",
+    "- At most ONE card may come from HIS ARSENAL: then use its key exactly and set from_arsenal true. Prefer fresh ones; from_arsenal is false for every other card. A well-known reference he likely already has (a famous film scene, a classic deal) counts as his: at most one of those too.",
+    "- The cards should not repeat a category unless the room demands it.",
+  ].join("\n");
+}
+
+/** The fill-up turn: `count` fresh cards, none of `avoid` (owner, 2026-11-03:
+ *  a suppressed slot is filled, never left empty). */
+export function fillPrompt(situation: string, room: Room | null, count: number, avoid: string[]): string {
+  return [
+    armPrompt(situation, room),
+    `Give exactly ${count} more, each fresh: from_arsenal false, nothing he already has, and none of these keys: ${avoid.join(", ") || "(none)"}.`,
   ].join("\n");
 }
 
@@ -165,7 +274,7 @@ export function armSystem(opts: { weights: Record<string, number>; arsenal: Arse
 export function armPrompt(situation: string, room: Room | null): string {
   return [
     `The room: ${situation.trim()}`,
-    room ? `All three play in the ${room} room.` : "Pick the room each one plays best in.",
+    room ? `All of them play in the ${room} room.` : "Pick the room each one plays best in.",
   ].join("\n");
 }
 
