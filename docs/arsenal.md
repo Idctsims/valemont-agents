@@ -913,9 +913,15 @@ the title page, `/arsenal` and `/arsenal/saved`.
   cards come only from `add_test_title_hook_cards(marker, title, n)` (the
   verified e2e marker), which writes `n` test cards (the first unverified
   when n ≥ 3) and a test word, and settles the hook drafted.
-- **Titles finished before db/062 get no hook** (no backfill: no AI spent
-  on old titles). Such a title drafts the first time it is marked Finished
-  again, since it has never drafted.
+- **Titles finished before db/062:** db/062 itself backfills nothing.
+  **Owner decision (Nov 3): backfill the 8 real titles already Finished,
+  after deploy, once each, by a recorded run:**
+  `scripts.arsenal_title_hook --backfill --by "owner Nov 3"` (`--dry-run`
+  lists them). One transaction per title writes the hook (its note
+  "backfill (owner Nov 3)", kept through the draft: the settle appends
+  notes) and one `arsenal_title_hook` job, as the trigger would have. A
+  title that already has a hook is never touched. Report per title: cards,
+  word, verification and outcome, cost; and the total.
 - **Context:** `ctx_arsenal` gains `recent_title_cards` (the last 5 real
   hooks: title, state, card count, checked count, card titles);
   `ctx_screening`'s `finished_recent` gains `arsenal_cards` (N, once
