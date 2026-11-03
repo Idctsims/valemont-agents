@@ -1020,6 +1020,12 @@ class Refill(NoDatabase):
         message = submitted[0]["requests"][0].params["messages"][0]["content"]
         self.assertIn("Write 40 references", message)
         self.assertIn("finance_business 7", message)
+        # db/061 (owner, 2026-11-03): the run records the split it asked for.
+        quotas = logged[0]["quotas"]
+        self.assertEqual(sum(quotas.values()), 40)
+        self.assertEqual(quotas["finance_business"], 7)
+        for category, n in quotas.items():
+            self.assertIn(f"{category} {n}", message)
 
     def test_the_job_runs_every_six_hours(self) -> None:
         from core import system_jobs

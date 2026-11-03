@@ -268,14 +268,18 @@ class Categories(SportsSqlCase):
             film = self.scored(conn, "nba", 30, pillar="home")
             conn.execute("UPDATE stories SET sport = NULL, category = 'deals' WHERE id = %s", (deal,))
             conn.execute("UPDATE stories SET sport = NULL, category = 'film_music' WHERE id = %s", (film,))
-            rows = conn.execute("SELECT id FROM feed_for_you('home', 100000, 0, NULL, 'deals')").fetchall()
+            # Egress (CLAUDE.md §6; docs/arsenal.md §9.2 measured this class at
+            # 929 KB): our own two ids are filtered in the database, and the
+            # whole window's categories come back as one aggregated row.
+            rows = conn.execute("SELECT id FROM feed_for_you('home', 100000, 0, NULL, 'deals') "
+                                "WHERE id = ANY(%s)", ([deal, film],)).fetchall()
             ids = {r[0] for r in rows}
             self.assertIn(deal, ids)
             self.assertNotIn(film, ids)
-            cats = {r[0] for r in conn.execute(
-                "SELECT v.category FROM feed_for_you('home', 100000, 0, NULL, 'deals') f "
-                "JOIN v_feed_stories v ON v.id = f.id")}
-            self.assertEqual(cats, {"deals"})
+            cats = conn.execute(
+                "SELECT coalesce(array_agg(DISTINCT v.category), '{}') FROM feed_for_you('home', 100000, 0, NULL, 'deals') f "
+                "JOIN v_feed_stories v ON v.id = f.id").fetchone()[0]
+            self.assertEqual(set(cats), {"deals"})
             with self.assertRaises(psycopg.errors.CheckViolation), conn.transaction():
                 conn.execute("UPDATE stories SET category = 'gossip' WHERE id = %s", (deal,))
 
@@ -300,9 +304,11 @@ class Categories(SportsSqlCase):
             bet, sb, deal = (self.story(conn, src, title=f"TL recat {n}") for n in ("bet", "sb", "deal"))
             for sid, cat in ((bet, "betting"), (sb, "sports_business"), (deal, "deals")):
                 conn.execute("UPDATE stories SET category = %s WHERE id = %s", (cat, sid))
-            got = {j.story_id: cur for j, cur in ledger.feed_category_jobs(["betting", "sports_business"], conn=conn)}
-            self.assertEqual({k: v for k, v in got.items() if k in (bet, sb, deal)},
-                             {bet: "betting", sb: "sports_business"})
+            # The worker's exact text, narrowed to our ids in the database (egress).
+            got = dict(conn.execute(
+                f"SELECT x.id, x.category FROM ({ledger.FEED_CATEGORIZED_SQL}) x WHERE x.id = ANY(%s)",
+                (["betting", "sports_business"], [bet, sb, deal])).fetchall())
+            self.assertEqual(got, {bet: "betting", sb: "sports_business"})
             # sb's "old" is stale (it is sports_business, not deals): refused.
             self.assertEqual(ledger.feed_recategorize([(bet, "betting", "other"), (sb, "deals", "other")],
                                                       conn=conn), 1)
@@ -321,8 +327,11 @@ class Categories(SportsSqlCase):
                                      ("nosport_deals", None, "deals"), ("sport_betting", "nfl", "betting"),
                                      ("sport_null", "golf", None)):
                 conn.execute("UPDATE stories SET sport = %s, category = %s WHERE id = %s", (sport, cat, rows[name]))
-            got = {j.story_id: (j.sport, cur) for j, cur in ledger.feed_money_jobs(conn=conn)}
-            mine = {k: v for k, v in got.items() if k in rows.values()}
+            # The worker's exact text, narrowed to our ids in the database:
+            # the whole real money set is ~1.7 MB of summaries (egress).
+            mine = {r[0]: (r[1], r[2]) for r in conn.execute(
+                f"SELECT x.id, x.sport, x.category FROM ({ledger.FEED_MONEY_SET_SQL}) x WHERE x.id = ANY(%s)",
+                (list(rows.values()),))}
             self.assertEqual(mine, {rows["sport_other"]: ("nfl", "other"),
                                     rows["nosport_sb"]: (None, "sports_business")})
 

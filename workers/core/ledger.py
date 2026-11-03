@@ -1171,6 +1171,23 @@ def notification_sent_this_month(kind: str) -> bool:
     return bool(row[0])
 
 
+#: The latest delivered credit push (core/ai.py). tests_live runs this text.
+AI_CREDIT_OUTAGE_SQL: Final = """
+    SELECT kind FROM notifications
+     WHERE kind IN ('ai_credit_empty', 'ai_credit_restored') AND status IN ('sent', 'partial')
+     ORDER BY created_at DESC, id DESC
+     LIMIT 1
+"""
+
+
+def ai_credit_outage_open(*, conn: psycopg.Connection | None = None) -> bool:
+    """Is an Anthropic credit outage open (core/ai.py)? True when the latest
+    delivered ai_credit_empty / ai_credit_restored push is the empty one."""
+    with _brief_conn(conn) as c:
+        row = c.execute(AI_CREDIT_OUTAGE_SQL).fetchone()
+    return row is not None and row[0] == "ai_credit_empty"
+
+
 # ---------------------------------------------------------------------------
 # AI usage (db/020): append-only. core/ai.py is the only writer here; the web
 # twin (Chat 2) writes as the owner through RLS.
@@ -1424,6 +1441,23 @@ def queue_retry(job_id: int, error: str, delay: timedelta) -> None:
             """,
             (error, delay, job_id),
         )
+
+
+#: tests_live runs this text.
+QUEUE_DEFER_SQL: Final = """
+    UPDATE job_queue
+       SET status = 'queued', locked_at = NULL, last_error = left(%s, 500),
+           run_after = now() + %s, attempts = greatest(attempts - 1, 0)
+     WHERE id = %s
+"""
+
+
+def queue_defer(job_id: int, error: str, delay: timedelta, *, conn: psycopg.Connection | None = None) -> None:
+    """Retry after `delay` WITHOUT spending the attempt this claim counted:
+    the failure was not the job's (the Anthropic account's credit is empty,
+    core/ai.py), so an outage never exhausts a queued job."""
+    with _brief_conn(conn) as c:
+        c.execute(QUEUE_DEFER_SQL, (error, delay, job_id))
 
 
 def queue_fail(job_id: int, error: str) -> None:
@@ -2826,16 +2860,19 @@ _PRUNE_PROTECTED: Final = """
            AND NOT EXISTS (SELECT 1 FROM content_items ci JOIN title_trailers tt ON tt.item_id = ci.id
                             WHERE ci.story_id = st.id)"""
 
-#: The two story rules' WHERE (FROM stories st), shared by the prune and its dry run.
-_PRUNE_STORY_WHERE: Final = {
+#: The two story rules' age test alone (FROM stories st): what a rule would
+#: take if nothing were protected. feed_prune counts the protected ones it
+#: holds back against this (db/061 feed_prune_runs.held).
+_PRUNE_STORY_AGE: Final = {
     "filtered_stories_deleted":
-        f"st.filtered_reason IS NOT NULL AND st.last_seen_at < now() - interval '{FILTERED_STORY_DAYS} days'"
-        + _PRUNE_PROTECTED,
+        f"st.filtered_reason IS NOT NULL AND st.last_seen_at < now() - interval '{FILTERED_STORY_DAYS} days'",
     # Kept stories, KEPT_STORY_DAYS after they were last seen, unless protected.
     "unreacted_stories_deleted":
-        f"st.filtered_reason IS NULL AND st.last_seen_at < now() - interval '{KEPT_STORY_DAYS} days'"
-        + _PRUNE_PROTECTED,
+        f"st.filtered_reason IS NULL AND st.last_seen_at < now() - interval '{KEPT_STORY_DAYS} days'",
 }
+
+#: The two story rules' WHERE (FROM stories st), shared by the prune and its dry run.
+_PRUNE_STORY_WHERE: Final = {name: age + _PRUNE_PROTECTED for name, age in _PRUNE_STORY_AGE.items()}
 
 FEED_PRUNE_SQL: Final = {
     "embeddings_cleared": """
@@ -2870,9 +2907,96 @@ FEED_PRUNE_SQL: Final = {
 }
 
 
-def feed_prune(*, conn: psycopg.Connection | None = None) -> dict[str, int]:
+class PruneCounts(dict):  # type: ignore[type-arg]
+    """feed_prune's result: step -> rows its statement touched (the keys of
+    FEED_PRUNE_SQL), plus what its feed_prune_runs row recorded."""
+    deleted: dict[str, int]
+    held: dict[str, dict[str, int]]
+    run_id: int
+
+
+#: Each story rule's protected stories, by protection, among those its age
+#: test takes (_PRUNE_STORY_AGE): what the prune held back. A story can carry
+#: more than one protection, so `stories` is the distinct count.
+FEED_PRUNE_HELD_SQL: Final = """
+    WITH aged AS (SELECT st.id FROM stories st WHERE {age}),
+         f AS (SELECT a.id,
+                      EXISTS (SELECT 1 FROM feed_reactions r WHERE r.story_id = a.id) AS reactions,
+                      EXISTS (SELECT 1 FROM entity_link_proposals p WHERE p.story_id = a.id) AS move_proposals,
+                      EXISTS (SELECT 1 FROM tech_credit_pushes t WHERE t.story_id = a.id) AS credit_pushes,
+                      EXISTS (SELECT 1 FROM repo_surfacings rs WHERE rs.story_id = a.id) AS repo_surfacings,
+                      EXISTS (SELECT 1 FROM content_items ci JOIN title_trailers tt ON tt.item_id = ci.id
+                               WHERE ci.story_id = a.id) AS trailers
+                 FROM aged a)
+    SELECT count(*) FILTER (WHERE reactions OR move_proposals OR credit_pushes OR repo_surfacings OR trailers),
+           count(*) FILTER (WHERE reactions), count(*) FILTER (WHERE move_proposals),
+           count(*) FILTER (WHERE credit_pushes), count(*) FILTER (WHERE repo_surfacings),
+           count(*) FILTER (WHERE trailers)
+      FROM f
+"""
+HELD_KEYS: Final = ("stories", "reactions", "move_proposals", "credit_pushes", "repo_surfacings", "trailers")
+
+#: The seeded-items step's cascade: the similarity rows of the items it deletes.
+_PRUNE_SEEDED_SIMILARITY_SQL: Final = """
+    SELECT count(*) FROM feed_similarity_log l
+     WHERE l.item_id IN (SELECT id FROM content_items WHERE seeded AND fetched_at < now() - interval '30 days')
+"""
+
+#: Per-table totals (feed_prune_runs.deleted). Every table the prune deletes from.
+PRUNE_TABLES: Final = ("stories", "content_items", "story_scores", "feed_similarity_log", "interest_profiles")
+
+
+def feed_prune(*, conn: psycopg.Connection | None = None) -> PruneCounts:
+    """The nightly prune, in one transaction, recorded in feed_prune_runs
+    (db/061) in the same transaction: every table's deleted rows, cascades
+    included, and each story rule's protected stories held back.
+
+    A cascade cannot be counted by the DELETE, so each story step counts what
+    will go with its stories (FEED_PRUNE_STORY_DRY_RUN_SQL) just before it
+    runs. The steps run in order, each counting what is still there, so the
+    per-table totals never count a row twice. A trailer link among them
+    raises: a protected story was about to be deleted."""
     with _brief_conn(conn) as c, c.transaction():
-        return {name: c.execute(sql).rowcount for name, sql in FEED_PRUNE_SQL.items()}
+        steps: dict[str, dict[str, int]] = {}
+        held: dict[str, dict[str, int]] = {}
+        out = PruneCounts()
+        for name, sql in FEED_PRUNE_SQL.items():
+            if name in _PRUNE_STORY_WHERE:
+                held[name] = dict(zip(HELD_KEYS, (int(v) for v in c.execute(
+                    FEED_PRUNE_HELD_SQL.format(age=_PRUNE_STORY_AGE[name])).fetchone())))
+                # Lock the doomed set, so the count and the DELETE see the same rows.
+                c.execute(f"SELECT count(*) FROM (SELECT st.id FROM stories st WHERE {_PRUNE_STORY_WHERE[name]}"
+                          " FOR UPDATE) locked").fetchone()
+                row = c.execute(FEED_PRUNE_STORY_DRY_RUN_SQL.format(where=_PRUNE_STORY_WHERE[name])).fetchone()
+                will = dict(zip(STORY_DRY_RUN_TABLES, (int(v) for v in row)))
+                if will.pop("protected_trailers"):
+                    raise LedgerError(f"feed_prune {name}: would delete a title's trailer; refusing")
+                n = c.execute(sql).rowcount
+                if n != will["stories"]:
+                    raise LedgerError(f"feed_prune {name}: counted {will['stories']} stories, deleted {n}")
+                steps[name] = will
+            elif name == "seeded_items_deleted":
+                sim = int(c.execute(_PRUNE_SEEDED_SIMILARITY_SQL).fetchone()[0])
+                n = c.execute(sql).rowcount
+                steps[name] = {"content_items": n, "feed_similarity_log": sim}
+            elif name == "embeddings_cleared":
+                n = c.execute(sql).rowcount
+            else:
+                n = c.execute(sql).rowcount
+                table = {"story_scores_superseded_deleted": "story_scores",
+                         "interest_profiles_deleted": "interest_profiles",
+                         "similarity_log_deleted": "feed_similarity_log"}[name]
+                steps[name] = {table: n}
+            out[name] = n
+        out.deleted = {t: sum(s.get(t, 0) for s in steps.values()) for t in PRUNE_TABLES}
+        out.held = held
+        out.run_id = int(c.execute(
+            """
+            INSERT INTO feed_prune_runs (deleted, steps, held, embeddings_cleared)
+            VALUES (%s, %s, %s, %s) RETURNING id
+            """,
+            (Jsonb(out.deleted), Jsonb(steps), Jsonb(held), out["embeddings_cleared"])).fetchone()[0])
+        return out
 
 
 #: One story rule's dry run: the stories it would delete and every row that
@@ -4775,6 +4899,36 @@ def arsenal_arm_state(ref_id: int, *, conn: psycopg.Connection | None = None) ->
     return None if r is None else ArsenalArmState(r[0], r[1], bool(r[2]), bool(r[3]), bool(r[4]))
 
 
+#: STRANDED SAVES (owner, 2026-11-03; arsenal/arm.py sweep_job): Arm Me cards
+#: in the owner's saved set that never finished verify-on-save: still
+#: pending, or verified/corrected with no outcome check on record, with no
+#: arsenal_arm_verify job queued or running for them (db/059 queues ONE,
+#: ever, so a job that failed for good leaves the card "Checking…" forever),
+#: saved more than `min_age_h` hours ago (the queue's own chance first).
+#: Real cards only; oldest save first. tests_live runs this exact text.
+ARSENAL_STRANDED_SAVES_SQL: Final = """
+    SELECT r.id
+      FROM v_arsenal_saved s
+      JOIN arsenal_refs r ON r.id = s.ref_id
+     WHERE r.status = 'arm' AND NOT r.is_test AND NOT s.is_test
+       AND (r.verification = 'pending'
+            OR (r.verification IN ('verified', 'corrected')
+                AND NOT EXISTS (SELECT 1 FROM arsenal_outcome_checks oc WHERE oc.ref_id = r.id)))
+       AND NOT EXISTS (SELECT 1 FROM job_queue q
+                        WHERE q.kind = 'arsenal_arm_verify' AND q.payload ->> 'ref_id' = r.id::text
+                          AND q.status IN ('queued', 'running'))
+       AND s.saved_at < now() - make_interval(hours => %(min_age_h)s)
+     ORDER BY s.saved_at, r.id
+     LIMIT %(limit)s
+"""
+
+
+def arsenal_stranded_saves(limit: int, min_age_h: int, *, conn: psycopg.Connection | None = None) -> list[int]:
+    with _brief_conn(conn) as c:
+        return [int(r[0]) for r in c.execute(ARSENAL_STRANDED_SAVES_SQL,
+                                             {"limit": limit, "min_age_h": min_age_h}).fetchall()]
+
+
 @dataclass(frozen=True)
 class ArsenalHold:
     id: int
@@ -4827,14 +4981,21 @@ _ARSENAL_RUN_COUNTS: Final = ("refs_requested", "words_requested", "inserted_ref
 
 def arsenal_log_run(kind: str, status: str, *, run_id: int | None = None, batch_id: str | None = None,
                     model: str | None = None, cost_usd: Decimal | None = None, note: str | None = None,
+                    quotas: Mapping[str, int] | None = None,
                     conn: psycopg.Connection | None = None, **counts: int) -> int:
-    """One arsenal_pool_runs row (append-only). Returns its id."""
+    """One arsenal_pool_runs row (append-only). Returns its id. `quotas`
+    (db/061): a 'submitted' run's target references per category."""
     unknown = set(counts) - set(_ARSENAL_RUN_COUNTS)
     if unknown:
         raise LedgerError(f"arsenal_log_run: unknown count(s) {sorted(unknown)}")
+    if quotas is not None and status != "submitted":
+        raise LedgerError("arsenal_log_run: quotas belong on the 'submitted' run")
     cols = ["kind", "status", "run_id", "batch_id", "model", "cost_usd", "note", *counts]
     vals = [kind, status, run_id, batch_id, model, cost_usd if cost_usd is not None else Decimal(0),
             note[:500] if note else None, *counts.values()]
+    if quotas is not None:
+        cols.append("quotas")
+        vals.append(Jsonb({str(k): int(v) for k, v in quotas.items()}))
     with _brief_conn(conn) as c:
         return int(c.execute(
             f"INSERT INTO arsenal_pool_runs ({', '.join(cols)}) VALUES ({', '.join(['%s'] * len(cols))}) RETURNING id",

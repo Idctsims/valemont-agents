@@ -117,7 +117,7 @@ def submit(*, client: Any = None, refs: int = cards.POOL_REFS) -> tuple[int, str
                               cards.category_weights(ledger.arsenal_weights()))
     batch_id, model = ai.submit_batch(requests=batch_requests(context(), split, cards.POOL_WORDS), model=MODEL,
                                       client=client)
-    run_id = ledger.arsenal_log_run("batch", "submitted", batch_id=batch_id, model=model,
+    run_id = ledger.arsenal_log_run("batch", "submitted", batch_id=batch_id, model=model, quotas=split,
                                     refs_requested=sum(split.values()), words_requested=cards.POOL_WORDS)
     log.info("arsenal pool: batch %s submitted (run %d): %s", batch_id, run_id, split)
     return run_id, batch_id
@@ -206,8 +206,8 @@ def topup(status: ledger.ArsenalPoolStatus, *, client: Any = None, http: Any = N
     split = topup_split(status.ready_categories)
     words = cards.TOPUP_WORDS
     ctx = context()
-    run_id = ledger.arsenal_log_run("topup", "submitted", model=MODEL, refs_requested=sum(split.values()),
-                                    words_requested=words)
+    run_id = ledger.arsenal_log_run("topup", "submitted", model=MODEL, quotas=split,
+                                    refs_requested=sum(split.values()), words_requested=words)
     cost = Decimal(0)
 
     def add_cost(_usage_id: int, _model: str, c: Decimal) -> None:
