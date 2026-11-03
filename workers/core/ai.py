@@ -18,12 +18,31 @@ Every call goes through `complete()`, which:
 `record_usage()` is the same accounting for work that does not go through
 `complete()` (Message Batches results, from Chat 3). `cost_usd()` is pure and
 public so the web twin's pricing file (Chat 2) can be tested against it.
+
+THE ACCOUNT'S CREDIT (owner, 2026-11-03). When the Anthropic account's
+prepaid balance runs out, the API answers every call with HTTP 400 "Your
+credit balance is too low". That is not this project's budget (above) and
+not a bug in a job: it is one outage with one cause. Every SDK call here
+turns it into CreditExhausted, and:
+  - ONE push per outage, "Anthropic credit balance empty — top up"
+    (notification kind ai_credit_empty);
+  - ONE "Anthropic credit restored" push (ai_credit_restored) on the first
+    successful call after it;
+  - core/jobs.run_tracked records the affected job's failure as CREDIT_NOTE,
+    not the SDK's error text, and the health monitor sends no per-job
+    "needs attention" for it (the one credit push covers them all);
+  - the job_queue defers a queued job for an hour without spending one of
+    its attempts, so an outage never exhausts one.
+The outage's state is the latest of those two notifications, read once per
+process by the health monitor's first pass (credit_sync), so a restart in the
+middle of an outage neither repeats the push nor loses the "restored" one.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import threading
 from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Callable, Mapping
@@ -100,6 +119,130 @@ class AiUnavailable(AiError):
 
 class BudgetExceeded(AiError):
     """The month's budget is spent and the call was not critical."""
+
+
+class CreditExhausted(AiError):
+    """The Anthropic account's prepaid credit is spent (HTTP 400 "credit
+    balance is too low"). Raised from the SDK's error, which stays as its
+    __cause__."""
+
+
+# ----------------------------------------------------------------- credit
+
+CREDIT_EMPTY_KIND = "ai_credit_empty"
+CREDIT_RESTORED_KIND = "ai_credit_restored"
+#: What an affected job's job_health.last_error says. The health monitor
+#: matches its prefix (credit_note) to stay quiet for that job.
+CREDIT_NOTE = "credit: Anthropic credit balance empty; top up (Plans & Billing)"
+_CREDIT_TEXT = "credit balance is too low"
+
+
+def is_credit_error(exc: BaseException) -> bool:
+    """The API's 'credit balance is too low' 400 (anthropic.BadRequestError),
+    matched by status and text so no SDK import is needed."""
+    return getattr(exc, "status_code", None) == 400 and _CREDIT_TEXT in str(exc).lower()
+
+
+def credit_cause(exc: BaseException | None) -> CreditExhausted | None:
+    """`exc` or anything in its cause/context chain that is CreditExhausted
+    (a job may wrap it), else None."""
+    seen: set[int] = set()
+    while exc is not None and id(exc) not in seen:
+        if isinstance(exc, CreditExhausted):
+            return exc
+        seen.add(id(exc))
+        exc = exc.__cause__ or exc.__context__
+    return None
+
+
+def credit_note(text: str | None) -> bool:
+    """Does a job_health note say the job failed for the account's credit?"""
+    return bool(text) and str(text).startswith(CREDIT_NOTE.split(";")[0])
+
+
+_credit_lock = threading.Lock()
+#: Is a credit outage open (its push delivered, no "restored" since)? None:
+#: not yet known in this process; credit_sync or the first credit error reads it.
+_credit_empty: bool | None = None
+#: A call has succeeded in this process (for a restart mid-outage).
+_credit_ok_seen = False
+
+
+def _credit_push(kind: str, title: str, body: str) -> bool:
+    """True only if at least one device took it; a failed push is logged."""
+    try:
+        results = push.send(push.Message(kind=kind, title=title, body=body,
+                                         deep_link="/settings/health", tag="ai-credit"))
+    except Exception as exc:
+        log.error("credit alert %s not sent: %s: %s", kind, type(exc).__name__, exc)
+        return False
+    return any(getattr(r, "status", None) in ("sent", "partial") for r in results)
+
+
+def _push_restored() -> None:
+    """Under _credit_lock, with an outage open: tell the owner it is over."""
+    global _credit_empty
+    if _credit_push(CREDIT_RESTORED_KIND, "Anthropic credit restored",
+                    "Claude calls are working again. Summaries and why-lines catch up on the next runs."):
+        _credit_empty = False
+        log.info("ai credit restored")
+
+
+def _on_credit_error() -> None:
+    """One push per outage. Never raises: the caller raises CreditExhausted."""
+    global _credit_empty
+    with _credit_lock:
+        if _credit_empty is None:
+            try:
+                _credit_empty = ledger.ai_credit_outage_open()
+            except Exception as exc:
+                log.error("credit outage state unreadable (%s: %s); alerting", type(exc).__name__, exc)
+                _credit_empty = False
+        if _credit_empty:
+            return
+        log.error("ai: the Anthropic credit balance is empty; every Claude call fails until a top-up")
+        if _credit_push(CREDIT_EMPTY_KIND, "Anthropic credit balance empty — top up",
+                        "Every Claude call is refused (HTTP 400). Summaries, why-lines and the Arsenal wait; "
+                        "the brief falls back. Top up at console.anthropic.com, Plans & Billing."):
+            _credit_empty = True
+
+
+def _on_success() -> None:
+    """A call went through. Reads nothing: acts only on an outage known open."""
+    global _credit_ok_seen
+    _credit_ok_seen = True
+    if _credit_empty:
+        with _credit_lock:
+            if _credit_empty:
+                _push_restored()
+
+
+def credit_sync() -> None:
+    """Learn, once per process, whether an outage is open (the latest
+    ai_credit_empty / ai_credit_restored push). The health monitor calls it
+    every pass; it reads the database only the first time. A call that already
+    succeeded in this process closes an outage found open."""
+    global _credit_empty
+    if _credit_empty is not None:
+        return
+    with _credit_lock:
+        if _credit_empty is None:
+            _credit_empty = ledger.ai_credit_outage_open()
+        if _credit_empty and _credit_ok_seen:
+            _push_restored()
+
+
+def _sdk(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    """One SDK request: the account's credit error becomes CreditExhausted."""
+    try:
+        out = fn(*args, **kwargs)
+    except Exception as exc:
+        if is_credit_error(exc):
+            _on_credit_error()
+            raise CreditExhausted(CREDIT_NOTE) from exc
+        raise
+    _on_success()
+    return out
 
 
 # ------------------------------------------------------------------ usage
@@ -266,8 +409,8 @@ def complete(*, purpose: str, messages: list[Any], model: str = DEFAULT_MODEL,
         raise AiError(f"no pricing for model {model!r}; add it to core/ai.py PRICING first")
     sdk = client if client is not None else _client()
     chosen = guard(model, critical=critical)
-    response = sdk.messages.create(model=chosen, max_tokens=max_tokens,
-                                   messages=messages, **params)
+    response = _sdk(sdk.messages.create, model=chosen, max_tokens=max_tokens,
+                    messages=messages, **params)
     # The response names the model that actually served it; price that one.
     served = getattr(response, "model", None) or chosen
     if served not in PRICING:
@@ -313,7 +456,7 @@ def submit_batch(*, requests: list[BatchRequest], model: str, critical: bool = F
         raise AiError("a batch needs at least one request")
     sdk = client if client is not None else _client()
     chosen = guard(model, critical=critical)
-    batch = sdk.messages.batches.create(requests=[
+    batch = _sdk(sdk.messages.batches.create, requests=[
         {"custom_id": r.custom_id, "params": {"model": chosen, "max_tokens": r.max_tokens, **r.params}}
         for r in requests
     ])
@@ -324,7 +467,7 @@ def submit_batch(*, requests: list[BatchRequest], model: str, critical: bool = F
 def batch_status(batch_id: str, *, client: Any = None) -> str:
     """'in_progress' | 'canceling' | 'ended'."""
     sdk = client if client is not None else _client()
-    return str(sdk.messages.batches.retrieve(batch_id).processing_status)
+    return str(_sdk(sdk.messages.batches.retrieve, batch_id).processing_status)
 
 
 def batch_results(batch_id: str, *, purpose: str, model: str, critical: bool = False, client: Any = None,
@@ -334,7 +477,8 @@ def batch_results(batch_id: str, *, purpose: str, model: str, critical: bool = F
     the one submitted)."""
     sdk = client if client is not None else _client()
     out: list[BatchResult] = []
-    for entry in sdk.messages.batches.results(batch_id):
+    # Listed inside _sdk: the SDK may fetch the results lazily, on iteration.
+    for entry in _sdk(lambda: list(sdk.messages.batches.results(batch_id))):
         result = entry.result
         kind = str(getattr(result, "type", "errored"))
         if kind != "succeeded":

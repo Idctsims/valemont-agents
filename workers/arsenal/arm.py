@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from arsenal import outcome, sources, verify
-from core import ledger
+from core import ai, ledger
 
 log = logging.getLogger("valemont.arsenal.arm")
 
@@ -85,3 +85,45 @@ def arm_verify_job(payload: Mapping[str, Any]) -> ArmVerifyRun:
     """The job_queue handler (kind ledger.ARSENAL_ARM_VERIFY_KIND)."""
     ref_id = ref_of(payload)
     return ArmVerifyRun(f"ref {ref_id}: {verify_saved(ref_id)}")
+
+
+# ------------------------------------------------------------ stranded saves
+
+SWEEP_JOB = "arsenal_arm_sweep"
+SWEEP_S = 6 * 60 * 60
+#: At most this many cards a run: each is up to ~10 Haiku calls.
+SWEEP_LIMIT = 5
+#: A save gets the queue's own chance first.
+SWEEP_MIN_AGE_H = 1
+
+
+class SweepFailed(RuntimeError):
+    """One or more stranded cards failed again; the rest were still swept."""
+
+
+def sweep_job(*, verify_one: Any = None) -> ArmVerifyRun:
+    """STRANDED SAVES (owner, 2026-11-03): a saved Arm Me card whose one
+    arsenal_arm_verify job failed for good stays pending ("Checking…")
+    forever, since db/059 queues one per card, ever. Every 6 h this finishes
+    them directly, oldest save first, through verify_saved (each step skips
+    what is done). One card failing never stops the next; any failure raises
+    at the end so job_health shows it. The Anthropic credit error stops the
+    run at once: every card would fail the same way (core/ai.py)."""
+    run = verify_one or verify_saved
+    ids = ledger.arsenal_stranded_saves(SWEEP_LIMIT, SWEEP_MIN_AGE_H)
+    if not ids:
+        return ArmVerifyRun("no stranded saves")
+    done: list[str] = []
+    failed: list[str] = []
+    for ref_id in ids:
+        try:
+            done.append(f"ref {ref_id}: {run(ref_id)}")
+        except Exception as exc:
+            if ai.credit_cause(exc) is not None:
+                raise
+            log.error("arsenal arm sweep: ref %d failed: %s: %s", ref_id, type(exc).__name__, exc)
+            failed.append(f"ref {ref_id}: {type(exc).__name__}: {exc}")
+    log.info("arsenal arm sweep: %d finished, %d failed: %s", len(done), len(failed), "; ".join(done + failed))
+    if failed:
+        raise SweepFailed(f"{len(failed)} of {len(ids)} stranded save(s) failed: " + "; ".join(failed))
+    return ArmVerifyRun(f"{len(done)} stranded save(s) finished: " + "; ".join(done))

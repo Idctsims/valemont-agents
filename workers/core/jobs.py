@@ -39,7 +39,7 @@ from typing import Callable
 
 from apscheduler.triggers.base import BaseTrigger
 
-from core import egress, ledger, memory
+from core import ai, egress, ledger, memory
 
 log = logging.getLogger("valemont.jobs")
 
@@ -130,7 +130,10 @@ def run_tracked(job: SystemJob) -> None:
             raise
         return
     except Exception as exc:
-        detail = describe(exc)
+        # The Anthropic account's credit (core/ai.py): one named cause, not
+        # the SDK's text. Still a failure (nothing was done), but the health
+        # monitor stays quiet for it: ai.py's one push covers every job.
+        detail = ai.CREDIT_NOTE if ai.credit_cause(exc) is not None else describe(exc)
         log.error("%s failed: %s", job.name, detail)
         try:
             ledger.job_failed(job.name, detail)

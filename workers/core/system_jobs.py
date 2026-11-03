@@ -91,9 +91,11 @@
                              embeddings older than 72 h; deletes filtered
                              stories (with their items), seeded items and
                              similarity-log rows older than 30 days, kept
-                             stories unreacted for 90 days, superseded scores
-                             after 7 days and old profiles after 90. A story
-                             with any reaction is never deleted (db/039).
+                             stories unreacted for 21 days, superseded scores
+                             after 7 days and old profiles after 90. A
+                             protected story is never deleted (db/039).
+                             Each run's per-table deletes and the protected
+                             stories held back go to feed_prune_runs (db/061).
     egress           15 min: the day's approximate database egress (every
                              system job's reads, core/egress.py) in job_health
                              and one egress_samples row (db/057; a final row
@@ -120,6 +122,9 @@
                              a saved Arm Me card, verified and then
                              outcome-checked by the same machinery; queued
                              once per card by the save (arsenal/arm.py).
+    arsenal_arm_sweep 6 h    and 9 min after boot: saved Arm Me cards whose one
+                             verify job failed for good, finished directly,
+                             at most 5 a run (arsenal/arm.py sweep_job).
     arsenal_drop     daily   05:30, then every 30 min to 21:30 America/Chicago,
                              and at boot: today's drop (db/054
                              arsenal_pick_drop, zero AI calls). A no-op once
@@ -149,7 +154,7 @@ from arsenal import drop as arsenal_drop
 from arsenal import outcome as arsenal_outcome
 from arsenal import pool as arsenal_pool
 from arsenal import verify as arsenal_verify
-from core import brief, egress, ledger, push
+from core import ai, brief, egress, ledger, push
 from core.jobs import SystemJob, describe, run_tracked
 from feed import ingest as feed_ingest
 from feed import profile as feed_profile_mod
@@ -185,6 +190,8 @@ DB_SIZE_REALERT_HOURS = 24 * 30
 
 QUEUE_BATCH = 20
 QUEUE_BACKOFF_BASE = timedelta(seconds=30)  # 30 s, 60 s, 2 min, 4 min
+#: A queued job that failed only for the Anthropic account's credit.
+QUEUE_CREDIT_DEFER = timedelta(hours=1)
 
 
 # ------------------------------------------------------------------ heartbeat
@@ -319,6 +326,10 @@ def check_health(scheduled: Iterable[str]) -> None:
         # external watchdog covers that. Its own failures still count.
         stale = row.stale and row.job != MONITOR
         unhealthy = failing or stale
+        if unhealthy and row.alert_state == "ok" and ai.credit_note(row.last_error):
+            # Failing for the Anthropic account's credit: core/ai.py sent the
+            # one push for the outage; a "needs attention" per job would repeat it.
+            continue
         if unhealthy and row.alert_state == "ok":
             why = (f"failed {row.consecutive_failures} times in a row"
                    if failing else "has not succeeded on schedule")
@@ -373,7 +384,13 @@ def check_summary_backlog() -> int:
 
 
 def monitor_pass(scheduled: Iterable[str]) -> None:
-    """The health monitor's minute: every job's health, then the backlog."""
+    """The health monitor's minute: every job's health, then the backlog.
+    First, once per process, the Anthropic credit outage's state (core/ai.py);
+    a failed read is logged and retried next pass, never stopping the checks."""
+    try:
+        ai.credit_sync()
+    except Exception as exc:
+        log.error("credit state not read: %s", describe(exc))
     check_health(scheduled)
     check_summary_backlog()
 
@@ -448,6 +465,12 @@ def poll_queue(handlers: Mapping[str, QueueHandler] = QUEUE_HANDLERS) -> None:
             handler(job.payload)
         except Exception as exc:
             detail = describe(exc)
+            if ai.credit_cause(exc) is not None:
+                # Not the job's failure: retried hourly, its attempt given back,
+                # so an outage never strands a queued job (core/ai.py).
+                ledger.queue_defer(job.id, ai.CREDIT_NOTE, QUEUE_CREDIT_DEFER)
+                log.warning("job_queue #%d %s deferred %s: %s", job.id, job.kind, QUEUE_CREDIT_DEFER, ai.CREDIT_NOTE)
+                continue
             if job.attempts >= ledger.QUEUE_MAX_ATTEMPTS:
                 ledger.queue_fail(job.id, detail)
                 log.error("job_queue #%d %s failed for good: %s", job.id, job.kind, detail)
@@ -612,10 +635,19 @@ def feed_profile_job() -> None:
         _chain(FEED_WHY, FEED_REPO_WHY)
 
 
-def feed_prune() -> dict[str, int]:
+class PruneRun:
+    def __init__(self, note: str) -> None:
+        self.job_note = note
+
+
+def feed_prune() -> PruneRun:
+    """The prune, recorded in feed_prune_runs (db/061); the note is its totals."""
     counts = ledger.feed_prune()
     log.info("feed prune: %s", ", ".join(f"{k} {v}" for k, v in counts.items()))
-    return counts
+    held = sum(h.get("stories", 0) for h in counts.held.values())
+    return PruneRun(f"run {counts.run_id}: deleted "
+                    + ", ".join(f"{t} {n}" for t, n in counts.deleted.items())
+                    + f"; held {held} protected; embeddings cleared {counts['embeddings_cleared']}")
 
 
 # ---------------------------------------------------------------------- drill
@@ -699,6 +731,9 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
         ARSENAL_VERIFY,
         ARSENAL_OUTCOME,
         ARSENAL_ARM_VERIFY,
+        # Saved Arm Me cards whose one verify job failed for good (arsenal/arm.py).
+        SystemJob(arsenal_arm.SWEEP_JOB, arsenal_arm.SWEEP_S, IntervalTrigger(seconds=arsenal_arm.SWEEP_S),
+                  arsenal_arm.sweep_job, misfire_grace=3600, start_delay_s=540),
     ]
     if env.get("HEALTH_DRILL", "").strip().lower() == "true":
         log.warning("HEALTH_DRILL=true: scheduling health_drill, which always fails")
