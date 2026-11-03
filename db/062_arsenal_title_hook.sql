@@ -35,6 +35,14 @@
 --
 -- A self-test runs on paste (section 8), rolled back, and raises on any wrong
 -- result, so a bad paste applies nothing.
+-- FIRST PASTE (2026-11-03) failed in its own self-test and applied nothing:
+-- "SELFTEST FAILED: add_test_title_hook_cards". One IF both called the
+-- helper (which writes) and read the hook back; a statement reads one
+-- snapshot, taken before the helper's writes, so the hook still read
+-- 'queued'. Read back via db_inspect: no log row, neither table, no new
+-- function, the origin CHECK and the refs guard still db/059's. The helper
+-- now runs in its own statement. RULE: in a self-test, never read back in
+-- the same statement as a function that writes.
 -- ORDER (db/055's lesson): every table a trigger function reads is created
 -- before any statement that fires it. FIXTURES (db/053's): no explicit NULL
 -- into a NOT NULL column. TRUNCATE (db/042's): every referencing table named.
@@ -736,7 +744,11 @@ BEGIN
                                         AND payload ->> 'title_id' = v_test::text) THEN
             RAISE EXCEPTION 'SELFTEST FAILED: a test finish (hook %, or a job was queued)', v_thook;
         END IF;
-        IF public.add_test_title_hook_cards(v_marker, v_test, 3) <> v_thook
+        -- Called in its own statement: a subquery in the same statement as a
+        -- writing function reads the statement's snapshot, from before the
+        -- write (the FIRST PASTE's failure).
+        v_ref := public.add_test_title_hook_cards(v_marker, v_test, 3);
+        IF v_ref <> v_thook
            OR (SELECT status FROM public.arsenal_title_hooks WHERE id = v_thook) <> 'drafted'
            OR (SELECT count(*) FROM public.arsenal_refs WHERE source_title_id = v_test AND is_test AND origin_kind = 'title_hook') <> 3
            OR (SELECT count(*) FROM public.arsenal_refs WHERE source_title_id = v_test AND verification = 'unverified') <> 1 THEN
