@@ -94,11 +94,14 @@ class Objects(ScreeningSqlCase):
             fixed = conn.execute("SELECT 1 FROM migration_log WHERE name = '052_watch_current_grants'").fetchone()
             self.assertEqual(writable, [] if fixed else ["v_watch_current"])
             # db/053 adds two AFTER INSERT triggers (the re-rank queue, the title entity).
+            # db/062 adds a third (the Arsenal hook on a finish).
             recs = conn.execute("SELECT 1 FROM migration_log WHERE name = '053_screening_recs'").fetchone()
+            hook = conn.execute("SELECT 1 FROM migration_log WHERE name = '062_arsenal_title_hook'").fetchone()
             self.assertEqual({r[0] for r in conn.execute(
                 "SELECT tgname FROM pg_trigger WHERE tgrelid = 'watch_status'::regclass AND NOT tgisinternal")},
                 {"watch_status_stamp", "watch_status_immutable", "watch_status_no_truncate"}
-                | ({"watch_status_rerank", "watch_status_title_entity"} if recs else set()))
+                | ({"watch_status_rerank", "watch_status_title_entity"} if recs else set())
+                | ({"watch_status_title_hook"} if hook else set()))
             self.assertEqual(conn.execute("SELECT key, brief_section, enabled FROM context_providers "
                                           "WHERE key LIKE 'screening%%' ORDER BY key").fetchall(),
                              [("screening", False, True), ("screening_brief", True, True)])
@@ -174,8 +177,19 @@ class WatchHistory(ScreeningSqlCase):
         with _rolled_back() as conn:
             tid = self.title(conn)
             self.move(conn, tid, "want")
+            # Every table that references watch_status, from the catalog (db/042's
+            # lesson: TRUNCATE checks foreign keys before any trigger; db/062's
+            # arsenal_title_hooks references it).
+            tables = {"watch_status"}
+            while True:
+                more = {r[0] for r in conn.execute(
+                    "SELECT DISTINCT c.conrelid::regclass::text FROM pg_constraint c "
+                    "WHERE c.contype = 'f' AND c.confrelid::regclass::text = ANY(%s)", (sorted(tables),)).fetchall()}
+                if more <= tables:
+                    break
+                tables |= more
             for sql in ("UPDATE watch_status SET status = 'finished' WHERE title_id = %(t)s",
-                        "DELETE FROM watch_status WHERE title_id = %(t)s", "TRUNCATE watch_status"):
+                        "DELETE FROM watch_status WHERE title_id = %(t)s", "TRUNCATE " + ", ".join(sorted(tables))):
                 with self.subTest(sql=sql[:20]), self.assertRaises(psycopg.errors.RaiseException), conn.transaction():
                     conn.execute(sql, {"t": tid})
 

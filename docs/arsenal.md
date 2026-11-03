@@ -1,9 +1,8 @@
-# The Arsenal — design (Chat 5, Phases 1 and 2)
+# The Arsenal — design (Chat 5, Phases 1–3)
 
 Oct 15, 2026. Phase 1: the reference pool, verification, the daily drop and
 the Power Word (§1–§8). **Phase 2 (Oct 21): Arm Me, My Arsenal saves and the
-Monday quiz, §9.** The Screening Room hook (Phase 3) is out of scope; the
-schema leaves room for it (`origin_kind`, `source_title_id`).
+Monday quiz, §9.** **Phase 3 (Nov 3): the Screening Room hook, §10.**
 
 Code: `db/054_arsenal.sql`, `workers/arsenal/`, `apps/web/src/app/(app)/arsenal/`.
 Voice: `prompts/arsenal_voice.md` (byte-identical copy in `workers/prompts/`).
@@ -833,3 +832,157 @@ quiz."
    - A double save cannot make two entries: the view keeps the latest event per target, and the save guard refuses a second save ("already saved", under a per-target lock).
 
 Checks after the fixes: `tsc` clean; `pnpm lint` clean (tokens, contrast); `pnpm test:unit` 154 passed.
+
+---
+
+## 10. Phase 3 — the Screening Room hook (Nov 3)
+
+Code: `db/062_arsenal_title_hook.sql`; `workers/arsenal/hook.py`,
+`workers/scripts/arsenal_title_hook.py`; `apps/web/src/lib/arsenal/`
+(`hook.ts`, `hook-view.ts`, `titles.ts`), `components/screening/title-arsenal.tsx`,
+the title page, `/arsenal` and `/arsenal/saved`.
+
+### 10.1 Owner decisions (Oct 15)
+
+- It fires on films and shows.
+- **Once per title.** A re-watch drafts nothing new.
+- Every card names its source work (the title).
+- A quote is at most 15 words and credits the character AND the work.
+- Mostly the move, described in our own words.
+
+### 10.2 Step 0 (Nov 3)
+
+- **Baseline on `chat5-phase3` (from `main` at `997ca47`):**
+  - `tests/`: 1124 OK.
+  - `tests_live -v`: 463 ran, 0 skipped, **1 failure**:
+    `test_arsenal_sql.NearDupAndWeights.test_love_and_not_interested_move_weights_known_and_tests_do_not`
+    ("2.0 not greater than 2.0"). The owner's real reactions and saves put
+    the **negotiation room at the 2.0 clamp** (read via db_inspect: 1 love,
+    weight 2.0), and the test guarded its room assertion with the
+    category's clamp only. A test-guard bug on live data, not a broken
+    rule: each dimension is now guarded by its own clamp (its own commit).
+    This baseline run was not metered.
+- **watch_status** (db/051) is append-only; `finished_at` is set by its
+  BEFORE trigger on every move to finished; a re-watch is a new row.
+  `v_watch_current` is the latest move per title. Read via db_inspect on
+  Nov 3: 22 rows; 8 real titles currently Finished, 1 test.
+- **One hook run, estimated** from `core/ai.py` PRICING and the Arsenal's
+  own `ai_usage` averages (Nov 3):
+
+  | Step | Calls | Basis | Cost |
+  |---|---|---|---|
+  | Draft (Sonnet 5.5, non-critical) | 1 | ~5,000 in (voice ~950, rules ~420, the canon ~450, the 191 references ever proposed ~2,600, the title and weights ~450); ~1,500 out (5 cards, a word, thinking at medium) | ~$0.025 (range $0.02–0.035) |
+  | Verify (Haiku) | ~8 | ~1.6 reads a card × 5, at the measured $0.000416 | ~$0.003 |
+  | Outcome (Haiku) | 24 | 3 controls × 3 reads, then 5 cards × 3, at the measured $0.000337 | ~$0.008 |
+  | Power Word | 0 | kaikki, no AI | $0 |
+  | **Total** | | | **~$0.035–0.045 a finished title** |
+
+  Arm Me's measured requests (Nov 3) ran ~$0.020 at ~5,200 in / ~960 out;
+  the hook asks for more cards and carries the full never-repeat list.
+
+### 10.3 Data (db/062)
+
+- **`arsenal_refs`:** `origin_kind` gains `title_hook`; a title_hook card
+  carries `source_title_id`, and only it does (CHECK
+  `arsenal_refs_title_hook`). The reference guard adds, at INSERT: a
+  title_hook card enters as `pool`, with its title's `is_test`, and only
+  while that title's hook is still queued (or failed and re-run by hand).
+  No card is ever added to a drafted hook.
+- **`arsenal_title_hooks`:** ONE row per title, ever (`title_id` UNIQUE).
+  - Columns: title_id, watch_status_id (the finish that triggered it),
+    status (`queued` | `drafted` | `failed`), ref_ids (at most 5), word_id,
+    ai_usage_id (the draft's Sonnet call), note, is_test (from the title),
+    created_at, settled_at.
+  - **Append-only in identity, settled once.** The spec said "append-only",
+    but it also puts a status on the row that moves queued → drafted; a
+    strictly append-only row could not hold it. So the guard freezes the
+    identity, lets `queued` settle once to `drafted` or `failed` (with its
+    cards, word, usage and note), and never lets `drafted` change. No
+    DELETE, no TRUNCATE.
+  - **A failed hook drafts again only by a hand re-run**
+    (`scripts.arsenal_title_hook --rerun --by "…"`), which writes an
+    `arsenal_title_hook_reruns` row (append-only: who, the database role,
+    when) in the same transaction as the new draft. That is the
+    "regenerated-style event, only if re-run by hand".
+- **The trigger** (`watch_status_title_hook`, AFTER INSERT, SECURITY
+  DEFINER): a move to finished on a title with no hook writes the hook
+  (`ON CONFLICT (title_id) DO NOTHING`) and, for a real title only, ONE
+  `job_queue` row of kind `arsenal_title_hook`.
+- **Test titles:** a test title's finish writes a test hook and **no job**:
+  the worker never sees it, so no AI is ever spent on a test title. Its
+  cards come only from `add_test_title_hook_cards(marker, title, n)` (the
+  verified e2e marker), which writes `n` test cards (the first unverified
+  when n ≥ 3) and a test word, and settles the hook drafted.
+- **Titles finished before db/062:** db/062 itself backfills nothing.
+  **Owner decision (Nov 3): backfill the 8 real titles already Finished,
+  after deploy, once each, by a recorded run:**
+  `scripts.arsenal_title_hook --backfill --by "owner Nov 3"` (`--dry-run`
+  lists them). One transaction per title writes the hook (its note
+  "backfill (owner Nov 3)", kept through the draft: the settle appends
+  notes) and one `arsenal_title_hook` job, as the trigger would have. A
+  title that already has a hook is never touched. Report per title: cards,
+  word, verification and outcome, cost; and the total.
+- **Context:** `ctx_arsenal` gains `recent_title_cards` (the last 5 real
+  hooks: title, state, card count, checked count, card titles);
+  `ctx_screening`'s `finished_recent` gains `arsenal_cards` (N, once
+  drafted) or `arsenal: "drafting"`.
+- **Access:** RLS on both tables; one read policy each (`is_owner()`);
+  anon nothing; authenticated select only; valemont_readonly reads.
+
+### 10.4 Worker (`arsenal/hook.py`, job_queue kind `arsenal_title_hook`)
+
+1. **Draft** (hook queued): one Sonnet call, non-critical (the 80% budget
+   downgrade applies), `thinking: between_tools`, effort medium, structured
+   output `{refs: [...], word: {...}}`.
+   - System: the pool's own blocks (`cards.system_blocks`: the voice, the
+     rules with the outcome rule and the film/TV credit rule, the canon,
+     every reference ever proposed, the known and recent words), uncached
+     (the hook is sporadic; a cache write costs 1.25×).
+   - Message: the title (name, year, kind, overview ≤ 1,200 characters,
+     genres, up to 25 TMDB keywords), the owner's category and room
+     weights, and the ask: 3 to 5 references from this title, best first,
+     mostly film_tv (a real-world history or business angle may land
+     elsewhere; Succession → a boardroom move), and 1 Power Word from its
+     world; `source_work` = "<Title> (<year>)"; `source_page` = its
+     Wikipedia page (or Wikiquote for a quote).
+   - Each card: `cards.validate_ref`, then the owner's rules (`fit_card`):
+     a `source_work` that does not name the title is replaced by
+     "<Title> (<year>)" (noted); any quote, in every category, credits the
+     character and the title or goes. At most 5 kept. Near-duplicates
+     (cosine ≥ 0.92) are skipped and noted.
+   - **One transaction** (`ledger.arsenal_title_hook_draft`): the cards
+     (`title_hook`, `pool`, pending), the word, and the hook's move to
+     `drafted`. No card passed, a refusal, or no JSON: `failed`, with the
+     reason.
+2. **Check** (hook drafted): every card through `verify.verify_item` (the
+   pool's retrieval, judge and coverage guard), the word through kaikki,
+   then the outcome check: the three controls ONCE, then each verified or
+   corrected card's 3-read vote, recorded by `outcome.record` (a conflict
+   also holds it). Unverified cards stay in the pool, flagged, and never
+   drop. Cleared cards are ordinary pool cards tagged to the title: they
+   can drop later; the hook never forces a drop.
+- Every step skips what is done, so a retry resumes. A control that comes
+  out wrong raises `ControlsFailed` (nothing recorded; the queue retries).
+- **Credit outage (the #68 deferral):** the credit error propagates out of
+  the handler, and `poll_queue` defers the job an hour without spending an
+  attempt.
+- **`arsenal_title_hook_sweep`** (every 6 h, 11 min after boot, at most 3
+  a run): a real hook whose one job failed for good (still queued, or
+  drafted with a card or word pending, or a checked card with no outcome
+  check) and no live job is finished directly. The credit error stops the
+  sweep at once.
+
+### 10.5 Web
+
+- **The title page:** once a title has a hook, an **Arsenal** section:
+  "Drafting…" while queued; the cards with their tag (Checking while
+  pending, then Checked, Corrected, or Unverified with its reason, muted)
+  and Save; the Power Word with Save; a failed draft says so, muted. The
+  page refreshes itself every 15 s while anything is drafting or checking
+  (at most 10 minutes; paused while the tab is hidden).
+- **`/arsenal`** (today's cards) and **My Arsenal:** a card drafted from a
+  title shows **"From <title>"**, linking to the title's page.
+- **My Arsenal** gains a **From** filter: "From the Screening Room" keeps a
+  finished title's cards only (a word has no title).
+- `checkTagKind`: a pending pool card now reads **Checking** (before db/062
+  no pending pool card was ever shown).

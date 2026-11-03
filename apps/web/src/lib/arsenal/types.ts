@@ -48,7 +48,15 @@ export type Ref = {
   reaction: RefReaction | null;
   /** In My Arsenal (db/059 v_arsenal_saved). */
   saved: boolean;
+  /** Drafted from a title the owner finished (db/062), or null. */
+  fromTitle: FromTitle | null;
 };
+
+/** The finished title a card was drafted from (db/062 source_title_id). */
+export type FromTitle = { name: string; href: string };
+
+/** A title's page: /screening/title/<kind>/<tmdb id>. */
+export const titleHref = (kind: "movie" | "tv", tmdbId: number) => `/screening/title/${kind}/${tmdbId}`;
 
 export type Word = {
   id: number;
@@ -127,7 +135,8 @@ export type RefStatus ="seed" | "pool" | "dropped" | "rejected" | "arm";
 /** The small tag on a card (Phase 2, docs/arsenal.md §9.3, §9.5). A held
  *  outcome conflict reads as Unverified; an Arm Me card is "Unchecked until
  *  saved" until it is saved, then "Checking" until the verifier settles it;
- *  a seed is the owner's own canon, never checked. */
+ *  a seed is the owner's own canon, never checked. A pool card still
+ *  pending (a finished title's fresh card, db/062) is "Checking". */
 export type CheckTagKind = "checked" | "corrected" | "unverified" | "unchecked" | "checking" | "seed" | null;
 
 export function checkTagKind(c: { verification: Verification; status?: RefStatus; saved?: boolean; held?: boolean }): CheckTagKind {
@@ -137,6 +146,7 @@ export function checkTagKind(c: { verification: Verification; status?: RefStatus
   if (c.verification === "unverified") return "unverified";
   if (c.status === "seed") return "seed";
   if (c.status === "arm") return c.saved ? "checking" : "unchecked";
+  if (c.status === "pool" && c.verification === "pending") return "checking";
   return null;
 }
 

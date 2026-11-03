@@ -18,6 +18,12 @@ export function listWithHeld<T extends SavedKeyed>(items: T[], held: Map<string,
   return [...out.values()].sort((a, b) => b.savedAt.localeCompare(a.savedAt));
 }
 
+/** The "From the Screening Room" filter (db/062): a finished title's cards
+ *  only. A word carries no title, so it never matches. */
+export function fromScreening(i: { kind: "ref" | "word"; fromTitle?: unknown }): boolean {
+  return i.kind === "ref" && i.fromTitle != null;
+}
+
 /** How many are still saved: everything listed that is not removed. */
 export function keptCount<T extends SavedKeyed>(all: T[], removed: Set<string>): number {
   return all.filter((i) => !removed.has(savedKey(i))).length;

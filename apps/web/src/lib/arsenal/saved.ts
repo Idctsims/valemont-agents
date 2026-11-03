@@ -8,7 +8,8 @@ import {
   buildQuestions, QUIZ_MIN_SAVED, weekStart, type Distractors, type Question, type QuestionView,
   type QuizItem, type StoredCard,
 } from "./quiz";
-import type { Category, RefStatus, Room, Verification } from "./types";
+import { fromTitles } from "./titles";
+import type { Category, FromTitle, RefStatus, Room, Verification } from "./types";
 
 // My Arsenal and the Monday quiz (Chat 5 Phase 2; db/059), through the
 // owner's session (RLS: her rows). Narrow columns, own rows by id. A test
@@ -39,6 +40,8 @@ export type SavedRef = {
   sourceWork: string; quote: string | null; quoteBy: string | null; sourceUrl: string | null;
   verification: Verification; verificationNote: string | null; status: RefStatus; held: boolean;
   heldNote: string | null; fromArmMe: boolean;
+  /** Drafted from a finished title (db/062), or null. */
+  fromTitle: FromTitle | null;
 };
 export type SavedWord = {
   kind: "word"; id: number; savedAt: string; isTest: boolean;
@@ -66,7 +69,7 @@ export async function mySaved(supabase: SupabaseClient, opts: { withTests?: bool
   const [refs, words, holds] = await Promise.all([
     refIds.length
       ? supabase.from("arsenal_refs").select("id, category, title, origin, meaning, deploy_line, room, source_work, quote, "
-          + "quote_by, source_url, verification, verification_note, status, origin_kind").in("id", refIds)
+          + "quote_by, source_url, verification, verification_note, status, origin_kind, source_title_id").in("id", refIds)
       : null,
     wordIds.length
       ? supabase.from("arsenal_words").select("id, lemma, pronunciation, meaning, room, sentence, verification, "
@@ -79,6 +82,7 @@ export async function mySaved(supabase: SupabaseClient, opts: { withTests?: bool
     id: number; category: Category; title: string; origin: string; meaning: string; deploy_line: string; room: Room;
     source_work: string; quote: string | null; quote_by: string | null; source_url: string | null;
     verification: Verification; verification_note: string | null; status: RefStatus; origin_kind: string;
+    source_title_id: number | null;
   };
   type WordRow = {
     id: number; lemma: string; pronunciation: string | null; meaning: string; room: Room; sentence: string;
@@ -88,6 +92,7 @@ export async function mySaved(supabase: SupabaseClient, opts: { withTests?: bool
   const wordById = new Map(((words?.data ?? []) as unknown as WordRow[]).map((w) => [w.id, w]));
   const holdById = new Map(((holds?.data ?? []) as { ref_id: number; reason: string; detail: string | null }[])
     .map((h) => [h.ref_id, h]));
+  const titles = await fromTitles(supabase, [...refById.values()].map((r) => r.source_title_id));
   return rows.flatMap((s): SavedItem[] => {
     if (s.ref_id) {
       const r = refById.get(s.ref_id);
@@ -99,6 +104,7 @@ export async function mySaved(supabase: SupabaseClient, opts: { withTests?: bool
         quote: r.quote, quoteBy: r.quote_by, sourceUrl: r.source_url, verification: r.verification,
         verificationNote: r.verification_note, status: r.status, held: !!hold,
         heldNote: hold ? `${hold.reason}${hold.detail ? `: ${hold.detail}` : ""}` : null, fromArmMe: r.origin_kind === "arm_me",
+        fromTitle: r.source_title_id ? titles.get(r.source_title_id) ?? null : null,
       }];
     }
     const w = s.word_id ? wordById.get(s.word_id) : undefined;

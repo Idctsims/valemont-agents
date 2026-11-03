@@ -297,8 +297,13 @@ class NearDupAndWeights(ArsenalSqlCase):
             self.assertEqual(w(), base)
             conn.execute(react, (self.owner, r, "love"))
             up = w()
+            # Each dimension is guarded by its OWN clamp: real loves and saves put
+            # the negotiation room at 2.0 on 2026-11-03 while music_culture was
+            # under it, and the room assertion, guarded by the category's clamp,
+            # went red on data, not on a broken rule.
             if base[("category", "music_culture")] < 2.0:
                 self.assertGreater(up[("category", "music_culture")], base[("category", "music_culture")])
+            if base[("room", "negotiation")] < 2.0:
                 self.assertGreater(up[("room", "negotiation")], base[("room", "negotiation")])
             conn.execute(react, (self.owner, r, "known"))
             self.assertEqual(w(), base)  # the latest reaction counts; known moves nothing

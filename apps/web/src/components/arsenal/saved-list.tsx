@@ -7,7 +7,7 @@ import { CheckTag, RefCardBody, RoomPill, TestTag } from "@/components/arsenal/r
 import { UnverifiedReason } from "@/components/arsenal/unverified-reason";
 import { ChipFace } from "@/components/ui/chip";
 import type { SavedItem } from "@/lib/arsenal/saved";
-import { keptCount, listWithHeld, savedKey } from "@/lib/arsenal/saved-view";
+import { fromScreening, keptCount, listWithHeld, savedKey } from "@/lib/arsenal/saved-view";
 import {
   CATEGORIES, CATEGORY_LABEL, checkTagKind, ROOM_LABEL, ROOMS, type Category, type Room,
 } from "@/lib/arsenal/types";
@@ -17,14 +17,21 @@ import {
 // Me card says "Checking" until the verifier settles it, then Checked,
 // Corrected, or Unverified with its reason (a held outcome conflict reads
 // as Unverified, with the outcome reason). Filter by room and by category
-// (a category filter shows references only: words have none). Unsave leaves
-// a line with Undo, so a slip costs one tap.
+// (a category filter shows references only: words have none), and by where
+// it came from: "From the Screening Room" keeps the cards drafted from a
+// finished title (db/062). Unsave leaves a line with Undo, so a slip costs
+// one tap.
 
 const key = savedKey;
+
+type Origin = "screening";
+const ORIGINS = ["screening"] as const satisfies readonly Origin[];
+const ORIGIN_LABEL: Record<Origin, string> = { screening: "From the Screening Room" };
 
 export function SavedList({ items }: { items: SavedItem[] }) {
   const [room, setRoom] = useState<Room | null>(null);
   const [category, setCategory] = useState<Category | null>(null);
+  const [origin, setOrigin] = useState<Origin | null>(null);
   const [removed, setRemoved] = useState<Set<string>>(new Set());
   // An unsaved item leaves the server's list at the next render (the action
   // refreshes), so the list keeps it here: its "Removed · Undo" line stays.
@@ -59,7 +66,8 @@ export function SavedList({ items }: { items: SavedItem[] }) {
   }
 
   const all = listWithHeld(items, held);
-  const shown = all.filter((i) => (!room || i.room === room) && (!category || (i.kind === "ref" && i.category === category)));
+  const shown = all.filter((i) => (!room || i.room === room) && (!category || (i.kind === "ref" && i.category === category))
+    && (!origin || fromScreening(i)));
   const kept = keptCount(all, removed);
   return (
     <div data-testid="saved-list" aria-busy={busy} className="lg:max-w-3xl">
@@ -67,6 +75,8 @@ export function SavedList({ items }: { items: SavedItem[] }) {
       <Filters label="Room" testPrefix="saved-filter-room" options={ROOMS} names={ROOM_LABEL} value={room} onChange={setRoom} />
       <Filters label="Category" testPrefix="saved-filter-category" options={CATEGORIES} names={CATEGORY_LABEL}
                value={category} onChange={setCategory} />
+      <Filters label="From" testPrefix="saved-filter-from" options={ORIGINS} names={ORIGIN_LABEL}
+               value={origin} onChange={setOrigin} />
       {error && <p role="alert" data-testid="saved-error" className="mt-2 text-sm text-danger">{error}</p>}
 
       {all.length === 0 ? (
@@ -97,7 +107,7 @@ export function SavedList({ items }: { items: SavedItem[] }) {
                   category: i.category, title: i.title, sourceWork: i.sourceWork, origin: i.origin, quote: i.quote,
                   quoteBy: i.quoteBy, meaning: i.meaning, deployLine: i.deployLine, room: i.room, sourceUrl: i.sourceUrl,
                   tag: checkTagKind({ verification: i.verification, status: i.status, saved: true, held: i.held }),
-                  tagNote: i.held ? i.heldNote : i.verificationNote, isTest: i.isTest,
+                  tagNote: i.held ? i.heldNote : i.verificationNote, isTest: i.isTest, fromTitle: i.fromTitle,
                 }}>
                   <Unsave title={i.title} onClick={() => toggle(i, false)} />
                 </RefCardBody>
