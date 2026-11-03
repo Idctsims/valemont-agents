@@ -5,7 +5,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { chicagoDay } from "@/lib/screening/types";
 
 import { savedKeys } from "./saved";
-import type { Drop, PastDrop, Ref, RefReaction, UnverifiedRef, Word } from "./types";
+import { fromTitles } from "./titles";
+import type { Drop, FromTitle, PastDrop, Ref, RefReaction, UnverifiedRef, Word } from "./types";
 
 // The Arsenal's reads (Chat 5 Phase 1; db/054), through the owner's session
 // (RLS: she reads everything here). Narrow columns, own rows by id. A test
@@ -17,13 +18,14 @@ const PAST_SHOWN = 14;
 const UNVERIFIED_SHOWN = 20;
 
 const REF_COLS = "id, category, title, origin, meaning, deploy_line, room, source_work, quote, quote_by, source_url, "
-  + "verification, verification_note, is_test";
+  + "verification, verification_note, is_test, source_title_id";
 const WORD_COLS = "id, lemma, pronunciation, etymology, etymology_url, meaning, room, sentence, verification, is_test";
 
 type RefRow = {
   id: number; category: Ref["category"]; title: string; origin: string; meaning: string; deploy_line: string;
   room: Ref["room"]; source_work: string; quote: string | null; quote_by: string | null; source_url: string | null;
   verification: Ref["verification"]; verification_note: string | null; is_test: boolean;
+  source_title_id: number | null;
 };
 type WordRow = {
   id: number; lemma: string; pronunciation: string | null; etymology: string | null; etymology_url: string | null;
@@ -45,11 +47,11 @@ async function latestReactions(supabase: SupabaseClient, column: "ref_id" | "wor
   return out;
 }
 
-function toRef(r: RefRow, reaction: RefReaction | null, saved: boolean): Ref {
+function toRef(r: RefRow, reaction: RefReaction | null, saved: boolean, fromTitle: FromTitle | null): Ref {
   return {
     id: r.id, category: r.category, title: r.title, origin: r.origin, meaning: r.meaning, deployLine: r.deploy_line,
     room: r.room, sourceWork: r.source_work, quote: r.quote, quoteBy: r.quote_by, sourceUrl: r.source_url,
-    verification: r.verification, verificationNote: r.verification_note, isTest: r.is_test, reaction, saved,
+    verification: r.verification, verificationNote: r.verification_note, isTest: r.is_test, reaction, saved, fromTitle,
   };
 }
 
@@ -74,10 +76,12 @@ export async function todayDrop(supabase: SupabaseClient, opts: { withTests?: bo
   if (word.error) throw new Error(`Couldn't read today's Power Word: ${word.error.message}`);
   const byId = new Map(((refs.data ?? []) as unknown as RefRow[]).map((r) => [r.id, r]));
   const w = word.data as unknown as WordRow;
+  const titles = await fromTitles(supabase, [...byId.values()].map((r) => r.source_title_id));
   return {
     id: d.id, date: d.drop_date, isTest: d.is_test,
     refs: d.ref_ids.map((id) => byId.get(id)).filter((r): r is RefRow => !!r)
-      .map((r) => toRef(r, refReactions.get(r.id) ?? null, saved.has(`ref:${r.id}`))),
+      .map((r) => toRef(r, refReactions.get(r.id) ?? null, saved.has(`ref:${r.id}`),
+                        r.source_title_id ? titles.get(r.source_title_id) ?? null : null)),
     word: {
       id: w.id, lemma: w.lemma, pronunciation: w.pronunciation, etymology: w.etymology, etymologyUrl: w.etymology_url,
       meaning: w.meaning, room: w.room, sentence: w.sentence, verification: w.verification, isTest: w.is_test,

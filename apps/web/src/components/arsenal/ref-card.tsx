@@ -1,8 +1,10 @@
+import Link from "next/link";
+
 import { ArrowSquareOut } from "@phosphor-icons/react";
 
 import { UnverifiedReason } from "@/components/arsenal/unverified-reason";
 import {
-  CATEGORY_LABEL, CHECK_TAG_LABEL, ROOM_LABEL, quoteCredit, type Category, type CheckTagKind, type Room,
+  CATEGORY_LABEL, CHECK_TAG_LABEL, ROOM_LABEL, quoteCredit, type Category, type CheckTagKind, type FromTitle, type Room,
 } from "@/lib/arsenal/types";
 
 // One Arsenal reference card (Chat 5): the category and its tag, the
@@ -30,6 +32,8 @@ export type CardData = {
   fromArsenal?: boolean;
   /** Say "No source given" when there is no Source link (Arm Me). */
   sayNoSource?: boolean;
+  /** Drafted from a finished title (db/062): "From <title>", linking to its page. */
+  fromTitle?: FromTitle | null;
 };
 
 export function RefCardBody({ c, children }: { c: CardData; children?: React.ReactNode }) {
@@ -46,6 +50,15 @@ export function RefCardBody({ c, children }: { c: CardData; children?: React.Rea
         )}
         {c.isTest && <TestTag />}
       </div>
+      {c.fromTitle && (
+        <p className="flex items-center gap-1 text-sm text-text-muted">
+          From
+          <Link href={c.fromTitle.href} data-testid="card-from-title"
+                className="tap inline-flex min-w-0 items-center truncate px-1 text-accent underline-offset-2 hover:underline">
+            {c.fromTitle.name}
+          </Link>
+        </p>
+      )}
       <h3 data-testid="card-title" className="mt-2 font-display text-3xl leading-tight text-text text-balance">{c.title}</h3>
       <p data-testid="card-source-work" className="mt-1 text-sm italic text-text-muted">{c.sourceWork}</p>
       <p data-testid="card-origin" className="mt-3 text-base text-text-muted text-pretty">{c.origin}</p>

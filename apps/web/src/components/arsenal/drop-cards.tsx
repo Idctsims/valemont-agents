@@ -129,6 +129,7 @@ function Card({ r, current, onReact }: { r: Ref; current: RefReaction | null; on
         category: r.category, title: r.title, sourceWork: r.sourceWork, origin: r.origin, quote: r.quote,
         quoteBy: r.quoteBy, meaning: r.meaning, deployLine: r.deployLine, room: r.room, sourceUrl: r.sourceUrl,
         tag: checkTagKind({ verification: r.verification }), tagNote: r.verificationNote, isTest: r.isTest,
+        fromTitle: r.fromTitle,
       }}>
         <div className="flex flex-wrap items-start gap-1">
           <ReactionButtons label={r.title} testPrefix="card" current={current} onReact={onReact} />

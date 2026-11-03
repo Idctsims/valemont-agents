@@ -12,8 +12,9 @@ import { parseArmLine, type ArmCard } from "../src/lib/arsenal/arm-stream";
 import {
   buildQuestions, MASK, maskTitle, nextCard, orderItems, quizSize, swapWord, weekStart, type QuizItem,
 } from "../src/lib/arsenal/quiz";
-import { keptCount, listWithHeld, savedKey } from "../src/lib/arsenal/saved-view";
-import { checkTagKind, quoteCredit, saveLabel, workTitle } from "../src/lib/arsenal/types";
+import { hookBusy, type HookCard, type TitleHook } from "../src/lib/arsenal/hook-view";
+import { fromScreening, keptCount, listWithHeld, savedKey } from "../src/lib/arsenal/saved-view";
+import { checkTagKind, quoteCredit, saveLabel, titleHref, workTitle } from "../src/lib/arsenal/types";
 
 // The Arsenal's render-time quote credit (owner, 2026-10-16): a film or TV
 // quote credits the character AND the work, on cards written before the
@@ -166,7 +167,8 @@ test("tags: unchecked until saved, then checking; a held conflict is unverified;
   expect(checkTagKind({ verification: "verified", status: "arm", saved: true, held: true })).toBe("unverified");
   expect(checkTagKind({ verification: "corrected" })).toBe("corrected");
   expect(checkTagKind({ verification: "pending", status: "seed" })).toBe("seed");
-  expect(checkTagKind({ verification: "pending", status: "pool" })).toBeNull();
+  // db/062: a pending pool card (a finished title's fresh card) reads Checking.
+  expect(checkTagKind({ verification: "pending", status: "pool" })).toBe("checking");
 });
 
 const NOW = new Date("2026-10-26T15:00:00Z");
@@ -287,4 +289,35 @@ test("the quiz masks the title out of 'Which reference fits this?'", () => {
     expect(q.prompt).not.toMatch(/gambit/i);
     expect(q.prompt).toContain(MASK);
   }
+});
+
+// ------------------------------------------------ the Screening Room hook (db/062)
+
+test("a finished title's fresh pool card reads Checking until the verifier settles it", () => {
+  expect(checkTagKind({ verification: "pending", status: "pool" })).toBe("checking");
+  expect(checkTagKind({ verification: "verified", status: "pool" })).toBe("checked");
+  expect(checkTagKind({ verification: "unverified", status: "pool" })).toBe("unverified");
+  expect(checkTagKind({ verification: "verified", status: "pool", held: true })).toBe("unverified");
+  // A drop card (no status passed) is unchanged.
+  expect(checkTagKind({ verification: "pending" })).toBe(null);
+});
+
+test("From the Screening Room keeps a finished title's cards only", () => {
+  const from = { name: "Succession", href: titleHref("tv", 76331) };
+  expect(from.href).toBe("/screening/title/tv/76331");
+  expect(fromScreening({ kind: "ref", fromTitle: from })).toBe(true);
+  expect(fromScreening({ kind: "ref", fromTitle: null })).toBe(false);
+  expect(fromScreening({ kind: "word" })).toBe(false);
+});
+
+test("the title page refreshes while the hook is drafting or a card is still checking, never after", () => {
+  const c = (verification: HookCard["verification"]) => ({ verification }) as HookCard;
+  const h = (status: TitleHook["status"], cards: HookCard[] = [], word: TitleHook["word"] = null): TitleHook =>
+    ({ status, note: null, cards, word });
+  expect(hookBusy(null)).toBe(false);
+  expect(hookBusy(h("queued"))).toBe(true);
+  expect(hookBusy(h("failed"))).toBe(false);
+  expect(hookBusy(h("drafted", [c("verified"), c("pending")]))).toBe(true);
+  expect(hookBusy(h("drafted", [c("verified"), c("unverified")]))).toBe(false);
+  expect(hookBusy(h("drafted", [c("corrected")], { verification: "pending" } as TitleHook["word"]))).toBe(true);
 });

@@ -8,8 +8,10 @@ import { notFound } from "next/navigation";
 import { JustWatchAttribution, TmdbAttribution } from "@/components/screening/attribution";
 import { Poster } from "@/components/screening/search-box";
 import { ShelfButtons } from "@/components/screening/shelf-buttons";
+import { TitleArsenal } from "@/components/screening/title-arsenal";
 import { TitleReactions } from "@/components/screening/title-reactions";
 import { Fold } from "@/components/ui/fold";
+import { titleHook } from "@/lib/arsenal/hook";
 import { requireOwner } from "@/lib/auth";
 import { MARKER_HEADER, decideMarker } from "@/lib/capital/marker";
 import { titleOnShelf } from "@/lib/screening/data";
@@ -29,6 +31,8 @@ export const metadata: Metadata = { title: "Screening Room" };
 // database row, and only with the verified e2e marker.
 // Phase 4 (db/053): Love / Neutral / Not interested, and "In the news" (up
 // to 3 recent Home stories that mention it) for a title on Want or Watching.
+// Chat 5 Phase 3 (db/062): once finished, its Arsenal cards ("Drafting…"
+// while the worker writes them), each with its tag and Save.
 
 export default async function TitlePage({ params }: { params: Promise<{ kind: string; id: string }> }) {
   await requireOwner();
@@ -45,9 +49,13 @@ export default async function TitlePage({ params }: { params: Promise<{ kind: st
   } : null);
   if (!t) notFound();
   const onList = shelf?.status === "want" || shelf?.status === "watching";
-  const [reaction, news] = shelf
-    ? await Promise.all([titleReaction(supabase, shelf.title.id), onList ? titleNews(supabase, shelf.title.id, { withTests }) : []])
-    : [null, []];
+  const [reaction, news, hook] = shelf
+    ? await Promise.all([
+        titleReaction(supabase, shelf.title.id),
+        onList ? titleNews(supabase, shelf.title.id, { withTests }) : [],
+        titleHook(supabase, shelf.title.id),
+      ])
+    : [null, [], null];
   const where = splitProviders(t.providers);
   const elsewhere = where.otherStream.length + where.rent.length + where.buy.length;
 
@@ -91,6 +99,8 @@ export default async function TitlePage({ params }: { params: Promise<{ kind: st
           />
         </section>
       )}
+
+      {hook && <TitleArsenal hook={hook} />}
 
       {news.length > 0 && (
         <section aria-label="In the news" data-testid="title-news" className="mt-8">

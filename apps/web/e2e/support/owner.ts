@@ -828,6 +828,46 @@ export async function lastTestQuiz(): Promise<{ id: number; questions: number } 
   });
 }
 
+// ----------------------------------------------------- the Screening Room hook (db/062)
+
+/** A title's hook rows (one, ever, once it is finished): status and is_test. */
+export async function titleHooks(titleId: number): Promise<{ id: number; status: string; is_test: boolean }[]> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.from("arsenal_title_hooks").select("id, status, is_test").eq("title_id", titleId);
+    if (error) throw new Error(`title hook read failed: ${error.message}`);
+    return (data ?? []) as { id: number; status: string; is_test: boolean }[];
+  });
+}
+
+/** The arsenal_title_hook jobs queued for a title (a TEST title: none, ever). */
+export async function titleHookJobs(titleId: number): Promise<number> {
+  return asOwner(async (supabase) => {
+    const { count, error } = await supabase.from("job_queue").select("id", { count: "exact", head: true })
+      .eq("kind", "arsenal_title_hook").eq("payload->>title_id", String(titleId));
+    if (error) throw new Error(`title hook jobs read failed: ${error.message}`);
+    return count ?? 0;
+  });
+}
+
+/** Draft a finished TEST title's hook (db/062 add_test_title_hook_cards): `n`
+ *  test cards (the first unverified when n >= 3) and a test word. Returns the hook id. */
+export async function addTestTitleHookCards(titleId: number, n = 3): Promise<number> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.rpc("add_test_title_hook_cards", { p_marker: e2eMarker(), p_title_id: titleId, p_cards: n });
+    if (error) throw new Error(`test hook cards failed: ${error.message}`);
+    return data as number;
+  });
+}
+
+/** A title's hook cards (ids, in id order). */
+export async function titleHookCards(titleId: number): Promise<number[]> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.from("arsenal_refs").select("id").eq("source_title_id", titleId).order("id");
+    if (error) throw new Error(`hook cards read failed: ${error.message}`);
+    return ((data ?? []) as { id: number }[]).map((r) => r.id);
+  });
+}
+
 /** A title's history (watch_status), oldest first: what the spec checks. */
 export async function watchHistory(titleId: number): Promise<{ status: string; finished_at: string | null }[]> {
   return asOwner(async (supabase) => {
