@@ -107,6 +107,11 @@ workers/         Everything Python. The Railway image is built from here.
                    written once). No SQL, no orders.
   sports/nfl/      Everything NFL: nflverse schedule/kickoff, team codes, injuries,
                    models. A new sport is a sibling package, not a rebuild.
+  sports/espn.py   The sports data layer (Chat 7; docs/sports_data.md): ESPN
+                   fetch, schema validation, parse to sports_events rows.
+                   sports/jobs.py (sports_schedule, sports_live) and
+                   sports/provider.py (the API-Sports fallback, wired to nothing)
+                   beside it. No SQL: ledger.sports_events_upsert writes.
   jobs/            Scheduled work that is not an agent (weekly model fits).
   scripts/         One-off utilities, health checks, db_inspect.py (§5).
   tests/           Invariant suite. Stubbed ledger, no DB, no network. See §6.

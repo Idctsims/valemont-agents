@@ -60,6 +60,13 @@ fixtures (event lists cut, nothing inside an event changed) are in
   and `limit=500`. Men's college basketball: `groups=50` (Division I),
   `limit=500` (65 games on Thu Nov 5).
 - No `dates` on NFL returns the current week (15 games).
+- **A single date inside a multi-day event returns that event** (checked:
+  golf `20261106` mid-tournament, F1 `20261107` and `20261108` mid-weekend,
+  ATP `20261106`, WTA `20261110`, UFC on the card's day). So the live job asks
+  only for the dates in play, for every league.
+- Every scoreboard's top level carries `events`, `leagues` and `provider`
+  (plus `week`, `groups`, `day`, `season` on some): `events` and `leagues`
+  are the contract checked on every response, an empty day included.
 
 **Sizes** (bytes as served before decompression are the `gzip` column: ESPN
 answers `Content-Encoding: gzip`; parsed size is `bytes`):
@@ -277,6 +284,7 @@ database.
 
 Kalshi event mapping (Phase 2, `kalshi_event_ticker` stays NULL), Game Day
 UI and the Brief's slate (Phase 3; `ctx_sports_today` is registered as a
-provider but is **not** a brief section), pushes, odds, box scores and player
+provider but is **not** a brief section; Wags reads it from the paste on,
+since every enabled provider is in `context_snapshot()`), pushes, odds, box scores and player
 stats, leagues beyond §1 (other soccer leagues later), and the API-Sports
 implementation.
