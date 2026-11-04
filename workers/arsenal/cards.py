@@ -120,8 +120,9 @@ def quota_split(total: int, have: Mapping[str, int], weights: Mapping[str, float
 
 # ---------------------------------------------------------------- prompt
 
-#: The never-repeat list a prompt carries (owner, 2026-11-04: capped, compact
-#: titles, most relevant first, so the input stops growing with the Arsenal).
+#: The title hook's never-repeat list (owner, 2026-11-04): capped, most
+#: relevant first. The POOL batch carries every reference ever proposed (the
+#: Nov 2 rule, restored the same day after the cap cost a batch 20 of 36).
 PROPOSED_CAP = 60
 
 
@@ -184,15 +185,16 @@ def system_blocks(ctx: PromptContext) -> list[dict[str, Any]]:
     (cached: the two requests of a batch, and the top-up, share it)."""
     voice = load_arsenal_voice()
     taste = "\n".join(f"- {title} ({work}) [{key}]" for key, title, work in ctx.seeds)
-    # Compact: titles only, semicolon-separated, the most relevant first (the
-    # keys add tokens and nothing the UNIQUE key does not already enforce).
-    recent = "; ".join(title for _, title in ctx.proposed) or "(none yet)"
+    # "key: title", semicolon-separated. The KEYS stay (owner, 2026-11-04):
+    # without them the model re-proposes existing references under their
+    # existing keys (Nov 4's batch: 20 of 36 refused, finance 0 of 7).
+    recent = "; ".join(f"{key}: {title}" for key, title in ctx.proposed) or "(none yet)"
     lemmas = ", ".join(ctx.recent_lemmas) or "(none yet)"
     known = ", ".join(ctx.known_lemmas) or "(none)"
     rules = RULES.format(categories=", ".join(f"{c} ({CATEGORY_NOTES[c]})" for c in CATEGORIES))
     lists = ("THE OWNER'S CANON: taste to match, NEVER to repeat\n" + taste
-             + "\n\nREFERENCES ALREADY PROPOSED (the most relevant; there are more): never repeat, never the "
-               "same story under another name or another quote from the same scene\n" + recent
+             + "\n\nREFERENCES ALREADY PROPOSED (key: title): never repeat, never the same story under another "
+               "name or another quote from the same scene\n" + recent
              + "\n\nKNOWN POWER WORDS: the owner already uses these; the register to match, never a Power Word\n"
              + known + "\n\nRECENT POWER WORDS: never repeat\n" + lemmas)
     return [

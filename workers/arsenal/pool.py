@@ -56,21 +56,24 @@ WORDS_MAX_TOKENS = 3_000
 TOPUP_MAX_TOKENS = 5_000
 
 
-def context(*, categories: Sequence[str] = (), terms: set[str] = frozenset()) -> cards.PromptContext:
-    """The prompt's lists. The never-repeat list is capped to the
-    cards.PROPOSED_CAP most relevant references (owner, 2026-11-04): those
-    in `categories` (the ones being requested) and those sharing a word with
-    `terms` first, newest first."""
-    return cards.PromptContext(seeds=ledger.arsenal_seeds(),
-                               proposed=cards.cap_proposed(ledger.arsenal_proposed(), categories=categories,
-                                                           terms=terms),
+def context(*, cap: bool = False, categories: Sequence[str] = (), terms: set[str] = frozenset()) -> cards.PromptContext:
+    """The prompt's lists. The pool's never-repeat list is EVERY reference
+    ever proposed, with its key (the Nov 2 rule; restored 2026-11-04 after
+    the cap made a batch re-propose 20 existing references). `cap` gives the
+    title hook its capped, relevant slice (cards.cap_proposed): `categories`
+    and words shared with `terms` first, newest first."""
+    rows = ledger.arsenal_proposed()
+    proposed = (cards.cap_proposed(rows, categories=categories, terms=terms) if cap
+                else [(k, t) for k, t, _ in rows])
+    return cards.PromptContext(seeds=ledger.arsenal_seeds(), proposed=proposed,
                                recent_lemmas=ledger.arsenal_recent_lemmas(60),
                                known_lemmas=ledger.arsenal_seed_lemmas())
 
 
 def context_for(split: Mapping[str, int]) -> cards.PromptContext:
-    """A batch's or top-up's context: the requested categories' references first."""
-    return context(categories=[c for c, n in split.items() if n])
+    """A batch's or top-up's context: the full list (the split is kept for
+    the signature; every category's references are listed)."""
+    return context()
 
 
 def category_have(counts: Mapping[str, ledger.ArsenalCategoryCount]) -> dict[str, int]:
@@ -242,7 +245,7 @@ def topup(status: ledger.ArsenalPoolStatus, *, client: Any = None, http: Any = N
     ledger.arsenal_log_run("topup", "collected", run_id=run_id, model=MODEL, cost_usd=cost,
                            note="; ".join(ins.notes + ([dist] if dist else [])) or None, inserted_refs=len(ins.ref_ids),
                            inserted_words=len(ins.word_ids), skipped_dup=ins.skipped_dup,
-                           skipped_invalid=ins.skipped_invalid)
+                           skipped_invalid=ins.skipped_invalid, refusals=ins.refusals or None)
     verified: dict[str, int] = {}
     for target, ids in (("ref", ins.ref_ids), ("word", ins.word_ids)):
         for item_id in ids:
