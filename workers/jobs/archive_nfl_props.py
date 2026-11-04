@@ -28,6 +28,10 @@ What is stored, per yardage-prop market (`KXNFLPASSYDS`, `KXNFLRSHYDS`,
 
 Run weekly, by hand for now, after Monday night's game: the Tuesday after a
 week. Kalshi jobs run one at a time.
+
+**From week 6, `--to-storage`** writes the same selection to Supabase Storage
+instead of Postgres (jobs/archive_props_storage.py,
+docs/props_archive_storage.md). Week 5 stays in Postgres.
 """
 
 from __future__ import annotations
@@ -82,9 +86,28 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s")
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--week", type=int, required=True)
-    week = ap.parse_args(argv).week
+    ap.add_argument("--to-storage", action="store_true",
+                    help="weeks 6–18: write to Supabase Storage, not Postgres "
+                         "(docs/props_archive_storage.md)")
+    ap.add_argument("--revision", type=int, default=1,
+                    help="with --to-storage: 2+ only after the previous revision "
+                         "recorded unsettled markets")
+    args = ap.parse_args(argv)
+    week = args.week
+    if args.revision != 1 and not args.to_storage:
+        ap.error("--revision needs --to-storage")
 
     now = datetime.now(timezone.utc)
+    if args.to_storage:
+        # Imported here: the Postgres path never needs the storage client.
+        from core.s3 import S3Client, S3Config
+        from jobs import archive_props_storage
+        store = S3Client(S3Config.from_env())  # refuses, naming any missing .env key
+        log.info("storage mode: bucket %s, week %d, revision %d", store.bucket, week, args.revision)
+        return archive_props_storage.run(
+            week, args.revision, schedule=NflSchedule.fetch([SEASON]),
+            client=KalshiClient(min_interval=0.3), store=store, now=now)
+
     schedule = NflSchedule.fetch([SEASON])
     games = week_games(schedule, week)
     by_id = {g.game_id: g for g in games}
