@@ -62,7 +62,7 @@ def _refuse_database(*a, **k):
 class Parsing(unittest.TestCase):
     def test_every_fixture_parses_into_valid_rows(self) -> None:
         names = sorted(p.stem[len("espn_"):] for p in FIXTURES.glob("espn_*.json"))
-        self.assertEqual(len(names), 18)
+        self.assertEqual(len(names), 20)
         for name in names:
             with self.subTest(fixture=name):
                 lg = LEAGUES[name.split("_")[0]]
@@ -200,15 +200,54 @@ class Parsing(unittest.TestCase):
         self.assertEqual(first.score, {"sets": [[6, 1], [7, 6]]})
         self.assertEqual(first.session, "Qualifying 1st Round")
 
-    def test_tennis_scope_majors_masters_finals(self) -> None:
-        data = fixture("wta_finals")
-        self.assertEqual({e["name"] for e in data["events"]}, {"FAGE WTA Finals Indian Wells", "American Tennis Open Miami"})
-        matches = espn.parse(LEAGUES["wta"], data)
-        self.assertTrue(all(m.parent_espn_id == "382-2026" for m in matches))  # Miami is out of scope
-        # An in-scope event with no status and no matches (ESPN's Miami shape) stores nothing, loudly or not at all.
-        miami = copy.deepcopy([e for e in data["events"] if e["id"] == "1083-2026"][0])
-        miami["major"] = True
-        self.assertEqual(espn.parse(LEAGUES["wta"], {"events": [miami], "leagues": []}), [])
+    def test_tennis_stores_every_tour_event(self) -> None:
+        # Item 4 (owner, 2026-11-04): no name matching. A tour-level 250 with
+        # major false is stored like the Masters.
+        data = fixture("atp_masters")
+        data["events"][0].update(name="Some Open 250", major=False)
+        self.assertEqual(len(espn.parse(LEAGUES["atp"], data)), 4)
+        wta = fixture("wta_finals")
+        self.assertEqual({e["name"] for e in wta["events"]},
+                         {"FAGE WTA Finals Indian Wells", "American Tennis Open Miami"})
+        # Miami (ESPN gives it no status and no matches) is read and stores nothing.
+        self.assertEqual({m.parent_espn_id for m in espn.parse(LEAGUES["wta"], wta)}, {"382-2026"})
+
+    def test_f1_unknown_session_type_fails_loudly(self) -> None:
+        # Item 6: the sprint's shape is unverified, so any session type but
+        # FP1-3 / Qual / Race stops the F1 league with the path.
+        data = fixture("f1_scheduled")
+        data["events"][0]["competitions"][3]["type"]["abbreviation"] = "Sprint"
+        with self.assertRaises(EspnShapeError) as ctx:
+            espn.parse(LEAGUES["f1"], data)
+        self.assertIn("type.abbreviation", ctx.exception.path)
+        self.assertIn("sprint shape pending", str(ctx.exception))
+
+    def test_followed_golfers_while_a_round_is_live_from_the_open(self) -> None:
+        # Item 5: The Open (July 2026, ESPN, both followed players in the
+        # field), trimmed to the top 8 and everyone tied with them or with
+        # Scheffler / Koepka. Its status is set to round 4 in progress: the
+        # only change; ESPN serves no live golf on Nov 4 to record.
+        data = fixture("pga_open_final")
+        st = data["events"][0]["competitions"][0]["status"]
+        st["period"] = 4
+        st["type"].update(name="STATUS_IN_PROGRESS", state="in", completed=False)
+        rounds = espn.parse(LEAGUES["pga"], data)
+        live = [r for r in rounds if r.status == "live"]
+        self.assertEqual([r.session for r in live], ["R4"])
+        followed = {f["name"]: f for f in live[0].score["followed"]}
+        self.assertEqual(set(followed), {"Scottie Scheffler", "Brooks Koepka"})
+        # Expected from ESPN's full 156-man field: -7 is orders 4-5, -2 is 28-39.
+        self.assertEqual({k: followed["Scottie Scheffler"][k] for k in ("pos", "to_par")}, {"pos": "T4", "to_par": "-7"})
+        self.assertEqual({k: followed["Brooks Koepka"][k] for k in ("pos", "to_par")}, {"pos": "T28", "to_par": "-2"})
+        for f in followed.values():
+            self.assertIsInstance(f["thru"], int)
+            self.assertTrue(0 <= f["thru"] <= 18)
+            self.assertIn("today", f)
+
+    def test_a_tbd_game_is_stored_with_the_flag(self) -> None:
+        games = by_id(parse("cfb_tbd"))
+        self.assertEqual({k: (g.time_tbd, g.starts_at.hour) for k, g in games.items()},
+                         {"401856883": (True, 5), "401856864": (True, 5), "401858296": (False, 17)})
 
 
 # ------------------------------------------------------------------ status
@@ -413,29 +452,90 @@ class Tiers(unittest.TestCase):
     def test_scheduled_with_a_time(self) -> None:
         for offset, want in ((timedelta(minutes=16), "cold"), (timedelta(minutes=15), "hot"),
                              (timedelta(0), "hot"), (-timedelta(hours=3), "hot"),
-                             (-timedelta(hours=3, minutes=1), "warm"), (-timedelta(hours=24), "cold")):
+                             (-timedelta(hours=3, minutes=1), "cold"), (-timedelta(hours=24), "cold")):
             with self.subTest(starts_in=offset):
                 self.assertEqual(jobs.tier(cached("scheduled", NOW + offset), NOW), want)
 
-    def test_time_tbd_is_warm_from_its_day_start(self) -> None:
-        self.assertEqual(jobs.tier(cached("scheduled", NOW + timedelta(minutes=5), tbd=True), NOW), "cold")
-        self.assertEqual(jobs.tier(cached("scheduled", NOW - timedelta(hours=6), tbd=True), NOW), "warm")
-        self.assertEqual(jobs.tier(cached("scheduled", NOW - timedelta(hours=25), tbd=True), NOW), "cold")
+    def test_a_tbd_start_never_wakes_the_live_job(self) -> None:
+        # Item 1 (owner, 2026-11-04): a team game with no published time is
+        # left to the daily pull, at any hour of its day.
+        for league in ("cfb", "nfl", "nba", "epl"):
+            for offset in (timedelta(0), -timedelta(hours=5), -timedelta(hours=14), timedelta(minutes=10)):
+                with self.subTest(league=league, offset=offset):
+                    self.assertEqual(jobs.tier(cached("scheduled", NOW + offset, tbd=True, league=league), NOW),
+                                     "cold")
+        for kind, league in (("race_session", "f1"), ("bout", "ufc")):
+            self.assertEqual(jobs.tier(cached("scheduled", NOW - timedelta(hours=1), kind=kind, tbd=True,
+                                              league=league), NOW), "cold")
 
-    def test_live_is_hot_to_its_ceiling_then_warm_then_cold(self) -> None:
-        self.assertEqual(jobs.tier(cached("live", NOW - timedelta(hours=2)), NOW), "hot")
-        self.assertEqual(jobs.tier(cached("delayed", NOW - timedelta(hours=2)), NOW), "hot")
-        self.assertEqual(jobs.tier(cached("live", NOW - timedelta(hours=9)), NOW), "warm")
-        self.assertEqual(jobs.tier(cached("live", NOW - timedelta(hours=25)), NOW), "cold")
-        self.assertEqual(jobs.tier(cached("live", NOW - timedelta(hours=19), kind="golf_round", tbd=True), NOW), "hot")
+    def test_no_time_kinds_are_warm_on_their_own_day_only(self) -> None:
+        # Item 2: golf rounds and tennis matches, every 10 min, on the event's
+        # own (Eastern, ESPN's) day; never the day before or after.
+        day_start = datetime(2026, 11, 4, 5, 0, tzinfo=timezone.utc)  # midnight Eastern, Nov 4
+        for kind, league in (("golf_round", "pga"), ("match", "atp")):
+            ev = cached("scheduled", day_start, kind=kind, tbd=True, league=league)
+            for at, want in ((day_start - timedelta(minutes=1), "cold"),       # Nov 3, 23:59 Eastern
+                             (day_start, "warm"), (NOW, "warm"),
+                             (day_start + timedelta(hours=23, minutes=59), "warm"),  # Nov 4, 23:59 Eastern
+                             (day_start + timedelta(days=1), "cold"),              # Nov 5
+                             (day_start + timedelta(days=3), "cold"), (day_start - timedelta(days=3), "cold")):
+                with self.subTest(kind=kind, at=at):
+                    self.assertEqual(jobs.tier(ev, at), want)
+
+    def test_stuck_live_caps(self) -> None:
+        # Item 3: hot until the cap past the start, then stuck (never polled).
+        caps = {"nfl": 6, "cfb": 6, "nba": 4, "nhl": 4, "mcbb": 4, "epl": 3, "mls": 3, "ucl": 3, "mlb": 5}
+        for league, hours in caps.items():
+            with self.subTest(league=league):
+                self.assertEqual(jobs.tier(cached("live", NOW - timedelta(hours=hours, minutes=-1),
+                                                  league=league), NOW), "hot")
+                self.assertEqual(jobs.tier(cached("live", NOW - timedelta(hours=hours, minutes=1),
+                                                  league=league), NOW), "stuck")
+                self.assertEqual(jobs.tier(cached("delayed", NOW - timedelta(hours=hours, minutes=1),
+                                                  league=league), NOW), "stuck")
+        for kind, league, hours in (("race_session", "f1", 4), ("bout", "ufc", 8)):
+            self.assertEqual(jobs.tier(cached("live", NOW - timedelta(hours=hours, minutes=-1), kind=kind,
+                                              league=league), NOW), "hot")
+            self.assertEqual(jobs.tier(cached("live", NOW - timedelta(hours=hours, minutes=1), kind=kind,
+                                              league=league), NOW), "stuck")
+
+    def test_a_tbd_event_is_stuck_by_the_time_it_has_been_seen_live(self) -> None:
+        # Its starts_at is only ESPN's day start, so the clock is live_since.
+        round_ = cached("live", NOW - timedelta(hours=20), kind="golf_round", tbd=True, league="pga")
+        self.assertEqual(jobs.tier(round_, NOW, NOW - timedelta(hours=13)), "hot")
+        self.assertEqual(jobs.tier(round_, NOW, NOW - timedelta(hours=14, minutes=1)), "stuck")
+        match = cached("live", NOW - timedelta(hours=15), kind="match", tbd=True, league="wta")
+        self.assertEqual(jobs.tier(match, NOW, NOW - timedelta(hours=1)), "hot")
+        self.assertEqual(jobs.tier(match, NOW, NOW - timedelta(hours=6, minutes=1)), "stuck")
+
+    def test_stuck_is_flagged_not_polled_and_logged_once(self) -> None:
+        c = jobs.EventCache()
+        c.events[("nfl", "9")] = cached("live", NOW - timedelta(hours=7), league="nfl")
+        with mock.patch.object(jobs.log, "warning") as warn:  # the suite disables logging output
+            self.assertEqual(c.plan(NOW), {})
+            self.assertEqual(c.plan(NOW + timedelta(minutes=1)), {})
+        self.assertEqual(warn.call_count, 1)
+        self.assertEqual(warn.call_args.args[1:4], ("nfl", "9", "live"))
+        self.assertEqual(c.stuck, {("nfl", "9")})
+        run = jobs.live_job(provider_factory=lambda: self.fail("polled a stuck event"), now=lambda: NOW,
+                            cache=c, leagues={"nfl": LEAGUES["nfl"]})
+        self.assertTrue(run.idle)
+        self.assertEqual(run.stuck, ["nfl 9"])
+        self.assertIn("stuck-live flagged 1: nfl 9", run.job_note)
+        # Once final, no longer flagged.
+        c.events[("nfl", "9")] = cached("final", NOW - timedelta(hours=7), league="nfl")
+        c.plan(NOW)
+        self.assertEqual(c.stuck, set())
 
     def test_plan(self) -> None:
         c = jobs.EventCache()
         self.assertEqual(c.plan(NOW), {})
         c.events[("nba", "1")] = cached("live", NOW - timedelta(hours=1))
         c.events[("nba", "2")] = cached("scheduled", NOW + timedelta(hours=5))  # cold: not fetched for
-        c.events[("pga", "x-r1")] = cached("scheduled", NOW - timedelta(hours=10), kind="golf_round",
-                                           tbd=True, league="pga")
+        c.events[("pga", "x-r1")] = cached("scheduled", datetime(2026, 11, 4, 5, 0, tzinfo=timezone.utc),
+                                           kind="golf_round", tbd=True, league="pga")
+        c.events[("pga", "x-r2")] = cached("scheduled", datetime(2026, 11, 5, 5, 0, tzinfo=timezone.utc),
+                                           kind="golf_round", tbd=True, league="pga")  # tomorrow: cold
         c.events[("nfl", "3")] = cached("final", NOW - timedelta(hours=1), league="nfl")
         plan = c.plan(NOW)
         self.assertEqual(plan, {"nba": ("hot", [date(2026, 11, 4)]), "pga": ("warm", [date(2026, 11, 4)])})
@@ -595,10 +695,11 @@ class LiveJob(JobsCase):
         self.live(prov, at=datetime(2026, 11, 4, 23, 46, tzinfo=timezone.utc))  # 14 min before 00:00 UTC
         self.assertEqual(prov.requests, [("nba", [date(2026, 11, 4)])])
 
+    @mock.patch.dict(jobs.STUCK_AFTER_LEAGUE, {"ucl": timedelta(hours=8)})
     def test_a_failed_league_is_loud_and_the_others_still_write(self) -> None:
         data = {"ucl": fixture("ucl_live"), "nba": fixture("nba_scheduled")}
         self.schedule(FakeProvider(data), "ucl", "nba")
-        at = datetime(2026, 11, 4, 23, 50, tzinfo=timezone.utc)  # both in play
+        at = datetime(2026, 11, 4, 23, 50, tzinfo=timezone.utc)  # both in play (UCL's cap raised for this)
         moved = copy.deepcopy(data["ucl"])
         [e for e in moved["events"] if e["status"]["type"]["state"] == "in"][0]["competitions"][0]["status"][
             "displayClock"] = "90'"
@@ -616,6 +717,33 @@ class LiveJob(JobsCase):
         run = self.live(FakeProvider({"ucl": gone}))
         self.assertEqual(run.missing, 1)
         self.assertEqual(len([k for k in self.cache.events if k[0] == "ucl"]), 2)
+
+    def test_tbd_game_sleeps_until_the_daily_pull_publishes_its_time(self) -> None:
+        tbd = fixture("cfb_tbd")
+        tbd["events"] = [e for e in tbd["events"] if e["id"] == "401856883"]
+        game_day = datetime(2026, 11, 14, 12, 0, tzinfo=timezone.utc)
+        with mock.patch.object(ledger, "sports_leagues", lambda **k: league_rows("cfb")):
+            jobs.schedule_job(provider=FakeProvider({"cfb": tbd}), now=lambda: game_day, cache=self.cache,
+                              registry=self.registry)
+        self.assertTrue(self.upserts[-1][0]["time_tbd"])
+        # All of its day, nothing wakes the live job for it.
+        for hours in range(-7, 18):
+            self.assertTrue(self.live(FakeProvider({}), at=game_day + timedelta(hours=hours)).idle, hours)
+        # ESPN publishes 3:30 PM Eastern; the next daily pull replaces the time.
+        published = copy.deepcopy(tbd)
+        comp = published["events"][0]["competitions"][0]
+        comp["timeValid"] = True
+        comp["date"] = published["events"][0]["date"] = "2026-11-14T20:30Z"
+        with mock.patch.object(ledger, "sports_leagues", lambda **k: league_rows("cfb")):
+            run = jobs.schedule_job(provider=FakeProvider({"cfb": published}), now=lambda: game_day,
+                                    cache=self.cache, registry=self.registry)
+        self.assertEqual((run.sent, run.updated), (1, 1))
+        self.assertEqual((self.upserts[-1][0]["time_tbd"], self.upserts[-1][0]["starts_at"]),
+                         (False, "2026-11-14T20:30:00+00:00"))
+        self.assertTrue(self.live(FakeProvider({}), at=datetime(2026, 11, 14, 20, 14, tzinfo=timezone.utc)).idle)
+        prov = FakeProvider({"cfb": published})
+        self.live(prov, at=datetime(2026, 11, 14, 20, 15, tzinfo=timezone.utc))
+        self.assertEqual(prov.requests, [("cfb", [date(2026, 11, 14)])])
 
     def test_warm_league_waits_ten_minutes(self) -> None:
         self.schedule(FakeProvider({"pga": fixture("pga_scheduled")}), "pga")

@@ -94,6 +94,24 @@ class Upsert(SportsSqlCase):
             stored = self.read(conn, a["espn_id"], "broadcast, is_test, starts_at")
             self.assertEqual(stored[:2], (["CBS", "Paramount+"], True))
 
+    def test_no_row_is_written_without_a_change(self) -> None:
+        with _rolled_back() as conn:
+            a = _row(status="final", espn_status="STATUS_FINAL", score={"home": 24, "away": 17})
+            self.upsert(conn, a)
+            # A different hash over the same content: nothing written.
+            self.assertEqual(self.upsert(conn, dict(a, content_hash=uuid.uuid4().hex)), ledger.SportsUpsert(0, 0))
+            # A golf round past play is sent with no score; the stored one is kept, so nothing changes.
+            self.assertEqual(self.upsert(conn, dict(a, score=None, content_hash=uuid.uuid4().hex)),
+                             ledger.SportsUpsert(0, 0))
+            self.assertEqual(self.read(conn, a["espn_id"])[1], {"home": 24, "away": 17})
+            # A published time is a change: one write, the TBD flag cleared.
+            t = _row(time_tbd=True, starts_at="2026-11-14T05:00:00+00:00")
+            self.upsert(conn, t)
+            self.assertEqual(self.upsert(conn, dict(t, time_tbd=False, starts_at="2026-11-14T20:30:00+00:00",
+                                                    content_hash=uuid.uuid4().hex)), ledger.SportsUpsert(0, 1))
+            got = self.read(conn, t["espn_id"], "time_tbd, starts_at")
+            self.assertEqual(got, (False, datetime(2026, 11, 14, 20, 30, tzinfo=timezone.utc)))
+
     def test_a_stored_score_is_never_cleared_and_the_ticker_never_touched(self) -> None:
         with _rolled_back() as conn:
             a = _row(status="live", score={"home": 3, "away": 0})

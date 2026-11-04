@@ -43,7 +43,11 @@ One call per league for today (`dates=20261104`) and one for a range
 (`dates=20261104-20261110`), plus single future days and completed days for
 the final shapes. Raw responses stayed in the scratchpad; trimmed real
 fixtures (event lists cut, nothing inside an event changed) are in
-`workers/tests/fixtures/sports/espn_*.json`, 18 files, 549 KB.
+`workers/tests/fixtures/sports/espn_*.json`, 18 files, 549 KB; plus two
+added the same day for the owner's follow-ups: `espn_cfb_tbd.json` (two
+Nov 14 FBS games ESPN marks `timeValid: false`, one timed) and
+`espn_pga_open_final.json` (The Open, July 2026: the top 8 and everyone
+tied with them or with Scheffler / Koepka, 20 of 156, 150 KB).
 
 **What works:**
 
@@ -129,9 +133,9 @@ One `sports_events` row per thing that starts, has a status and ends.
   `conference_id` is ESPN's (`8` is the SEC), so Phase 3 can surface Alabama,
   ranked, SEC and national TV first. `score` = `{home, away}` once the game
   has started.
-- **F1**: practice sessions (`FP1`–`FP3`) are skipped; every other session is
-  stored, so a sprint weekend's sessions arrive under whatever ESPN names them
-  (no sprint weekend was on the calendar to probe). `score.results` = the top
+- **F1**: practice (`FP1`–`FP3`) is skipped; `Qual` and `Race` are stored.
+  **Any other session type fails the F1 league loudly** (`EspnShapeError`
+  naming `type.abbreviation`): the sprint's shape is unverified (§8). `score.results` = the top
   10 by ESPN's `order` once the session has started; `period` is the lap.
 - **Golf**: ESPN's scoreboard has **one competition per tournament**, no
   per-round rows and no tee times. Rounds are derived: one per day from the
@@ -147,13 +151,11 @@ One `sports_events` row per thing that starts, has a status and ends.
   A finished round keeps the standings it last had (a later run never
   clears a stored score).
 - **UFC**: one row per bout; `participants` = the two fighters with `winner`.
-- **Tennis**: singles only (`mens-singles`, `womens-singles` groupings).
-  **Scope: "majors+"** is read as tournaments ESPN flags `major: true`, plus
-  any whose name contains "Masters" or "Finals" (Paris Masters, ATP Finals,
-  WTA Finals). WTA 1000 events carry neither marker and are not stored;
-  **owner to confirm**. A match with a `TBD` player (ESPN id `-4`) is not
-  stored until both players are known. `score.sets` = each player's set
-  scores.
+- **Tennis**: **every ATP and WTA tour event ESPN lists** (owner,
+  2026-11-04; no name matching, ESPN's `major` flag is read but not a
+  filter), singles only (`mens-singles`, `womens-singles` groupings). A
+  match with a `TBD` player (ESPN id `-4`) is not stored until both players
+  are known. `score.sets` = each player's set scores.
 
 Common columns: `starts_at` (timestamptz, ESPN's `date`, UTC), `time_tbd`
 (ESPN's `timeValid` false), `broadcast` (text[], every name in ESPN's order,
@@ -201,15 +203,45 @@ and the job note lists each league's event count.
 **`sports_live`**: every 60 s. It reads nothing from the database and calls
 ESPN only for a league with something in play, decided from the cache:
 
-- **hot (every 60 s):** an event `live` or `delayed`, until `starts_at` + its
-  kind's ceiling (game 8 h, race session 5 h, bout 8 h, match 8 h, golf round
-  16 h); or a `scheduled` event with a real time from 15 min before
-  `starts_at` to 3 h after it.
-- **warm (every 10 min):** a `time_tbd` event that is not finished, from its
-  `starts_at` (ESPN's day start) for 24 h, so a golf round or a tennis match
-  with no published time is noticed within 10 min of going live; and any
-  hot event past its ceiling, up to 24 h after `starts_at`.
+- **hot (every 60 s):** an event `live` or `delayed`, until its stuck-live
+  cap (below); or a `scheduled` event with a real time from 15 min before
+  `starts_at` to 3 h after it (then it is left to the next daily pull).
+- **warm (every 10 min):** a `scheduled`, `time_tbd` **golf round or tennis
+  match** (the kinds ESPN gives no start time for), **on its own day only**:
+  from its `starts_at` (ESPN's day start, midnight Eastern) to the end of
+  that Eastern day. Never the day before, never the day after.
+- **A TBD start of any other kind never wakes the live job** (owner,
+  2026-11-04): a team game, F1 session or bout whose `time_tbd` is true
+  is left to the daily pull, which replaces `starts_at` and clears
+  `time_tbd` when ESPN publishes the time. Measured: 15 of 56 FBS games on
+  Sat Nov 14 and 39 of 59 on Nov 21 were TBD on Nov 4, each filed at 05:00
+  UTC. (If such a game is fetched anyway because its league is hot for
+  another game, its row updates like any other.)
 - otherwise **idle: zero calls.**
+
+**Stuck-live caps** (owner, 2026-11-04). An event still `live` or `delayed`
+this long past its start stops being polled, is flagged in every
+`sports_live` job note (`stuck-live flagged N: <league> <id>`, in
+`job_health`) and is logged once (WARNING). The next daily pull still
+refreshes it, and it unflags once final.
+
+| league / kind | cap |
+|---|---|
+| `nfl`, `cfb` | 6 h |
+| `nba`, `nhl`, `mcbb` | 4 h |
+| `epl`, `mls`, `ucl` (soccer) | 3 h |
+| `mlb` | 5 h |
+| any other team league (`game`) | 4 h |
+| `race_session` (F1) | 4 h (a race with red flags runs ~3 h) |
+| `bout` (UFC) | 8 h (a bout carries the card's start; a card runs ~6 h) |
+| `match` (tennis) | 6 h |
+| `golf_round` | 14 h |
+
+For a `time_tbd` event (golf rounds, most tennis) `starts_at` is only the
+day's start, so its cap runs from when the worker **first saw it live**
+(in memory: a restart starts that clock again). The flag lives in the job
+note, not in the table; Phase 3 can show "stale" by the same rule (status
+live and past the cap).
 
 A polled league is fetched for the Eastern dates of its in-play events only
 (team leagues one call per date, range leagues one call). An event the
@@ -225,10 +257,13 @@ database.
 ## 6. Writes, egress, RAM, calls
 
 - **Upsert by `(league, espn_id)`, one statement per fetch:** the rows go up
-  as one JSON array (`jsonb_to_recordset`), `ON CONFLICT … DO UPDATE … WHERE
-  content_hash IS DISTINCT FROM EXCLUDED.content_hash AND NOT is_test`, so an
-  unchanged row is not written, and a test row is never touched. RETURNING
-  one boolean per written row. No `SELECT *` anywhere; the worker's only read
+  as one JSON array (`jsonb_to_recordset`), `ON CONFLICT … DO UPDATE … WHERE`
+  the writer's own kind of row (real or test) **and** some stored column
+  would change (every column the update sets, the score as `coalesce` would
+  leave it). So **no row is written without a change**, even when the hash
+  moves (a golf round past play is sent with no score; its stored standings
+  are kept and nothing is rewritten). The worker's cache first skips any row
+  whose content hash it already holds. RETURNING one boolean per written row. No `SELECT *` anywhere; the worker's only read
   is the registry (14 short rows) per schedule run.
 - **Supabase egress:** ~0 KB per live run (no reads), a few KB per schedule
   run. Every job's line carries RSS and ~KB read (`core/jobs.run_tracked`).
@@ -270,10 +305,18 @@ database.
 - **Tennis:** no broadcasters on any match; unplayed rounds carry `TBD`
   players and day-only times; ESPN marked some unplayed finals
   `STATUS_CANCELED` (stored as ESPN says; the next run updates them); one WTA
-  event came with no status and no matches (skipped: nothing to store). No
-  marker for WTA 1000 / ATP 500 tiers.
-- **F1:** no sprint weekend on the calendar to probe; sprint session names
-  are unverified (stored under whatever ESPN names them, practice excluded).
+  event came with no status and no matches (nothing to store). No marker for
+  WTA 1000 / ATP 500 tiers (not needed: every tour event is stored).
+- **Golf: no live golf to record on Nov 4.** The followed players' fields
+  (`pos`, `to_par`, `today`, `thru`) are tested on ESPN's The Open (July
+  2026, `espn_pga_open_final.json`, both followed players in the field)
+  with its status set to round 4 in progress; the first live PGA round
+  (Thu Nov 5, World Wide Technology Championship) is the real check.
+- **F1: sprint shape pending the first sprint weekend.** None was on the
+  calendar to probe (São Paulo, Nov 6–8, is FP1–3, Qual, Race). Until it is
+  recorded, an unknown session type fails the F1 league loudly; the fix is
+  to probe that weekend, add its abbreviations to `F1_STORED` with a
+  fixture, and say here what they are.
 - **UFC:** the method of victory is not in the scoreboard (only `winner`).
 - **MLB:** off season (0 events on Nov 4); the shape is the team-game shape,
   fixture `espn_mlb_empty.json` is the empty day.

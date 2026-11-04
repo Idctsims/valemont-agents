@@ -5591,7 +5591,8 @@ def arsenal_run_rows(run_id: int, *, conn: psycopg.Connection | None = None) -> 
 # ---------------------------------------------------------------------------
 # Sports data layer (db/065; sports/, docs/sports_data.md). sports_leagues is
 # the registry the worker reads each schedule run; sports_events is upserted
-# by (league, espn_id), written only when content_hash changes. A writer
+# by (league, espn_id), written only when a stored column would change (the
+# worker also skips rows whose content_hash its cache already holds). A writer
 # touches only rows of its own kind (the worker real rows, tests_live its
 # e2e- test rows), and never kalshi_event_ticker (Phase 2's). A stored score
 # is never cleared: a golf round past play keeps its last standings.
@@ -5635,8 +5636,21 @@ SPORTS_EVENTS_UPSERT_SQL: Final = """
         period = EXCLUDED.period, clock = EXCLUDED.clock,
         score = coalesce(EXCLUDED.score, sports_events.score),
         content_hash = EXCLUDED.content_hash, updated_at = now()
-     WHERE sports_events.content_hash IS DISTINCT FROM EXCLUDED.content_hash
-       AND sports_events.is_test = %(is_test)s
+     WHERE sports_events.is_test = %(is_test)s
+       -- Written only if a stored column would change: every column the SET
+       -- writes, with the score as the SET would leave it. (A hash alone
+       -- would rewrite a golf round whose sent score is NULL but kept.)
+       AND (sports_events.kind, sports_events.parent_espn_id, sports_events.event_name, sports_events.session,
+            sports_events.starts_at, sports_events.time_tbd, sports_events.home, sports_events.away,
+            sports_events.participants, sports_events.broadcast, sports_events.national_tv, sports_events.venue,
+            sports_events.status, sports_events.espn_status, sports_events.status_detail, sports_events.period,
+            sports_events.clock, sports_events.score)
+           IS DISTINCT FROM
+           (EXCLUDED.kind, EXCLUDED.parent_espn_id, EXCLUDED.event_name, EXCLUDED.session,
+            EXCLUDED.starts_at, EXCLUDED.time_tbd, EXCLUDED.home, EXCLUDED.away,
+            EXCLUDED.participants, EXCLUDED.broadcast, EXCLUDED.national_tv, EXCLUDED.venue,
+            EXCLUDED.status, EXCLUDED.espn_status, EXCLUDED.status_detail, EXCLUDED.period,
+            EXCLUDED.clock, coalesce(EXCLUDED.score, sports_events.score))
     RETURNING (xmax = 0) AS inserted
 """
 

@@ -10,7 +10,10 @@ docs/sports_data.md §5).
                      others; the run then fails naming each failed league.
     sports_live      every 60 s: reads nothing from the database and calls
                      ESPN only for a league with something in play, from the
-                     cache (hot: every run; warm: every 10 min); otherwise
+                     cache (hot: every run; warm, a no-time golf round or
+                     tennis match on its own day: every 10 min); a TBD start
+                     never wakes it; an event live past its stuck-live cap
+                     is no longer polled, flagged and logged once; otherwise
                      idle, zero calls.
 
 Rows are sent only when their content hash differs from the cache, and the
@@ -43,18 +46,29 @@ DAYS_BACK, DAYS_AHEAD = 1, 7
 
 LEAD = timedelta(minutes=15)
 #: A scheduled event with a real time stays hot this long past its start
-#: (ESPN is often a few minutes late flipping a game to in-progress).
+#: (ESPN is often a few minutes late flipping a game to in-progress); then
+#: it is left to the next daily pull.
 SCHEDULED_HOT_AFTER = timedelta(hours=3)
-#: A live event stays hot until starts_at plus its kind's ceiling.
-LIVE_CEILING = {
-    "game": timedelta(hours=8),
-    "race_session": timedelta(hours=5),
-    "golf_round": timedelta(hours=20),
-    "bout": timedelta(hours=8),
-    "match": timedelta(hours=8),
+#: Stuck-live caps (owner, 2026-11-04): an event still live or delayed this
+#: long past its start stops being polled, is flagged and logged once
+#: (docs/sports_data.md §5). By league first, then by kind.
+STUCK_AFTER_LEAGUE = {
+    "nfl": timedelta(hours=6), "cfb": timedelta(hours=6),
+    "nba": timedelta(hours=4), "nhl": timedelta(hours=4), "mcbb": timedelta(hours=4),
+    "epl": timedelta(hours=3), "mls": timedelta(hours=3), "ucl": timedelta(hours=3),
+    "mlb": timedelta(hours=5),
 }
-#: Past every hot window, an unfinished event is still polled warm until this.
-WARM_UNTIL = timedelta(hours=24)
+STUCK_AFTER_KIND = {
+    "game": timedelta(hours=4),          # a team league not listed above
+    "race_session": timedelta(hours=4),  # a race with red flags runs ~3 h
+    "golf_round": timedelta(hours=14),   # from first seen live: a full day of tee times
+    "bout": timedelta(hours=8),          # bouts carry the card's start; a card runs ~6 h
+    "match": timedelta(hours=6),
+}
+#: Kinds ESPN gives no start time for (time_tbd): checked every 10 min on
+#: the event's own day only. A TBD start of any other kind never wakes the
+#: live job: the daily pull replaces the time when ESPN publishes it.
+NO_TIME_KINDS = frozenset({"golf_round", "match"})
 DONE = frozenset({"final", "postponed", "canceled", "suspended"})
 
 
@@ -78,21 +92,27 @@ class Cached:
     content_hash: str
 
 
-def tier(ev: Cached, now: datetime) -> str:
-    """'hot' (every 60 s), 'warm' (every 10 min) or 'cold' (never)."""
+def stuck_after(ev: Cached) -> timedelta:
+    return STUCK_AFTER_LEAGUE.get(ev.league) or STUCK_AFTER_KIND[ev.kind]
+
+
+def tier(ev: Cached, now: datetime, live_since: datetime | None = None) -> str:
+    """'hot' (every 60 s), 'warm' (every 10 min), 'stuck' (live past its
+    cap: never polled, flagged) or 'cold' (never polled).
+
+    The stuck clock runs from starts_at; for a time-TBD event (whose
+    starts_at is only ESPN's day start) from when the worker first saw it
+    live (`live_since`)."""
     if ev.status in DONE:
         return "cold"
-    age = now - ev.starts_at
     if ev.status in ("live", "delayed"):
-        if age < LIVE_CEILING[ev.kind]:
-            return "hot"
-        return "warm" if age < WARM_UNTIL else "cold"
+        base = (live_since or now) if ev.time_tbd else ev.starts_at
+        return "hot" if now - base < stuck_after(ev) else "stuck"
     # scheduled
     if ev.time_tbd:
-        return "warm" if timedelta(0) <= age < WARM_UNTIL else "cold"
-    if -LEAD <= age <= SCHEDULED_HOT_AFTER:
-        return "hot"
-    return "warm" if SCHEDULED_HOT_AFTER < age < WARM_UNTIL else "cold"
+        own_day = ev.starts_at <= now and eastern_day(now) == eastern_day(ev.starts_at)
+        return "warm" if ev.kind in NO_TIME_KINDS and own_day else "cold"
+    return "hot" if -LEAD <= now - ev.starts_at <= SCHEDULED_HOT_AFTER else "cold"
 
 
 @dataclass
@@ -102,6 +122,12 @@ class EventCache:
 
     events: dict[tuple[str, str], Cached] = field(default_factory=dict)
     last_poll: dict[str, datetime] = field(default_factory=dict)
+    #: When the worker first saw each event live (the stuck clock of a
+    #: time-TBD event). In memory: a restart starts it again.
+    live_since: dict[tuple[str, str], datetime] = field(default_factory=dict)
+    #: Events flagged stuck-live now, and those already logged (once each).
+    stuck: set[tuple[str, str]] = field(default_factory=set)
+    logged_stuck: set[tuple[str, str]] = field(default_factory=set)
 
     @staticmethod
     def entry(ev: SportsEvent, h: str) -> Cached:
@@ -111,24 +137,44 @@ class EventCache:
         c = self.events.get(ev.key)
         return c is not None and c.content_hash == h
 
-    def replace_league(self, league: str, rows: Iterable[tuple[SportsEvent, str]]) -> None:
+    def replace_league(self, league: str, rows: Iterable[tuple[SportsEvent, str]],
+                       now: datetime | None = None) -> None:
         for k in [k for k in self.events if k[0] == league]:
             del self.events[k]
-        self.update(rows)
+        self.update(rows, now)
 
-    def update(self, rows: Iterable[tuple[SportsEvent, str]]) -> None:
+    def update(self, rows: Iterable[tuple[SportsEvent, str]], now: datetime | None = None) -> None:
         for ev, h in rows:
             self.events[ev.key] = self.entry(ev, h)
+            if ev.status in ("live", "delayed"):
+                self.live_since.setdefault(ev.key, now or datetime.now(timezone.utc))
+            else:
+                self.live_since.pop(ev.key, None)
 
     def prune(self, before: datetime) -> None:
         for k in [k for k, c in self.events.items() if c.starts_at < before]:
             del self.events[k]
+            self.live_since.pop(k, None)
+
+    def tier_of(self, key: tuple[str, str], now: datetime) -> str:
+        return tier(self.events[key], now, self.live_since.get(key))
 
     def plan(self, now: datetime) -> dict[str, tuple[str, list[date]]]:
-        """{league: (tier, Eastern dates to fetch)} for every league to poll now."""
+        """{league: (tier, Eastern dates to fetch)} for every league to poll
+        now. Flags (and logs, once each) every event stuck live."""
         by_league: dict[str, tuple[bool, set[date]]] = {}
-        for (league, _), c in self.events.items():
-            t = tier(c, now)
+        stuck: set[tuple[str, str]] = set()
+        for key, c in self.events.items():
+            league = key[0]
+            t = self.tier_of(key, now)
+            if t == "stuck":
+                stuck.add(key)
+                if key not in self.logged_stuck:
+                    self.logged_stuck.add(key)
+                    log.warning("sports live: %s %s is still %s %.1f h after its start; no longer polled "
+                                "(stuck-live cap %.0f h)", league, key[1], c.status,
+                                (now - c.starts_at).total_seconds() / 3600, stuck_after(c).total_seconds() / 3600)
+                continue
             if t == "cold":
                 continue
             hot, days = by_league.get(league, (False, set()))
@@ -141,6 +187,7 @@ class EventCache:
                 last = self.last_poll.get(league)
                 if last is None or now - last >= WARM_INTERVAL:
                     out[league] = ("warm", sorted(days))
+        self.stuck = stuck
         return out
 
 
@@ -163,16 +210,21 @@ class SportsRun:
     wire_bytes: int = 0
     missing: int = 0
     idle: bool = False
+    #: Events flagged stuck-live (live past their cap; never polled).
+    stuck: list[str] = field(default_factory=list)
 
     @property
     def job_note(self) -> str:
+        stuck = f"stuck-live flagged {len(self.stuck)}: {', '.join(self.stuck[:5])}" if self.stuck else None
         if self.idle:
-            return "idle: nothing in play, 0 ESPN calls"
+            return "; ".join(p for p in ("idle: nothing in play, 0 ESPN calls", stuck) if p)
         parts = [", ".join(f"{k} {v}" for k, v in self.leagues.items()) or "no league fetched",
                  f"sent {self.sent}, inserted {self.inserted}, updated {self.updated}",
                  f"{self.calls} ESPN calls, ~{round(self.wire_bytes / 1024)} KB over the wire"]
         if self.missing:
             parts.append(f"{self.missing} expected event(s) missing from ESPN")
+        if stuck:
+            parts.append(stuck)
         if self.failed:
             parts.append("FAILED " + ", ".join(sorted(self.failed)))
         return "; ".join(parts)
@@ -236,7 +288,7 @@ def schedule_job(*, provider: Provider | None = None, env: Mapping[str, str] = o
     days = schedule_window(now())
     try:
         def store(lg: League, events: list[SportsEvent]) -> None:
-            cache.replace_league(lg.code, _write(run, events, cache))
+            cache.replace_league(lg.code, _write(run, events, cache), now())
 
         _fetch_each(p, {lg.code: (lg, days) for lg in leagues}, run, store)
         cache.prune(now() - timedelta(days=DAYS_BACK + 1))
@@ -253,25 +305,26 @@ def live_job(*, provider_factory: Callable[[], Provider] | None = None, env: Map
     unless the cache has a league in play."""
     t = now()
     plan = cache.plan(t)
+    stuck = sorted(f"{k[0]} {k[1]}" for k in cache.stuck)
     if not plan:
-        return SportsRun(idle=True)
+        return SportsRun(idle=True, stuck=stuck)
     known = leagues if leagues is not None else LEAGUES
     targets = {code: (known[code], days) for code, (_, days) in plan.items() if code in known}
     if not targets:
-        return SportsRun(idle=True)
+        return SportsRun(idle=True, stuck=stuck)
     p = provider_factory() if provider_factory else provider_from_env(env)
-    run = SportsRun()
+    run = SportsRun(stuck=stuck)
     try:
         def store(lg: League, events: list[SportsEvent]) -> None:
             cache.last_poll[lg.code] = t
             got = {ev.key for ev in events}
             expected = [k for k, c in cache.events.items()
-                        if k[0] == lg.code and tier(c, t) != "cold" and k not in got]
+                        if k[0] == lg.code and cache.tier_of(k, t) in ("hot", "warm") and k not in got]
             if expected:
                 run.missing += len(expected)
                 log.warning("sports live: %s: %d in-play event(s) not in ESPN's response: %s", lg.code,
                             len(expected), ", ".join(k[1] for k in expected[:5]))
-            cache.update(_write(run, events, cache))
+            cache.update(_write(run, events, cache), t)
 
         _fetch_each(p, targets, run, store)
     finally:

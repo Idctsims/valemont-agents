@@ -32,9 +32,11 @@ FOLLOWED_GOLFERS = ("Scottie Scheffler", "Brooks Koepka")
 GOLF_LEADERS = 5
 F1_RESULTS = 10
 TENNIS_SINGLES = ("mens-singles", "womens-singles")
-#: "majors+": ESPN's major flag, or Masters / Finals in the name (§3).
-TENNIS_TIER = re.compile(r"\b(masters|finals)\b", re.I)
-F1_PRACTICE = re.compile(r"^FP\d*$", re.I)
+#: F1 session types by ESPN abbreviation, as probed 2026-11-04 (FP1-3, Qual,
+#: Race). Practice is skipped; anything else (a sprint session: its shape is
+#: pending the first sprint weekend, docs/sports_data.md §8) fails loudly.
+F1_PRACTICE = frozenset({"FP1", "FP2", "FP3"})
+F1_STORED = frozenset({"Qual", "Race"})
 #: Tennis's placeholder for an undecided player.
 TBD_NAME = "TBD"
 
@@ -314,8 +316,12 @@ def parse_f1(lg: League, events: Sequence[Any]) -> list[SportsEvent]:
         for k, c in enumerate(_list(e, "competitions", lg.code, p)):
             cp = f"{p}.competitions[{k}]"
             abbr = req(req(c, "type", dict, lg.code, cp), "abbreviation", str, lg.code, f"{cp}.type")
-            if F1_PRACTICE.match(abbr):
+            if abbr in F1_PRACTICE:
                 continue
+            if abbr not in F1_STORED:
+                raise EspnShapeError(lg.code, f"{cp}.type.abbreviation",
+                                     f"unknown F1 session type {abbr[:20]!r} (sprint shape pending the first "
+                                     "sprint weekend: docs/sports_data.md §8)")
             st = read_status(c, lg.code, cp)
             names, national = broadcasts(c, lg.code, cp)
             score = None
@@ -458,18 +464,14 @@ def parse_ufc(lg: League, events: Sequence[Any]) -> list[SportsEvent]:
 
 # ----------------------------------------------------------------- tennis
 
-def tennis_in_scope(e: Any, league: str, path: str) -> bool:
-    return bool(opt(e, "major", bool, league, path)) or bool(TENNIS_TIER.search(req(e, "name", str, league, path)))
-
-
 def parse_tennis(lg: League, events: Sequence[Any]) -> list[SportsEvent]:
+    """Every tour event ESPN lists (owner, 2026-11-04), singles matches only."""
     out: list[SportsEvent] = []
     for i, e in enumerate(events):
         p = f"events[{i}]"
         eid = req(e, "id", str, lg.code, p)
         name = req(e, "name", str, lg.code, p)
-        if not tennis_in_scope(e, lg.code, p):
-            continue
+        opt(e, "major", bool, lg.code, p)  # validated, not a filter
         for g, grp in enumerate(opt(e, "groupings", list, lg.code, p) or []):
             gp = f"{p}.groupings[{g}]"
             slug = req(req(grp, "grouping", dict, lg.code, gp), "slug", str, lg.code, f"{gp}.grouping")

@@ -145,9 +145,12 @@
                              rows whose content changed; also the daily ESPN
                              contract test (sports/jobs.py, docs/sports_data.md).
     sports_live      60 s    calls ESPN only for a league with an event in play
-                             or starting within 15 min (time-TBD ones every
-                             10 min), from the in-memory cache; idle otherwise,
-                             with zero ESPN calls and zero database reads.
+                             or starting within 15 min (no-time golf rounds and
+                             tennis every 10 min on their own day; a TBD start
+                             never), from the in-memory cache; stops polling an
+                             event live past its stuck-live cap and flags it;
+                             idle otherwise, with zero ESPN calls and zero
+                             database reads.
 
 Alerts go through core/push.py with deep link /settings/health.
 """
