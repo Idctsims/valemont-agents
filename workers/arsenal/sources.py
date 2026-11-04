@@ -192,6 +192,33 @@ def wikipedia_page(title: str, *, http: Http | None = None) -> WikiPage | None:
                     " ".join(str(summary.get("description") or "").split())[:200])
 
 
+_EPISODE_TITLE = re.compile(r"\|\s*Title\s*=\s*(.*?)(?=\n\s*\|\s*\w+\s*=|\n\}\})", re.S)
+_EPISODE_SUMMARY = re.compile(r"\|\s*ShortSummary\s*=\s*(.*?)(?=\n\s*\|\s*\w+\s*=|\n\}\})", re.S)
+_EPISODE_BLOCK = re.compile(r"\{\{\s*Episode list(?:/sublist)?\b(.*?)\n\}\}", re.S | re.I)
+
+
+def episode_summaries(title: str, *, http: Http | None = None) -> Section | None:
+    """A TV series page's per-episode summaries, as one "Episodes" section.
+    They sit in {{Episode list}} templates, which the plain-text extract drops
+    (tables), so the judge never saw a series' plot: The Diplomat's carrier
+    attack and Kabul are there (verifier yield, 2026-11-04). None when the
+    page has no episode list. One request."""
+    status, body = fetch(WIKIPEDIA_API, {"action": "parse", "page": title, "prop": "wikitext", "redirects": "1",
+                                         "format": "json", "formatversion": "2"}, http=http)
+    data = _json(body) if status == 200 else None
+    wikitext = str(((data or {}).get("parse") or {}).get("wikitext") or "")
+    lines = []
+    for block in _EPISODE_BLOCK.findall(wikitext):
+        summary = _EPISODE_SUMMARY.search(block)
+        if not summary:
+            continue
+        name = _EPISODE_TITLE.search(block)
+        text = strip_markup(summary.group(1)).strip()
+        if text:
+            lines.append(f"{strip_markup(name.group(1)).strip()}: {text}" if name else text)
+    return Section("Episodes", "\n".join(lines)) if lines else None
+
+
 def search(api: str, query: str, *, limit: int = SEARCH_LIMIT, http: Http | None = None) -> list[str]:
     """Article titles for a MediaWiki full-text search (list=search) on
     Wikipedia or Wikiquote, best first. A quoted phrase searches the phrase."""

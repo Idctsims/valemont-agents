@@ -343,6 +343,47 @@
    "expect": "unverified",
    "why": "Misattributed: no source ties it to Einstein (Wikiquote lists it under Misattributed).",
    "kind": "synthetic_misquote"
+  },
+  {
+   "id": -5,
+   "category": "history_military",
+   "title": "Washington crosses the Delaware",
+   "origin": "On the night of December 25-26, 1776, George Washington led the Continental Army across the icy Delaware River to surprise the Hessians at Trenton, humming Yankee Doodle to keep the oarsmen in time.",
+   "meaning": "Move at night, across the obstacle they think protects them.",
+   "deploy_line": "They think the river is the moat; we cross it tonight.",
+   "room": "boardroom",
+   "source_work": "George Washington, Battle of Trenton (1776)",
+   "quote": null,
+   "quote_by": null,
+   "source_kind": "wikipedia",
+   "source_page": "Washington's crossing of the Delaware River",
+   "verification_now": null,
+   "note_now": null,
+   "expect": "trimmed",
+   "flourish": "yankee doodle",
+   "why": "True core (the crossing, Dec 25-26 1776, Trenton) plus an invented flourish (humming Yankee Doodle). REVISED 2026-11-04 after its first run: the first draft's meaning and deploy line ('everyone's off for the holidays') leaned on a second unsupported claim; they now rest on the core only, and the flourish is still the only invented detail.",
+   "kind": "synthetic_trim"
+  },
+  {
+   "id": -6,
+   "category": "history_military",
+   "title": "One small step",
+   "origin": "On July 20, 1969, Neil Armstrong became the first person to walk on the Moon during Apollo 11, after checking his wristwatch twice at the foot of the ladder.",
+   "meaning": "Be first, and the first step is the story.",
+   "deploy_line": "Nobody remembers the second company to land there.",
+   "room": "boardroom",
+   "source_work": "Neil Armstrong, Apollo 11 (1969)",
+   "quote": null,
+   "quote_by": null,
+   "source_kind": "wikipedia",
+   "source_page": "Apollo 11",
+   "verification_now": null,
+   "note_now": null,
+   "expect": "trimmed",
+   "flourish": "wristwatch",
+   "why": "True core (Armstrong, Apollo 11, July 20 1969, first on the Moon) plus an invented flourish (the wristwatch).",
+   "kind": "synthetic_trim"
   }
- ]
+ ],
+ "trim_rule": "Added 2026-11-04 by the owner's decision (the guarded trim): each 'synthetic_trim' card must come back 'corrected' with its flourish removed from the rewritten origin; never 'verified' as-is."
 }

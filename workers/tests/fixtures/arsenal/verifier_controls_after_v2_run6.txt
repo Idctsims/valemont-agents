@@ -1,0 +1,44 @@
+﻿PASS  2269 expect unverified got unverified 'Austin Dennison, the quiet operator'
+        first source insufficient (The Diplomat (American TV series)); second source The Diplomat (American TV series); contradicted: The excerpt shows Billie and Stuart discussing hiring the VP and Kate's selection, but never mentions Austin Dennison or staff who abs
+PASS   215 expect unverified got unverified 'Seneca on luck'
+        contradicted: The excerpt covers Seneca's Stoicism and his letters but never mentions the luck-preparation-opportunity line, and it dates Letters to Lucilius to his final years, not a specific date of c. 65 AD as the card states.
+PASS    21 expect unverified got unverified 'The Grave Dancer'
+        insufficient: the excerpt does not cover every claim (The excerpt lists the essay as 1982, not 1976, and never says the nickname came from it, so the origin claim is not confirmed.)
+PASS  1852 expect corrected  got corrected  'Washington resigns his commission'
+        corrected by the source: Excerpt confirms who, what, and date; the card's origin omits that he left for Mount Vernon the next day and does not name Annapolis, Maryland, so a minor precision fix is offered, but the card's core is supported with a source_work ma
+PASS  1964 expect clear      got verified   'BATNA (Getting to Yes)'
+        
+FAIL   190 expect clear      got unverified "Bezos's Day 1"
+        first source insufficient (Jeff Bezos); second source Jeff Bezos; insufficient: The excerpt contains no mention of a 2016 shareholder letter, 'Day 1', or 'Day 2' stasis, so it does not cover the card's origin or source work.
+FAIL   192 expect clear      got unverified "Buffett's Ovarian Lottery"
+        first source insufficient (Warren Buffett); second source Warren Buffett; insufficient: The excerpt is a biography of Buffett covering his life, marriages, possessions and hobbies, but never mentions the 'ovarian lottery' remark, birth luck, or The Giving Pled
+PASS   727 expect clear      got corrected  'The Flu Game'
+        corrected by the source: The excerpt confirms the core, but says later reporting revealed the illness was food poisoning, not simply the flu, so the origin's flu label needs qualifying.
+FAIL   736 expect clear      got unverified 'Roc-A-Fella'
+        insufficient: the excerpt does not cover every claim (Excerpt confirms who founded the label and why, but gives 1994 not 1995, and says the debut was released in a joint venture with Priority Records, not sold from a trunk; the source work should be the 1996 a
+FAIL  2267 expect clear      got unverified "Kate Wyler takes the job she didn't want"
+        first source insufficient (The Diplomat (American TV series)); second source The Diplomat (American TV series); contradicted: The excerpt shows Kate Wyler being offered a vice-presidential-style slot as a 'plan' for a woman candidate, not a London ambassadorsh
+PASS  2270 expect clear      got corrected  'Managing the carrier-attack crisis'
+        corrected by trimming (dropped: the ambassador must hold the allied position; Washington and London each push toward a different response): The excerpt confirms the carrier attack and the ambassador appointment, but does not say the ambassador must hold the al
+PASS  2271 expect clear      got corrected  "Kate won't dress the part"
+        corrected by trimming (dropped: the hair and wardrobe image-management; the staged warmth; that she resists the ambassadorship's image-management; that she wins the room on substance): The excerpt confirms Kate's appointment and her substantive moves but says 
+PASS  2247 expect clear      got corrected  'Scylla or Charybdis'
+        corrected by trimming (dropped: the six-headed monster detail is stated, but Odysseus losing six men is not ment; 'the whole ship' risked is mentioned, but the exact six-men loss is not): Excerpt confirms Odysseus passes Scylla to lose a few sailors, not exact
+PASS    14 expect clear      got corrected  'Win first, then go to war'
+        corrected by trimming (dropped: "Every battle is won before it is fought" is a later paraphrase): The excerpt confirms the core quote and source, but is silent on the later paraphrase, so that detail is dropped and the origin is rewritten to the excerpt's word
+PASS    -1 expect unverified got unverified 'Luke, I am your father'
+        quote not found in the sourced lines; kept as a described move; the origin rests on a quote no source holds
+PASS    -2 expect unverified got unverified 'Play it again, Sam'
+        contradicted: The excerpt is about the 1972 Woody Allen film and says the line's title comes from it, not that Rick says it in Casablanca; the excerpt never shows the line being spoken in Casablanca, so the card's claim is unsupported and the excerpt contradic
+PASS    -3 expect unverified got unverified 'Let them eat cake'
+        contradicted: The excerpt says there is no evidence Marie Antoinette ever said it; the phrase is traced to Rousseau's Confessions and a 'great princess', and the 1789 date and Antoinette attribution are contradicted.
+PASS    -4 expect unverified got unverified 'Einstein on insanity'
+        contradicted: The excerpt says the insanity quote is widely misattributed to Einstein via the Internet, so the card's attribution to him is contradicted.
+FAIL    -5 expect trimmed    got unverified 'Washington crosses the Delaware'
+        first source insufficient (George Washington's crossing of the Delaware River); second source George Washington; insufficient: The excerpt is a collection of Washington quotations and orders from 1770-1776 and never mentions the Delaware crossing, the Trenton 
+PASS    -6 expect trimmed    got corrected  'One small step'
+        corrected by trimming (dropped: July 20 date (excerpt says July 21 UTC); walked on the Moon during Apollo 11 (excerpt says set foot); checked his wristwatch twice at the foot of the ladder (not mentioned)): The excerpt confirms who, what, and the core timing, 
+        rewritten: On July 21, 1969, Neil Armstrong became the first person to set foot on the Moon during Apollo 11, saying "That's one small step for [a] man, one giant leap for mankind."
+
+known-bad held: 7/7; should-clear cleared: 6/10 (need 7); 1852 kept: True; trims: 1/2  =>  done-when NOT met
+cost: 25 Haiku calls, $0.012345

@@ -34,10 +34,20 @@ def card_of(c: dict[str, Any]) -> ledger.ArsenalRefToVerify:
         c["source_kind"], c.get("source_page"), "pending", None, c["meaning"], c["deploy_line"])
 
 
-def passes(expect: str, verdict: str) -> bool:
+def passes(c: dict[str, Any], v: verify.RefVerdict) -> bool:
+    expect = c["expect"]
     if expect == "unverified":
-        return verdict == "unverified"
-    return verdict in CLEARED  # "clear" and "corrected" (no regression)
+        return v.verification == "unverified"
+    if expect == "trimmed":
+        # The guarded trim (owner, 2026-11-04): corrected, rewritten without
+        # the invented flourish; never verified as-is.
+        return (v.verification == "corrected" and bool(v.origin)
+                and c["flourish"].lower() not in (v.origin or "").lower())
+    return v.verification in CLEARED  # "clear" and "corrected" (no regression)
+
+
+#: The done-when (owner, 2026-11-04).
+SHOULD_CLEAR_MIN = 7
 
 
 def main() -> int:
@@ -61,21 +71,28 @@ def main() -> int:
         rows = []
         for c in doc["cards"]:
             v = verify.verify_ref(card_of(c), ask=lambda r, e: verify.ask_haiku(r, e))
-            ok = passes(c["expect"], v.verification)
+            ok = passes(c, v)
             rows.append(ok)
+            rewritten = f"\n        rewritten: {v.origin[:200]}" if c["expect"] == "trimmed" and v.origin else ""
             print(f"{'PASS' if ok else 'FAIL'} {c['id']:>5} expect {c['expect']:<10} got {v.verification:<10} "
-                  f"{c['title'][:48]!r}\n        {(v.note or '')[:260]}")
+                  f"{c['title'][:48]!r}\n        {(v.note or '')[:260]}{rewritten}")
     finally:
         ai.complete = real_complete
         ledger.close_pool()
-    bad = [c for c, ok in zip(doc["cards"], rows) if not ok and c["expect"] != "clear"]
-    clear = [ok for c, ok in zip(doc["cards"], rows) if c["expect"] == "clear"]
-    print(f"\nknown-bad held: {sum(1 for c, ok in zip(doc['cards'], rows) if c['expect'] == 'unverified' and ok)}"
-          f"/{sum(1 for c in doc['cards'] if c['expect'] == 'unverified')}; "
-          f"should-clear cleared: {sum(clear)}/{len(clear)}; 1852 kept: "
-          f"{next(ok for c, ok in zip(doc['cards'], rows) if c['expect'] == 'corrected')}")
+
+    def tally(expect: str) -> tuple[int, int]:
+        got = [ok for c, ok in zip(doc["cards"], rows) if c["expect"] == expect]
+        return sum(got), len(got)
+
+    held, n_bad = tally("unverified")
+    cleared, n_clear = tally("clear")
+    kept, _ = tally("corrected")
+    trims, n_trim = tally("trimmed")
+    done = held == n_bad and cleared >= SHOULD_CLEAR_MIN and kept == 1 and trims == n_trim
+    print(f"\nknown-bad held: {held}/{n_bad}; should-clear cleared: {cleared}/{n_clear} (need {SHOULD_CLEAR_MIN}); "
+          f"1852 kept: {bool(kept)}; trims: {trims}/{n_trim}  =>  done-when {'MET' if done else 'NOT met'}")
     print(f"cost: {spent['calls']} Haiku calls, ${spent['cost']}")
-    return 1 if bad else 0
+    return 0 if held == n_bad and kept == 1 and trims == n_trim else 1
 
 
 if __name__ == "__main__":
