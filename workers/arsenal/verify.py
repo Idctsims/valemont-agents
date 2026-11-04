@@ -69,9 +69,15 @@ You check one reference card against a source excerpt, using ONLY the excerpt.
 - contradicted: the excerpt is about the card's subject and says otherwise on the substance.
 - insufficient: the excerpt does not cover it, or covers only part of it, or is about a different subject.
 
-Never use corrected to delete, soften or rewrite a claim the excerpt does not mention: a claim the excerpt is silent on makes the card insufficient, not corrected. Never write a fix from your own knowledge; every word of a fix comes from the excerpt.
+Never write a fix from your own knowledge; every word of a fix comes from the excerpt.
 
 covers_every_claim: true only when the excerpt mentions every claim of the card's origin (who, what, when, the detail) and its source_work; false when any of them is missing from the excerpt.
+
+The trim (the only way a silent excerpt can still clear a card). When the excerpt CONFIRMS THE CORE of the card (who did it, what they did, and when) but is silent on one or more other details (a flourish, a number, a scene detail):
+- core_confirmed: true; dropped_details: each detail the excerpt does not mention, one short phrase each.
+- verdict corrected, with fixed_origin REWRITTEN FROM THE EXCERPT'S OWN WORDING: the core only, none of the dropped details.
+- deploy_depends_on_dropped: true when the deploy_line or meaning only works because of a dropped detail.
+When the excerpt does not confirm the core, or says otherwise: core_confirmed false, and insufficient or contradicted as above. When nothing is dropped, dropped_details is empty.
 
 The outcome check. When the excerpt shows how the story really ended and that ending undercuts the card's meaning or deploy_line (Thermopylae was a total defeat for the Greeks; it cannot be a pitch line about winning), set outcome_conflict to true. Then either reframe it honestly (verdict corrected, with fixed_meaning and/or fixed_deploy_line that fit the real ending, same voice, one breath) or, when no honest reframe works, answer contradicted. When the ending fits the card, outcome_conflict is false.
 
@@ -80,11 +86,14 @@ note: one short sentence saying why. Answer with the JSON the schema asks for.""
 
 def schema() -> dict[str, Any]:
     nullable = {"anyOf": [{"type": "string"}, {"type": "null"}]}
-    fields = ("verdict", "covers_every_claim", "outcome_conflict", "fixed_origin", "fixed_source_work", "fixed_meaning",
-              "fixed_deploy_line", "note")
+    fields = ("verdict", "covers_every_claim", "core_confirmed", "dropped_details", "deploy_depends_on_dropped",
+              "outcome_conflict", "fixed_origin", "fixed_source_work", "fixed_meaning", "fixed_deploy_line", "note")
     return {"type": "object", "additionalProperties": False, "required": list(fields),
             "properties": {"verdict": {"type": "string", "enum": list(VERDICTS)},
-                           "covers_every_claim": {"type": "boolean"}, "outcome_conflict": {"type": "boolean"},
+                           "covers_every_claim": {"type": "boolean"}, "core_confirmed": {"type": "boolean"},
+                           "dropped_details": {"type": "array", "items": {"type": "string"}},
+                           "deploy_depends_on_dropped": {"type": "boolean"},
+                           "outcome_conflict": {"type": "boolean"},
                            "fixed_origin": nullable, "fixed_source_work": nullable, "fixed_meaning": nullable,
                            "fixed_deploy_line": nullable, "note": {"type": "string"}}}
 
@@ -101,15 +110,88 @@ class Judgement:
     #: The judge's own answer to "does the excerpt mention every claim?".
     #: A model answer that omits it counts as False (parse_judgement).
     covers_every_claim: bool = True
+    #: The guarded trim (owner, 2026-11-04): the excerpt confirms who, what
+    #: and when; the details it is silent on; whether the deploy line or
+    #: meaning leans on one of them. Omitted answers count against a trim.
+    core_confirmed: bool = False
+    dropped_details: tuple[str, ...] = ()
+    deploy_depends_on_dropped: bool = True
 
 
-def held(j: Judgement) -> Judgement:
+def held(j: Judgement, ref: ledger.ArsenalRefToVerify | None = None) -> Judgement:
     """The judge held to its own coverage answer: 'supported' or 'corrected'
     on an excerpt that does not cover every claim is 'insufficient' (owner,
-    2026-10-16: a silent excerpt never trims a card into 'corrected')."""
-    if j.verdict in ("supported", "corrected") and not j.covers_every_claim and not j.outcome_conflict:
+    2026-10-16: a silent excerpt never trims a card into 'corrected').
+    An outcome reframe is held to it too (verifier yield, 2026-11-04: the
+    frozen Vader misquote was reframed into 'corrected' on an excerpt that
+    never showed its line); an uncovered conflict stays unverified, its
+    outcome_conflict note kept."""
+    if j.verdict in ("supported", "corrected") and not j.covers_every_claim:
+        trim = trimmed(j) if ref is None or trim_allowed(ref, j) else None
+        if trim is not None:
+            return trim
+        if j.outcome_conflict:
+            return Judgement("insufficient", None, None,
+                             f"the reframe's excerpt does not cover every claim ({j.note})".replace(" ()", ""),
+                             outcome_conflict=True, covers_every_claim=False)
         return Judgement("insufficient", None, None, f"the excerpt does not cover every claim ({j.note})".replace(" ()", ""))
     return j
+
+
+#: A trimmed card's note starts so (and lists every detail it dropped).
+TRIMMED = "corrected by trimming"
+
+
+def trim_allowed(ref: ledger.ArsenalRefToVerify, j: Judgement) -> bool:
+    """The card's own subject is never trimmed: a dropped detail that names
+    the card's title (The Grave Dancer's article, the frozen controls) means
+    the core is NOT confirmed. The person's own names are not the subject's
+    words for this test (a dropped "Jordan scored 38" still names Jordan)."""
+    person, _, _ = split_work(ref.source_work)
+    subject = sources.key_terms(ref.title) - sources.key_terms(person, _CREDIT.sub("", ref.quote_by or ""))
+    if any(subject & sources.key_terms(d) for d in j.dropped_details):
+        return False
+    # The deploy line and meaning never lean on a dropped detail (owner,
+    # 2026-11-04), checked here as well as asked of the judge: a dropped detail
+    # sharing a distinctive word with them ("wins the room on substance"
+    # against "still hold the room") means the card's point went with it.
+    point = (sources.key_terms(ref.meaning, ref.deploy_line) - subject
+             - sources.key_terms(person, _CREDIT.sub("", ref.quote_by or "")))
+    if any(point & sources.key_terms(d) for d in j.dropped_details):
+        return False
+    # The core's WHEN: every year the card's origin names survives into the
+    # rewritten origin. A page that gives another year (The Grave Dancer: 1982,
+    # not 1976) does not confirm the core; that is never a trim.
+    years = set(_YEAR.findall(ref.origin))
+    return years <= set(_YEAR.findall(j.fixed_origin or ""))
+
+
+def rests_on_unfound_quote(ref: ledger.ArsenalRefToVerify) -> bool:
+    """The origin asserts the card's quote ("Vader reveals himself with the
+    exact line 'Luke, I am your father'") while no source holds that quote:
+    dropping the quote cannot leave a true card behind (the frozen Vader
+    misquote, 2026-11-04)."""
+    return bool(ref.quote) and sources.quote_found(ref.quote, [ref.origin])
+
+
+def trimmed(j: Judgement) -> Judgement | None:
+    """THE GUARDED TRIM (owner, 2026-11-04; it amends the Oct 16 rule that a
+    silent excerpt never clears a card). An excerpt that confirms the core
+    (who, what, when) but is silent on other details clears the card as
+    'corrected' ONLY when all hold:
+      * the judge says the core is confirmed and names what it dropped;
+      * the card is rewritten from the page's wording (fixed_origin);
+      * the deploy line and meaning do not lean on a dropped detail;
+      * no outcome conflict rides on it (that path has its own reframe).
+    The note lists every dropped detail. Otherwise None (insufficient)."""
+    if (j.verdict != "corrected" or not j.core_confirmed or not j.dropped_details or not j.fixed_origin
+            or j.deploy_depends_on_dropped or j.outcome_conflict):
+        return None
+    dropped = "; ".join(j.dropped_details)
+    return Judgement("corrected", j.fixed_origin, j.fixed_source_work,
+                     f"{TRIMMED} (dropped: {dropped}): {j.note}"[:300], outcome_conflict=False,
+                     fixed_meaning=j.fixed_meaning, fixed_deploy_line=j.fixed_deploy_line, covers_every_claim=False,
+                     core_confirmed=True, dropped_details=j.dropped_details, deploy_depends_on_dropped=False)
 
 
 #: (card, excerpt) -> Judgement. Injected by tests; production calls Haiku.
@@ -117,6 +199,8 @@ Ask = Callable[[ledger.ArsenalRefToVerify, str], Judgement]
 
 
 def ask_haiku(ref: ledger.ArsenalRefToVerify, excerpt: str, *, client: Any = None) -> Judgement:
+    """The judge: Haiku, one read (owner, 2026-11-04: the Sonnet and escalation
+    trials did not pass the frozen controls; docs/arsenal.md §11.5)."""
     card = {"title": ref.title, "origin": ref.origin, "meaning": ref.meaning, "deploy_line": ref.deploy_line,
             "source_work": ref.source_work, "quote": ref.quote, "quote_by": ref.quote_by}
     response = ai.complete(
@@ -143,7 +227,11 @@ def parse_judgement(data: Any) -> Judgement:
                      " ".join(str(data.get("note") or "").split())[:300],
                      outcome_conflict=data.get("outcome_conflict") is True,
                      fixed_meaning=text("fixed_meaning", 5, 300), fixed_deploy_line=text("fixed_deploy_line", 5, 220),
-                     covers_every_claim=data.get("covers_every_claim") is True)
+                     covers_every_claim=data.get("covers_every_claim") is True,
+                     core_confirmed=data.get("core_confirmed") is True,
+                     dropped_details=tuple(" ".join(str(d).split())[:80] for d in (data.get("dropped_details") or [])
+                                           if str(d).strip())[:6],
+                     deploy_depends_on_dropped=data.get("deploy_depends_on_dropped") is not False)
 
 
 # ------------------------------------------------------------------ mapping
@@ -168,6 +256,8 @@ def outcome(*, quote_dropped: bool, judgement: Judgement | None, unreachable: st
     if judgement.verdict == "corrected":
         if judgement.fixed_origin is None and judgement.fixed_source_work is None:
             return "unverified", "the judge corrected it without usable wording"
+        if judgement.note.startswith(TRIMMED):
+            return "corrected", judgement.note
         return "corrected", f"corrected by the source: {judgement.note}".rstrip(": ")
     return ("corrected", "") if quote_dropped else ("verified", "")
 
@@ -189,8 +279,23 @@ class RefVerdict:
 # ---------------------------------------------------------------- retrieval
 
 #: Pages fetched per wiki, at most (each Wikipedia page is two requests).
-MAX_WIKIPEDIA_PAGES = 4
+MAX_WIKIPEDIA_PAGES = 5
 MAX_WIKIQUOTE_PAGES = 3
+#: Claim terms added to the title search ("The Flu Game" + "Jordan fever 38").
+CLAIM_TERMS = 4
+#: For film and TV, these sections always make the excerpt (the story is there).
+PLOT_HEADINGS = ("plot", "synopsis", "premise", "summary", "story", "episodes", "season")
+#: A page about something other than the card's work (verifier yield, owner
+#: 2026-11-04: no concept pages, soundtracks, unrelated people).
+OFF_SUBJECT = re.compile(r"\((?:[^()]*\b)?(?:soundtrack|album|song|single|video game|disambiguation|band|"
+                         r"musical|novel|play|board game)\)|^list of |discography|filmography", re.I)
+#: The same kinds, read from Wikipedia's one-line description ("2021 song by
+#: Bo Burnham", "2005 studio album by Teairra Mari"): titles alone miss them.
+OFF_SUBJECT_DESCRIPTION = re.compile(r"\b(?:song|single|album|soundtrack|video game|board game|band|musical|"
+                                     r"disambiguation|given name|surname|topics referred to)\b", re.I)
+_QUALIFIER = re.compile(r"^(.*?)\s*\(([^()]*)\)\s*$")
+_YEAR = re.compile(r"\b(1[0-9]{3}|20[0-9]{2})\b")
+_CREDIT = re.compile(r"\s*\(as written in [^()]*\)\s*$", re.I)
 #: The quote's key phrase for a phrase search: its first words.
 PHRASE_WORDS = 6
 _TRAILING_PARENS = re.compile(r"\s*\(([^()]*)\)\s*$")
@@ -233,14 +338,85 @@ def _unique(names: list[str | None]) -> list[str]:
     return out
 
 
+def _surname(name: str | None) -> str | None:
+    """The last distinctive word of a name: "Sam Zell" -> "zell"; a film
+    credit's "(as written in ...)" is dropped first."""
+    words = sorted(sources.key_terms(_CREDIT.sub("", name or "")), key=(name or "").lower().find)
+    return words[-1] if words else None
+
+
+def on_subject(ref: ledger.ArsenalRefToVerify, page_title: str) -> tuple[bool, str]:
+    """Is this page about the card's subject? (verdict, why). Verifier yield
+    (owner, 2026-11-04): a second source whose title does not match the
+    card's subject is rejected: no concept pages, soundtracks, unrelated
+    people. The card's own named page always passes."""
+    title = page_title.strip()
+    own = (ref.source_page or "").strip()
+    if own and title.lower() == own.lower():
+        return True, "the card's own page"
+    m = _QUALIFIER.match(own)
+    person, work, _ = split_work(ref.source_work)
+    # A film or show's episode list holds its plot: allowed when it names the work.
+    episodes = (ref.category == "film_tv" and title.lower().startswith("list of ")
+                and bool(sources.key_terms(work)) and sources.key_terms(work) <= sources.key_terms(title))
+    if OFF_SUBJECT.search(title) and not OFF_SUBJECT.search(own) and not episodes:
+        return False, "a page about something else (soundtrack, album, list, ...)"
+    if m:
+        base, qualifier = m.group(1).strip().lower(), m.group(2).strip().lower()
+        t = _QUALIFIER.match(title)
+        if title.lower() == base:
+            return False, f"the bare title when the card's page is {own!r} (a concept or other page)"
+        if t and t.group(1).strip().lower() == base and t.group(2).strip().lower() != qualifier:
+            return False, f"another {base!r} ({t.group(2)}), not the card's ({qualifier})"
+    if episodes:
+        return True, "the work's episode list"
+    words = sources.key_terms(title)
+    names = {n for n in (_surname(person), _surname(ref.quote_by)) if n}
+    if names & words:
+        return True, "names the card's person"
+    for terms in (sources.key_terms(work), sources.key_terms(ref.title),
+                  sources.key_terms(m.group(1)) if m else sources.key_terms(own)):
+        if terms and terms <= words:
+            return True, "holds the work's or the card's title"
+    return False, "names neither the card's person nor its work"
+
+
+def episode_pages(ref: ledger.ArsenalRefToVerify) -> list[str]:
+    """For a TV card, the pages that tell its episodes: "List of The Diplomat
+    (American TV series) episodes" and "The Diplomat (American TV series)
+    season 1". A series' own page rarely has the scene a card names; its
+    episode list does (the Diplomat controls, 2026-11-04). A missing page
+    costs one 404."""
+    own = (ref.source_page or "").strip()
+    if ref.category != "film_tv" or not re.search(r"\((?:[^()]*\s)?(?:TV series|miniseries)\)$", own, re.I):
+        return []
+    base = _QUALIFIER.match(own).group(1).strip()  # type: ignore[union-attr]
+    return [f"List of {own} episodes", f"List of {base} episodes"]
+
+
+def claim_query(ref: ledger.ArsenalRefToVerify) -> str:
+    """The card's title plus its first CLAIM_TERMS distinctive origin words
+    not already in the title: "The Flu Game Jordan 1997 fever ..."."""
+    have = sources.key_terms(ref.title)
+    extra = [w for w in sources.normalize(ref.origin).split()
+             if w in sources.key_terms(ref.origin) and w not in have]
+    return " ".join([ref.title, *list(dict.fromkeys(extra))[:CLAIM_TERMS]])
+
+
 def candidates(ref: ledger.ArsenalRefToVerify, *, http: sources.Http | None = None) -> tuple[list[Candidate], list[str]]:
     """Every page that could hold the passage, ranked by its best-matching
     section (the work's own page wins ties: it is searched first). Returns
-    (candidates, the sources that would not answer)."""
+    (candidates, the sources that would not answer). A page that is not about
+    the card's subject (on_subject) is never a candidate."""
     person, work, context = split_work(ref.source_work)
-    strong = sources.key_terms(ref.title, work, context, person, ref.quote)
+    strong = sources.key_terms(ref.title, work, context, person, ref.quote, _CREDIT.sub("", ref.quote_by or ""))
     weak = sources.key_terms(ref.origin)
-    want_quotes = ref.category == "film_tv" or ref.quote is not None or ref.source_kind == "wikiquote"
+    # A person's Wikiquote page holds their remarks ("the ovarian lottery").
+    want_quotes = (ref.category == "film_tv" or ref.quote is not None or ref.source_kind == "wikiquote"
+                   or person is not None)
+    # The work's own section first ("Game 5" of the 1997 NBA Finals), and for
+    # film and TV the plot.
+    prefer = tuple(p for p in (work.strip().lower(),) if p) + (PLOT_HEADINGS if ref.category == "film_tv" else ())
     down: list[str] = []
 
     def searched(api: str, query: str) -> list[str]:
@@ -252,13 +428,25 @@ def candidates(ref: ledger.ArsenalRefToVerify, *, http: sources.Http | None = No
 
     # The work with its person ("Enchiridion Epictetus"), else with its own
     # context ("Moneyball Michael Lewis, 2003": the book, not the film).
-    wp_names = _unique([ref.source_page, *searched(sources.WIKIPEDIA_API, f"{work} {person or context}"),
+    # The specific event, work or person: the title with its key claim terms
+    # first ("The Flu Game" + the origin's words), then the work with its
+    # person or context ("Moneyball Michael Lewis, 2003": the book, not the
+    # film), then the title with the person or work. Off-subject names are
+    # dropped before anything is fetched.
+    wp_names = _unique([ref.source_page, *episode_pages(ref), *searched(sources.WIKIPEDIA_API, claim_query(ref)),
+                        *searched(sources.WIKIPEDIA_API, f"{work} {person or context}"),
                         ref.title, *searched(sources.WIKIPEDIA_API, f"{ref.title} {person or work}")])
+    wp_names = [n for n in wp_names if on_subject(ref, n)[0]]
     wq_names: list[str] = []
     if want_quotes:
         phrase = " ".join((ref.quote or "").split()[:PHRASE_WORDS])
+        character = _CREDIT.sub("", ref.quote_by or "").strip()
+        # For film and TV: the film's own Wikiquote page, and a search for the
+        # work with its character (the character's section holds their lines).
         wq_names = _unique([ref.source_page, *(searched(sources.WIKIQUOTE_API, f'"{phrase}"') if phrase else []),
-                            work, person, ref.quote_by])
+                            *(searched(sources.WIKIQUOTE_API, f"{work} {character}") if character else []),
+                            work, person, character])
+        wq_names = [n for n in wq_names if on_subject(ref, n)[0]]
     out: list[Candidate] = []
     for name in wp_names[:MAX_WIKIPEDIA_PAGES]:
         try:
@@ -266,11 +454,27 @@ def candidates(ref: ledger.ArsenalRefToVerify, *, http: sources.Http | None = No
         except sources.SourceUnavailable as exc:
             down.append(str(exc))
             continue
-        if page is None or any(c.kind == "wikipedia" and c.title == page.title for c in out):
+        # A redirect can land on another subject: check the page's own title,
+        # and its description (a song, an album) unless the card is about one.
+        if page is None or not on_subject(ref, page.title)[0] \
+                or (OFF_SUBJECT_DESCRIPTION.search(page.description)
+                    and not OFF_SUBJECT_DESCRIPTION.search(f"{ref.source_work} {ref.title} {ref.source_page or ''}")
+                    and page.title.lower() != (ref.source_page or "").lower()) \
+                or any(c.kind == "wikipedia" and c.title == page.title for c in out):
             continue
         sections = page.sections or (sources.Section("", page.text),)
+        # A TV series' episode summaries live in tables the extract drops:
+        # read them for the card's own series page.
+        if ref.category == "film_tv" and episode_pages(ref) and page.title.lower() == (ref.source_page or "").lower():
+            try:
+                eps = sources.episode_summaries(page.title, http=http)
+            except sources.SourceUnavailable as exc:
+                down.append(str(exc))
+                eps = None
+            if eps is not None:
+                sections = (*sections, eps)
         out.append(Candidate("wikipedia", page.title, page.url,
-                             sources.excerpt(sections, strong=strong, weak=weak, quote=ref.quote),
+                             sources.excerpt(sections, strong=strong, weak=weak, quote=ref.quote, prefer=prefer),
                              tuple(ln for s in sections for ln in sources.sentences(s.text))))
     for name in wq_names[:MAX_WIKIQUOTE_PAGES]:
         try:
@@ -278,10 +482,15 @@ def candidates(ref: ledger.ArsenalRefToVerify, *, http: sources.Http | None = No
         except sources.SourceUnavailable as exc:
             down.append(str(exc))
             continue
-        if q is None or not q.lines or any(c.kind == "wikiquote" and c.title == q.title for c in out):
+        if q is None or not q.lines or not on_subject(ref, q.title)[0] \
+                or any(c.kind == "wikiquote" and c.title == q.title for c in out):
             continue
+        # A person's page is often one long "Quotes" section: rank its LINES
+        # (with their source lines) so "the ovarian lottery" is not cut off
+        # by the first few thousand characters.
+        line_sections = tuple(sources.Section(f"quote {i}", ln) for i, ln in enumerate(q.lines, 1))
         out.append(Candidate("wikiquote", q.title, q.url,
-                             sources.excerpt(q.sections or (sources.Section("", "\n".join(q.lines)),),
+                             sources.excerpt((sources.Section("", ""), *line_sections),
                                              strong=strong, weak=weak, quote=ref.quote),
                              q.lines))
     # The card's own subject page first: a page whose title holds every key
@@ -296,6 +505,28 @@ def candidates(ref: ledger.ArsenalRefToVerify, *, http: sources.Http | None = No
 
     out.sort(key=lambda c: (not own_page(c), -c.excerpt.score))
     return out, down
+
+
+def reattributed(ref: ledger.ArsenalRefToVerify, j: Judgement) -> Judgement:
+    """A correction fixes a detail; it never changes WHO the card is about.
+    A 'corrected' whose fixed source_work drops the card's named person (the
+    Marie Antoinette misquote rewritten to Rousseau: the frozen controls,
+    2026-11-04) is the excerpt saying otherwise on the substance:
+    contradicted. The judge's prompt is unchanged."""
+    person, _, _ = split_work(ref.source_work)
+    name = _surname(person)
+    if j.verdict != "corrected" or not j.fixed_source_work or not name:
+        return j
+    # Only a DIFFERENT named person re-attributes it ("Jean-Jacques Rousseau,
+    # Confessions"); a work with no person ("Reasonable Doubt (1996)" for the
+    # Roc-A-Fella card, whose "person" is the label) is a detail fix.
+    new_person, _, _ = split_work(j.fixed_source_work)
+    new_name = _surname(new_person)
+    if new_name is None or name in sources.key_terms(j.fixed_source_work):
+        return j
+    return Judgement("contradicted", None, None,
+                     f"the correction re-attributes it away from {person} ({j.fixed_source_work}): {j.note}"[:300],
+                     outcome_conflict=False, covers_every_claim=j.covers_every_claim)
 
 
 def verify_ref(ref: ledger.ArsenalRefToVerify, *, ask: Ask, http: sources.Http | None = None) -> RefVerdict:
@@ -323,25 +554,33 @@ def verify_ref(ref: ledger.ArsenalRefToVerify, *, ask: Ask, http: sources.Http |
             notes.append("quote not found in the sourced lines; kept as a described move")
 
     # The quote's page is read first; then the best-matching pages.
-    order = ([quote_page] if quote_page else []) + [c for c in found if c is not quote_page]
+    order = [c for c in ([quote_page] if quote_page else []) + [c for c in found if c is not quote_page]
+             if c.excerpt.text.strip()]
     judged: list[str] = []
     judgement = Judgement("insufficient", None, None, "an empty page")
     used: Candidate | None = None
-    for c in order:
-        if not c.excerpt.text.strip():
-            continue
+    first: Candidate | None = None
+    while order:
+        # 'insufficient' earns ONE second source, from the OTHER wiki when it
+        # has a page (Wikiquote holds a person's remarks; the next Wikipedia
+        # lookalike rarely helps: "Lauren Sanchez Bezos" after "Jeff Bezos").
+        c = order.pop(0) if first is None else next((x for x in order if x.kind != first.kind), order[0])
+        if first is not None:
+            order.remove(c)
         text = f"SOURCE: {c.title} ({c.kind})\n\n{c.excerpt.text}"
         if c is quote_page and matched_line:
             text = f"QUOTED LINE: {matched_line}\n\n{text}"
-        judgement = held(ask(ref, text[:sources.JUDGE_CHARS + 200]))
+        judgement = reattributed(ref, held(ask(ref, text[:sources.JUDGE_CHARS + 200]), ref))
         judged.append(c.title)
         used = c
-        # 'insufficient' earns ONE second source; nothing else retries.
+        first = first or c
         if judgement.verdict != "insufficient" or judgement.outcome_conflict or len(judged) == 2:
             break
     if len(judged) == 2:
         notes.append(f"first source insufficient ({judged[0]}); second source {judged[1]}")
     verification, why = outcome(quote_dropped=drop_quote, judgement=judgement, unreachable=None)
+    if drop_quote and verification != "unverified" and rests_on_unfound_quote(ref):
+        verification, why = "unverified", "the origin rests on a quote no source holds"
     if why:
         notes.append(why)
     # The card links where it was checked: the quote's page when its quote was

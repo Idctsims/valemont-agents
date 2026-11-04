@@ -393,6 +393,14 @@ def _client() -> Any:
     return _SDK
 
 
+def count_tokens(*, model: str, messages: list[Any], client: Any = None, **params: Any) -> int:
+    """The input tokens a prompt would cost (the API's free token count; no
+    model call, no ai_usage row). For measuring prompts, e.g. the Arsenal's
+    never-repeat cap (owner, 2026-11-04): tokens before and after."""
+    sdk = client if client is not None else _client()
+    return int(_sdk(sdk.messages.count_tokens, model=model, messages=messages, **params).input_tokens)
+
+
 def complete(*, purpose: str, messages: list[Any], model: str = DEFAULT_MODEL,
              critical: bool = False, max_tokens: int = 16_000, client: Any = None,
              on_recorded: OnRecorded | None = None, **params: Any) -> Any:

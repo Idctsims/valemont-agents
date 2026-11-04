@@ -986,3 +986,102 @@ the title page, `/arsenal` and `/arsenal/saved`.
   finished title's cards only (a word has no title).
 - `checkTagKind`: a pending pool card now reads **Checking** (before db/062
   no pending pool card was ever shown).
+---
+
+## 11. Verifier yield (Chat 5's last item, Nov 4; branch `verifier-yield`)
+
+### 11.1 The Oct 16 rule, amended (owner, 2026-11-04): the guarded trim
+
+Oct 16 (§8b): a page silent on a claim made the card **insufficient**; the
+judge could never "trim" its way to corrected. **Amended Nov 4 (owner,
+option b):** a card may clear as **corrected by trimming** only when ALL hold:
+
+- the page confirms the core: who, what and **when**. Every year the card's
+  origin names must survive into the rewritten origin (`trim_allowed`);
+- the card is **rewritten from the page's wording** (`fixed_origin`);
+- **every dropped detail is listed** in the verification note
+  ("corrected by trimming (dropped: ...)");
+- the deploy line and meaning do **not** lean on a dropped detail: the
+  judge says so (`deploy_depends_on_dropped`), AND no dropped detail shares
+  a distinctive word with them, AND none names the card's own title;
+- no outcome conflict rides on it. The outcome check reruns on the trimmed
+  card: it is stored rewritten, and the pipeline outcome-checks every
+  verified or corrected card with no check on record.
+
+Contradictions are unchanged. A "corrected" whose new source work names a
+**different person** is a contradiction (`reattributed`). An outcome
+reframe is held to coverage like any correction. A card whose quote no
+source holds, and whose origin asserts that quote, stays unverified.
+
+### 11.2 The frozen controls (`tests/fixtures/arsenal/verifier_controls.json`)
+
+Frozen before any change; run by `scripts.arsenal_verifier_controls`
+(verify only, nothing written; the judge's calls are real).
+
+- **Known-bad, must stay unverified (7):**
+  - 2269, the Dennison card;
+  - 215, Seneca on luck;
+  - seed 21, The Grave Dancer: Sam Zell's page lists Real Estate Review (1982), the card says 1976. It is the only pool or seed contradiction confirmed against the correct page;
+  - 4 synthetic misquotes: Vader, Casablanca, Marie Antoinette, Einstein.
+- **Should clear (10):**
+  - BATNA 1964, Bezos 190, Buffett 192, the Flu Game 727, Roc-A-Fella 736;
+  - 2267, 2270, 2271, 2247;
+  - seed 14.
+- **1852 Washington** must stay corrected.
+- **2 trim fixtures** (owner, Nov 4): a true core with an invented flourish (Washington's crossing with "humming Yankee Doodle"; Apollo 11 with "checking his wristwatch twice"). Each must come back corrected with the flourish removed.
+  - Fixture -5's meaning and deploy line were revised after its first run: the draft leaned on a second unsupported claim. Disclosed in the fixture.
+- 2250 is excluded from both sets.
+
+### 11.3 Diagnosis (3a), Nov 4: 125 real unverified
+
+- **By origin:** 85 pool, 20 title-hook, 2 Arm Me, 18 seeds.
+- **By cause:** 41 insufficient, 45 wrong page, 21 contradicted, 15 outcome conflict, 3 corrected without usable wording.
+- **86 (69%) are retrieval failures.** Examples: the actress Sofia Hublitz for Ozark; Andy Jassy for Bezos; Bill Gates for Buffett; Sam Snead for Sam Zell; a *Total War* game page for Sun Tzu; a TV series' main page, whose episode plot lives in tables the plain-text extract drops.
+
+### 11.4 Results so far
+
+| Run | Known-bad | Should-clear | 1852 | Trims | Cost |
+|---|---|---|---|---|---|
+| Baseline (unchanged) | 6/7 | 0/10 | kept | n/a | $0.0123 |
+| v1 retrieval + re-attribution | 7/7 | 1/10 | kept | n/a | $0.0111 |
+| + guarded trim, episode summaries, the guards (two runs) | 7/7, 7/7 | 3/10, 3/10 | kept | 2/2, 2/2 | $0.0134, $0.0139 |
+
+- **Residue dry run** (v1, all 125, nothing written): 8 clear (6.4%), $0.115.
+- **Finding:** the cards that clear change from run to run (BATNA, Sun Tzu and Scylla each flipped). Haiku takes no temperature setting (§8c), so single reads vary. The done-when (should-clear ≥ 7/10) is not met.
+
+### 11.5 The judge trial (owner, Nov 4): test before switching
+
+Each mode ran the frozen controls **twice** (`scripts.arsenal_verifier_controls --judge`). Pass = both runs meet all four: known-bad 7/7, should-clear ≥ 7/10, 1852 kept, trims 2/2.
+
+| Mode | Run | Known-bad | Should-clear | 1852 | Trims | Cost (20 controls) |
+|---|---|---|---|---|---|---|
+| (A) Sonnet for every card | 1 | 7/7 | 2/10 | kept | 2/2 | $0.287 (30 Sonnet calls) |
+| (A) | 2 | 7/7 | 2/10 | kept | 2/2 | $0.286 (30 Sonnet calls) |
+| (B) Haiku, Sonnet on "insufficient" | 1 | 7/7 | 4/10 | kept | 2/2 | $0.168 (Haiku $0.013, Sonnet $0.155) |
+| (B) | 2 | 7/7 | 3/10 | kept | 2/2 | $0.117 (Haiku $0.012, Sonnet $0.105) |
+| (for reference) Haiku single read, 2 runs | | 7/7, 7/7 | 3/10, 3/10 | kept | 2/2 | $0.013, $0.014 |
+
+**Neither passes.** By the owner's rule: report and stop; the bar is lowered. **Decided (owner, Nov 4):** the judge stays Haiku single-read, and the escalation code is **removed**, not kept switched off. **The bar:** known-bad 7/7, should-clear ≥ 3/10 in both runs, 1852 kept, trims 2/2, AND the next fresh pool batch's dry-run clear rate above the 52–58% baseline.
+
+Sonnet is the strictest of the three and stable (the same 2 of 10, twice). The should-clear misses are pages that never state the card's specific claim (Bezos's Day 1 letter, Buffett's ovarian lottery, Kate's Kabul), which no judge can confirm.
+
+**Projected weekly cost, on a 36-card batch** (cost per control card × 36). The controls are harder than fresh cards, so (B)'s escalation share would be lower on a fresh batch:
+
+| Mode | Per card | Per week |
+|---|---|---|
+| Haiku single read | ~$0.0007 | ~$0.025 |
+| (A) Sonnet for every card | ~$0.0143 | ~$0.52 |
+| (B) escalation | ~$0.0059–0.0084 | ~$0.21–0.30 |
+
+### 11.6 The never-repeat cap (owner's 3f, Nov 4)
+
+The hook's and the pool's prompts now list the **60 most relevant** of every reference ever proposed (`cards.cap_proposed`), as titles only. The order is: a title sharing a word with the request first (the hook: the title's name and TMDB keywords), then the requested categories (the hook: film_tv), then the rest; newest first within each.
+
+The database's UNIQUE key and the embedding near-duplicate check still guard every insert against all of them. **Approved (owner, Nov 4): this replaces the Nov 2 rule ("every reference ever proposed").**
+
+Measured with the API's token count (`scripts.arsenal_prompt_tokens`; no model call), 219 references proposed:
+
+| Prompt | Before | After |
+|---|---|---|
+| The hook (The Diplomat) | 9,991 | **4,923** (−51%) |
+| The pool's reference request | 9,394 | **4,362** (−54%) |

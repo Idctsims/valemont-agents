@@ -31,11 +31,17 @@ from core import ledger
 from core.paths import load_env
 
 
+#: The groups the owner reports by (Nov 4), from origin_kind.
+GROUPS = {"pool": "pool", "title_hook": "hook", "arm_me": "arm", "seed": "seed"}
+
+
 def unverified_ids() -> list[int]:
+    """Every real unverified pool, title-hook, Arm Me and seed reference
+    (db/063 opened the one re-verification to seeds and arm cards)."""
     with ledger._brief_conn(None) as c:  # noqa: SLF001 - a script's one read
         return [int(r[0]) for r in c.execute(
-            "SELECT id FROM arsenal_refs WHERE NOT is_test AND status = 'pool' AND verification = 'unverified' "
-            "ORDER BY id").fetchall()]
+            "SELECT id FROM arsenal_refs WHERE NOT is_test AND status IN ('pool', 'seed', 'arm') "
+            "AND verification = 'unverified' ORDER BY id").fetchall()]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -49,6 +55,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--write needs --by (who re-verified, as recorded)")
     load_env()
     after: Counter[str] = Counter()
+    by_group: dict[str, Counter[str]] = {}
     written = refused = 0
     try:
         ids = args.ids or unverified_ids()
@@ -59,10 +66,12 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"\n{ref_id}: not found")
                 continue
             with ledger._brief_conn(None) as c:  # noqa: SLF001
-                was, note = c.execute("SELECT verification, verification_note FROM arsenal_refs WHERE id = %s",
-                                      (ref_id,)).fetchone()
+                was, note, origin_kind = c.execute(
+                    "SELECT verification, verification_note, origin_kind FROM arsenal_refs WHERE id = %s",
+                    (ref_id,)).fetchone()
             v = verify.verify_ref(r, ask=lambda card, e: verify.ask_haiku(card, e))
             after[v.verification] += 1
+            by_group.setdefault(GROUPS.get(origin_kind, origin_kind), Counter())[v.verification] += 1
             print(f"\n{ref_id} {r.category} {r.title!r} ({r.source_work})")
             print(f"  before: {was}: {note}")
             print(f"  after:  {v.verification}: {v.note or '(no note)'}")
@@ -88,6 +97,12 @@ def main(argv: list[str] | None = None) -> int:
                 print("  not written (verdict unchanged: its one re-verification is kept)")
         print("\nbefore: " + f"unverified {len(ids)}" + "; after: "
               + ", ".join(f"{k} {n}" for k, n in sorted(after.items())))
+        for group in ("pool", "hook", "arm", "seed"):
+            if group in by_group:
+                g = by_group[group]
+                cleared = g["verified"] + g["corrected"]
+                print(f"  {group}: unverified {sum(g.values())} -> verified {g['verified']}, corrected "
+                      f"{g['corrected']}, unverified {g['unverified']} ({cleared}/{sum(g.values())} clear)")
         if args.write:
             print(f"written {written}, refused {refused}")
             try:

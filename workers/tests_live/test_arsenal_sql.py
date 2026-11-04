@@ -370,7 +370,7 @@ class TestRowsHidden(ArsenalSqlCase):
             before = counts0.get("sports", ledger.ArsenalCategoryCount(0, 0))
             self.assertEqual(counts1["sports"], ledger.ArsenalCategoryCount(before.ready + 1, before.in_flight + 1))
             self.assertEqual(sum(n.ready for n in counts1.values()), status1.refs_ready)
-            proposed = dict(ledger.arsenal_proposed(conn=conn))
+            proposed = {k: t for k, t, _ in ledger.arsenal_proposed(conn=conn)}
             key, test_key = (conn.execute("SELECT canonical_key FROM arsenal_refs WHERE id = %s", (i,)).fetchone()[0]
                              for i in (ready, test_ref))
             self.assertEqual(proposed[key], f"TL {key}")
@@ -548,8 +548,9 @@ class RoomsAndWordSeeds(ArsenalSqlCase):
                 "SELECT ref_id, old_verification, new_verification, old_note, new_note, by_whom, db_role = current_user "
                 "FROM arsenal_reverifications WHERE id = %s", (rec,)).fetchone(),
                 (r, "unverified", "corrected", "insufficient: x", "second look", "tests_live", True))
+            # db/063 widened the message with the rule (pool, seed or arm).
             self.refused(conn, "SELECT arsenal_reverify_ref(%s, 'verified', 'again', 'tests_live')", (r,),
-                         "only an unverified pool reference")
+                         "only an unverified pool, seed or arm reference")
             # Staying unverified still spends the one chance.
             r2 = self.unverified_ref(conn)
             conn.execute("SELECT arsenal_reverify_ref(%s, 'unverified', 'still nothing', 'tests_live')", (r2,))
@@ -557,6 +558,35 @@ class RoomsAndWordSeeds(ArsenalSqlCase):
                          (r2,), "already re-verified once")
             self.refused(conn, "UPDATE arsenal_reverifications SET by_whom = 'someone' WHERE id = %s", (rec,), "")
             self.refused(conn, "DELETE FROM arsenal_reverifications WHERE id = %s", (rec,), "")
+
+    def test_db063_a_seed_and_an_arm_card_get_their_one_re_verification(self) -> None:
+        """db/063 (owner, 2026-11-04): an unverified REAL seed and arm card are
+        re-verified once each; the status never changes (a seed stays a seed);
+        a second re-verification is still refused."""
+        with _rolled_back() as conn:
+            if conn.execute("SELECT 1 FROM migration_log WHERE name = '063_reverify_seeds_arm'").fetchone() is None:
+                self.skipTest("db/063 not pasted")
+            ids = {}
+            for status, origin in (("seed", "seed"), ("arm", "arm_me")):
+                key = f"tl_{uuid.uuid4().hex[:16]}"
+                ids[status] = int(conn.execute(
+                    "INSERT INTO arsenal_refs (canonical_key, category, title, origin, meaning, deploy_line, room, "
+                    "source_work, source_kind, status, origin_kind) VALUES (%s, 'sports', %s, "
+                    "'An origin long enough.', 'A meaning.', 'A line.', 'pitch', 'A work', 'wikipedia', %s, %s) "
+                    "RETURNING id", (key, f"TL {key}", status, origin)).fetchone()[0])
+                conn.execute("UPDATE arsenal_refs SET verification = 'unverified', verification_note = 'insufficient: x' "
+                             "WHERE id = %s", (ids[status],))
+            conn.execute("SELECT arsenal_reverify_ref(%s, 'corrected', 'trimmed', 'tests_live', 'https://tl.invalid/s', "
+                         "'A corrected origin, long enough.')", (ids["seed"],))
+            conn.execute("SELECT arsenal_reverify_ref(%s, 'verified', 'supported', 'tests_live', 'https://tl.invalid/a')",
+                         (ids["arm"],))
+            got = dict(conn.execute("SELECT status, verification FROM arsenal_refs WHERE id = ANY(%s)",
+                                    (list(ids.values()),)).fetchall())
+            self.assertEqual(got, {"seed": "corrected", "arm": "verified"})
+            self.refused(conn, "SELECT arsenal_reverify_ref(%s, 'verified', 'again', 'tests_live')", (ids["seed"],),
+                         "only an unverified pool, seed or arm reference")
+            self.refused(conn, "UPDATE arsenal_refs SET status = 'pool' WHERE id = %s", (ids["seed"],),
+                         "never changes status")
 
     def test_a_held_reference_or_word_is_never_picked_nor_ready(self) -> None:
         with _rolled_back() as conn:
