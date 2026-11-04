@@ -4,5 +4,11 @@
   "scripts": {
     "test:workers": "cd workers && ..\\venv\\Scripts\\python.exe -m unittest discover -s tests -t .",
     "test:workers:live": "cd workers && ..\\venv\\Scripts\\python.exe -m unittest discover -s tests_live -t ."
+  },
+  "pnpm": {
+    "overrides": {
+      "undici@>=6.23.0 <6.29.1": "6.29.1",
+      "zod@>=4.0.0 <4.6.6": "4.6.6"
+    }
   }
 }

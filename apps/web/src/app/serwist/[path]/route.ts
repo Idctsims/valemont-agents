@@ -12,8 +12,19 @@ const revision =
   spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf-8" }).stdout?.trim() ||
   crypto.randomUUID();
 
+// The precache is Next's hashed build output, public/icons and /offline, and
+// nothing else (CLAUDE.md, PWA: "never cache private data"). @serwist/turbopack's
+// default also globs every public/ file, which precached /tmdb-logo.svg from
+// Oct 14 (pwa.spec's guard caught it, Nov 3). The static pattern is the
+// package's own default (9.5.13, distDir ".next/": next.config sets none).
+const PRECACHE_GLOBS = [
+  ".next/static/**/*.{js,css,html,ico,apng,png,avif,jpg,jpeg,jfif,pjpeg,pjp,gif,svg,webp,json,webmanifest}",
+  "public/icons/**/*",
+];
+
 export const { dynamic, dynamicParams, revalidate, generateStaticParams, GET } = createSerwistRoute({
   swSrc: "src/app/sw.ts",
+  globPatterns: PRECACHE_GLOBS,
   additionalPrecacheEntries: [{ url: "/offline", revision }],
   useNativeEsbuild: true,
   // A self-contained classic script: registers on every iOS version that has

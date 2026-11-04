@@ -38,7 +38,7 @@
     "ts-fsrs": "5.4.2",
     "use-stick-to-bottom": "1.1.6",
     "web-push": "3.6.7",
-    "zod": "4.6.5"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@playwright/test": "1.64.0",
