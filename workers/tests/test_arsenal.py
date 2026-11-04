@@ -674,8 +674,11 @@ class OutcomeControls(unittest.TestCase):
         r = ref(**{k: v for k, v in thermo_card.items() if k != "meaning" and k != "deploy_line"},
                 meaning=thermo_card["meaning"], deploy_line=thermo_card["deploy_line"])
         found, _ = verify.candidates(r, http=get)
-        score = {c.title: c.excerpt.score for c in found}
-        self.assertGreater(score[decoy], score[own])  # on terms alone the decoy would win
+        # Verifier yield (2026-11-04): the decoy is not about the card's
+        # subject, so it is never a candidate at all (it shared more terms
+        # and, before, needed the own-page rank to lose).
+        self.assertEqual(verify.on_subject(r, decoy)[0], False)
+        self.assertNotIn(decoy, [c.title for c in found])
         self.assertEqual(found[0].title, own)
         votes = iter([True, True, False])
         res = verify.outcome_check(r, http=get, ask=lambda c, e: (next(votes), "the Greeks were wiped out"))

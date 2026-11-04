@@ -106,8 +106,16 @@ class Judgement:
 def held(j: Judgement) -> Judgement:
     """The judge held to its own coverage answer: 'supported' or 'corrected'
     on an excerpt that does not cover every claim is 'insufficient' (owner,
-    2026-10-16: a silent excerpt never trims a card into 'corrected')."""
-    if j.verdict in ("supported", "corrected") and not j.covers_every_claim and not j.outcome_conflict:
+    2026-10-16: a silent excerpt never trims a card into 'corrected').
+    An outcome reframe is held to it too (verifier yield, 2026-11-04: the
+    frozen Vader misquote was reframed into 'corrected' on an excerpt that
+    never showed its line); an uncovered conflict stays unverified, its
+    outcome_conflict note kept."""
+    if j.verdict in ("supported", "corrected") and not j.covers_every_claim:
+        if j.outcome_conflict:
+            return Judgement("insufficient", None, None,
+                             f"the reframe's excerpt does not cover every claim ({j.note})".replace(" ()", ""),
+                             outcome_conflict=True, covers_every_claim=False)
         return Judgement("insufficient", None, None, f"the excerpt does not cover every claim ({j.note})".replace(" ()", ""))
     return j
 
@@ -189,8 +197,22 @@ class RefVerdict:
 # ---------------------------------------------------------------- retrieval
 
 #: Pages fetched per wiki, at most (each Wikipedia page is two requests).
-MAX_WIKIPEDIA_PAGES = 4
+MAX_WIKIPEDIA_PAGES = 5
 MAX_WIKIQUOTE_PAGES = 3
+#: Claim terms added to the title search ("The Flu Game" + "Jordan fever 38").
+CLAIM_TERMS = 4
+#: For film and TV, these sections always make the excerpt (the story is there).
+PLOT_HEADINGS = ("plot", "synopsis", "premise", "summary", "story", "episodes", "season")
+#: A page about something other than the card's work (verifier yield, owner
+#: 2026-11-04: no concept pages, soundtracks, unrelated people).
+OFF_SUBJECT = re.compile(r"\((?:[^()]*\b)?(?:soundtrack|album|song|single|video game|disambiguation|band|"
+                         r"musical|novel|play|board game)\)|^list of |discography|filmography", re.I)
+#: The same kinds, read from Wikipedia's one-line description ("2021 song by
+#: Bo Burnham", "2005 studio album by Teairra Mari"): titles alone miss them.
+OFF_SUBJECT_DESCRIPTION = re.compile(r"\b(?:song|single|album|soundtrack|video game|board game|band|musical|"
+                                     r"disambiguation|given name|surname|topics referred to)\b", re.I)
+_QUALIFIER = re.compile(r"^(.*?)\s*\(([^()]*)\)\s*$")
+_CREDIT = re.compile(r"\s*\(as written in [^()]*\)\s*$", re.I)
 #: The quote's key phrase for a phrase search: its first words.
 PHRASE_WORDS = 6
 _TRAILING_PARENS = re.compile(r"\s*\(([^()]*)\)\s*$")
@@ -233,14 +255,72 @@ def _unique(names: list[str | None]) -> list[str]:
     return out
 
 
+def _surname(name: str | None) -> str | None:
+    """The last distinctive word of a name: "Sam Zell" -> "zell"; a film
+    credit's "(as written in ...)" is dropped first."""
+    words = sorted(sources.key_terms(_CREDIT.sub("", name or "")), key=(name or "").lower().find)
+    return words[-1] if words else None
+
+
+def on_subject(ref: ledger.ArsenalRefToVerify, page_title: str) -> tuple[bool, str]:
+    """Is this page about the card's subject? (verdict, why). Verifier yield
+    (owner, 2026-11-04): a second source whose title does not match the
+    card's subject is rejected: no concept pages, soundtracks, unrelated
+    people. The card's own named page always passes."""
+    title = page_title.strip()
+    own = (ref.source_page or "").strip()
+    if own and title.lower() == own.lower():
+        return True, "the card's own page"
+    m = _QUALIFIER.match(own)
+    person, work, _ = split_work(ref.source_work)
+    # A film or show's episode list holds its plot: allowed when it names the work.
+    episodes = (ref.category == "film_tv" and title.lower().startswith("list of ")
+                and bool(sources.key_terms(work)) and sources.key_terms(work) <= sources.key_terms(title))
+    if OFF_SUBJECT.search(title) and not OFF_SUBJECT.search(own) and not episodes:
+        return False, "a page about something else (soundtrack, album, list, ...)"
+    if m:
+        base, qualifier = m.group(1).strip().lower(), m.group(2).strip().lower()
+        t = _QUALIFIER.match(title)
+        if title.lower() == base:
+            return False, f"the bare title when the card's page is {own!r} (a concept or other page)"
+        if t and t.group(1).strip().lower() == base and t.group(2).strip().lower() != qualifier:
+            return False, f"another {base!r} ({t.group(2)}), not the card's ({qualifier})"
+    if episodes:
+        return True, "the work's episode list"
+    words = sources.key_terms(title)
+    names = {n for n in (_surname(person), _surname(ref.quote_by)) if n}
+    if names & words:
+        return True, "names the card's person"
+    for terms in (sources.key_terms(work), sources.key_terms(ref.title),
+                  sources.key_terms(m.group(1)) if m else sources.key_terms(own)):
+        if terms and terms <= words:
+            return True, "holds the work's or the card's title"
+    return False, "names neither the card's person nor its work"
+
+
+def claim_query(ref: ledger.ArsenalRefToVerify) -> str:
+    """The card's title plus its first CLAIM_TERMS distinctive origin words
+    not already in the title: "The Flu Game Jordan 1997 fever ..."."""
+    have = sources.key_terms(ref.title)
+    extra = [w for w in sources.normalize(ref.origin).split()
+             if w in sources.key_terms(ref.origin) and w not in have]
+    return " ".join([ref.title, *list(dict.fromkeys(extra))[:CLAIM_TERMS]])
+
+
 def candidates(ref: ledger.ArsenalRefToVerify, *, http: sources.Http | None = None) -> tuple[list[Candidate], list[str]]:
     """Every page that could hold the passage, ranked by its best-matching
     section (the work's own page wins ties: it is searched first). Returns
-    (candidates, the sources that would not answer)."""
+    (candidates, the sources that would not answer). A page that is not about
+    the card's subject (on_subject) is never a candidate."""
     person, work, context = split_work(ref.source_work)
-    strong = sources.key_terms(ref.title, work, context, person, ref.quote)
+    strong = sources.key_terms(ref.title, work, context, person, ref.quote, _CREDIT.sub("", ref.quote_by or ""))
     weak = sources.key_terms(ref.origin)
-    want_quotes = ref.category == "film_tv" or ref.quote is not None or ref.source_kind == "wikiquote"
+    # A person's Wikiquote page holds their remarks ("the ovarian lottery").
+    want_quotes = (ref.category == "film_tv" or ref.quote is not None or ref.source_kind == "wikiquote"
+                   or person is not None)
+    # The work's own section first ("Game 5" of the 1997 NBA Finals), and for
+    # film and TV the plot.
+    prefer = tuple(p for p in (work.strip().lower(),) if p) + (PLOT_HEADINGS if ref.category == "film_tv" else ())
     down: list[str] = []
 
     def searched(api: str, query: str) -> list[str]:
@@ -252,13 +332,25 @@ def candidates(ref: ledger.ArsenalRefToVerify, *, http: sources.Http | None = No
 
     # The work with its person ("Enchiridion Epictetus"), else with its own
     # context ("Moneyball Michael Lewis, 2003": the book, not the film).
-    wp_names = _unique([ref.source_page, *searched(sources.WIKIPEDIA_API, f"{work} {person or context}"),
+    # The specific event, work or person: the title with its key claim terms
+    # first ("The Flu Game" + the origin's words), then the work with its
+    # person or context ("Moneyball Michael Lewis, 2003": the book, not the
+    # film), then the title with the person or work. Off-subject names are
+    # dropped before anything is fetched.
+    wp_names = _unique([ref.source_page, *searched(sources.WIKIPEDIA_API, claim_query(ref)),
+                        *searched(sources.WIKIPEDIA_API, f"{work} {person or context}"),
                         ref.title, *searched(sources.WIKIPEDIA_API, f"{ref.title} {person or work}")])
+    wp_names = [n for n in wp_names if on_subject(ref, n)[0]]
     wq_names: list[str] = []
     if want_quotes:
         phrase = " ".join((ref.quote or "").split()[:PHRASE_WORDS])
+        character = _CREDIT.sub("", ref.quote_by or "").strip()
+        # For film and TV: the film's own Wikiquote page, and a search for the
+        # work with its character (the character's section holds their lines).
         wq_names = _unique([ref.source_page, *(searched(sources.WIKIQUOTE_API, f'"{phrase}"') if phrase else []),
-                            work, person, ref.quote_by])
+                            *(searched(sources.WIKIQUOTE_API, f"{work} {character}") if character else []),
+                            work, person, character])
+        wq_names = [n for n in wq_names if on_subject(ref, n)[0]]
     out: list[Candidate] = []
     for name in wp_names[:MAX_WIKIPEDIA_PAGES]:
         try:
@@ -266,11 +358,17 @@ def candidates(ref: ledger.ArsenalRefToVerify, *, http: sources.Http | None = No
         except sources.SourceUnavailable as exc:
             down.append(str(exc))
             continue
-        if page is None or any(c.kind == "wikipedia" and c.title == page.title for c in out):
+        # A redirect can land on another subject: check the page's own title,
+        # and its description (a song, an album) unless the card is about one.
+        if page is None or not on_subject(ref, page.title)[0] \
+                or (OFF_SUBJECT_DESCRIPTION.search(page.description)
+                    and not OFF_SUBJECT_DESCRIPTION.search(f"{ref.source_work} {ref.title} {ref.source_page or ''}")
+                    and page.title.lower() != (ref.source_page or "").lower()) \
+                or any(c.kind == "wikipedia" and c.title == page.title for c in out):
             continue
         sections = page.sections or (sources.Section("", page.text),)
         out.append(Candidate("wikipedia", page.title, page.url,
-                             sources.excerpt(sections, strong=strong, weak=weak, quote=ref.quote),
+                             sources.excerpt(sections, strong=strong, weak=weak, quote=ref.quote, prefer=prefer),
                              tuple(ln for s in sections for ln in sources.sentences(s.text))))
     for name in wq_names[:MAX_WIKIQUOTE_PAGES]:
         try:
@@ -278,7 +376,8 @@ def candidates(ref: ledger.ArsenalRefToVerify, *, http: sources.Http | None = No
         except sources.SourceUnavailable as exc:
             down.append(str(exc))
             continue
-        if q is None or not q.lines or any(c.kind == "wikiquote" and c.title == q.title for c in out):
+        if q is None or not q.lines or not on_subject(ref, q.title)[0] \
+                or any(c.kind == "wikiquote" and c.title == q.title for c in out):
             continue
         out.append(Candidate("wikiquote", q.title, q.url,
                              sources.excerpt(q.sections or (sources.Section("", "\n".join(q.lines)),),
@@ -296,6 +395,23 @@ def candidates(ref: ledger.ArsenalRefToVerify, *, http: sources.Http | None = No
 
     out.sort(key=lambda c: (not own_page(c), -c.excerpt.score))
     return out, down
+
+
+def reattributed(ref: ledger.ArsenalRefToVerify, j: Judgement) -> Judgement:
+    """A correction fixes a detail; it never changes WHO the card is about.
+    A 'corrected' whose fixed source_work drops the card's named person (the
+    Marie Antoinette misquote rewritten to Rousseau: the frozen controls,
+    2026-11-04) is the excerpt saying otherwise on the substance:
+    contradicted. The judge's prompt is unchanged."""
+    person, _, _ = split_work(ref.source_work)
+    name = _surname(person)
+    if j.verdict != "corrected" or not j.fixed_source_work or not name:
+        return j
+    if name in sources.key_terms(j.fixed_source_work):
+        return j
+    return Judgement("contradicted", None, None,
+                     f"the correction re-attributes it away from {person} ({j.fixed_source_work}): {j.note}"[:300],
+                     outcome_conflict=False, covers_every_claim=j.covers_every_claim)
 
 
 def verify_ref(ref: ledger.ArsenalRefToVerify, *, ask: Ask, http: sources.Http | None = None) -> RefVerdict:
@@ -333,7 +449,7 @@ def verify_ref(ref: ledger.ArsenalRefToVerify, *, ask: Ask, http: sources.Http |
         text = f"SOURCE: {c.title} ({c.kind})\n\n{c.excerpt.text}"
         if c is quote_page and matched_line:
             text = f"QUOTED LINE: {matched_line}\n\n{text}"
-        judgement = held(ask(ref, text[:sources.JUDGE_CHARS + 200]))
+        judgement = reattributed(ref, held(ask(ref, text[:sources.JUDGE_CHARS + 200])))
         judged.append(c.title)
         used = c
         # 'insufficient' earns ONE second source; nothing else retries.

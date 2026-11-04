@@ -147,6 +147,8 @@ class WikiPage:
     text: str
     #: The whole article by section, the lead first.
     sections: tuple[Section, ...] = ()
+    #: Wikipedia's one-line description ("2021 song by Bo Burnham"), or "".
+    description: str = ""
 
 
 _PLAIN_HEADING = re.compile(r"^(={2,6})\s*(.*?)\s*\1\s*$", re.M)
@@ -186,7 +188,8 @@ def wikipedia_page(title: str, *, http: Http | None = None) -> WikiPage | None:
     pages = ((data or {}).get("query") or {}).get("pages") or []
     if pages and isinstance(pages[0], dict) and pages[0].get("extract"):
         text = str(pages[0]["extract"])
-    return WikiPage(canonical, str(url), text[:JUDGE_CHARS], tuple(split_sections(text)))
+    return WikiPage(canonical, str(url), text[:JUDGE_CHARS], tuple(split_sections(text)),
+                    " ".join(str(summary.get("description") or "").split())[:200])
 
 
 def search(api: str, query: str, *, limit: int = SEARCH_LIMIT, http: Http | None = None) -> list[str]:
@@ -379,17 +382,28 @@ class Excerpt:
     headings: tuple[str, ...]
 
 
+#: A preferred section (a film's Plot) outranks term overlap, below a quote.
+PREFER_BONUS = 25
+
+
 def excerpt(sections: Sequence[Section], *, strong: set[str], weak: set[str] = frozenset(),
-            quote: str | None = None, limit: int = JUDGE_CHARS) -> Excerpt:
+            quote: str | None = None, limit: int = JUDGE_CHARS, prefer: Sequence[str] = ()) -> Excerpt:
     """The lead (at most LEAD_CHARS), then the sections that match the card
     best, until `limit`. Nothing matching: the sections in page order, as
-    before (the judge then usually answers insufficient)."""
+    before (the judge then usually answers insufficient). A section whose
+    heading starts with one of `prefer` (lower case: "plot", "synopsis")
+    ranks first after a quote's section (verifier yield, owner 2026-11-04:
+    for film and TV, read the plot)."""
     if not sections:
         return Excerpt("", 0, ())
     lead = sections[0] if sections[0].heading == "" else None
     body = [s for s in sections if s is not lead]
-    scored = sorted(((section_score(s, strong=strong, weak=weak, quote=quote), i, s) for i, s in enumerate(body)),
-                    key=lambda x: (-x[0], x[1]))
+
+    def score(s: Section) -> int:
+        bonus = PREFER_BONUS if any(s.heading.lower().startswith(p) for p in prefer) else 0
+        return section_score(s, strong=strong, weak=weak, quote=quote) + bonus
+
+    scored = sorted(((score(s), i, s) for i, s in enumerate(body)), key=lambda x: (-x[0], x[1]))
     parts: list[str] = []
     heads: list[str] = []
     top = section_score(lead, strong=strong, weak=weak, quote=quote) if lead else 0

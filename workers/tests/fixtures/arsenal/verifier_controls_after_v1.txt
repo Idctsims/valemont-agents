@@ -1,0 +1,39 @@
+﻿PASS  2269 expect unverified got unverified 'Austin Dennison, the quiet operator'
+        contradicted: The excerpt shows Austin Dennison is a UK Foreign Secretary, not a staffer behind the scenes, so the card's account of him as a quiet operator who keeps the ambassador out of trouble is contradicted, and the excerpt does not mention the quoted st
+PASS   215 expect unverified got unverified 'Seneca on luck'
+        first source insufficient (Seneca the Younger); second source Seneca effect; outcome_conflict: The excerpt attributes a different line to Seneca (Letters 91.6 on slow growth and rapid ruin), not luck meeting preparation, so the card's origin and meaning are co
+PASS    21 expect unverified got unverified 'The Grave Dancer'
+        contradicted: The excerpt lists a 1982 article titled "The Grave Dancer: A Guide to The Risky Art of Resurrecting Dead Properties," not a 1976 one, so the card's date and title are wrong, but it gives no basis for a corrected origin claim tied to the card's sp
+PASS  1852 expect corrected  got corrected  'Washington resigns his commission'
+        corrected by the source: The card's date, Congress location, and return to Mount Vernon match the excerpt, but the excerpt places the Annapolis meeting in the Maryland State House and the return on December 24, and the card's origin omits the Treaty of Paris c
+FAIL  1964 expect clear      got unverified 'BATNA (Getting to Yes)'
+        first source insufficient (Best alternative to a negotiated agreement); second source William Ury; insufficient: the excerpt does not cover every claim (The excerpt confirms Getting to Yes (1981) by Fisher and Ury and the BATNA idea, but does not say the Harva
+FAIL   190 expect clear      got unverified "Bezos's Day 1"
+        first source insufficient (Jeff Bezos); second source Lauren Sánchez Bezos; insufficient: The excerpt is about Lauren Sánchez Bezos and never mentions Jeff Bezos's 2016 shareholder letter or its Day 1 and Day 2 content, so it cannot verify the card.
+FAIL   192 expect clear      got unverified "Buffett's Ovarian Lottery"
+        first source insufficient (Warren Buffett); second source Warren Buffett; insufficient: The excerpt is a biography covering Buffett's life, personal habits and finances but never mentions the 'ovarian lottery' remark, its origin, or The Giving Pledge, so the c
+FAIL   727 expect clear      got unverified 'The Flu Game'
+        first source insufficient (Flu Game shoes); second source 2026 NBA Finals; insufficient: The excerpt covers the 2026 NBA Finals, not Michael Jordan's 1997 Game 5 flu game, so the card's origin and source work are not addressed.
+FAIL   736 expect clear      got unverified 'Roc-A-Fella'
+        insufficient: the excerpt does not cover every claim (The excerpt gives 1994 as the founding year and says the debut album came out in 1996 through Priority; it never mentions selling albums from a trunk, so that detail is unsupported.)
+FAIL  2267 expect clear      got unverified "Kate Wyler takes the job she didn't want"
+        first source insufficient (The Diplomat (American TV series)); second source The Diplomat (American TV series); insufficient: The excerpt shows Kate being offered a seat she was reluctant about, but never states she was a career diplomat who wanted Kabul or th
+FAIL  2270 expect clear      got unverified 'Managing the carrier-attack crisis'
+        contradicted: The excerpt describes The Diplomat as a series about Kate Wyler defusing an international crisis, but says nothing about a British carrier struck in the Persian Gulf or Washington and London pushing different responses, so the card's origin is no
+FAIL  2271 expect clear      got unverified "Kate won't dress the part"
+        contradicted: The excerpt describes Kate Wyler as a diplomat dealing with crises and her marriage but never mentions her resisting image-management, hair, wardrobe, or winning the room on substance, so the card's specific origin is not covered and the excerpt 
+FAIL  2247 expect clear      got unverified 'Scylla or Charybdis'
+        first source insufficient (Between Scylla and Charybdis); second source Wrestle Odyssey 2; insufficient: The excerpt is about a 2026 Japanese wrestling event and says nothing about Circe, Odysseus, Scylla, or Charybdis, so the card cannot be checked against it
+PASS    14 expect clear      got corrected  'Win first, then go to war'
+        corrected by the source: The excerpt gives the quote in Chapter IV (Disposition of the Army) and does not support the card's vague source, so the origin is corrected to name the chapter; the paraphrase note is not addressed by the excerpt and stays as written.
+PASS    -1 expect unverified got unverified 'Luke, I am your father'
+        quote not found in the sourced lines; kept as a described move; outcome_conflict: the reframe's excerpt does not cover every claim (The excerpt confirms the reveal and the 1980 film but not the exact quote, and the card's 'changes everything' and 'winning' fra
+PASS    -2 expect unverified got unverified 'Play it again, Sam'
+        contradicted: The excerpt is about the 1972 Woody Allen film of that title, which says the line is not spoken in Casablanca; it does not support the card's claim that Rick says it there.
+PASS    -3 expect unverified got unverified 'Let them eat cake'
+        first source insufficient (Let them eat cake); second source Let Them Eat Cake (TV series); insufficient: The excerpt is about the 1999 BBC sitcom Let Them Eat Cake, not the phrase's historical origin or Marie Antoinette's 1789 remark, so it cannot verify the 
+PASS    -4 expect unverified got unverified 'Einstein on insanity'
+        contradicted: The excerpt says the insanity quote is widely misattributed to Einstein, directly contradicting the card's claim that he defined insanity this way.
+
+known-bad held: 7/7; should-clear cleared: 1/10; 1852 kept: True
+cost: 26 Haiku calls, $0.011050
