@@ -1193,4 +1193,11 @@ Now `outcome.controls_gate` (the worker, the top-up, Arm Me, the hook, and `scri
 
 - Retrieval reads **"Custer's Last Stand (serial)"**, the 1936 film serial, not the battle. The reader's reason describes the annihilation, but it votes on the excerpt it was given.
 - Which control failed in the worker's 14 refusals was only logged, and the Railway CLI is logged out here: **not read, pending**.
-- **Replace Custer later (owner): carried.** At ~2/3 wrong per pass, the rerun still refuses about 4 runs in 9; the job queue's 5 attempts carry the rest.
+- ~~Replace Custer later (owner): carried.~~ **Fixed instead by pinning (owner, Nov 4, PR #78):** each control reads only its own page, so the controls test the judge, not retrieval:
+  - Thermopylae → "Battle of Thermopylae";
+  - Custer → "Battle of the Little Bighorn";
+  - Miracle on Ice → "Miracle on Ice".
+
+  `verify.outcome_check(page_title=…)` reads only the candidate with that exact title. If it is missing, nothing is read and the control fails loudly. Real references are unpinned; their ranking is unchanged.
+
+  **Three read-only passes with the pins (Nov 4, ~19:00 UTC): 9 of 9 right, every vote unanimous** (Thermopylae YYY, Custer YYY on the battle's page, Miracle on Ice nnn). Tests: `tests/test_arsenal.py` `PinnedControlPages`.

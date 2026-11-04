@@ -28,6 +28,7 @@ no database.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import re
@@ -719,7 +720,7 @@ class OutcomeWriteGate(NoDatabase):
         self.patch("close_pool", lambda: None)
         page = verify.Candidate("wikipedia", "Some page", "https://x.invalid",
                                 sources.Excerpt("an excerpt", 1, ("",)), ())
-        p = mock.patch.object(verify, "candidates", lambda r, http=None: ([page], []))
+        p = mock.patch.object(verify, "candidates", own_page(page))
         p.start()
         self.addCleanup(p.stop)
         for target in (mock.patch.object(check, "load_env", lambda: None),
@@ -775,7 +776,7 @@ class OutcomeInThePool(NoDatabase):
         self.patch("arsenal_record_outcome", lambda i, **kw: self.recorded.append(
             (i, kw["conflict"], kw["votes"], kw["controls"], kw["source"])) or (1, 70 if kw["conflict"] else None))
         page = verify.Candidate("wikipedia", "Some page", "https://x.invalid", sources.Excerpt("x", 1, ("",)), ())
-        p = mock.patch.object(verify, "candidates", lambda r, http=None: ([page], []))
+        p = mock.patch.object(verify, "candidates", own_page(page))
         p.start()
         self.addCleanup(p.stop)
 
@@ -929,7 +930,65 @@ class OutcomeCheck(unittest.TestCase):
         self.assertEqual(verify.outcome(quote_dropped=False, judgement=j, unreachable=None)[0], "corrected")
 
 
+class PinnedControlPages(unittest.TestCase):
+    """Owner, Nov 4: the outcome controls test the judge, not retrieval. On
+    Nov 4 Custer's ranking read "Custer's Last Stand (serial)" (the 1936 film
+    serial), and the control came out wrong in 2 of 3 passes."""
+
+    SERIAL = verify.Candidate("wikipedia", "Custer's Last Stand (serial)", "https://x.invalid/s",
+                              sources.Excerpt("a 1936 film serial", 9, ("",)), ())
+    BATTLE = verify.Candidate("wikipedia", "Battle of the Little Bighorn", "https://x.invalid/b",
+                              sources.Excerpt("Custer and his men were killed", 5, ("",)), ())
+
+    def setUp(self) -> None:
+        from arsenal import outcome
+        self.outcome = outcome
+        self.custer = outcome.card(next(c for c in outcome.cases() if c["name"] == "custer")["card"])
+
+    def candidates(self, *found: verify.Candidate) -> Any:
+        p = mock.patch.object(verify, "candidates", lambda r, http=None: (list(found), []))
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_the_pinned_page_is_read_even_when_another_ranks_first(self) -> None:
+        self.candidates(self.SERIAL, self.BATTLE)
+        read: list[str] = []
+        res = verify.outcome_check(self.custer, ask=lambda c, e: read.append(e) or (True, "wiped out"),
+                                   page_title="battle of the little bighorn")
+        self.assertEqual(res.page, "Battle of the Little Bighorn")
+        self.assertTrue(read and all("Custer and his men were killed" in e for e in read))
+        # Unpinned (every real reference), the ranking still decides.
+        self.assertEqual(verify.outcome_check(self.custer, ask=lambda c, e: (False, "x")).page,
+                         "Custer's Last Stand (serial)")
+
+    def test_a_missing_pinned_page_reads_nothing_and_fails_the_control_loudly(self) -> None:
+        self.candidates(self.SERIAL)
+        res = verify.outcome_check(self.custer, ask=_refuse_database, page_title="Battle of the Little Bighorn")
+        self.assertEqual((res.conflict, res.votes, res.page), (False, (), None))
+        self.assertIn("pinned page 'Battle of the Little Bighorn' not read", res.note)
+
+    def test_every_control_is_pinned_to_its_own_page_and_the_controls_use_it(self) -> None:
+        pins = {c["name"]: c["pinned_page"] for c in self.outcome.cases()}
+        self.assertEqual(pins, {"thermopylae": "Battle of Thermopylae", "custer": "Battle of the Little Bighorn",
+                                "miracle_on_ice": "Miracle on Ice"})
+        for c in self.outcome.cases():
+            self.assertEqual(c["pinned_page"], c["card"]["source_page"], c["name"])
+        self.candidates(self.SERIAL, self.BATTLE,
+                        verify.Candidate("wikipedia", "Battle of Thermopylae", "u", sources.Excerpt("t", 1, ("",)), ()),
+                        verify.Candidate("wikipedia", "Miracle on Ice", "u", sources.Excerpt("m", 1, ("",)), ()))
+        results = self.outcome.control_results(ask=controls_ask())
+        self.assertEqual([r.ok for r in results], [True, True, True])
+        self.assertIn("page Battle of the Little Bighorn", next(r.line for r in results if r.name == "custer"))
+
+
 # ======================================================================= pool
+
+def own_page(page: verify.Candidate) -> Any:
+    """A stub for verify.candidates: `page`, titled after the card's own
+    source_page when it has one, so a pinned control (owner, Nov 4) finds
+    its page and every other card reads `page` as before."""
+    return lambda r, http=None: ([dataclasses.replace(page, title=r.source_page or page.title)], [])
+
 
 def controls_ask(*conflicts: str) -> verify.AskOutcome:
     """An outcome reader that gets the three controls right (Thermopylae and
@@ -1333,7 +1392,7 @@ class Drop(NoDatabase):
         page = verify.Candidate("wikipedia", "Some page", "https://x.invalid", sources.Excerpt("x", 1, ("",)), ())
         with mock.patch.object(ai, "complete", complete), \
                 mock.patch.object(verify, "verify_item", lambda t, i, **kw: settled.append(f"{t} {i}") or "verified"), \
-                mock.patch.object(verify, "candidates", lambda r, http=None: ([page], [])):
+                mock.patch.object(verify, "candidates", own_page(page)):
             up = pool.topup(status(ready_categories=("sports",)), embed=lambda texts: [[0.0]] * len(texts),
                             ask_outcome=controls_ask())
         self.assertEqual(len(calls), 1)

@@ -450,11 +450,11 @@ each in phases with a "done when" checklist). It supersedes the former steps
 - **Chat 5 CLOSED 2026-11-04 (owner).** Carried, each pending until read:
   - verifier recall on source-thin cards;
   - the 125 unspent re-verifications (they stay flagged);
-  - replacing the Custer control (later);
+  - the worker's next outcome run with the pinned controls (PR #78; Custer's page pinned, 3 read-only passes 9 of 9): its control result;
   - the 3-card check on real Arm Me use (0 as of Nov 4);
   - the first real Monday quiz, Mon Nov 9;
   - the Undo fix re-run, the 390 px From-line check, worker RSS at rest;
-  - **#77's rerun live on the worker: pending until it deploys.**
+  - **#77 deployed** (merge `4b9c47d` 18:38:41 UTC; the worker's boot runs 18:39:06 UTC). **#78's pins live on the worker: pending until it deploys.**
 - **Next, by the sequence change (owner, 2026-11-02), now that Chat 5 is closed:** Chat 7 (sports data layer, Game Day), then Chat 8 (betting; **Railway Hobby funded first**), then Chat 9 (slips, manual entry, live tracker: it needs Chat 8's consensus engine and generated bets), then Chats 10–12 (crypto). Chat 6 (Lookbook) moves last, before Chat 13. In short: 7 → 8 → 9 → 10–12 → 6 → 13. MASTER_PLAN §6.
 
 Reason for deploying at step 4 and not at the end: "works locally, dies
