@@ -1144,3 +1144,53 @@ Cost $0.075. Its outcome run refused: one of the three controls came out wrong, 
 
   It is readable with db_inspect.
 - **Carried:** today's outcome run refused on a wrong control. If that recurs, it blocks drops (a reference needs an outcome check on record).
+
+### 11.9 The fresh batch on PR #76, and the verifier work stopped (owner, Nov 4)
+
+**The batch** (`scripts.arsenal_pool --now` by hand, ~17:57–18:05 UTC Nov 4, on PR #76's code: merge `f6f187c`, the worker rebooted ~08:26 UTC). Runs 151 (submitted), 152 (collected), 153 (verified); read via db_inspect.
+
+| Category | Asked | Inserted | Cleared |
+|---|---|---|---|
+| finance_business | 7 | 7 | 2 |
+| history_military | 8 | 8 | 0 |
+| film_tv | 7 | 5 | 1 |
+| music_culture | 4 | 4 | 2 |
+| sports | 4 | 4 | 0 |
+| philosophy | 4 | 3 | 3 |
+| literature_myth | 2 | 2 | 2 |
+| **References** | **36** | **33** | **10 (7 corrected)** |
+| Power Words | 12 | 4 | 2 |
+
+- **The full never-repeat list did its job:** 33 of 36 inserted (run 120: 15), **0 invalid references** (run 120: 20), 3 near-duplicates (film_tv 2, philosophy 1). All 8 refusals were Power Words, as duplicate keys. Run 152's `refusals`: `{"words": {"duplicate_key": 8}, "film_tv": {"near_dup": 2}, "philosophy": {"near_dup": 1}}` (db/064 records as designed).
+- **Clear rate 12 of 37 (32%)**, references 10 of 33. That is below the 52–58% baseline, and lower than run 120's 45%.
+- **Cost $0.1057:** pool $0.0756, verify $0.0263, outcome $0.0038.
+- The script's inline outcome check refused (1 of 3 controls wrong).
+
+**Decided (owner, Nov 4): the verifier work stops.** The clear rate does not block anything:
+- an unverified card never drops;
+- supply is covered by the refill rule (PR #64: any category under 3 ready or in flight refills);
+- precision held, known-bad 7/7 in every run.
+
+The apples-to-apples comparison against the 52–58% baseline and the re-verifications are skipped. **The 125 unverified stay flagged, unspent (carried).**
+
+**The outcome control: one rerun before refusing (owner, Nov 4).** On Nov 4 the worker's `arsenal_outcome` jobs refused 14 of 19 passes on a wrong control:
+- jobs 1339, 1383 and 1384 failed all 5 attempts;
+- 1385 and 1386 passed on attempts 5 and 4. Between them they checked all 14 cleared references from runs 120 and 151, every one `nnn`, controls 3/3, `source` worker (checks 1527–1540, 15:40 and 18:10–18:12 UTC). No hand run was needed, and none was made: a second check would only add rows.
+
+Now `outcome.controls_gate` (the worker, the top-up, Arm Me, the hook, and `scripts.arsenal_outcome_check --write`):
+- on a wrong control it reruns the three controls **once**;
+- it logs each failed control with its votes and reason (`arsenal outcome control FAILED (run|rerun): <name>, votes …; reason: …`);
+- it records only if every control passes in one pass, so `controls` stays `3/3` (db/057's CHECK);
+- a refusal names the controls wrong in both passes. Tests: `tests/test_arsenal.py` `OutcomeInThePool` and `OutcomeWriteGate`.
+
+**The control that fails is Custer.** Three read-only passes of `scripts.arsenal_outcome_control` (Nov 4, ~18:30 UTC; Thermopylae and the Miracle on Ice passed all three):
+
+| Pass | Custer's votes | Result |
+|---|---|---|
+| 1 | nnn | wrong |
+| 2 | nnn | wrong |
+| 3 | YYn | right |
+
+- Retrieval reads **"Custer's Last Stand (serial)"**, the 1936 film serial, not the battle. The reader's reason describes the annihilation, but it votes on the excerpt it was given.
+- Which control failed in the worker's 14 refusals was only logged, and the Railway CLI is logged out here: **not read, pending**.
+- **Replace Custer later (owner): carried.** At ~2/3 wrong per pass, the rerun still refuses about 4 runs in 9; the job queue's 5 attempts carry the rest.
