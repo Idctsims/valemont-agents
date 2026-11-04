@@ -1085,3 +1085,36 @@ Measured with the API's token count (`scripts.arsenal_prompt_tokens`; no model c
 |---|---|---|
 | The hook (The Diplomat) | 9,991 | **4,923** (−51%) |
 | The pool's reference request | 9,394 | **4,362** (−54%) |
+
+### 11.8 The cap reverted for the pool (owner, Nov 4), and refusals on the record
+
+**What happened.** The fresh batch on the deployed code (run 120, submitted 07:32 UTC Nov 4) inserted **15 of 36** references: 6 near-duplicates and **20 invalid**, finance_business 0 of 7. It cleared 10 of the 22 items it settled (**45%**, below the 52% floor), so the re-verifications were not spent.
+
+| Category | Asked | Inserted | Cleared |
+|---|---|---|---|
+| finance_business | 7 | 0 | n/a |
+| history_military | 8 | 4 | 1 |
+| film_tv | 7 | 3 | 1 |
+| music_culture | 4 | 3 | 1 |
+| sports | 4 | 2 | 0 |
+| philosophy | 4 | 2 | 0 |
+| literature_myth | 2 | 1 | 1 |
+| **References** | **36** | **15** | **4, all corrected** |
+| Power Words | 12 | 7 | 6 |
+
+Cost $0.075. Its outcome run refused: one of the three controls came out wrong, and nothing was recorded.
+
+**The cause was 3f's cap.** Without the full list and its keys, the model re-proposed existing references. The batches before had 0–1 invalid; Nov 1, under the old 60-key list, had 10 invalid and 15 near-duplicates; this one had 20 invalid. The invalid reasons were only logged, so they could not be read from the database.
+
+**Decided (owner, Nov 4):**
+- **The pool batch carries the full never-repeat list WITH keys again: the Nov 2 rule is restored for the pool.** It runs on a cached block at the batch rate, so the extra ~5,000 tokens cost about half a cent a batch.
+- **The cap stays for the title hook only**, with keys added.
+- Measured: pool 9,806 tokens (234 references); hook 6,075 (60, with keys; 9,991 uncapped).
+- **db/064:** `arsenal_pool_runs.refusals`, on a collected row, records every refusal by category ("words", "unknown") and reason:
+  - `duplicate_key`: a repeat, or the UNIQUE conflict at insert;
+  - `near_dup`;
+  - `invalid_field`;
+  - `other`.
+
+  It is readable with db_inspect.
+- **Carried:** today's outcome run refused on a wrong control. If that recurs, it blocks drops (a reference needs an outcome check on record).

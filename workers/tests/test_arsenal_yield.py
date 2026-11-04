@@ -145,6 +145,47 @@ class Guards(unittest.TestCase):
         self.assertEqual((held.verdict, held.outcome_conflict), ("insufficient", True))
 
 
+class Refusals(unittest.TestCase):
+    """db/064 (owner, 2026-11-04): every refusal counted by category and reason."""
+
+    def test_reasons(self) -> None:
+        from arsenal import collect
+        self.assertEqual(collect.refusal_reason("repeats crossing_the_rubicon"), "duplicate_key")
+        for why in ("bad canonical_key 'X'", "unknown category 'cooking'", "unknown room 'x'",
+                    "title, origin missing or out of bounds", "the sentence does not use 'x'", "not an object"):
+            with self.subTest(why=why):
+                self.assertEqual(collect.refusal_reason(why), "invalid_field")
+        self.assertEqual(collect.refusal_reason("something new"), "other")
+
+    def test_insert_candidates_counts_every_refusal(self) -> None:
+        from unittest import mock
+
+        from arsenal import cards, collect
+        from core import ledger
+        ok = {"canonical_key": "fresh_one", "category": "sports", "title": "Fresh one",
+              "origin": "An origin long enough to pass.", "meaning": "A meaning.", "deploy_line": "A line to deploy.",
+              "room": "pitch", "source_work": "A work", "quote": None, "quote_by": None, "source_kind": "wikipedia",
+              "source_page": "A page"}
+        refs = [dict(ok, canonical_key="old_key", title="Old one"),                       # repeats a blocked key
+                dict(ok, canonical_key="bad_cat", title="Bad one", category="cooking"),   # unknown category
+                dict(ok, canonical_key="near_one", title="Near one", category="film_tv"),  # near-duplicate
+                dict(ok, canonical_key="taken_key", title="Taken one", category="film_tv"),  # UNIQUE at insert
+                ok]
+        words = [{"lemma": "known", "meaning": "a meaning", "room": "pitch", "sentence": "Say known here."}]
+        with mock.patch.object(ledger, "arsenal_nearest", lambda v: ("old", 0.99 if v == [9.0] else 0.5)), \
+                mock.patch.object(ledger, "arsenal_insert_ref",
+                                  lambda card, **kw: None if card.canonical_key == "taken_key" else 7), \
+                mock.patch.object(ledger, "arsenal_insert_word", lambda *a, **kw: 9):
+            ins = collect.insert_candidates(
+                refs, words, run_id=1, blocked_keys={"old_key"}, blocked_lemmas={"known"},
+                embed=lambda texts: [[9.0] if t.startswith("Near one") else [0.1] for t in texts])
+        self.assertTrue(cards.CATEGORIES)
+        self.assertEqual(ins.refusals, {"sports": {"duplicate_key": 1}, "unknown": {"invalid_field": 1},
+                                        "film_tv": {"near_dup": 1, "duplicate_key": 1},
+                                        "words": {"duplicate_key": 1}})
+        self.assertEqual((ins.skipped_invalid, ins.skipped_dup, ins.ref_ids), (3, 2, [7]))
+
+
 class Episodes(unittest.TestCase):
     def test_summaries_are_read_from_the_episode_tables(self) -> None:
         wikitext = ("== Episodes ==\n{{Episode list\n| EpisodeNumber = 1\n| Title = The Cinderella Thing\n"

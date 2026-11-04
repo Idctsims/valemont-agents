@@ -21,7 +21,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from arsenal import cards
 from core import ai, ledger
@@ -60,6 +60,13 @@ class Inserted:
     notes: list[str] = field(default_factory=list)
     #: Every embedded candidate, skipped or not.
     nearest: list[Nearest] = field(default_factory=list)
+    #: db/064: category ("words", "unknown") -> reason -> count. Reasons:
+    #: duplicate_key, near_dup, invalid_field, other.
+    refusals: dict[str, dict[str, int]] = field(default_factory=dict)
+
+    def refuse(self, category: str, reason: str) -> None:
+        bucket = self.refusals.setdefault(category, {})
+        bucket[reason] = bucket.get(reason, 0) + 1
 
     @property
     def near_dup_skips(self) -> list[Nearest]:
@@ -84,10 +91,28 @@ def distribution_note(ins: Inserted) -> str | None:
     return note
 
 
+def refusal_reason(why: str | None) -> str:
+    """A validator's refusal as a db/064 reason: a key or lemma that exists
+    ("repeats ...") is duplicate_key; a bad field is invalid_field."""
+    text = why or ""
+    if text.startswith("repeats "):
+        return "duplicate_key"
+    if any(m in text for m in ("bad canonical_key", "bad lemma", "unknown category", "unknown room",
+                               "unknown source_kind", "missing or out of bounds", "does not use", "not an object")):
+        return "invalid_field"
+    return "other"
+
+
+def _category_of(item: Any) -> str:
+    c = item.get("category") if isinstance(item, Mapping) else None
+    return c if c in cards.CATEGORIES else "unknown"
+
+
 def insert_candidates(raw_refs: Sequence[Any], raw_words: Sequence[Any], *, run_id: int | None,
                       blocked_keys: set[str], blocked_lemmas: set[str], embed: Embed | None = None) -> Inserted:
     """Validate, embed, near-duplicate check and insert; nothing raises for a
-    bad or repeated card."""
+    bad or repeated card. Every refusal is counted by category and reason
+    (db/064), and the counts go on the run's 'collected' row."""
     out = Inserted()
     good: list[ledger.ArsenalCardIn] = []
     seen = set(blocked_keys)
@@ -95,6 +120,7 @@ def insert_candidates(raw_refs: Sequence[Any], raw_words: Sequence[Any], *, run_
         card, why = cards.validate_ref(item, seen)
         if card is None:
             out.skipped_invalid += 1
+            out.refuse(_category_of(item), refusal_reason(why))
             log.info("arsenal candidate refused: %s", why)
             continue
         seen.add(card.canonical_key)
@@ -114,6 +140,7 @@ def insert_candidates(raw_refs: Sequence[Any], raw_words: Sequence[Any], *, run_
             out.nearest.append(Nearest(card.canonical_key, card.title, matched, cosine, skip))
             if skip:
                 out.skipped_dup += 1
+                out.refuse(card.category, "near_dup")
                 log.info("arsenal candidate %s (%r) skipped: near-duplicate of %s, cosine %.4f",
                          card.canonical_key, card.title, matched, cosine)
                 continue
@@ -122,6 +149,7 @@ def insert_candidates(raw_refs: Sequence[Any], raw_words: Sequence[Any], *, run_
         new_id = ledger.arsenal_insert_ref(card, pool_run_id=run_id, vector=vec)
         if new_id is None:
             out.skipped_dup += 1
+            out.refuse(card.category, "duplicate_key")
             log.info("arsenal candidate %s skipped: the key exists", card.canonical_key)
             continue
         out.ref_ids.append(new_id)
@@ -130,12 +158,14 @@ def insert_candidates(raw_refs: Sequence[Any], raw_words: Sequence[Any], *, run_
         word, why = cards.validate_word(item, lemmas)
         if word is None:
             out.skipped_invalid += 1
+            out.refuse("words", refusal_reason(why))
             log.info("arsenal word refused: %s", why)
             continue
         lemmas.add(word.lemma)
         new_id = ledger.arsenal_insert_word(word, pool_run_id=run_id)
         if new_id is None:
             out.skipped_dup += 1
+            out.refuse("words", "duplicate_key")
             log.info("arsenal word %r skipped: it exists", word.lemma)
             continue
         out.word_ids.append(new_id)
@@ -210,7 +240,8 @@ def _collect(open_batch: ledger.ArsenalOpenBatch, *, client: Any, embed: Embed |
     ledger.arsenal_log_run("batch", "collected", run_id=open_batch.run_id, batch_id=open_batch.batch_id,
                            model=open_batch.model or None, cost_usd=cost, note=note,
                            inserted_refs=len(ins.ref_ids), inserted_words=len(ins.word_ids),
-                           skipped_dup=ins.skipped_dup, skipped_invalid=ins.skipped_invalid)
+                           skipped_dup=ins.skipped_dup, skipped_invalid=ins.skipped_invalid,
+                           refusals=ins.refusals or None)
     if queue:
         queue_verification(ins)
     summary = (f"collected batch {open_batch.batch_id}: {len(ins.ref_ids)} refs, {len(ins.word_ids)} words, "

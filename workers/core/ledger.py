@@ -4983,20 +4983,29 @@ _ARSENAL_RUN_COUNTS: Final = ("refs_requested", "words_requested", "inserted_ref
 def arsenal_log_run(kind: str, status: str, *, run_id: int | None = None, batch_id: str | None = None,
                     model: str | None = None, cost_usd: Decimal | None = None, note: str | None = None,
                     quotas: Mapping[str, int] | None = None,
+                    refusals: Mapping[str, Mapping[str, int]] | None = None,
                     conn: psycopg.Connection | None = None, **counts: int) -> int:
     """One arsenal_pool_runs row (append-only). Returns its id. `quotas`
-    (db/061): a 'submitted' run's target references per category."""
+    (db/061): a 'submitted' run's target references per category.
+    `refusals` (db/064): a 'collected' run's refusals by category ("words",
+    "unknown") and reason (duplicate_key, near_dup, invalid_field, other)."""
     unknown = set(counts) - set(_ARSENAL_RUN_COUNTS)
     if unknown:
         raise LedgerError(f"arsenal_log_run: unknown count(s) {sorted(unknown)}")
     if quotas is not None and status != "submitted":
         raise LedgerError("arsenal_log_run: quotas belong on the 'submitted' run")
+    if refusals is not None and status != "collected":
+        raise LedgerError("arsenal_log_run: refusals belong on the 'collected' run")
     cols = ["kind", "status", "run_id", "batch_id", "model", "cost_usd", "note", *counts]
     vals = [kind, status, run_id, batch_id, model, cost_usd if cost_usd is not None else Decimal(0),
             note[:500] if note else None, *counts.values()]
     if quotas is not None:
         cols.append("quotas")
         vals.append(Jsonb({str(k): int(v) for k, v in quotas.items()}))
+    if refusals:
+        cols.append("refusals")
+        vals.append(Jsonb({str(c): {str(r): int(n) for r, n in reasons.items() if n}
+                           for c, reasons in refusals.items() if any(reasons.values())}))
     with _brief_conn(conn) as c:
         return int(c.execute(
             f"INSERT INTO arsenal_pool_runs ({', '.join(cols)}) VALUES ({', '.join(['%s'] * len(cols))}) RETURNING id",

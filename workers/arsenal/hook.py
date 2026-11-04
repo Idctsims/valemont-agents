@@ -123,7 +123,7 @@ def context_for(title: ledger.TitleForHook) -> cards.PromptContext:
     sharing a word with this title (its name and keywords) and film/TV first
     (owner, 2026-11-04; the backfill's drafts read ~10,000 input tokens)."""
     from arsenal.sources import key_terms
-    return pool.context(categories=["film_tv"], terms=key_terms(title.name, *title.keywords))
+    return pool.context(cap=True, categories=["film_tv"], terms=key_terms(title.name, *title.keywords))
 
 
 def system_blocks(ctx: cards.PromptContext) -> list[dict[str, Any]]:
