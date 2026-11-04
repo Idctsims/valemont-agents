@@ -7,8 +7,9 @@
 A DRY RUN BY DEFAULT (owner, 2026-10-16, after an intermediate prompt held
 three false positives). --write first runs the controls in this same run
 (scripts.arsenal_outcome_control: Thermopylae and Custer must flag, the
-Miracle on Ice must not) and refuses, writing nothing, unless all of them
-pass. Both results are printed and logged.
+Miracle on Ice must not); on a wrong one it reruns them once (owner, Nov 4)
+and refuses, writing nothing, unless every control passes in one pass.
+Both results are printed and logged.
 
 Every real, undropped, verified or corrected reference (one with an active
 hold is skipped) is read against its best source page (arsenal/verify.py
@@ -32,7 +33,6 @@ import sys
 from arsenal import outcome, sources, verify
 from core import ledger
 from core.paths import load_env
-from scripts import arsenal_outcome_control
 
 log = logging.getLogger("valemont.arsenal.outcome_check")
 
@@ -56,17 +56,14 @@ def main(argv: list[str] | None = None, *, ask: verify.AskOutcome | None = None)
     controls = ""
     try:
         if args.write:
-            wrong, lines = arsenal_outcome_control.run_controls(ask=ask, samples=args.samples)
-            for line in lines:
-                print(f"control: {line}")
-                log.info("arsenal outcome control: %s", line)
-            if wrong:
-                msg = f"--write refused: {wrong} of {len(lines)} controls wrong in this run; nothing written"
-                print(msg)
-                log.error("arsenal outcome check: %s", msg)
+            # The worker's gate: a wrong control reruns the controls once (owner, Nov 4).
+            try:
+                controls = outcome.controls_gate(ask=ask, samples=args.samples,
+                                                 echo=lambda line: print(f"control: {line}"))
+            except outcome.ControlsFailed as exc:
+                print(f"--write refused: {exc}")
                 return 1
-            controls = f"{len(lines)}/{len(lines)}"
-            log.info("arsenal outcome check: all %d controls passed; checks and holds will be written", len(lines))
+            log.info("arsenal outcome check: controls %s passed; checks and holds will be written", controls)
         if args.ids:
             pool = [ledger.ArsenalPoolRef(r, False) for r in (ledger.arsenal_ref_to_verify(i) for i in args.ids) if r]
         else:

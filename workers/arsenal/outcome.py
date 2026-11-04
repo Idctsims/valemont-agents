@@ -21,8 +21,10 @@ dropped (Oct 17 and 19). Now:
 The three controls (tests/fixtures/arsenal/outcome_controls.json:
 Thermopylae and Custer must flag, the Miracle on Ice must not) run first, in
 the same run, through the same retrieval and vote. If any comes out wrong,
-NOTHING is recorded and ControlsFailed is raised: the references stay
-unchecked, so none of them can drop, and job_health shows the failure.
+they run once more (owner, Nov 4); if the rerun has one wrong too, NOTHING
+is recorded and ControlsFailed is raised: the references stay unchecked, so
+none of them can drop, and job_health shows the failure. Every failed
+control is logged with its votes and reason.
 """
 
 from __future__ import annotations
@@ -31,7 +33,7 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from arsenal import sources, verify
 from core import ledger
@@ -64,32 +66,78 @@ def votes_text(votes: tuple[bool, ...]) -> str:
     return "".join("Y" if v else "n" for v in votes)
 
 
-def run_controls(*, ask: verify.AskOutcome, samples: int = verify.OUTCOME_SAMPLES,
-                 http: sources.Http | None = None) -> tuple[int, list[str]]:
-    """(how many came out wrong, one line per case)."""
-    wrong = 0
-    lines = []
+@dataclass(frozen=True)
+class ControlResult:
+    name: str
+    ok: bool
+    votes: str  # votes_text, '-' for no read
+    note: str   # the reader's reason
+    line: str   # the whole PASS/FAIL line, as printed and logged
+
+
+def control_results(*, ask: verify.AskOutcome, samples: int = verify.OUTCOME_SAMPLES,
+                    http: sources.Http | None = None) -> list[ControlResult]:
+    """One pass over the three controls."""
+    out = []
     for case in cases():
         res = verify.outcome_check(card(case["card"]), ask=ask, samples=samples, http=http)
         ok = res.conflict == case["expect_conflict"]
-        wrong += not ok
-        lines.append(f"{'PASS' if ok else 'FAIL'} {case['name']}: expect {'conflict' if case['expect_conflict'] else 'ok'}, "
-                     f"got {'conflict' if res.conflict else 'ok'} (votes {votes_text(res.votes) or '-'}; "
-                     f"page {res.page}); {res.note}")
-    return wrong, lines
+        votes = votes_text(res.votes) or "-"
+        line = (f"{'PASS' if ok else 'FAIL'} {case['name']}: expect {'conflict' if case['expect_conflict'] else 'ok'}, "
+                f"got {'conflict' if res.conflict else 'ok'} (votes {votes}; page {res.page}); {res.note}")
+        out.append(ControlResult(case["name"], ok, votes, res.note, line))
+    return out
+
+
+def run_controls(*, ask: verify.AskOutcome, samples: int = verify.OUTCOME_SAMPLES,
+                 http: sources.Http | None = None) -> tuple[int, list[str]]:
+    """(how many came out wrong, one line per case). One pass, no rerun."""
+    results = control_results(ask=ask, samples=samples, http=http)
+    return sum(not r.ok for r in results), [r.line for r in results]
+
+
+def _failed(results: list[ControlResult]) -> str:
+    return ", ".join(f"{r.name} (votes {r.votes})" for r in results if not r.ok)
 
 
 def controls_gate(*, ask: verify.AskOutcome, samples: int = verify.OUTCOME_SAMPLES,
-                  http: sources.Http | None = None) -> str:
-    """Run the controls; return "passed/total", or raise ControlsFailed."""
-    wrong, lines = run_controls(ask=ask, samples=samples, http=http)
-    for line in lines:
-        log.info("arsenal outcome control: %s", line)
-    if wrong:
-        msg = f"{wrong} of {len(lines)} controls wrong in this run; nothing recorded"
-        log.error("arsenal outcome check: %s", msg)
-        raise ControlsFailed(msg)
-    return f"{len(lines)}/{len(lines)}"
+                  http: sources.Http | None = None, echo: Callable[[str], None] | None = None) -> str:
+    """Run the controls; return "passed/total", or raise ControlsFailed.
+
+    On a wrong control the controls run ONCE more before refusing (owner,
+    Nov 4: Haiku's single reads swing, and one wrong vote refused three runs
+    that day). Every failed control is logged with its votes and reason; the
+    rerun must pass all of them, so the recorded "n/n" is still every control
+    passing in one pass of the same run (db/057). A control wrong in both
+    passes is named in the refusal: one that keeps failing gets replaced.
+    `echo` (a script's print) sees every line too."""
+    def one_pass(label: str) -> list[ControlResult]:
+        results = control_results(ask=ask, samples=samples, http=http)
+        for r in results:
+            log.info("arsenal outcome control (%s): %s", label, r.line)
+            if echo:
+                echo(r.line)
+            if not r.ok:
+                log.warning("arsenal outcome control FAILED (%s): %s, votes %s; reason: %s",
+                            label, r.name, r.votes, r.note)
+        return results
+
+    first = one_pass("run")
+    total = len(first)
+    if all(r.ok for r in first):
+        return f"{total}/{total}"
+    log.warning("arsenal outcome check: %d of %d controls wrong (%s); re-running the controls once",
+                sum(not r.ok for r in first), total, _failed(first))
+    second = one_pass("rerun")
+    if all(r.ok for r in second):
+        log.warning("arsenal outcome check: controls passed on the rerun (first pass wrong: %s)", _failed(first))
+        return f"{total}/{total}"
+    both = [r.name for r in second if not r.ok and not next(f for f in first if f.name == r.name).ok]
+    msg = (f"{sum(not r.ok for r in second)} of {total} controls wrong in this run, after one rerun "
+           f"(rerun: {_failed(second)}; first pass: {_failed(first)})"
+           + (f"; wrong in both: {', '.join(both)}" if both else "") + "; nothing recorded")
+    log.error("arsenal outcome check: %s", msg)
+    raise ControlsFailed(msg)
 
 
 # -------------------------------------------------------------------- record

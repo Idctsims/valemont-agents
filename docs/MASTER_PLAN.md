@@ -1,6 +1,6 @@
 # Valemont Command — Master Plan
 
-Oct 7, 2026 · @Terrell Sims · **Updated Oct 11, 2026: Chat 2 (Command core) complete**
+Oct 7, 2026 · @Terrell Sims · **Updated Nov 4, 2026: Chat 5 (the Arsenal) closed**
 
 ## Build status
 
@@ -8,8 +8,11 @@ Oct 7, 2026 · @Terrell Sims · **Updated Oct 11, 2026: Chat 2 (Command core) co
 | --- | --- | --- |
 | Chat 1 — Foundation | **Done.** All four phases green, both monitoring drills passed | Oct 8, 2026 |
 | Chat 2 — Command core | **Done.** All five phases live; first scheduled Morning Brief pushed at 09:45 | Oct 11, 2026 |
-| Chat 3 — Learning engine, Home feed, Sports News | **Next.** Setup listed under Chat 3 in §6 | — |
-| Chats 4–13 | Not started | — |
+| Chat 3 — Learning engine, Home feed, Sports News | **Done.** Phases 1–3 green; carried items in §6 | Oct 13, 2026 |
+| Chat 4 — Tech Hub and Screening Room | Phases 1–2 green; Phases 3–4 open on their readings (§6) | — |
+| Chat 5 — The Arsenal | **Done.** Phases 1–3 closed; verifier work stopped by the owner; carried items in §6 | Nov 4, 2026 |
+| Chat 7 — Sports data layer and Game Day | **Next**, by the Nov 2 sequence change (§6) | — |
+| Chats 6, 8–13 | Not started | — |
 
 What changed from this plan during Chats 1 and 2 is recorded where it applies, marked **(as built)**. The repo's `CLAUDE.md` Current State holds the full detail: commits, test counts, drill timelines.
 
@@ -248,7 +251,7 @@ Thirteen build chats after this one, each split into phases with a test you run 
 
 **Sequence change (owner, 2026-11-02).** The chats below keep their numbers, but they are built in this order:
 
-1. Chat 5 (Arsenal), to its close.
+1. Chat 5 (Arsenal), to its close. **Closed Nov 4, 2026.**
 2. **Chat 7**: sports data layer and Game Day.
 3. **Chat 8**: betting (consensus engine, Parlay Generator).
 4. **Chat 9**: Slip Analyzer, Manual Entry, Live Bet Tracker. It comes right after Chat 8 because it needs the consensus engine and the bets Chat 8 generates.
@@ -401,7 +404,7 @@ In short: 7 → 8 → 9 → 10–12 → 6 (Lookbook) → 13.
      - [ ] Trailers For you is ranked by taste, and works while YouTube RSS is down (TMDB source): **not yet reported** (the RSS outage ended before Phase 4 shipped; the TMDB path brought 11 trailers on its first run).
      - [ ] Worker RAM at rest: **pending (calendar)**, the 6 h curve on #50's worker after 07:15 UTC Oct 16; flat means the new baseline, and it closes this item and Phase 3's (owner's rule, Oct 16).
 
-### Chat 5 — The Arsenal
+### Chat 5 — The Arsenal ✓ (closed Nov 4, 2026; carried items below)
 
 **Set up in this chat:** nothing new.
 
@@ -413,7 +416,16 @@ In short: 7 → 8 → 9 → 10–12 → 6 (Lookbook) → 13.
 3. Screening Room hook: marking a show finished drafts its references into the Arsenal.
    - [x] Finishing a show produces new Arsenal cards tagged to it. **Phase 3 CLOSED 2026-11-04 (owner), on the backfill.** PR #71 (merge `b621ac0`, live 21:27 UTC Nov 3); db/062 (one hook per title ever; the `watch_status` finish trigger). The backfill of the 8 titles Finished before db/062 (hooks 57–64): 28 cards tagged to their titles, 8 cleared (corrected, outcome `nnn`), 20 unverified; 7 Power Words (5 verified); $0.305 in all, ~$0.038 a title. Owner runs: `arsenal-hook`, `screens-arsenal-hook` phone and desktop passed; the 390 px From-line check: not run (owner). Detail: CLAUDE.md, Chat 5 Phase 3; `docs/arsenal.md` §10.
 4. Verifier yield (Chat 5's last item, owner Nov 4).
-   - [ ] On a dry run over the unverified set, ≥ 70% clear while the frozen known-bad controls all stay unverified; cost reported; only then the one re-verification. The never-repeat list in the hook and pool prompts capped (tokens before and after).
+   - [x] **STOPPED by the owner, Nov 4: the clear rate does not block.** An unverified card never drops, supply is covered by the refill rule (PR #64), and precision held (known-bad 7/7 in every run). The ≥ 70% target was never met. Shipped: PR #75 (escalation removed; the bar amended to should-clear ≥ 2/10; re-verify by group; db/063) and PR #76 (the pool's full never-repeat list with keys; the hook's cap of 60; refusals on the record, db/064). The fresh batch on #76 (runs 151–153): 33 of 36 inserted, 0 invalid references, clear rate 32% (12 of 37). The apples-to-apples comparison and the re-verifications are skipped. Detail: `docs/arsenal.md` §11.7–§11.9.
+   - [x] **The outcome control reruns once before refusing** (owner, Nov 4; PR #77): each failed control is logged with its votes and reason. On Nov 4 the worker's controls refused 14 of 19 passes; its retries still checked all 14 cleared references from runs 120 and 151 (`nnn`, controls 3/3). **Custer fails repeatedly**: 2 of 3 read-only passes, because retrieval reads the 1936 film serial's page. **The rerun live on the worker: pending until #77 deploys.**
+
+**Chat 5 CLOSED 2026-11-04 (owner).** Carried, each pending until read:
+- **Verifier recall on source-thin cards** (the second source off-topic or a list of quotes; `docs/arsenal.md` §11.3).
+- **125 unspent re-verifications**: the real unverified stay flagged, one re-verification each still unspent.
+- **Replace the Custer outcome control** (owner: later); which control failed in the worker's Nov 4 refusals is only in Railway's logs, not read.
+- **The 3-card check on real Arm Me use**: the first 3 real requests since PR #69 (0 as of Nov 4).
+- **The first real Monday quiz, Mon Nov 9** (7 saves, the quiz needs 4).
+- From the phases: the Undo fix not re-run; the 390 px "From <title>" check not run; worker RSS at rest (6 h read pending).
 
 ### Chat 6 — The Lookbook and the vision service
 

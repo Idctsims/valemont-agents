@@ -1,0 +1,45 @@
+﻿PASS  2269 expect unverified got unverified 'Austin Dennison, the quiet operator'
+        first source insufficient (The Diplomat (American TV series)); second source The Diplomat (American TV series); insufficient: The excerpt is a set of quotes from The Diplomat that never mentions Austin Dennison, Kate's staff absorbing a crisis, or anyone going
+PASS   215 expect unverified got unverified 'Seneca on luck'
+        contradicted: The excerpt covers Seneca's Stoicism and works but never attributes the preparation-meets-opportunity line to him or mentions luck, so the card's attribution cannot be confirmed and the excerpt does not contradict it directly.
+PASS    21 expect unverified got unverified 'The Grave Dancer'
+        insufficient: the excerpt does not cover every claim (The excerpt lists the piece as a 1982 Real Estate Review article, not a 1976 one, and never says he took the nickname from it, though it does confirm the buy-distressed-properties substance.)
+PASS  1852 expect corrected  got corrected  'Washington resigns his commission'
+        corrected by the source: The excerpt confirms the date, the act, the Annapolis setting, and the return to Mount Vernon, but the card's source_work is a paraphrase better matched to the excerpt's title, and the meaning's gloss is interpretive rather than source
+FAIL  1964 expect clear      got unverified 'BATNA (Getting to Yes)'
+        first source insufficient (Best alternative to a negotiated agreement); second source William Ury; insufficient: the excerpt does not cover every claim (Excerpt confirms Ury and Fisher co-wrote Getting to Yes and established BATNA, but does not give the 1981 d
+FAIL   190 expect clear      got unverified "Bezos's Day 1"
+        first source insufficient (Jeff Bezos); second source Jeff Bezos; insufficient: The excerpt is a list of Bezos quote citations and never mentions the 2016 shareholder letter, its 'Day 1' or 'Day 2' wording, or the stasis and decline passage, so the card cannot
+FAIL   192 expect clear      got unverified "Buffett's Ovarian Lottery"
+        contradicted: The excerpt is a biography of Buffett and never mentions the 'ovarian lottery' phrase, birth luck, or The Giving Pledge, so the card's attribution cannot be confirmed here and the excerpt does not contradict it either.
+PASS   727 expect clear      got corrected  'The Flu Game'
+        corrected by the source: The excerpt confirms the 38 points, the illness, and the Bulls win, but says the flu was later revealed to be food poisoning, so the origin needs that correction.
+FAIL   736 expect clear      got unverified 'Roc-A-Fella'
+        insufficient: the excerpt does not cover every claim (Excerpt confirms who founded the label and why, but gives 1994 not 1995, names Reasonable Doubt (1996) as the first release via Priority rather than a 1995 label launch, and says nothing about selling from 
+FAIL  2267 expect clear      got unverified "Kate Wyler takes the job she didn't want"
+        first source insufficient (The Diplomat (American TV series)); second source The Diplomat (American TV series); insufficient: The excerpt is quotes from The Diplomat with no mention of Kate Wyler being a career diplomat, wanting Kabul, or being handed the Lond
+PASS  2270 expect clear      got corrected  'Managing the carrier-attack crisis'
+        corrected by trimming (dropped: the ambassador must hold the allied position; Washington and London each push toward a different response): The excerpt confirms the carrier attack and Kate Wyler's appointment, but says nothing about her holding an allied posit
+FAIL  2271 expect clear      got unverified "Kate won't dress the part"
+        first source insufficient (The Diplomat (American TV series)); second source The Diplomat (American TV series); insufficient: The excerpt shows Kate objecting to her dress and being styled as a candidate, but never shows her winning the room on substance, so t
+FAIL  2247 expect clear      got unverified 'Scylla or Charybdis'
+        first source insufficient (Between Scylla and Charybdis); second source Wrestle Odyssey 2; contradicted: The excerpt is about a 2026 pro wrestling event in Tokyo and says nothing about Circe, Odysseus, Scylla, or The Odyssey, so it cannot confirm or deny the c
+FAIL    14 expect clear      got unverified 'Win first, then go to war'
+        first source insufficient (Sun Tzu); second source Sun Tzu; insufficient: the excerpt does not cover every claim (The excerpt confirms Sun Tzu wrote The Art of War but never mentions the 'win first, then go to war' line or its paraphrase, so the origin claim c
+PASS    -1 expect unverified got unverified 'Luke, I am your father'
+        quote not found in the sourced lines; kept as a described move; the origin rests on a quote no source holds
+PASS    -2 expect unverified got unverified 'Play it again, Sam'
+        contradicted: The excerpt is about the 1972 Woody Allen film, which is a different work; it never says Rick says this line to a pianist in Casablanca, and it describes the phrase as a title rather than a quote from Casablanca.
+PASS    -3 expect unverified got unverified 'Let them eat cake'
+        first source insufficient (Let them eat cake); second source Marie Antoinette; contradicted: The excerpt says the 'Let them eat cake' phrase appears in Rousseau's Confessions, written in 1766 when Marie Antoinette was 11, so the attribution to her in 1789 is c
+PASS    -4 expect unverified got unverified 'Einstein on insanity'
+        contradicted: The excerpt says the insanity quote is misattributed to Einstein, which contradicts the card's claim that he defined insanity that way.
+PASS    -5 expect trimmed    got corrected  'Washington crosses the Delaware'
+        corrected by trimming (dropped: humming Yankee Doodle to keep the oarsmen in time): The excerpt confirms who, what, and when but never mentions the Yankee Doodle detail, so it is dropped from the origin.
+        rewritten: On the night of December 25-26, 1776, George Washington led the Continental Army across the icy Delaware River to surprise the Hessians at Trenton.
+PASS    -6 expect trimmed    got corrected  'One small step'
+        corrected by trimming (dropped: July 20 date (excerpt gives July 21, 02:56 UTC); "after checking his wristwatch twice" flourish; "at the foot of the ladder" detail is partly supported but the excerpt places it): The excerpt confirms who, what and roughly when 
+        rewritten: On July 21, 1969, Neil Armstrong became the first person to set foot on the Moon during Apollo 11. He said "That's one small step for [a] man, one giant leap for mankind."
+
+known-bad held: 7/7; should-clear cleared: 2/10 (need 3); 1852 kept: True; trims: 2/2  =>  done-when NOT met
+cost: 28 judge calls, $0.013400 (claude-haiku-5-5 28 calls $0.013400)

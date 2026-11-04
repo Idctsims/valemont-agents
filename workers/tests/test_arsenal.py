@@ -732,6 +732,19 @@ class OutcomeWriteGate(NoDatabase):
         self.assertEqual(self.check.main(["--write"], ask=always_no), 1)
         self.assertEqual((self.holds, self.checks, self.pool_read), ([], [], []))  # refused before the pool was read
 
+    def test_write_reruns_a_wrong_control_once_like_the_worker(self) -> None:
+        base = controls_ask()
+        thermo: list[int] = []
+
+        def flaky(c: Any, e: Any) -> tuple[bool, str]:
+            if c.title == "Thermopylae":
+                thermo.append(1)
+                if len(thermo) <= 3:
+                    return False, "no"
+            return base(c, e)
+        self.assertEqual(self.check.main(["--write"], ask=flaky), 0)
+        self.assertEqual(self.checks, [(195, False, "nnn", "3/3", "script")])
+
     def test_write_records_every_check_and_holds_a_conflict(self) -> None:
         self.assertEqual(self.check.main(["--write"], ask=controls_ask("The Trojan Horse")), 0)
         self.assertEqual(self.checks, [(195, True, "YYY", "3/3", "script")])
@@ -788,6 +801,50 @@ class OutcomeInThePool(NoDatabase):
         with self.assertRaises(self.outcome.ControlsFailed) as caught:
             self.outcome.check_unchecked(ask=lambda c, e: (False, "x"))  # Thermopylae and Custer then fail
         self.assertIn("2 of 3 controls wrong", str(caught.exception))
+        self.assertEqual(self.recorded, [])
+
+    def test_a_wrong_control_reruns_the_controls_once_and_a_clean_rerun_records(self) -> None:
+        """Owner, Nov 4: one wrong vote refused three runs that day. A wrong
+        control reruns the controls once; the failure is logged with its
+        votes and reason; a rerun with every control right records "3/3"."""
+        self.logs_on()
+        self.patch("arsenal_unchecked_refs", lambda: [ref(id=711, title="See's Candies", verification="verified")])
+        base = controls_ask()
+        custer_reads = []
+
+        def flaky(c: Any, e: Any) -> tuple[bool, str]:
+            if c.title == "Custer's Last Stand":
+                custer_reads.append(1)
+                if len(custer_reads) <= 3:  # the first pass's three reads say no conflict
+                    return False, "the source covers the ride, not the ending"
+            return base(c, e)
+
+        with self.assertLogs("valemont.arsenal.outcome", level="WARNING") as logs:
+            run = self.outcome.check_unchecked(ask=flaky)
+        self.assertEqual(len(custer_reads), 6)  # two passes, no third
+        self.assertEqual(self.recorded, [(711, False, "nnn", "3/3", "worker")])
+        self.assertEqual(run.job_note, "controls 3/3; checked 1, held 0")
+        text = "\n".join(logs.output)
+        self.assertIn("FAILED (run): custer, votes nnn; reason: the source covers the ride, not the ending", text)
+        self.assertIn("controls passed on the rerun (first pass wrong: custer (votes nnn))", text)
+
+    def test_a_control_wrong_in_both_passes_is_named_and_nothing_is_recorded(self) -> None:
+        self.patch("arsenal_unchecked_refs", lambda: [ref(id=711, verification="verified")])
+        reads: list[str] = []
+        base = controls_ask()
+
+        def custer_never(c: Any, e: Any) -> tuple[bool, str]:
+            reads.append(c.title)
+            return (False, "no") if c.title == "Custer's Last Stand" else base(c, e)
+
+        with self.assertRaises(self.outcome.ControlsFailed) as caught:
+            self.outcome.check_unchecked(ask=custer_never)
+        msg = str(caught.exception)
+        self.assertTrue(msg.startswith("1 of 3 controls wrong in this run, after one rerun"), msg)
+        self.assertIn("wrong in both: custer;", msg)
+        self.assertTrue(msg.endswith("nothing recorded"), msg)
+        self.assertEqual(reads.count("Custer's Last Stand"), 6)  # rerun once, never twice
+        self.assertNotIn("See's Candies", reads)  # no reference read after a refusal
         self.assertEqual(self.recorded, [])
 
     def test_a_top_up_whose_controls_fail_says_so_and_the_pick_fails_loudly(self) -> None:
