@@ -1086,6 +1086,32 @@ Measured with the API's token count (`scripts.arsenal_prompt_tokens`; no model c
 | The hook (The Diplomat) | 9,991 | **4,923** (−51%) |
 | The pool's reference request | 9,394 | **4,362** (−54%) |
 
+
+### 11.7 The bar, amended (owner, Nov 4), and the runs on the deployed code
+
+**On the deployed code** (`b5ef40e`, PR #75, merged 07:02:07 UTC; the worker rebooted 07:02:35 UTC):
+
+| Controls run | Known-bad | Should-clear | 1852 | Trims | Cost |
+|---|---|---|---|---|---|
+| 1 | 7/7 | 2/10 (the Flu Game, 2270) | kept | 2/2 | $0.0134 |
+| 2 | 7/7 | 3/10 (adds BATNA) | kept | 2/2 | $0.0129 |
+
+Run 1 missed the ≥ 3/10 bar by one card. The controls were not rerun to find two passes.
+
+**Amended (owner, Nov 4): should-clear ≥ 2/10 in both runs**, with known-bad 7/7 in both, 1852 kept and trims 2/2. Why: recall on the hard controls is noisy (Haiku's single reads swing 2–4 of 10, and several should-clear cards make claims their pages never state). Precision held, though: **known-bad 7/7 in every run** of this work, eleven runs counting the (A) and (B) trials. Today's two runs pass the amended bar.
+
+**Residue dry run on the deployed code** (all 125 real unverified; nothing written; for information):
+
+| Group | Unverified | Clear after |
+|---|---|---|
+| Pool | 85 | 24 (4 verified, 20 corrected) |
+| Title hook | 20 | 2 (2 corrected) |
+| Arm Me | 2 | 2 (1 verified, 1 corrected) |
+| Seeds | 18 | 7 (7 corrected) |
+| **Total** | **125** | **35 (28%)** |
+
+The v1 dry run cleared 8 of 125 (6.4%). The two control runs and this dry run cost $0.102 together (210 Haiku calls).
+
 ### 11.8 The cap reverted for the pool (owner, Nov 4), and refusals on the record
 
 **What happened.** The fresh batch on the deployed code (run 120, submitted 07:32 UTC Nov 4) inserted **15 of 36** references: 6 near-duplicates and **20 invalid**, finance_business 0 of 7. It cleared 10 of the 22 items it settled (**45%**, below the 52% floor), so the re-verifications were not spent.
