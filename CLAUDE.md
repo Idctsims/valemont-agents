@@ -107,6 +107,11 @@ workers/         Everything Python. The Railway image is built from here.
                    written once). No SQL, no orders.
   sports/nfl/      Everything NFL: nflverse schedule/kickoff, team codes, injuries,
                    models. A new sport is a sibling package, not a rebuild.
+  sports/espn.py   The sports data layer (Chat 7; docs/sports_data.md): ESPN
+                   fetch, schema validation, parse to sports_events rows.
+                   sports/jobs.py (sports_schedule, sports_live) and
+                   sports/provider.py (the API-Sports fallback, wired to nothing)
+                   beside it. No SQL: ledger.sports_events_upsert writes.
   jobs/            Scheduled work that is not an agent (weekly model fits).
   scripts/         One-off utilities, health checks, db_inspect.py (§5).
   tests/           Invariant suite. Stubbed ledger, no DB, no network. See §6.
@@ -1158,7 +1163,14 @@ absent row as "I never looked."
     - Why: Nov 4's fresh batch refused 20 of 36 references as "invalid" and the reasons were only logged (`docs/arsenal.md` §11.8).
 
     **Verified via db_inspect the same session (~08:07 UTC):** (a) the log row; (b) the CHECK names `status = 'collected'`; (c) the column is jsonb and `valemont_readonly` can select it; (d) 0 rows carry refusals (no collect since).
-    - Next new file: `db/065`.
+  - **`db/065_sports_events.sql` applied 2026-11-04 19:30:12 UTC** (`migration_log`; the first paste; owner's paste, reported "db/065 pasted"; the self-test NOTICE was not reported here; the log row exists only if the self-test passed). Branch `chat7-phase1`, Chat 7 Phase 1 (`docs/sports_data.md`).
+    - `sports_leagues`: the registry (14 leagues; the owner's five cfb, nfl, nba, f1, pga first; `fetch_mode` per_day for team sports, whose date ranges ESPN refuses).
+    - `sports_events`: UNIQUE (league, espn_id); (league, kind) must match the registry; a test row is exactly an `e2e-` id; indexes for today by league and live now. The worker upserts in place, never touching `kalshi_event_ticker` (Phase 2).
+    - `add_test_sports_event` (verified e2e marker); `ctx_sports_today`, provider `sports_today` (sort 46), not a brief section.
+
+    **Verified via db_inspect the same session (19:34 UTC):** (a) the log row; (b) the 14 leagues, kinds, fetch modes, owner five and CFB/NCAAB params as written; (c) both tables RLS on, 1 policy each, anon no select, authenticated select only (no insert/update/delete/truncate), readonly select; (d) the 4 indexes; (e) `sports_today` enabled, not a brief section, sort 46; (f) 0 events; `ctx_sports_today()` counts `{}`; anon executes neither function, readonly executes the ctx only, authenticated `add_test_sports_event`.
+    - **Merge gate on `chat7-phase1` after the paste:** `tests/` 1235 OK; full `tests_live -v`, every connection metered: **483 OK, 0 skipped**, ~2.73 MB read (2,798 KB, 1,047 s; `test_sports_events_sql` 3 classes, ~2.7 KB).
+    - Next new file: `db/066`.
   - **Rule (owner, 2026-10-12): the migration record updates in the same session a migration is verified, never deferred to a merge.** Record `applied_at` from `migration_log` and the verification, and move "Next new file" here and in MASTER_PLAN §"Migration numbering", in their own commit.
 - **Known intermittent `tests_live` skip (identified 2026-10-12):** `test_system_jobs_sql.SystemJobsSql.test_claim_retry_and_finish` skips with "another poller claimed the test job first" when the production worker's 10 s `job_queue` poller claims the test's `noop` job first (observed 2 of 60 isolated runs). By design (skip, not fail); not a broken invariant. Two sibling tests in the same file skip the same way ("another poller claimed/failed the test job first"). Since 2026-10-13 `tests_live` runs with `-v`, so a skip is named, not assumed.
   - **2026-10-13, cleared (owner):** a quiet Phase 3 run reported "314 tests, OK (skipped=1)" with no name. The full verbose rerun had **0 skips** (314 OK, 593 s). The owner's judgment: the plausible cause is this documented poller race, since every migration-gated skip cannot fire (all applied). One alternative was not ruled out: a class whose own `setUpClass` hits a transient "database unreachable" is also reported as one skip.

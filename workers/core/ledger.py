@@ -5586,3 +5586,102 @@ def arsenal_run_rows(run_id: int, *, conn: psycopg.Connection | None = None) -> 
         rows = c.execute(f"SELECT {', '.join(cols)} FROM arsenal_pool_runs WHERE id = %s OR run_id = %s ORDER BY id",
                          (run_id, run_id)).fetchall()
     return [dict(zip(cols, r)) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Sports data layer (db/065; sports/, docs/sports_data.md). sports_leagues is
+# the registry the worker reads each schedule run; sports_events is upserted
+# by (league, espn_id), written only when a stored column would change (the
+# worker also skips rows whose content_hash its cache already holds). A writer
+# touches only rows of its own kind (the worker real rows, tests_live its
+# e2e- test rows), and never kalshi_event_ticker (Phase 2's). A stored score
+# is never cleared: a golf round past play keeps its last standings.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class SportsLeagueRow:
+    code: str
+    espn_path: str
+    espn_params: dict[str, str]
+    fetch_mode: str
+    kind: str
+    owner_five: bool
+    sort: int
+
+
+SPORTS_LEAGUES_SQL: Final = """
+    SELECT code, espn_path, espn_params, fetch_mode, kind, owner_five, sort
+      FROM sports_leagues WHERE active ORDER BY sort, code
+"""
+
+#: tests_live/test_sports_events_sql.py runs this exact text.
+SPORTS_EVENTS_UPSERT_SQL: Final = """
+    INSERT INTO sports_events (league, kind, espn_id, parent_espn_id, event_name, session, starts_at, time_tbd,
+                               home, away, participants, broadcast, national_tv, venue, status, espn_status,
+                               status_detail, period, clock, score, content_hash, is_test)
+    SELECT r.league, r.kind, r.espn_id, r.parent_espn_id, r.event_name, r.session, r.starts_at, r.time_tbd,
+           r.home, r.away, r.participants, coalesce(r.broadcast, '{}'), r.national_tv, r.venue, r.status,
+           r.espn_status, r.status_detail, r.period, r.clock, r.score, r.content_hash, %(is_test)s
+      FROM jsonb_to_recordset(%(rows)s) AS r (
+               league text, kind text, espn_id text, parent_espn_id text, event_name text, session text,
+               starts_at timestamptz, time_tbd boolean, home text, away text, participants jsonb,
+               broadcast text[], national_tv boolean, venue text, status text, espn_status text,
+               status_detail text, period integer, clock text, score jsonb, content_hash text)
+    ON CONFLICT (league, espn_id) DO UPDATE SET
+        kind = EXCLUDED.kind, parent_espn_id = EXCLUDED.parent_espn_id, event_name = EXCLUDED.event_name,
+        session = EXCLUDED.session, starts_at = EXCLUDED.starts_at, time_tbd = EXCLUDED.time_tbd,
+        home = EXCLUDED.home, away = EXCLUDED.away, participants = EXCLUDED.participants,
+        broadcast = EXCLUDED.broadcast, national_tv = EXCLUDED.national_tv, venue = EXCLUDED.venue,
+        status = EXCLUDED.status, espn_status = EXCLUDED.espn_status, status_detail = EXCLUDED.status_detail,
+        period = EXCLUDED.period, clock = EXCLUDED.clock,
+        score = coalesce(EXCLUDED.score, sports_events.score),
+        content_hash = EXCLUDED.content_hash, updated_at = now()
+     WHERE sports_events.is_test = %(is_test)s
+       -- Written only if a stored column would change: every column the SET
+       -- writes, with the score as the SET would leave it. (A hash alone
+       -- would rewrite a golf round whose sent score is NULL but kept.)
+       AND (sports_events.kind, sports_events.parent_espn_id, sports_events.event_name, sports_events.session,
+            sports_events.starts_at, sports_events.time_tbd, sports_events.home, sports_events.away,
+            sports_events.participants, sports_events.broadcast, sports_events.national_tv, sports_events.venue,
+            sports_events.status, sports_events.espn_status, sports_events.status_detail, sports_events.period,
+            sports_events.clock, sports_events.score)
+           IS DISTINCT FROM
+           (EXCLUDED.kind, EXCLUDED.parent_espn_id, EXCLUDED.event_name, EXCLUDED.session,
+            EXCLUDED.starts_at, EXCLUDED.time_tbd, EXCLUDED.home, EXCLUDED.away,
+            EXCLUDED.participants, EXCLUDED.broadcast, EXCLUDED.national_tv, EXCLUDED.venue,
+            EXCLUDED.status, EXCLUDED.espn_status, EXCLUDED.status_detail, EXCLUDED.period,
+            EXCLUDED.clock, coalesce(EXCLUDED.score, sports_events.score))
+    RETURNING (xmax = 0) AS inserted
+"""
+
+
+@dataclass(frozen=True)
+class SportsUpsert:
+    inserted: int
+    updated: int
+
+    @property
+    def written(self) -> int:
+        return self.inserted + self.updated
+
+
+def sports_leagues(*, conn: psycopg.Connection | None = None) -> list[SportsLeagueRow]:
+    with _brief_conn(conn) as c:
+        rows = c.execute(SPORTS_LEAGUES_SQL).fetchall()
+    return [SportsLeagueRow(code, path, {str(k): str(v) for k, v in (params or {}).items()}, mode, kind,
+                            bool(five), int(sort))
+            for code, path, params, mode, kind, five, sort in rows]
+
+
+def sports_events_upsert(rows: Sequence[Mapping[str, Any]], *, is_test: bool = False,
+                         conn: psycopg.Connection | None = None) -> SportsUpsert:
+    """Insert or refresh `rows` (sports/espn.SportsEvent.row() plus its
+    content_hash) in ONE statement. A row whose stored hash is equal is not
+    written; only the inserted/updated flags come back."""
+    if not rows:
+        return SportsUpsert(0, 0)
+    with _brief_conn(conn) as c, c.transaction():
+        flags = [r[0] for r in c.execute(SPORTS_EVENTS_UPSERT_SQL,
+                                         {"rows": Jsonb(list(rows)), "is_test": is_test}).fetchall()]
+    inserted = sum(1 for f in flags if f)
+    return SportsUpsert(inserted, len(flags) - inserted)

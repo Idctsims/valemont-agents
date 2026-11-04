@@ -139,6 +139,18 @@
                              today has one. Pool short: deferred while a batch
                              is open or < 2 h old, else one synchronous top-up
                              verified inline first; still short raises.
+    sports_schedule  daily   04:00 America/Chicago, and 30 s after boot: every
+                             league in sports_leagues (db/065) from yesterday
+                             to today + 7, upserted by (league, espn_id), only
+                             rows whose content changed; also the daily ESPN
+                             contract test (sports/jobs.py, docs/sports_data.md).
+    sports_live      60 s    calls ESPN only for a league with an event in play
+                             or starting within 15 min (no-time golf rounds and
+                             tennis every 10 min on their own day; a TBD start
+                             never), from the in-memory cache; stops polling an
+                             event live past its stuck-live cap and flags it;
+                             idle otherwise, with zero ESPN calls and zero
+                             database reads.
 
 Alerts go through core/push.py with deep link /settings/health.
 """
@@ -173,6 +185,7 @@ from feed import tech as feed_tech
 from feed import why as feed_why
 from screening import jobs as screening_jobs
 from screening import rec_jobs as screening_recs
+from sports import jobs as sports_jobs
 
 log = logging.getLogger("valemont.system")
 
@@ -753,6 +766,13 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
         # Hooks whose one job failed for good (arsenal/hook.py).
         SystemJob(arsenal_hook.SWEEP_JOB, arsenal_hook.SWEEP_S, IntervalTrigger(seconds=arsenal_hook.SWEEP_S),
                   arsenal_hook.sweep_job, misfire_grace=3600, start_delay_s=660),
+        # The sports data layer (db/065). The schedule run fills the cache the
+        # live job plans from, so the live job is idle until it has run.
+        SystemJob(sports_jobs.SCHEDULE_JOB, 24 * 60 * 60, CronTrigger(hour=4, minute=0, timezone=OWNER_TZ),
+                  sports_jobs.schedule_job, misfire_grace=3600, start_delay_s=30),
+        SystemJob(sports_jobs.LIVE_JOB, sports_jobs.LIVE_INTERVAL_S,
+                  IntervalTrigger(seconds=sports_jobs.LIVE_INTERVAL_S),
+                  sports_jobs.live_job, start_delay_s=90),
     ]
     if env.get("HEALTH_DRILL", "").strip().lower() == "true":
         log.warning("HEALTH_DRILL=true: scheduling health_drill, which always fails")
