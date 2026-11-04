@@ -178,7 +178,10 @@ Each HEAD is a few hundred bytes. The upload is ingress.
 - **A week missing from both stores is unevaluable**, which is a fail
   (§8.1), not a deferral. The runner says which weeks.
 - The runner remains as §8.1 says: committed before it runs, refuses before
-  2027-01-20, refuses if output exists, runs once.
+  2027-01-20, refuses if output exists, runs once. **And (owner,
+  2026-11-04): it runs only once week 18's archive shows 0 unsettled**
+  (§10, the week-18 note). It reads each week's highest revision; if that
+  revision records unsettled > 0 for week 18, it refuses.
 
 ## 9. Keys (`.env` names, documented in `.env.example`)
 
@@ -205,12 +208,14 @@ rerun a week later with `--revision 2`.
 
 | Week | Run on |
 |---|---|
-| 6, 7, 8 | now (overdue) |
+| 6, 7, 8 | done 2026-11-04 (r1, 0 unsettled each) |
 | 9 | Tue 2026-11-10 |
 | 10–17 | each following Tuesday, through Tue 2027-01-05 (week 17) |
 | 18 | Tue 2027-01-12 (nflverse, read 2026-11-04: every week-18 game at 2027-01-10 18:00 UTC, a placeholder until the league sets times) |
 
-**For the owner (not acted on): week 18 is later than §8.1 assumed.**
+**Week 18 is later than §8.1 assumed. Decided (owner, 2026-11-04): the
+frozen text stays untouched; the January runner waits for week 18's archive
+to show 0 unsettled, as well as for 2027-01-20 (§8).**
 Preregistration §8.1 says week 18 ends 2027-01-03 and sets the runner's
 earliest date at 2027-01-20, on the basis that stat props settle within
 15 days (§2.7). nflverse shows week 18 on 2027-01-10. On that rule, its
