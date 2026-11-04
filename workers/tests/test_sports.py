@@ -718,6 +718,22 @@ class LiveJob(JobsCase):
         self.assertEqual(run.missing, 1)
         self.assertEqual(len([k for k in self.cache.events if k[0] == "ucl"]), 2)
 
+    def test_an_old_match_in_a_live_draw_is_not_resent(self) -> None:
+        # Production, 20:01 UTC Nov 4: a tournament's call returns its whole
+        # draw (Paris matches from Oct 31); the schedule run pruned those from
+        # the cache, so every live run re-sent 81 unchanged rows (the database
+        # wrote none). Nothing the schedule fetched may look new to the live job.
+        draw = fixture("atp_masters")
+        live = copy.deepcopy(draw["events"][0]["groupings"][0]["competitions"][0])
+        live["id"] = "999001"
+        live["date"] = live["startDate"] = "2026-11-04T18:00Z"
+        live["status"]["type"].update(name="STATUS_IN_PROGRESS", state="in", completed=False)
+        draw["events"][0]["groupings"][0]["competitions"].append(live)
+        self.schedule(FakeProvider({"atp": draw}), "atp")
+        run = self.live(FakeProvider({"atp": draw}))
+        self.assertEqual(run.leagues, {"atp": 5})
+        self.assertEqual(run.sent, 0)
+
     def test_tbd_game_sleeps_until_the_daily_pull_publishes_its_time(self) -> None:
         tbd = fixture("cfb_tbd")
         tbd["events"] = [e for e in tbd["events"] if e["id"] == "401856883"]
@@ -755,6 +771,100 @@ class LiveJob(JobsCase):
         again = FakeProvider({"pga": fixture("pga_scheduled")})
         self.live(again, at=at + timedelta(minutes=10))
         self.assertEqual(len(again.requests), 1)
+
+
+class SimProvider:
+    """30 days of synthetic slates: 10 NBA games a night (tip 00:00 UTC,
+    live for 2.5 h, then final), and 10-day ATP tournaments whose every call
+    returns the whole draw (3 matches a day). Status follows `clock`."""
+
+    name = "sim"
+    DAY0 = datetime(2026, 11, 1, tzinfo=timezone.utc)
+
+    def __init__(self) -> None:
+        self.clock = self.DAY0
+        self.calls = 0
+        self.wire_bytes = 0
+
+    def _status(self, start: datetime) -> str:
+        if self.clock < start:
+            return "scheduled"
+        return "live" if self.clock < start + timedelta(hours=2, minutes=30) else "final"
+
+    def events(self, lg: League, days: list[date]) -> list[SportsEvent]:
+        self.calls += 1
+        out = []
+        if lg.code == "nba":
+            for d in days:
+                tip = datetime(d.year, d.month, d.day, tzinfo=timezone.utc) + timedelta(days=1)
+                for i in range(10):
+                    st = self._status(tip)
+                    out.append(SportsEvent(league="nba", kind="game", espn_id=f"{d:%Y%m%d}{i:02d}",
+                                           event_name=f"g{i}", starts_at=tip, status=st,
+                                           espn_status="STATUS_FINAL" if st == "final" else "STATUS_SCHEDULED",
+                                           home=f"H{i}", away=f"A{i}"))
+        else:
+            first = (min(days) - self.DAY0.date()).days // 10
+            last = (max(days) - self.DAY0.date()).days // 10
+            for t in range(first, last + 1):
+                for d in range(10):
+                    for m in range(3):
+                        start = self.DAY0 + timedelta(days=10 * t + d, hours=12 + 2 * m)
+                        st = self._status(start)
+                        out.append(SportsEvent(league="atp", kind="match", espn_id=f"t{t}-{d}-{m}",
+                                               event_name=f"Open {t}", starts_at=start, status=st,
+                                               espn_status="STATUS_FINAL" if st == "final" else "STATUS_SCHEDULED",
+                                               parent_espn_id=f"t{t}"))
+        return out
+
+    def close(self) -> None:
+        pass
+
+
+class CacheBounded(JobsCase):
+    def test_thirty_days_of_schedule_and_live_cycles_stay_bounded(self) -> None:
+        sim = SimProvider()
+        sizes: list[tuple[int, int]] = []
+        resent_unchanged = 0
+        for day in range(30):
+            base = SimProvider.DAY0 + timedelta(days=day)
+            sim.clock = base + timedelta(hours=9)  # the 04:00 Chicago pull
+            with mock.patch.object(ledger, "sports_leagues", lambda **k: league_rows("nba", "atp")):
+                jobs.schedule_job(provider=sim, now=lambda: sim.clock, cache=self.cache, registry=self.registry)
+            for at in (timedelta(hours=12, minutes=30), timedelta(hours=23, minutes=50), timedelta(hours=24, minutes=30),
+                       timedelta(hours=25, minutes=30), timedelta(hours=26, minutes=40)):
+                sim.clock = base + at
+                before = len(self.upserts)
+                run = jobs.live_job(provider_factory=lambda: sim, now=lambda: sim.clock, cache=self.cache,
+                                    leagues=self.registry)
+                # Every row sent changed: the draw's old matches are never re-sent.
+                for batch in self.upserts[before:]:
+                    for r in batch:
+                        resent_unchanged += r["status"] == "final" and r["starts_at"] < (
+                            sim.clock - timedelta(days=1)).isoformat()
+                self.assertFalse(run.failed)
+            sizes.append((len(self.cache.events), len(self.cache.seen)))
+        self.assertEqual(resent_unchanged, 0)
+        events, seen = zip(*sizes)
+        # Plateaus: the last 10 days hold no more than days 15-20 did, within one day's slate.
+        self.assertLessEqual(max(events[20:]), max(events[10:20]) + 40)
+        self.assertLessEqual(max(seen[20:]), max(seen[10:20]) + 40)
+        # And in absolute terms: events ~ the 9-day window plus open draws; seen ~ 14 settled days on top.
+        self.assertLessEqual(max(events), 200)
+        self.assertLessEqual(max(seen), 450)
+        # Nothing settled and older than 14 days survives.
+        cutoff = (sim.clock - jobs.SEEN_SETTLED_KEEP).timestamp()
+        self.assertFalse([k for k, (_, start, settled) in self.cache.seen.items() if settled and start < cutoff])
+
+    def test_seen_ceiling_drops_anything_sixty_days_old(self) -> None:
+        c = jobs.EventCache()
+        old = SportsEvent(league="atp", kind="match", espn_id="x", event_name="Old", status="postponed",
+                          espn_status="STATUS_POSTPONED", starts_at=NOW - timedelta(days=61))
+        c.update([(old, old.content_hash())], NOW)
+        c.prune(NOW - timedelta(days=30))
+        self.assertIn(("atp", "x"), c.seen)  # postponed, 31 days: kept
+        c.prune(NOW)
+        self.assertNotIn(("atp", "x"), c.seen)
 
 
 class HashRule(unittest.TestCase):

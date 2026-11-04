@@ -248,11 +248,23 @@ A polled league is fetched for the Eastern dates of its in-play events only
 response should contain but does not is logged and counted in the note; it is
 never deleted.
 
-**Cache:** the last schedule run's events for its 9-day window: key, kind,
-`starts_at`, `time_tbd`, status, content hash. A few thousand small tuples.
-It decides the live tiers and skips sending rows whose hash is unchanged.
-Rebuilt from ESPN at every boot (the boot run), never read back from the
-database.
+**Cache** (in memory, rebuilt from ESPN at every boot, never read back from
+the database), two maps:
+
+- `events`: full entries (key, kind, `starts_at`, `time_tbd`, status) for
+  what can still be in play; the live tiers read it. Pruned by age after
+  every run (started over 2 days ago and not live).
+- `seen`: compact, key → (first 8 bytes of the content hash, start epoch,
+  settled), and the only thing that decides whether a fetched row is
+  re-sent. A tournament's call returns its whole draw, so a match too old
+  for `events` must still read as unchanged: on Nov 4 the first deploy,
+  which decided from `events`, re-sent 81 unchanged rows a minute (the
+  database wrote none). Pruned when an entry is settled (final or
+  canceled) and started over 14 days ago (owner, 2026-11-04), and at 60
+  days whatever its status, so an event ESPN leaves postponed cannot pin
+  memory.
+- A 30-day simulation (`tests/test_sports.py` `CacheBounded`) plateaus at
+  ~130–145 `events` and ~295–310 `seen` entries from day 15.
 
 ## 6. Writes, egress, RAM, calls
 
