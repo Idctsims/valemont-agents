@@ -718,6 +718,22 @@ class LiveJob(JobsCase):
         self.assertEqual(run.missing, 1)
         self.assertEqual(len([k for k in self.cache.events if k[0] == "ucl"]), 2)
 
+    def test_an_old_match_in_a_live_draw_is_not_resent(self) -> None:
+        # Production, 20:01 UTC Nov 4: a tournament's call returns its whole
+        # draw (Paris matches from Oct 31); the schedule run pruned those from
+        # the cache, so every live run re-sent 81 unchanged rows (the database
+        # wrote none). Nothing the schedule fetched may look new to the live job.
+        draw = fixture("atp_masters")
+        live = copy.deepcopy(draw["events"][0]["groupings"][0]["competitions"][0])
+        live["id"] = "999001"
+        live["date"] = live["startDate"] = "2026-11-04T18:00Z"
+        live["status"]["type"].update(name="STATUS_IN_PROGRESS", state="in", completed=False)
+        draw["events"][0]["groupings"][0]["competitions"].append(live)
+        self.schedule(FakeProvider({"atp": draw}), "atp")
+        run = self.live(FakeProvider({"atp": draw}))
+        self.assertEqual(run.leagues, {"atp": 5})
+        self.assertEqual(run.sent, 0)
+
     def test_tbd_game_sleeps_until_the_daily_pull_publishes_its_time(self) -> None:
         tbd = fixture("cfb_tbd")
         tbd["events"] = [e for e in tbd["events"] if e["id"] == "401856883"]

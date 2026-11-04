@@ -139,8 +139,15 @@ class EventCache:
 
     def replace_league(self, league: str, rows: Iterable[tuple[SportsEvent, str]],
                        now: datetime | None = None) -> None:
-        for k in [k for k in self.events if k[0] == league]:
+        """The league's entries become exactly what the schedule fetched. No
+        age-based prune: a tournament's call returns its whole draw, and an
+        old match dropped here would look new (and be re-sent) to every live
+        run (production, Nov 4)."""
+        rows = list(rows)
+        keep = {ev.key for ev, _ in rows}
+        for k in [k for k in self.events if k[0] == league and k not in keep]:
             del self.events[k]
+            self.live_since.pop(k, None)
         self.update(rows, now)
 
     def update(self, rows: Iterable[tuple[SportsEvent, str]], now: datetime | None = None) -> None:
@@ -150,11 +157,6 @@ class EventCache:
                 self.live_since.setdefault(ev.key, now or datetime.now(timezone.utc))
             else:
                 self.live_since.pop(ev.key, None)
-
-    def prune(self, before: datetime) -> None:
-        for k in [k for k, c in self.events.items() if c.starts_at < before]:
-            del self.events[k]
-            self.live_since.pop(k, None)
 
     def tier_of(self, key: tuple[str, str], now: datetime) -> str:
         return tier(self.events[key], now, self.live_since.get(key))
@@ -291,7 +293,10 @@ def schedule_job(*, provider: Provider | None = None, env: Mapping[str, str] = o
             cache.replace_league(lg.code, _write(run, events, cache), now())
 
         _fetch_each(p, {lg.code: (lg, days) for lg in leagues}, run, store)
-        cache.prune(now() - timedelta(days=DAYS_BACK + 1))
+        # A league no longer in the registry leaves the cache with it.
+        for k in [k for k in cache.events if k[0] not in registry]:
+            del cache.events[k]
+            cache.live_since.pop(k, None)
     finally:
         _finish(run, p)
     log.info("sports schedule: %s", run.job_note)
