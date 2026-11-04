@@ -657,11 +657,22 @@ class OutcomeResult:
 
 
 def outcome_check(ref: ledger.ArsenalRefToVerify, *, ask: AskOutcome, http: sources.Http | None = None,
-                  samples: int = OUTCOME_SAMPLES) -> OutcomeResult:
+                  samples: int = OUTCOME_SAMPLES, page_title: str | None = None) -> OutcomeResult:
     """The item 5 check on one checked card: the best page's excerpt, read
     `samples` times; a conflict on a strict majority. No page: no conflict
-    (nothing shows the ending), said in the note."""
+    (nothing shows the ending), said in the note.
+
+    `page_title` pins the page (the controls, owner Nov 4: they test the
+    judge, not retrieval; Custer's ranking picked the 1936 film serial). Only
+    the candidate with exactly that title is read; if it is not there,
+    nothing is read and the note says so, so a control fails loudly rather
+    than reading another page."""
     found, down = candidates(ref, http=http)
+    if page_title is not None:
+        found = [c for c in found if c.title.lower() == page_title.lower()]
+        if not any(c.excerpt.text.strip() for c in found):
+            return OutcomeResult(False, (), f"pinned page {page_title!r} not read "
+                                 f"({down[0] if down else 'not among the candidates'})", None)
     page = next((c for c in found if c.excerpt.text.strip()), None)
     if page is None:
         return OutcomeResult(False, (), f"no page to read ({down[0] if down else 'none found'})", None)

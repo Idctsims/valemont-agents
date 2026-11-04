@@ -32,7 +32,7 @@ from unittest import mock
 
 from arsenal import cards, hook, outcome, sources, verify
 from core import ai, ledger, system_jobs
-from tests.test_arsenal import ROOT, NoDatabase, controls_ask, ref
+from tests.test_arsenal import ROOT, NoDatabase, controls_ask, own_page, ref
 
 MIGRATION = ROOT / "db" / "062_arsenal_title_hook.sql"
 T0 = datetime(2026, 11, 4, 2, 0, tzinfo=timezone.utc)
@@ -274,7 +274,7 @@ class VerifyAndOutcome(NoDatabase):
         self.patch("arsenal_arm_state", lambda i: self.states.get(i))
         page = verify.Candidate("wikipedia", "Succession (TV series)", "https://x.invalid",
                                 sources.Excerpt("x", 1, ("",)), ())
-        p = mock.patch.object(verify, "candidates", lambda r, http=None: ([page], []))
+        p = mock.patch.object(verify, "candidates", own_page(page))
         p.start()
         self.addCleanup(p.stop)
 

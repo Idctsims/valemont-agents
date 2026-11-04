@@ -80,7 +80,9 @@ def control_results(*, ask: verify.AskOutcome, samples: int = verify.OUTCOME_SAM
     """One pass over the three controls."""
     out = []
     for case in cases():
-        res = verify.outcome_check(card(case["card"]), ask=ask, samples=samples, http=http)
+        # Each control reads its pinned page (owner, Nov 4): the controls test the judge, not retrieval.
+        res = verify.outcome_check(card(case["card"]), ask=ask, samples=samples, http=http,
+                                   page_title=case["pinned_page"])
         ok = res.conflict == case["expect_conflict"]
         votes = votes_text(res.votes) or "-"
         line = (f"{'PASS' if ok else 'FAIL'} {case['name']}: expect {'conflict' if case['expect_conflict'] else 'ok'}, "

@@ -25,7 +25,7 @@ from unittest import mock
 
 from arsenal import arm, outcome, sources, verify
 from core import brief, ledger, system_jobs
-from tests.test_arsenal import ROOT, NoDatabase, controls_ask, ref
+from tests.test_arsenal import ROOT, NoDatabase, controls_ask, own_page, ref
 
 MIGRATION_059 = ROOT / "db" / "059_arsenal_phase2.sql"
 
@@ -45,7 +45,7 @@ class VerifyOnSave(NoDatabase):
             (i, kw["conflict"], kw["votes"], kw["controls"], kw["source"])) or (9, 70 if kw["conflict"] else None))
         self.patch("arsenal_ref_to_verify", lambda i: ref(id=i, title="See's Candies", verification="verified"))
         page = verify.Candidate("wikipedia", "Some page", "https://x.invalid", sources.Excerpt("x", 1, ("",)), ())
-        p = mock.patch.object(verify, "candidates", lambda r, http=None: ([page], []))
+        p = mock.patch.object(verify, "candidates", own_page(page))
         p.start()
         self.addCleanup(p.stop)
 
