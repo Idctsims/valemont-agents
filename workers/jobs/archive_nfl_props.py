@@ -103,6 +103,9 @@ def main(argv: list[str] | None = None) -> int:
         from core.s3 import S3Client, S3Config
         from jobs import archive_props_storage
         store = S3Client(S3Config.from_env())  # refuses, naming any missing .env key
+        if not store.bucket_exists():  # before the half-hour fetch, not after it
+            log.error("bucket %s does not exist; create it (private) in the dashboard", store.bucket)
+            return archive_props_storage.EXIT_REFUSED
         log.info("storage mode: bucket %s, week %d, revision %d", store.bucket, week, args.revision)
         return archive_props_storage.run(
             week, args.revision, schedule=NflSchedule.fetch([SEASON]),

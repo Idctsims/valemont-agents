@@ -162,6 +162,26 @@ class S3Client:
         except OSError as exc:  # network: name the object, not the URL
             raise S3Error(f"{method} {self.bucket}/{key}: unreachable ({type(exc).__name__})") from None
 
+    def bucket_exists(self) -> bool:
+        """HEAD the bucket: True on 200, False on 404, raises on anything else
+        (403 = keys rejected). An object HEAD cannot tell a missing bucket from
+        a missing object; this can."""
+        url = f"{self.config.endpoint.rstrip('/')}/{self.config.bucket}"
+        signed = sign("HEAD", url, {}, hashlib.sha256(b"").hexdigest(),
+                      access_key_id=self.config.access_key_id,
+                      secret_access_key=self.config.secret_access_key,
+                      region=self.config.region, now=self._clock())
+        try:
+            status, _, _ = self._transport("HEAD", url, signed, None)
+        except OSError as exc:
+            raise S3Error(f"HEAD bucket {self.bucket}: unreachable ({type(exc).__name__})") from None
+        if status == 404:
+            return False
+        if status != 200:
+            raise S3Error(f"HEAD bucket {self.bucket} returned HTTP {status}"
+                          + (" (access key rejected?)" if status in (401, 403) else ""))
+        return True
+
     def head(self, key: str) -> ObjectInfo | None:
         """The object's size and ETag, or None if it does not exist."""
         status, headers, _ = self._send("HEAD", key, {}, None, hashlib.sha256(b"").hexdigest())

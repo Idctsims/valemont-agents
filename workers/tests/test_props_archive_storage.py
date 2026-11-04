@@ -349,6 +349,22 @@ class Client(unittest.TestCase):
         self.assertNotIn("SECRET", str(ctx.exception))
         self.assertNotIn("supabase.co", str(ctx.exception))
 
+    def test_bucket_head_tells_missing_bucket_from_rejected_keys(self) -> None:
+        urls = []
+
+        def answer(status):
+            def transport(method, url, headers, body):
+                urls.append((method, url))
+                return status, {}, b""
+            return transport
+
+        self.assertTrue(S3Client(S3Config.from_env(ENV), transport=answer(200)).bucket_exists())
+        self.assertEqual(urls[0], ("HEAD", "https://ref.storage.supabase.co/storage/v1/s3/nfl-props-archive"))
+        self.assertFalse(S3Client(S3Config.from_env(ENV), transport=answer(404)).bucket_exists())
+        with self.assertRaises(S3Error) as ctx:
+            S3Client(S3Config.from_env(ENV), transport=answer(403)).bucket_exists()
+        self.assertIn("rejected", str(ctx.exception))
+
     def test_the_client_cannot_read_an_object_back(self) -> None:
         # Store-only (preregistration §8.1): no GET, no LIST, no DELETE.
         for verb in ("get", "get_object", "list", "delete"):
