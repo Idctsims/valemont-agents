@@ -115,12 +115,38 @@ def tier(ev: Cached, now: datetime, live_since: datetime | None = None) -> str:
     return "hot" if -LEAD <= now - ev.starts_at <= SCHEDULED_HOT_AFTER else "cold"
 
 
+#: Full event objects (what plan() reads) are kept from this long before now.
+EVENT_KEEP = timedelta(days=DAYS_BACK + 1)
+#: The compact seen map drops an entry once it is settled (final or
+#: canceled) and started this long ago (owner, 2026-11-04)...
+SEEN_SETTLED_KEEP = timedelta(days=14)
+#: ...and any entry at all past this, so an event ESPN leaves postponed or
+#: scheduled forever cannot pin memory.
+SEEN_MAX_AGE = timedelta(days=60)
+SETTLED = frozenset({"final", "canceled"})
+
+
+def digest(h: str) -> int:
+    """The first 8 bytes of a content hash, as an int (a skip decision only:
+    the database still compares every column before it writes)."""
+    return int(h[:16], 16)
+
+
 @dataclass
 class EventCache:
     """The last schedule run's events plus every live update since. Never
-    read back from the database: the boot run rebuilds it from ESPN."""
+    read back from the database: the boot run rebuilds it from ESPN.
+
+    Two maps. `events` holds full Cached objects for what can still be in
+    play, pruned by age (EVENT_KEEP). `seen` is compact, key -> (hash
+    digest, start epoch seconds, settled), and decides whether a fetched row
+    is re-sent: a tournament's call returns its whole draw, so a match too
+    old for `events` must still read as unchanged (production, Nov 4: 81
+    re-sent rows a minute). `seen` drops an entry only once it is settled
+    and 14 days old (or 60 days old, whatever its status)."""
 
     events: dict[tuple[str, str], Cached] = field(default_factory=dict)
+    seen: dict[tuple[str, str], tuple[int, int, bool]] = field(default_factory=dict)
     last_poll: dict[str, datetime] = field(default_factory=dict)
     #: When the worker first saw each event live (the stuck clock of a
     #: time-TBD event). In memory: a restart starts it again.
@@ -134,29 +160,40 @@ class EventCache:
         return Cached(ev.league, ev.kind, ev.starts_at, ev.time_tbd, ev.status, h)
 
     def unchanged(self, ev: SportsEvent, h: str) -> bool:
-        c = self.events.get(ev.key)
-        return c is not None and c.content_hash == h
+        s = self.seen.get(ev.key)
+        return s is not None and s[0] == digest(h)
 
     def replace_league(self, league: str, rows: Iterable[tuple[SportsEvent, str]],
                        now: datetime | None = None) -> None:
-        """The league's entries become exactly what the schedule fetched. No
-        age-based prune: a tournament's call returns its whole draw, and an
-        old match dropped here would look new (and be re-sent) to every live
-        run (production, Nov 4)."""
-        rows = list(rows)
-        keep = {ev.key for ev, _ in rows}
-        for k in [k for k in self.events if k[0] == league and k not in keep]:
+        """The league's full entries become what the schedule fetched (then
+        the age prune); its `seen` entries are kept."""
+        for k in [k for k in self.events if k[0] == league]:
             del self.events[k]
-            self.live_since.pop(k, None)
         self.update(rows, now)
 
     def update(self, rows: Iterable[tuple[SportsEvent, str]], now: datetime | None = None) -> None:
+        t = now or datetime.now(timezone.utc)
         for ev, h in rows:
+            self.seen[ev.key] = (digest(h), int(ev.starts_at.timestamp()), ev.status in SETTLED)
             self.events[ev.key] = self.entry(ev, h)
             if ev.status in ("live", "delayed"):
-                self.live_since.setdefault(ev.key, now or datetime.now(timezone.utc))
+                self.live_since.setdefault(ev.key, t)
             else:
                 self.live_since.pop(ev.key, None)
+
+    def prune(self, now: datetime) -> None:
+        """Full objects by age; the compact map by settled + 14 days (60 days
+        regardless). Run after every schedule and live run."""
+        before = now - EVENT_KEEP
+        for k in [k for k, c in self.events.items()
+                  if c.starts_at < before and c.status not in ("live", "delayed")]:
+            del self.events[k]
+            self.live_since.pop(k, None)
+        settled_before = (now - SEEN_SETTLED_KEEP).timestamp()
+        max_before = (now - SEEN_MAX_AGE).timestamp()
+        for k in [k for k, (_, start, settled) in self.seen.items()
+                  if start < max_before or (settled and start < settled_before)]:
+            del self.seen[k]
 
     def tier_of(self, key: tuple[str, str], now: datetime) -> str:
         return tier(self.events[key], now, self.live_since.get(key))
@@ -297,6 +334,7 @@ def schedule_job(*, provider: Provider | None = None, env: Mapping[str, str] = o
         for k in [k for k in cache.events if k[0] not in registry]:
             del cache.events[k]
             cache.live_since.pop(k, None)
+        cache.prune(now())
     finally:
         _finish(run, p)
     log.info("sports schedule: %s", run.job_note)
@@ -332,6 +370,7 @@ def live_job(*, provider_factory: Callable[[], Provider] | None = None, env: Map
             cache.update(_write(run, events, cache), t)
 
         _fetch_each(p, targets, run, store)
+        cache.prune(t)
     finally:
         _finish(run, p)
     return run
