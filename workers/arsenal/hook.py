@@ -118,6 +118,14 @@ def hook_message(title: ledger.TitleForHook, weights: Mapping[tuple[str, str], f
         min_refs=MIN_REFS, max_refs=MAX_REFS, work=work_of(title), page_hint=page)
 
 
+def context_for(title: ledger.TitleForHook) -> cards.PromptContext:
+    """The hook's context: the never-repeat list capped to the references
+    sharing a word with this title (its name and keywords) and film/TV first
+    (owner, 2026-11-04; the backfill's drafts read ~10,000 input tokens)."""
+    from arsenal.sources import key_terms
+    return pool.context(categories=["film_tv"], terms=key_terms(title.name, *title.keywords))
+
+
 def system_blocks(ctx: cards.PromptContext) -> list[dict[str, Any]]:
     """The pool's blocks (voice, rules, canon, every reference ever proposed),
     uncached: the hook is sporadic, and a cache write costs 1.25x."""
@@ -227,7 +235,7 @@ def draft(hook: ledger.ArsenalTitleHook, *, client: Any = None, embed: Embed | N
     if title is None:
         ledger.arsenal_title_hook_fail(hook.id, f"title {hook.title_id} not found", rerun_by=rerun_by)
         return None
-    ctx = pool.context()
+    ctx = context_for(title)
     usage: dict[str, Any] = {}
 
     def recorded(usage_id: int, model: str, cost: Any) -> None:

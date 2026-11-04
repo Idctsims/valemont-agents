@@ -98,8 +98,10 @@ class Prompt(NoDatabase):
         self.assertIn("at most 15 words", blocks[1]["text"])
         self.assertNotIn("cache_control", blocks[0])
         self.assertEqual(blocks[2]["cache_control"], {"type": "ephemeral"})
-        for needle in ("NEVER to repeat", "Crossing the Rubicon", "the_medici_bank", "asymmetric"):
+        for needle in ("NEVER to repeat", "Crossing the Rubicon", "The Medici Bank", "asymmetric"):
             self.assertIn(needle, blocks[2]["text"])
+        # Compact titles (owner, 2026-11-04): the proposed list carries no keys.
+        self.assertNotIn("the_medici_bank", blocks[2]["text"])
 
     def test_one_batch_two_requests_with_structured_output(self) -> None:
         split = cards.allocate(30, {c: 1.0 for c in cards.CATEGORIES})
@@ -993,18 +995,27 @@ class Refill(NoDatabase):
         self.assertEqual(cards.quota_split(36, {c: 9 for c in cards.CATEGORIES}, weights),
                          cards.allocate(36, weights))
 
-    def test_the_prompt_carries_every_proposed_key_and_title(self) -> None:
-        proposed = [(f"key_{i}", f"Title {i}") for i in range(200)]
-        ctx = cards.PromptContext(seeds=[], proposed=proposed, recent_lemmas=[])
-        text = cards.system_blocks(ctx)[2]["text"]
-        self.assertIn("key_0: Title 0", text)
-        self.assertIn("key_199: Title 199", text)  # not only the last 60
-        self.assertIn("EVERY REFERENCE ALREADY PROPOSED", text)
+    def test_the_prompt_carries_a_capped_relevant_slice_of_the_proposed(self) -> None:
+        # Owner, 2026-11-04: cap the never-repeat list (compact titles, most
+        # relevant first) so the input stops growing with the Arsenal.
+        # Rows are newest first: 0 is the newest.
+        rows = [(f"key_{i}", f"Title {i}", "sports" if i % 2 else "film_tv") for i in range(200)]
+        rows[150] = ("key_150", "The Godfather boardroom", "finance_business")
         self.patch("arsenal_seeds", lambda: [])
-        self.patch("arsenal_proposed", lambda: proposed)
+        self.patch("arsenal_proposed", lambda: rows)
         self.patch("arsenal_recent_lemmas", lambda n: [])
         self.patch("arsenal_seed_lemmas", lambda: [])
-        self.assertEqual(len(pool.context().proposed), 200)
+        plain = pool.context().proposed
+        self.assertEqual(len(plain), cards.PROPOSED_CAP)
+        self.assertEqual(plain[0], ("key_0", "Title 0"))  # newest first
+        film = pool.context(categories=["film_tv"]).proposed
+        self.assertTrue(all(int(k.split("_")[1]) % 2 == 0 for k, _ in film))  # the requested category only, here
+        topical = pool.context(categories=["film_tv"], terms={"godfather"}).proposed
+        self.assertEqual(topical[0], ("key_150", "The Godfather boardroom"))  # a shared word outranks everything
+        text = cards.system_blocks(cards.PromptContext(seeds=[], proposed=topical, recent_lemmas=[]))[2]["text"]
+        self.assertIn("The Godfather boardroom; Title 0", text)
+        self.assertIn("REFERENCES ALREADY PROPOSED", text)
+        self.assertEqual(pool.context_for({"film_tv": 3, "sports": 0}).proposed, film)
 
     def test_submit_sends_the_quota_split(self) -> None:
         submitted: list[dict] = []

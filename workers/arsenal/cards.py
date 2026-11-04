@@ -120,11 +120,37 @@ def quota_split(total: int, have: Mapping[str, int], weights: Mapping[str, float
 
 # ---------------------------------------------------------------- prompt
 
+#: The never-repeat list a prompt carries (owner, 2026-11-04: capped, compact
+#: titles, most relevant first, so the input stops growing with the Arsenal).
+PROPOSED_CAP = 60
+
+
+def cap_proposed(rows: Sequence[tuple[str, str, str]], *, categories: Sequence[str] = (),
+                 terms: set[str] = frozenset(), limit: int = PROPOSED_CAP) -> list[tuple[str, str]]:
+    """The `limit` most relevant of every reference ever proposed (rows are
+    (key, title, category), newest first): a title sharing a word with
+    `terms` first, then one in a requested category, then the rest; newest
+    first within each. Near-duplicates happen within a category and a topic,
+    so those are what the model must see; the database's UNIQUE key and the
+    embedding near-duplicate check still guard every insert against all of
+    them."""
+    from arsenal.sources import key_terms
+    wanted = set(categories)
+
+    def rank(i_row: tuple[int, tuple[str, str, str]]) -> tuple[int, int]:
+        i, (_, title, category) = i_row
+        score = (2 if terms and terms & key_terms(title) else 0) + (1 if category in wanted else 0)
+        return (-score, i)
+
+    return [(k, t) for _, (k, t, _) in sorted(enumerate(rows), key=rank)[:limit]]
+
+
 @dataclass(frozen=True)
 class PromptContext:
     """What every request carries in its cached system block."""
     seeds: Sequence[tuple[str, str, str]]
-    #: (canonical_key, title) of every reference ever proposed (ledger.arsenal_proposed).
+    #: (canonical_key, title) of the references the prompt lists as never to
+    #: repeat: a capped, relevant slice (cap_proposed).
     proposed: Sequence[tuple[str, str]]
     recent_lemmas: Sequence[str]
     #: The owner's known words (db/055 word seeds): never a Power Word.
@@ -158,14 +184,15 @@ def system_blocks(ctx: PromptContext) -> list[dict[str, Any]]:
     (cached: the two requests of a batch, and the top-up, share it)."""
     voice = load_arsenal_voice()
     taste = "\n".join(f"- {title} ({work}) [{key}]" for key, title, work in ctx.seeds)
-    # Compact: one "key: title" per reference, semicolon-separated (~170 cards ≈ 2k tokens).
-    recent = "; ".join(f"{key}: {title}" for key, title in ctx.proposed) or "(none yet)"
+    # Compact: titles only, semicolon-separated, the most relevant first (the
+    # keys add tokens and nothing the UNIQUE key does not already enforce).
+    recent = "; ".join(title for _, title in ctx.proposed) or "(none yet)"
     lemmas = ", ".join(ctx.recent_lemmas) or "(none yet)"
     known = ", ".join(ctx.known_lemmas) or "(none)"
     rules = RULES.format(categories=", ".join(f"{c} ({CATEGORY_NOTES[c]})" for c in CATEGORIES))
     lists = ("THE OWNER'S CANON: taste to match, NEVER to repeat\n" + taste
-             + "\n\nEVERY REFERENCE ALREADY PROPOSED (key: title): never repeat, never the same story under "
-               "another name or another quote from the same scene\n" + recent
+             + "\n\nREFERENCES ALREADY PROPOSED (the most relevant; there are more): never repeat, never the "
+               "same story under another name or another quote from the same scene\n" + recent
              + "\n\nKNOWN POWER WORDS: the owner already uses these; the register to match, never a Power Word\n"
              + known + "\n\nRECENT POWER WORDS: never repeat\n" + lemmas)
     return [

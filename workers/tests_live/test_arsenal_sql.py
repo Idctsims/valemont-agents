@@ -370,7 +370,7 @@ class TestRowsHidden(ArsenalSqlCase):
             before = counts0.get("sports", ledger.ArsenalCategoryCount(0, 0))
             self.assertEqual(counts1["sports"], ledger.ArsenalCategoryCount(before.ready + 1, before.in_flight + 1))
             self.assertEqual(sum(n.ready for n in counts1.values()), status1.refs_ready)
-            proposed = dict(ledger.arsenal_proposed(conn=conn))
+            proposed = {k: t for k, t, _ in ledger.arsenal_proposed(conn=conn)}
             key, test_key = (conn.execute("SELECT canonical_key FROM arsenal_refs WHERE id = %s", (i,)).fetchone()[0]
                              for i in (ready, test_ref))
             self.assertEqual(proposed[key], f"TL {key}")

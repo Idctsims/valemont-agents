@@ -4738,15 +4738,16 @@ def arsenal_recent_keys(limit: int = 60, *, conn: psycopg.Connection | None = No
             "ORDER BY id DESC LIMIT %s", (limit,)).fetchall()]
 
 
-def arsenal_proposed(*, conn: psycopg.Connection | None = None) -> list[tuple[str, str]]:
-    """(canonical_key, title) of EVERY real reference ever proposed, any
-    status and origin, the seeds apart (they ride in the canon list): the
-    prompt's never-repeat list (owner, 2026-11-02: not the last 60; the Nov 1
-    batch lost 15 of 36 to near-duplicates of older cards)."""
+def arsenal_proposed(*, conn: psycopg.Connection | None = None) -> list[tuple[str, str, str]]:
+    """(canonical_key, title, category) of EVERY real reference ever
+    proposed, any status and origin, the seeds apart (they ride in the canon
+    list), NEWEST FIRST. The prompts list a relevant slice of it
+    (cards.cap_proposed, owner 2026-11-04); the database's UNIQUE key and the
+    near-duplicate check still see every one."""
     with _brief_conn(conn) as c:
-        return [(r[0], r[1]) for r in c.execute(
-            "SELECT canonical_key, title FROM arsenal_refs WHERE NOT is_test AND status <> 'seed' "
-            "ORDER BY id").fetchall()]
+        return [(r[0], r[1], r[2]) for r in c.execute(
+            "SELECT canonical_key, title, category FROM arsenal_refs WHERE NOT is_test AND status <> 'seed' "
+            "ORDER BY id DESC").fetchall()]
 
 
 @dataclass(frozen=True)

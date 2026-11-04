@@ -1048,3 +1048,40 @@ Frozen before any change; run by `scripts.arsenal_verifier_controls`
 
 - **Residue dry run** (v1, all 125, nothing written): 8 clear (6.4%), $0.115.
 - **Finding:** the cards that clear change from run to run (BATNA, Sun Tzu and Scylla each flipped). Haiku takes no temperature setting (§8c), so single reads vary. The done-when (should-clear ≥ 7/10) is not met.
+
+### 11.5 The judge trial (owner, Nov 4): test before switching
+
+Each mode ran the frozen controls **twice** (`scripts.arsenal_verifier_controls --judge`). Pass = both runs meet all four: known-bad 7/7, should-clear ≥ 7/10, 1852 kept, trims 2/2.
+
+| Mode | Run | Known-bad | Should-clear | 1852 | Trims | Cost (20 controls) |
+|---|---|---|---|---|---|---|
+| (A) Sonnet for every card | 1 | 7/7 | 2/10 | kept | 2/2 | $0.287 (30 Sonnet calls) |
+| (A) | 2 | 7/7 | 2/10 | kept | 2/2 | $0.286 (30 Sonnet calls) |
+| (B) Haiku, Sonnet on "insufficient" | 1 | 7/7 | 4/10 | kept | 2/2 | $0.168 (Haiku $0.013, Sonnet $0.155) |
+| (B) | 2 | 7/7 | 3/10 | kept | 2/2 | $0.117 (Haiku $0.012, Sonnet $0.105) |
+| (for reference) Haiku single read, 2 runs | | 7/7, 7/7 | 3/10, 3/10 | kept | 2/2 | $0.013, $0.014 |
+
+**Neither passes.** By the owner's rule: report and stop; the bar is lowered. The judge stays Haiku single-read. The escalation code (`verify_ref(escalate=...)`) is kept, off.
+
+Sonnet is the strictest of the three and stable (the same 2 of 10, twice). The should-clear misses are pages that never state the card's specific claim (Bezos's Day 1 letter, Buffett's ovarian lottery, Kate's Kabul), which no judge can confirm.
+
+**Projected weekly cost, on a 36-card batch** (cost per control card × 36). The controls are harder than fresh cards, so (B)'s escalation share would be lower on a fresh batch:
+
+| Mode | Per card | Per week |
+|---|---|---|
+| Haiku single read | ~$0.0007 | ~$0.025 |
+| (A) Sonnet for every card | ~$0.0143 | ~$0.52 |
+| (B) escalation | ~$0.0059–0.0084 | ~$0.21–0.30 |
+
+### 11.6 The never-repeat cap (owner's 3f, Nov 4)
+
+The hook's and the pool's prompts now list the **60 most relevant** of every reference ever proposed (`cards.cap_proposed`), as titles only. The order is: a title sharing a word with the request first (the hook: the title's name and TMDB keywords), then the requested categories (the hook: film_tv), then the rest; newest first within each.
+
+The database's UNIQUE key and the embedding near-duplicate check still guard every insert against all of them. This replaces the Nov 2 rule ("every reference ever proposed").
+
+Measured with the API's token count (`scripts.arsenal_prompt_tokens`; no model call), 219 references proposed:
+
+| Prompt | Before | After |
+|---|---|---|
+| The hook (The Diplomat) | 9,991 | **4,923** (−51%) |
+| The pool's reference request | 9,394 | **4,362** (−54%) |

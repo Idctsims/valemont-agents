@@ -56,10 +56,21 @@ WORDS_MAX_TOKENS = 3_000
 TOPUP_MAX_TOKENS = 5_000
 
 
-def context() -> cards.PromptContext:
-    return cards.PromptContext(seeds=ledger.arsenal_seeds(), proposed=ledger.arsenal_proposed(),
+def context(*, categories: Sequence[str] = (), terms: set[str] = frozenset()) -> cards.PromptContext:
+    """The prompt's lists. The never-repeat list is capped to the
+    cards.PROPOSED_CAP most relevant references (owner, 2026-11-04): those
+    in `categories` (the ones being requested) and those sharing a word with
+    `terms` first, newest first."""
+    return cards.PromptContext(seeds=ledger.arsenal_seeds(),
+                               proposed=cards.cap_proposed(ledger.arsenal_proposed(), categories=categories,
+                                                           terms=terms),
                                recent_lemmas=ledger.arsenal_recent_lemmas(60),
                                known_lemmas=ledger.arsenal_seed_lemmas())
+
+
+def context_for(split: Mapping[str, int]) -> cards.PromptContext:
+    """A batch's or top-up's context: the requested categories' references first."""
+    return context(categories=[c for c, n in split.items() if n])
 
 
 def category_have(counts: Mapping[str, ledger.ArsenalCategoryCount]) -> dict[str, int]:
@@ -115,8 +126,8 @@ def submit(*, client: Any = None, refs: int = cards.POOL_REFS) -> tuple[int, str
     (run id, batch id)."""
     split = cards.quota_split(refs, category_have(ledger.arsenal_category_counts()),
                               cards.category_weights(ledger.arsenal_weights()))
-    batch_id, model = ai.submit_batch(requests=batch_requests(context(), split, cards.POOL_WORDS), model=MODEL,
-                                      client=client)
+    batch_id, model = ai.submit_batch(requests=batch_requests(context_for(split), split, cards.POOL_WORDS),
+                                      model=MODEL, client=client)
     run_id = ledger.arsenal_log_run("batch", "submitted", batch_id=batch_id, model=model, quotas=split,
                                     refs_requested=sum(split.values()), words_requested=cards.POOL_WORDS)
     log.info("arsenal pool: batch %s submitted (run %d): %s", batch_id, run_id, split)
@@ -205,7 +216,7 @@ def topup(status: ledger.ArsenalPoolStatus, *, client: Any = None, http: Any = N
     inline (a reference with no check on record cannot drop, db/057)."""
     split = topup_split(status.ready_categories)
     words = cards.TOPUP_WORDS
-    ctx = context()
+    ctx = context_for(split)
     run_id = ledger.arsenal_log_run("topup", "submitted", model=MODEL, quotas=split,
                                     refs_requested=sum(split.values()), words_requested=words)
     cost = Decimal(0)

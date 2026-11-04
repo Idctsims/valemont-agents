@@ -50,10 +50,28 @@ def passes(c: dict[str, Any], v: verify.RefVerdict) -> bool:
 SHOULD_CLEAR_MIN = 7
 
 
-def main() -> int:
+JUDGES = ("haiku", "sonnet", "escalate")
+
+
+def asks(judge: str) -> tuple[verify.Ask, verify.Ask | None]:
+    """(first judge, escalation judge) for a mode (owner, 2026-11-04):
+    haiku alone; (A) sonnet for every card; (B) haiku, then sonnet on
+    haiku's 'insufficient' only."""
+    if judge == "sonnet":
+        return (lambda r, e: verify.ask_sonnet(r, e)), None
+    if judge == "escalate":
+        return (lambda r, e: verify.ask_haiku(r, e)), (lambda r, e: verify.ask_sonnet(r, e))
+    return (lambda r, e: verify.ask_haiku(r, e)), None
+
+
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--judge", choices=JUDGES, default="haiku")
+    args = parser.parse_args(argv)
     load_env()
     doc = json.loads(FIXTURE.read_text(encoding="utf-8"))
-    spent = {"cost": Decimal(0), "calls": 0}
+    spent: dict[str, Any] = {"cost": Decimal(0), "calls": 0, "by_model": {}}
     real_complete = ai.complete
 
     def counted(**kw: Any) -> Any:
@@ -62,15 +80,19 @@ def main() -> int:
         def recorded(usage_id: int, model: str, cost: Decimal) -> None:
             spent["cost"] += cost
             spent["calls"] += 1
+            n, c = spent["by_model"].get(model, (0, Decimal(0)))
+            spent["by_model"][model] = (n + 1, c + cost)
             if outer:
                 outer(usage_id, model, cost)
         return real_complete(on_recorded=recorded, **kw)
 
     ai.complete = counted  # count this run's judge calls only
+    first, escalate = asks(args.judge)
+    print(f"judge: {args.judge}")
     try:
         rows = []
         for c in doc["cards"]:
-            v = verify.verify_ref(card_of(c), ask=lambda r, e: verify.ask_haiku(r, e))
+            v = verify.verify_ref(card_of(c), ask=first, escalate=escalate)
             ok = passes(c, v)
             rows.append(ok)
             rewritten = f"\n        rewritten: {v.origin[:200]}" if c["expect"] == "trimmed" and v.origin else ""
@@ -91,9 +113,10 @@ def main() -> int:
     done = held == n_bad and cleared >= SHOULD_CLEAR_MIN and kept == 1 and trims == n_trim
     print(f"\nknown-bad held: {held}/{n_bad}; should-clear cleared: {cleared}/{n_clear} (need {SHOULD_CLEAR_MIN}); "
           f"1852 kept: {bool(kept)}; trims: {trims}/{n_trim}  =>  done-when {'MET' if done else 'NOT met'}")
-    print(f"cost: {spent['calls']} Haiku calls, ${spent['cost']}")
+    by = ", ".join(f"{m} {n} calls ${c}" for m, (n, c) in sorted(spent["by_model"].items()))
+    print(f"cost: {spent['calls']} judge calls, ${spent['cost']} ({by})")
     return 0 if held == n_bad and kept == 1 and trims == n_trim else 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

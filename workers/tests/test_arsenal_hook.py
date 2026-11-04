@@ -163,7 +163,7 @@ class Draft(NoDatabase):
         self.patch("arsenal_title_for_hook", lambda i: SUCCESSION)
         self.patch("arsenal_weights", lambda: {("category", "film_tv"): 1.0})
         self.patch("arsenal_seeds", lambda: [])
-        self.patch("arsenal_proposed", lambda: [("board_vote_old", "Old")])
+        self.patch("arsenal_proposed", lambda: [("board_vote_old", "Old", "film_tv")])
         self.patch("arsenal_recent_lemmas", lambda n=60: [])
         self.patch("arsenal_seed_lemmas", lambda: [])
         self.patch("arsenal_recent_keys", lambda n=60: [])
