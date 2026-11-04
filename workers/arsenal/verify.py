@@ -198,31 +198,17 @@ def trimmed(j: Judgement) -> Judgement | None:
 Ask = Callable[[ledger.ArsenalRefToVerify, str], Judgement]
 
 
-#: The escalation judge (verifier yield, owner 2026-11-04): Sonnet re-reads
-#: what Haiku found insufficient (mode B), or reads every card (mode A).
-SONNET = "claude-sonnet-5-5"
-
-
 def ask_haiku(ref: ledger.ArsenalRefToVerify, excerpt: str, *, client: Any = None) -> Judgement:
-    return ask_judge(ref, excerpt, model=MODEL, client=client)
-
-
-def ask_sonnet(ref: ledger.ArsenalRefToVerify, excerpt: str, *, client: Any = None) -> Judgement:
-    return ask_judge(ref, excerpt, model=SONNET, client=client)
-
-
-def ask_judge(ref: ledger.ArsenalRefToVerify, excerpt: str, *, model: str, client: Any = None) -> Judgement:
-    """One judge read: the same system prompt, schema and excerpt for either
-    model. Haiku runs with thinking off; Sonnet cannot turn it off, so it
-    thinks between tools at effort low (Wags' setting)."""
+    """The judge: Haiku, one read (owner, 2026-11-04: the Sonnet and escalation
+    trials did not pass the frozen controls; docs/arsenal.md §11.5)."""
     card = {"title": ref.title, "origin": ref.origin, "meaning": ref.meaning, "deploy_line": ref.deploy_line,
             "source_work": ref.source_work, "quote": ref.quote, "quote_by": ref.quote_by}
     response = ai.complete(
-        purpose=PURPOSE, model=model, critical=False, max_tokens=600 if model == MODEL else 2000, client=client,
+        purpose=PURPOSE, model=MODEL, critical=False, max_tokens=600, client=client,
         system=SYSTEM,
         messages=[{"role": "user", "content": "CARD:\n" + json.dumps(card, ensure_ascii=False)
                    + "\n\nEXCERPT:\n" + excerpt[:sources.JUDGE_CHARS + 200]}],
-        thinking={"type": "disabled"} if model == MODEL else {"type": "between_tools"},
+        thinking={"type": "disabled"},
         output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema()}},
     )
     return parse_judgement(response_json(response))
@@ -543,8 +529,7 @@ def reattributed(ref: ledger.ArsenalRefToVerify, j: Judgement) -> Judgement:
                      outcome_conflict=False, covers_every_claim=j.covers_every_claim)
 
 
-def verify_ref(ref: ledger.ArsenalRefToVerify, *, ask: Ask, http: sources.Http | None = None,
-               escalate: Ask | None = None) -> RefVerdict:
+def verify_ref(ref: ledger.ArsenalRefToVerify, *, ask: Ask, http: sources.Http | None = None) -> RefVerdict:
     """Steps 1-5 for one reference. Never raises for a source problem: an
     unreachable or missing page is an 'unverified' verdict with its reason."""
     page_title = ref.source_page or ref.title
@@ -575,7 +560,6 @@ def verify_ref(ref: ledger.ArsenalRefToVerify, *, ask: Ask, http: sources.Http |
     judgement = Judgement("insufficient", None, None, "an empty page")
     used: Candidate | None = None
     first: Candidate | None = None
-    escalated: list[str] = []
     while order:
         # 'insufficient' earns ONE second source, from the OTHER wiki when it
         # has a page (Wikiquote holds a person's remarks; the next Wikipedia
@@ -587,12 +571,6 @@ def verify_ref(ref: ledger.ArsenalRefToVerify, *, ask: Ask, http: sources.Http |
         if c is quote_page and matched_line:
             text = f"QUOTED LINE: {matched_line}\n\n{text}"
         judgement = reattributed(ref, held(ask(ref, text[:sources.JUDGE_CHARS + 200]), ref))
-        # Escalation (mode B, owner 2026-11-04): only Haiku's "insufficient"
-        # goes to the stronger judge, on the SAME excerpt; its clears and its
-        # contradictions stand. Every guard applies to what it decides.
-        if escalate is not None and judgement.verdict == "insufficient" and not judgement.outcome_conflict:
-            judgement = reattributed(ref, held(escalate(ref, text[:sources.JUDGE_CHARS + 200]), ref))
-            escalated.append(c.title)
         judged.append(c.title)
         used = c
         first = first or c
@@ -600,8 +578,6 @@ def verify_ref(ref: ledger.ArsenalRefToVerify, *, ask: Ask, http: sources.Http |
             break
     if len(judged) == 2:
         notes.append(f"first source insufficient ({judged[0]}); second source {judged[1]}")
-    if escalated:
-        notes.append(f"escalated to {SONNET} on {', '.join(escalated)}")
     verification, why = outcome(quote_dropped=drop_quote, judgement=judgement, unreachable=None)
     if drop_quote and verification != "unverified" and rests_on_unfound_quote(ref):
         verification, why = "unverified", "the origin rests on a quote no source holds"

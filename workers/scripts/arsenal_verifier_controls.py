@@ -46,29 +46,12 @@ def passes(c: dict[str, Any], v: verify.RefVerdict) -> bool:
     return v.verification in CLEARED  # "clear" and "corrected" (no regression)
 
 
-#: The done-when (owner, 2026-11-04).
-SHOULD_CLEAR_MIN = 7
-
-
-JUDGES = ("haiku", "sonnet", "escalate")
-
-
-def asks(judge: str) -> tuple[verify.Ask, verify.Ask | None]:
-    """(first judge, escalation judge) for a mode (owner, 2026-11-04):
-    haiku alone; (A) sonnet for every card; (B) haiku, then sonnet on
-    haiku's 'insufficient' only."""
-    if judge == "sonnet":
-        return (lambda r, e: verify.ask_sonnet(r, e)), None
-    if judge == "escalate":
-        return (lambda r, e: verify.ask_haiku(r, e)), (lambda r, e: verify.ask_sonnet(r, e))
-    return (lambda r, e: verify.ask_haiku(r, e)), None
+#: The bar (owner, 2026-11-04, after the judge trial): should-clear >= 3/10
+#: in both runs, with known-bad 7/7, 1852 kept and trims 2/2.
+SHOULD_CLEAR_MIN = 3
 
 
 def main(argv: list[str] | None = None) -> int:
-    import argparse
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--judge", choices=JUDGES, default="haiku")
-    args = parser.parse_args(argv)
     load_env()
     doc = json.loads(FIXTURE.read_text(encoding="utf-8"))
     spent: dict[str, Any] = {"cost": Decimal(0), "calls": 0, "by_model": {}}
@@ -87,12 +70,10 @@ def main(argv: list[str] | None = None) -> int:
         return real_complete(on_recorded=recorded, **kw)
 
     ai.complete = counted  # count this run's judge calls only
-    first, escalate = asks(args.judge)
-    print(f"judge: {args.judge}")
     try:
         rows = []
         for c in doc["cards"]:
-            v = verify.verify_ref(card_of(c), ask=first, escalate=escalate)
+            v = verify.verify_ref(card_of(c), ask=lambda r, e: verify.ask_haiku(r, e))
             ok = passes(c, v)
             rows.append(ok)
             rewritten = f"\n        rewritten: {v.origin[:200]}" if c["expect"] == "trimmed" and v.origin else ""

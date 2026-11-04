@@ -1061,7 +1061,7 @@ Each mode ran the frozen controls **twice** (`scripts.arsenal_verifier_controls 
 | (B) | 2 | 7/7 | 3/10 | kept | 2/2 | $0.117 (Haiku $0.012, Sonnet $0.105) |
 | (for reference) Haiku single read, 2 runs | | 7/7, 7/7 | 3/10, 3/10 | kept | 2/2 | $0.013, $0.014 |
 
-**Neither passes.** By the owner's rule: report and stop; the bar is lowered. The judge stays Haiku single-read. The escalation code (`verify_ref(escalate=...)`) is kept, off.
+**Neither passes.** By the owner's rule: report and stop; the bar is lowered. **Decided (owner, Nov 4):** the judge stays Haiku single-read, and the escalation code is **removed**, not kept switched off. **The bar:** known-bad 7/7, should-clear ≥ 3/10 in both runs, 1852 kept, trims 2/2, AND the next fresh pool batch's dry-run clear rate above the 52–58% baseline.
 
 Sonnet is the strictest of the three and stable (the same 2 of 10, twice). The should-clear misses are pages that never state the card's specific claim (Bezos's Day 1 letter, Buffett's ovarian lottery, Kate's Kabul), which no judge can confirm.
 
@@ -1077,7 +1077,7 @@ Sonnet is the strictest of the three and stable (the same 2 of 10, twice). The s
 
 The hook's and the pool's prompts now list the **60 most relevant** of every reference ever proposed (`cards.cap_proposed`), as titles only. The order is: a title sharing a word with the request first (the hook: the title's name and TMDB keywords), then the requested categories (the hook: film_tv), then the rest; newest first within each.
 
-The database's UNIQUE key and the embedding near-duplicate check still guard every insert against all of them. This replaces the Nov 2 rule ("every reference ever proposed").
+The database's UNIQUE key and the embedding near-duplicate check still guard every insert against all of them. **Approved (owner, Nov 4): this replaces the Nov 2 rule ("every reference ever proposed").**
 
 Measured with the API's token count (`scripts.arsenal_prompt_tokens`; no model call), 219 references proposed:
 
