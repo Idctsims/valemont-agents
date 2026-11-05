@@ -1,0 +1,341 @@
+{
+ "cursor": "",
+ "events": [
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXATPMATCH-26NOV05SHERIN",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-04T18:25:24.703327Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-19T09:00:00Z",
+     "created_time": "2026-11-04T11:21:32.31069Z",
+     "custom_strike": {
+      "tennis_competitor": "241ad35b-edbe-4ea0-a2bc-647102e62d3e"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXATPMATCH-26NOV05SHERIN",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-05T12:00:00Z",
+     "expiration_time": "2026-11-19T09:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.7400",
+     "latest_expiration_time": "2026-11-19T09:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.2700",
+     "no_bid_dollars": "0.2600",
+     "no_sub_title": "Ben Shelton",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-05T12:00:00Z",
+     "open_interest_fp": "2532.70",
+     "open_time": "2026-11-04T11:26:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.0000",
+     "previous_yes_bid_dollars": "0.0000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Ben Shelton wins the Shelton vs Rinderknech professional tennis match in the 2026 ATP Paris Round Of 16 after a ball has been played, then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the Shelton vs Rinderknech professional tennis match in the 2026 ATP Paris Round Of 16 after a ball has been played. If the match does not occur (signaled by a ball being played) due to a player injury, walkover, forfeiture, or any other cancellation (all before the match starts), the market will resolve to a fair price in accordance with the rules. If this match is postponed or delayed, the market will remain open and close after the rescheduled match has finished (within two weeks).\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 60,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXATPMATCH-26NOV05SHERIN-SHE",
+     "title": "Ben Shelton wins",
+     "updated_time": "2026-11-04T18:25:24.71406Z",
+     "volume_24h_fp": "2535.94",
+     "volume_fp": "2535.99",
+     "yes_ask_dollars": "0.7400",
+     "yes_ask_size_fp": "34914.29",
+     "yes_bid_dollars": "0.7300",
+     "yes_bid_size_fp": "11.71",
+     "yes_sub_title": "Ben Shelton"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-19T09:00:00Z",
+     "created_time": "2026-11-04T11:21:32.31069Z",
+     "custom_strike": {
+      "tennis_competitor": "d7fd9794-61d8-4dd5-8072-78d13c93fbcf"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXATPMATCH-26NOV05SHERIN",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-05T12:00:00Z",
+     "expiration_time": "2026-11-19T09:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.2800",
+     "latest_expiration_time": "2026-11-19T09:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.7300",
+     "no_bid_dollars": "0.7200",
+     "no_sub_title": "Arthur Rinderknech",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-05T12:00:00Z",
+     "open_interest_fp": "3115.09",
+     "open_time": "2026-11-04T11:26:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.0000",
+     "previous_yes_bid_dollars": "0.0000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Arthur Rinderknech wins the Shelton vs Rinderknech professional tennis match in the 2026 ATP Paris Round Of 16 after a ball has been played, then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the Shelton vs Rinderknech professional tennis match in the 2026 ATP Paris Round Of 16 after a ball has been played. If the match does not occur (signaled by a ball being played) due to a player injury, walkover, forfeiture, or any other cancellation (all before the match starts), the market will resolve to a fair price in accordance with the rules. If this match is postponed or delayed, the market will remain open and close after the rescheduled match has finished (within two weeks).\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 60,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXATPMATCH-26NOV05SHERIN-RIN",
+     "title": "Arthur Rinderknech wins",
+     "updated_time": "2026-11-04T18:25:24.71406Z",
+     "volume_24h_fp": "3152.14",
+     "volume_fp": "3152.14",
+     "yes_ask_dollars": "0.2800",
+     "yes_ask_size_fp": "54360.98",
+     "yes_bid_dollars": "0.2700",
+     "yes_bid_size_fp": "18.48",
+     "yes_sub_title": "Arthur Rinderknech"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "ATP Paris",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXATPMATCH",
+   "settlement_sources": [
+    {
+     "name": "ATP",
+     "url": "https://www.atptour.com/"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "Shelton vs Rinderknech (Nov 5)",
+   "title": "Shelton vs Rinderknech"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXATPMATCH-26NOV05HIJETC",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-04T18:20:24.777405Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-19T10:00:00Z",
+     "created_time": "2026-11-04T17:10:43.455894Z",
+     "custom_strike": {
+      "tennis_competitor": "577b14ee-1816-46a0-be87-8fac11de61c5"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXATPMATCH-26NOV05HIJETC",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-05T13:00:00Z",
+     "expiration_time": "2026-11-19T10:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.4600",
+     "latest_expiration_time": "2026-11-19T10:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.5500",
+     "no_bid_dollars": "0.5400",
+     "no_sub_title": "Rinky Hijikata",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-05T13:00:00Z",
+     "open_interest_fp": "2369.65",
+     "open_time": "2026-11-04T17:15:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.0000",
+     "previous_yes_bid_dollars": "0.0000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Rinky Hijikata wins the Hijikata vs Etcheverry professional tennis match in the 2026 ATP Paris Round Of 16 after a ball has been played, then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the Hijikata vs Etcheverry professional tennis match in the 2026 ATP Paris Round Of 16 after a ball has been played. If the match does not occur (signaled by a ball being played) due to a player injury, walkover, forfeiture, or any other cancellation (all before the match starts), the market will resolve to a fair price in accordance with the rules. If this match is postponed or delayed, the market will remain open and close after the rescheduled match has finished (within two weeks).\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 60,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXATPMATCH-26NOV05HIJETC-HIJ",
+     "title": "Rinky Hijikata wins",
+     "updated_time": "2026-11-04T18:20:24.788713Z",
+     "volume_24h_fp": "2464.65",
+     "volume_fp": "2568.79",
+     "yes_ask_dollars": "0.4600",
+     "yes_ask_size_fp": "59505.06",
+     "yes_bid_dollars": "0.4500",
+     "yes_bid_size_fp": "2518.00",
+     "yes_sub_title": "Rinky Hijikata"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-19T10:00:00Z",
+     "created_time": "2026-11-04T17:10:43.455894Z",
+     "custom_strike": {
+      "tennis_competitor": "1a6577a3-f592-47fd-a84e-eb7e97ff61b8"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXATPMATCH-26NOV05HIJETC",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-05T13:00:00Z",
+     "expiration_time": "2026-11-19T10:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.5600",
+     "latest_expiration_time": "2026-11-19T10:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.4600",
+     "no_bid_dollars": "0.4500",
+     "no_sub_title": "Tomas Martin Etcheverry",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-05T13:00:00Z",
+     "open_interest_fp": "2090.75",
+     "open_time": "2026-11-04T17:15:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.0000",
+     "previous_yes_bid_dollars": "0.0000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Tomas Martin Etcheverry wins the Hijikata vs Etcheverry professional tennis match in the 2026 ATP Paris Round Of 16 after a ball has been played, then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the Hijikata vs Etcheverry professional tennis match in the 2026 ATP Paris Round Of 16 after a ball has been played. If the match does not occur (signaled by a ball being played) due to a player injury, walkover, forfeiture, or any other cancellation (all before the match starts), the market will resolve to a fair price in accordance with the rules. If this match is postponed or delayed, the market will remain open and close after the rescheduled match has finished (within two weeks).\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 60,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXATPMATCH-26NOV05HIJETC-ETC",
+     "title": "Tomas Martin Etcheverry wins",
+     "updated_time": "2026-11-04T18:20:24.788713Z",
+     "volume_24h_fp": "3014.09",
+     "volume_fp": "3014.09",
+     "yes_ask_dollars": "0.5500",
+     "yes_ask_size_fp": "1625.00",
+     "yes_bid_dollars": "0.5400",
+     "yes_bid_size_fp": "24759.54",
+     "yes_sub_title": "Tomas Martin Etcheverry"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "ATP Paris",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXATPMATCH",
+   "settlement_sources": [
+    {
+     "name": "ATP",
+     "url": "https://www.atptour.com/"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "Hijikata vs Etcheverry (Nov 5)",
+   "title": "Hijikata vs Etcheverry"
+  }
+ ],
+ "milestones": [
+  {
+   "category": "Sports",
+   "details": {
+    "best_of": "3",
+    "first_competitor_id": "241ad35b-edbe-4ea0-a2bc-647102e62d3e",
+    "gender": "men",
+    "main_game_event_ticker": "KXATPMATCH-26NOV05SHERIN",
+    "round": "Round Of 16",
+    "second_competitor_id": "d7fd9794-61d8-4dd5-8072-78d13c93fbcf",
+    "status": "not_started",
+    "tour": "ATP",
+    "tournament_name": "ATP Paris"
+   },
+   "id": "709b791e-832e-4094-9f27-fe939381a2c8",
+   "last_updated_ts": "2026-11-04T18:45:57.975676Z",
+   "notification_message": "The match is about to begin.",
+   "primary_event_tickers": [
+    "KXATPMATCH-26NOV05SHERIN",
+    "KXATPSETWINNER-26NOV05SHERIN-1",
+    "KXATPSETWINNER-26NOV05SHERIN-2",
+    "KXATPEXACTMATCH-26NOV05SHERIN"
+   ],
+   "related_event_tickers": [
+    "KXATPMATCH-26NOV05SHERIN",
+    "KXATPSETWINNER-26NOV05SHERIN-1",
+    "KXATPSETWINNER-26NOV05SHERIN-2",
+    "KXATPEXACTMATCH-26NOV05SHERIN",
+    "KXATPGSPREAD-26NOV05SHERIN",
+    "KXATPGTOTAL-26NOV05SHERIN"
+   ],
+   "source_id": "sr:sport_event:76142896",
+   "source_ids": {
+    "source_2_id": "20261105BBD53ECC",
+    "source_3_id": "sr:sport_event:76142896"
+   },
+   "start_date": "2026-11-05T11:10:00Z",
+   "title": "Shelton vs Rinderknech",
+   "type": "tennis_tournament_singles"
+  },
+  {
+   "category": "Sports",
+   "details": {
+    "best_of": "3",
+    "first_competitor_id": "577b14ee-1816-46a0-be87-8fac11de61c5",
+    "gender": "men",
+    "main_game_event_ticker": "KXATPMATCH-26NOV05HIJETC",
+    "round": "Round Of 16",
+    "second_competitor_id": "1a6577a3-f592-47fd-a84e-eb7e97ff61b8",
+    "status": "not_started",
+    "tour": "ATP",
+    "tournament_name": "ATP Paris"
+   },
+   "id": "8821053e-0cfe-4b60-8c17-5e8e59942e1c",
+   "last_updated_ts": "2026-11-04T19:45:50.605983Z",
+   "notification_message": "The match is about to begin.",
+   "primary_event_tickers": [
+    "KXATPMATCH-26NOV05HIJETC",
+    "KXATPSETWINNER-26NOV05HIJETC-1",
+    "KXATPSETWINNER-26NOV05HIJETC-2",
+    "KXATPEXACTMATCH-26NOV05HIJETC"
+   ],
+   "related_event_tickers": [
+    "KXATPMATCH-26NOV05HIJETC",
+    "KXATPSETWINNER-26NOV05HIJETC-1",
+    "KXATPSETWINNER-26NOV05HIJETC-2",
+    "KXATPEXACTMATCH-26NOV05HIJETC",
+    "KXATPGSPREAD-26NOV05HIJETC",
+    "KXATPGTOTAL-26NOV05HIJETC"
+   ],
+   "source_id": "sr:sport_event:76142894",
+   "source_ids": {
+    "source_2_id": "20261105F5645B01",
+    "source_3_id": "sr:sport_event:76142894"
+   },
+   "start_date": "2026-11-05T13:00:00Z",
+   "title": "Hijikata vs Etcheverry",
+   "type": "tennis_tournament_singles"
+  }
+ ]
+}

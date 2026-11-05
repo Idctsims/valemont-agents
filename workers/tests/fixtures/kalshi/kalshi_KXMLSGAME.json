@@ -1,0 +1,219 @@
+{
+ "cursor": "",
+ "events": [
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXMLSGAME-26NOV07CHICLB",
+   "exchange_index": 0,
+   "last_updated_ts": "2026-10-24T00:32:48.651219Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-09T21:00:00Z",
+     "created_time": "2026-10-24T00:30:27.942044Z",
+     "custom_strike": {
+      "soccer_team": "a6f918b2-1142-4bd5-93b5-241aeb00c0d1"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXMLSGAME-26NOV07CHICLB",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-11-08T00:00:00Z",
+     "expiration_time": "2026-11-09T21:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.4900",
+     "latest_expiration_time": "2026-11-09T21:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.5300",
+     "no_bid_dollars": "0.5100",
+     "no_sub_title": "Chicago Fire",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-08T00:00:00Z",
+     "open_interest_fp": "546.17",
+     "open_time": "2026-10-24T00:36:00Z",
+     "previous_price_dollars": "0.4900",
+     "previous_yes_ask_dollars": "0.4800",
+     "previous_yes_bid_dollars": "0.4700",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Chicago Fire wins the Chicago Fire vs Columbus professional MLS soccer game originally scheduled for Nov 7, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties), then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the Chicago Fire vs Columbus professional MLS soccer game originally scheduled for Nov 7, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties). If the game ends in a tie, the market called \"Tie\" resolves to Yes. If the game is cancelled or rescheduled to over 48 hours away, the market will resolve to a fair price in accordance with the rules.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 0,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXMLSGAME-26NOV07CHICLB-CHI",
+     "title": "Chicago Fire wins",
+     "updated_time": "2026-10-24T00:36:00.173565Z",
+     "volume_24h_fp": "87.41",
+     "volume_fp": "639.42",
+     "yes_ask_dollars": "0.4900",
+     "yes_ask_size_fp": "10183.91",
+     "yes_bid_dollars": "0.4700",
+     "yes_bid_size_fp": "2172.65",
+     "yes_sub_title": "Chicago Fire"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-09T21:00:00Z",
+     "created_time": "2026-10-24T00:30:27.942044Z",
+     "custom_strike": {
+      "soccer_team": "a88c1376-454e-46d0-a974-1d9639dd6a18"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXMLSGAME-26NOV07CHICLB",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-11-08T00:00:00Z",
+     "expiration_time": "2026-11-09T21:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.2900",
+     "latest_expiration_time": "2026-11-09T21:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.7200",
+     "no_bid_dollars": "0.7100",
+     "no_sub_title": "Columbus",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-08T00:00:00Z",
+     "open_interest_fp": "2771.20",
+     "open_time": "2026-10-24T00:36:00Z",
+     "previous_price_dollars": "0.2900",
+     "previous_yes_ask_dollars": "0.2900",
+     "previous_yes_bid_dollars": "0.2800",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Columbus wins the Chicago Fire vs Columbus professional MLS soccer game originally scheduled for Nov 7, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties), then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the Chicago Fire vs Columbus professional MLS soccer game originally scheduled for Nov 7, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties). If the game ends in a tie, the market called \"Tie\" resolves to Yes. If the game is cancelled or rescheduled to over 48 hours away, the market will resolve to a fair price in accordance with the rules.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 0,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXMLSGAME-26NOV07CHICLB-CLB",
+     "title": "Columbus wins",
+     "updated_time": "2026-10-24T00:36:00.173565Z",
+     "volume_24h_fp": "254.33",
+     "volume_fp": "2774.18",
+     "yes_ask_dollars": "0.2900",
+     "yes_ask_size_fp": "5761.64",
+     "yes_bid_dollars": "0.2800",
+     "yes_bid_size_fp": "8480.95",
+     "yes_sub_title": "Columbus"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-09T21:00:00Z",
+     "created_time": "2026-10-24T00:30:27.942044Z",
+     "custom_strike": {
+      "soccer_team": "111193d4-9b1f-4bd8-ab7c-9de252737f05"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXMLSGAME-26NOV07CHICLB",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-11-08T00:00:00Z",
+     "expiration_time": "2026-11-09T21:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.2400",
+     "latest_expiration_time": "2026-11-09T21:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.7700",
+     "no_bid_dollars": "0.7600",
+     "no_sub_title": "Tie",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-08T00:00:00Z",
+     "open_interest_fp": "19.75",
+     "open_time": "2026-10-24T00:36:00Z",
+     "previous_price_dollars": "0.2400",
+     "previous_yes_ask_dollars": "0.2400",
+     "previous_yes_bid_dollars": "0.2200",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Tie is the result of the Chicago Fire vs Columbus professional MLS soccer game originally scheduled for Nov 7, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties), then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the Chicago Fire vs Columbus professional MLS soccer game originally scheduled for Nov 7, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties). If the game ends in a tie, the market called \"Tie\" resolves to Yes. If the game is cancelled or rescheduled to over 48 hours away, the market will resolve to a fair price in accordance with the rules.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 0,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXMLSGAME-26NOV07CHICLB-TIE",
+     "title": "Tie is the result",
+     "updated_time": "2026-10-24T00:36:00.173565Z",
+     "volume_24h_fp": "0.00",
+     "volume_fp": "19.75",
+     "yes_ask_dollars": "0.2400",
+     "yes_ask_size_fp": "7066.30",
+     "yes_bid_dollars": "0.2300",
+     "yes_bid_size_fp": "1771.57",
+     "yes_sub_title": "Tie"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "MLS",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXMLSGAME",
+   "settlement_sources": [
+    {
+     "name": "MLS",
+     "url": "https://www.mlssoccer.com/"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "CHI vs CLB (Nov 7)",
+   "title": "Chicago Fire vs Columbus"
+  }
+ ],
+ "milestones": [
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "a88c1376-454e-46d0-a974-1d9639dd6a18",
+    "coverage": {},
+    "home_team_id": "a6f918b2-1142-4bd5-93b5-241aeb00c0d1",
+    "is_ko": false,
+    "league": "MLS",
+    "main_game_event_ticker": "KXMLSGAME-26NOV07CHICLB",
+    "status": "not_started",
+    "tie_id": "111193d4-9b1f-4bd8-ab7c-9de252737f05"
+   },
+   "id": "3a18272c-e741-501c-b89d-91a5f508b24e",
+   "last_updated_ts": "2026-11-03T23:24:33.014199Z",
+   "notification_message": "The game is about to begin.",
+   "primary_event_tickers": [
+    "KXMLSGAME-26NOV07CHICLB",
+    "KXMLSSPREAD-26NOV07CHICLB",
+    "KXMLSTOTAL-26NOV07CHICLB",
+    "KXMLSBTTS-26NOV07CHICLB"
+   ],
+   "related_event_tickers": [
+    "KXMLSGAME-26NOV07CHICLB",
+    "KXMLSSPREAD-26NOV07CHICLB",
+    "KXMLSTOTAL-26NOV07CHICLB",
+    "KXMLSBTTS-26NOV07CHICLB"
+   ],
+   "source_ids": {},
+   "start_date": "2026-11-07T21:00:00Z",
+   "title": "Chicago Fire vs Columbus",
+   "type": "soccer_tournament_multi_leg"
+  }
+ ]
+}

@@ -163,7 +163,10 @@ deduplicated), `national_tv` (any `market = national`), `venue`, `status`
 (§4), `espn_status` (ESPN's name), `status_detail` (ESPN's `shortDetail`),
 `period`, `clock` (`displayClock`), `kalshi_event_ticker` (NULL until Phase 2;
 the worker's upsert never touches it), `content_hash`, `created_at`,
-`updated_at`, `is_test`.
+`updated_at`, `is_test`. **db/066 (Phase 2)** adds `neutral_site` (ESPN's
+`competitions[].neutralSite`: required for football, basketball and hockey
+games, optional for MLB, NULL for soccer, which carries none) and the Kalshi
+link columns, which only `kalshi_map` writes (`docs/kalshi_mapping.md`).
 
 ## 4. Status lifecycle
 
@@ -193,8 +196,11 @@ stat correction can reopen a final); every write is ESPN's latest.
 ## 5. Jobs and cadence
 
 **`sports_schedule`**: daily 04:00 America/Chicago, and at boot. Every active
-league: team leagues one call per Eastern date from yesterday to today + 7
-(9 calls each); range leagues one call for the same span. Yesterday is in the
+league: team leagues one call per Eastern date from yesterday to today + the
+league's `days_ahead` (db/066: **14 for NFL and CFB**, whose Kalshi games list
+up to ~12 days out, 16 calls each; 7 for the rest, 9 calls each); range
+leagues one call for the same span. **`kalshi_map` is chained after every
+run** (Phase 2, `docs/kalshi_mapping.md`). Yesterday is in the
 window so a game that ended while the worker was down still gets its final.
 It fills the in-memory cache (below). **It is also the daily contract test:**
 every response is validated (§7), including an empty day's top-level shape,
@@ -282,7 +288,8 @@ the database), two maps:
 - **RAM:** one response at a time: fetched, validated, parsed to small rows,
   dropped; `memory.release()` after each job. Peak transient: the CFB
   Saturday parse (~1 MB JSON, several MB of Python objects).
-- **ESPN calls:** schedule ~95 a day (10 team leagues × 9 + 5 range leagues),
+- **ESPN calls:** schedule ~100 a day from db/066 (7 per-day leagues × 9,
+  NFL and CFB × 16, 5 range leagues; it read "~95, 10 × 9 + 5" before),
   plus each boot. Live: 0 when nothing is in play; 60 an hour per hot league
   per date; a heavy Saturday (CFB, NCAAB, NBA, NHL, EPL, UFC hot together)
   ~360 an hour, ~18 MB/h over the wire, all inbound to Railway.

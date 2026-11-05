@@ -1,0 +1,566 @@
+{
+ "cursor": "",
+ "events": [
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXNCAAFGAME-26NOV11MASSTOL",
+   "exchange_index": 0,
+   "last_updated_ts": "2026-11-04T19:11:41.859218Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-13T20:00:00Z",
+     "created_time": "2026-10-28T22:05:51.262672Z",
+     "custom_strike": {
+      "football_team": "763afe17-0607-42d7-8d23-bbec306c1c4b"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAFGAME-26NOV11MASSTOL",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-11-11T23:00:00Z",
+     "expiration_time": "2026-11-13T20:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.7800",
+     "latest_expiration_time": "2026-11-13T20:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.2400",
+     "no_bid_dollars": "0.1400",
+     "no_sub_title": "Toledo",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-11T23:00:00Z",
+     "open_interest_fp": "0.00",
+     "open_time": "2026-10-28T22:06:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.8600",
+     "previous_yes_bid_dollars": "0.7800",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Toledo wins the UMass vs Toledo college football game originally scheduled for Nov 11, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, the market will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 90,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAFGAME-26NOV11MASSTOL-TOL",
+     "title": "Toledo wins",
+     "updated_time": "2026-11-04T19:11:41.866309Z",
+     "volume_24h_fp": "11.50",
+     "volume_fp": "11.50",
+     "yes_ask_dollars": "0.8600",
+     "yes_ask_size_fp": "3.00",
+     "yes_bid_dollars": "0.7600",
+     "yes_bid_size_fp": "100.00",
+     "yes_sub_title": "Toledo"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-13T20:00:00Z",
+     "created_time": "2026-10-28T22:05:51.262672Z",
+     "custom_strike": {
+      "football_team": "ab3974f1-c2f4-43de-85a0-62e0dd0b94bd"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAFGAME-26NOV11MASSTOL",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-11-11T23:00:00Z",
+     "expiration_time": "2026-11-13T20:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.2100",
+     "latest_expiration_time": "2026-11-13T20:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.8400",
+     "no_bid_dollars": "0.7900",
+     "no_sub_title": "UMass",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-11T23:00:00Z",
+     "open_interest_fp": "119.26",
+     "open_time": "2026-10-28T22:06:00Z",
+     "previous_price_dollars": "0.2100",
+     "previous_yes_ask_dollars": "0.2000",
+     "previous_yes_bid_dollars": "0.1600",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If UMass wins the UMass vs Toledo college football game originally scheduled for Nov 11, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, the market will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 90,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAFGAME-26NOV11MASSTOL-MASS",
+     "title": "UMass wins",
+     "updated_time": "2026-11-04T19:11:41.866309Z",
+     "volume_24h_fp": "74.07",
+     "volume_fp": "132.46",
+     "yes_ask_dollars": "0.2100",
+     "yes_ask_size_fp": "124.00",
+     "yes_bid_dollars": "0.1600",
+     "yes_bid_size_fp": "3.40",
+     "yes_sub_title": "UMass"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "NCAA Football",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXNCAAFGAME",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/football/fbs"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "MASS vs TOL (Nov 11)",
+   "title": "UMass vs Toledo"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXNCAAFGAME-26NOV03BALLMASS",
+   "exchange_index": 0,
+   "last_updated_ts": "2026-10-26T19:11:35.666554Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-06T00:00:00Z",
+     "created_time": "2026-10-21T01:04:46.417214Z",
+     "custom_strike": {
+      "football_team": "ab3974f1-c2f4-43de-85a0-62e0dd0b94bd"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAFGAME-26NOV03BALLMASS",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-11-04T03:00:00Z",
+     "expiration_time": "2026-11-06T00:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.6500",
+     "latest_expiration_time": "2026-11-06T00:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.3600",
+     "no_bid_dollars": "0.3500",
+     "no_sub_title": "UMass",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-04T03:00:00Z",
+     "open_interest_fp": "1225660.65",
+     "open_time": "2026-10-21T01:07:00Z",
+     "previous_price_dollars": "0.5900",
+     "previous_yes_ask_dollars": "0.6000",
+     "previous_yes_bid_dollars": "0.5900",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If UMass wins the Ball St. vs UMass college football game originally scheduled for Nov 3, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, the market will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 90,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAFGAME-26NOV03BALLMASS-MASS",
+     "title": "UMass wins",
+     "updated_time": "2026-10-26T19:11:35.672253Z",
+     "volume_24h_fp": "1870001.55",
+     "volume_fp": "1883987.18",
+     "yes_ask_dollars": "0.6500",
+     "yes_ask_size_fp": "40917.34",
+     "yes_bid_dollars": "0.6400",
+     "yes_bid_size_fp": "1648.50",
+     "yes_sub_title": "UMass"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-06T00:00:00Z",
+     "created_time": "2026-10-21T01:04:46.417214Z",
+     "custom_strike": {
+      "football_team": "5af0118b-3a61-45fd-9703-c167d20b8825"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAFGAME-26NOV03BALLMASS",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-11-04T03:00:00Z",
+     "expiration_time": "2026-11-06T00:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.3700",
+     "latest_expiration_time": "2026-11-06T00:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.6500",
+     "no_bid_dollars": "0.6400",
+     "no_sub_title": "Ball St.",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-04T03:00:00Z",
+     "open_interest_fp": "931778.14",
+     "open_time": "2026-10-21T01:07:00Z",
+     "previous_price_dollars": "0.4000",
+     "previous_yes_ask_dollars": "0.4100",
+     "previous_yes_bid_dollars": "0.4000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Ball St. wins the Ball St. vs UMass college football game originally scheduled for Nov 3, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, the market will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 90,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAFGAME-26NOV03BALLMASS-BALL",
+     "title": "Ball St. wins",
+     "updated_time": "2026-10-26T19:11:35.672253Z",
+     "volume_24h_fp": "1304689.85",
+     "volume_fp": "1316720.42",
+     "yes_ask_dollars": "0.3600",
+     "yes_ask_size_fp": "31254.93",
+     "yes_bid_dollars": "0.3500",
+     "yes_bid_size_fp": "11037.39",
+     "yes_sub_title": "Ball St."
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "NCAA Football",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXNCAAFGAME",
+   "settlement_sources": [
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/football/fbs"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "BALL vs MASS (Nov 3)",
+   "title": "Ball St. vs UMass"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXNCAAFGAME-26NOV07TXAMSCAR",
+   "exchange_index": 0,
+   "last_updated_ts": "2026-10-24T22:07:14.55716Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-09T20:00:00Z",
+     "created_time": "2026-10-24T22:06:21.628662Z",
+     "custom_strike": {
+      "football_team": "e075fc6c-3596-42a9-99f0-c7c05b358808"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAFGAME-26NOV07TXAMSCAR",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-11-07T23:00:00Z",
+     "expiration_time": "2026-11-09T20:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.7100",
+     "latest_expiration_time": "2026-11-09T20:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.3000",
+     "no_bid_dollars": "0.2900",
+     "no_sub_title": "South Carolina",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-07T23:00:00Z",
+     "open_interest_fp": "13928.81",
+     "open_time": "2026-10-24T22:07:00Z",
+     "previous_price_dollars": "0.7200",
+     "previous_yes_ask_dollars": "0.7200",
+     "previous_yes_bid_dollars": "0.7100",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If South Carolina wins the Texas A&M vs South Carolina college football game originally scheduled for Nov 7, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, the market will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 90,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAFGAME-26NOV07TXAMSCAR-SCAR",
+     "title": "South Carolina wins",
+     "updated_time": "2026-10-24T22:48:20.484305Z",
+     "volume_24h_fp": "3149.63",
+     "volume_fp": "15054.41",
+     "yes_ask_dollars": "0.7100",
+     "yes_ask_size_fp": "31882.30",
+     "yes_bid_dollars": "0.7000",
+     "yes_bid_size_fp": "12328.10",
+     "yes_sub_title": "South Carolina"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-09T20:00:00Z",
+     "created_time": "2026-10-24T22:06:21.628662Z",
+     "custom_strike": {
+      "football_team": "aa153db2-cab2-4fcf-a4d3-ac0f83e6ce7e"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAFGAME-26NOV07TXAMSCAR",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-11-07T23:00:00Z",
+     "expiration_time": "2026-11-09T20:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.3000",
+     "latest_expiration_time": "2026-11-09T20:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.7100",
+     "no_bid_dollars": "0.7000",
+     "no_sub_title": "Texas A&M",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-07T23:00:00Z",
+     "open_interest_fp": "34314.10",
+     "open_time": "2026-10-24T22:07:00Z",
+     "previous_price_dollars": "0.2900",
+     "previous_yes_ask_dollars": "0.2900",
+     "previous_yes_bid_dollars": "0.2800",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Texas A&M wins the Texas A&M vs South Carolina college football game originally scheduled for Nov 7, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, the market will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 90,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAFGAME-26NOV07TXAMSCAR-TXAM",
+     "title": "Texas A&M wins",
+     "updated_time": "2026-10-24T22:48:20.484305Z",
+     "volume_24h_fp": "11812.34",
+     "volume_fp": "37309.52",
+     "yes_ask_dollars": "0.3000",
+     "yes_ask_size_fp": "94083.02",
+     "yes_bid_dollars": "0.2900",
+     "yes_bid_size_fp": "471.12",
+     "yes_sub_title": "Texas A&M"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "NCAA Football",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXNCAAFGAME",
+   "settlement_sources": [
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/football/fbs"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "TXAM vs SCAR (Nov 7)",
+   "title": "Texas A&M vs South Carolina"
+  }
+ ],
+ "milestones": [
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "5af0118b-3a61-45fd-9703-c167d20b8825",
+    "broadcasts": [
+     {
+      "name": "ESPNU",
+      "scope": "national"
+     }
+    ],
+    "conference": "MID-AMERICAN",
+    "division": "FBS",
+    "home_team_id": "ab3974f1-c2f4-43de-85a0-62e0dd0b94bd",
+    "league": "NCAAFB",
+    "main_game_event_ticker": "KXNCAAFGAME-26NOV03BALLMASS",
+    "season": {
+     "type": "REG",
+     "week": 10,
+     "year": 2026
+    },
+    "status": "inprogress",
+    "tier": "C"
+   },
+   "id": "2f554062-f669-5b08-8a6d-ada6d2409c8c",
+   "last_updated_ts": "2026-11-05T01:10:50.406464Z",
+   "notification_message": "The game is about to begin!",
+   "primary_event_tickers": [
+    "KXNCAAFGAME-26NOV03BALLMASS",
+    "KXNCAAFSPREAD-26NOV04BALLMASS",
+    "KXNCAAFTOTAL-26NOV04BALLMASS"
+   ],
+   "related_event_tickers": [
+    "KXNCAAFGAME-26NOV03BALLMASS",
+    "KXNCAAF1H-26NOV03BALLMASS",
+    "KXNCAAFSPREAD-26NOV04BALLMASS",
+    "KXNCAAFTOTAL-26NOV04BALLMASS",
+    "KXNCAAFTEAMTOTAL-26NOV04BALLMASS",
+    "KXNCAAF1HSPREAD-26NOV04BALLMASS",
+    "KXNCAAF1HTOTAL-26NOV04BALLMASS"
+   ],
+   "source_ids": {
+    "source_1_id": "2975021",
+    "source_2_id": "202611048F659721",
+    "source_6_id": "18015475"
+   },
+   "start_date": "2026-11-05T00:00:00Z",
+   "title": "Ball St. at UMass",
+   "type": "football_game"
+  },
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "aa153db2-cab2-4fcf-a4d3-ac0f83e6ce7e",
+    "broadcasts": [
+     {
+      "name": "ESPN",
+      "scope": "national"
+     }
+    ],
+    "conference": "SEC",
+    "division": "FBS",
+    "home_team_id": "e075fc6c-3596-42a9-99f0-c7c05b358808",
+    "league": "NCAAFB",
+    "main_game_event_ticker": "KXNCAAFGAME-26NOV07TXAMSCAR",
+    "season": {
+     "type": "REG",
+     "week": 10,
+     "year": 2026
+    },
+    "status": "scheduled",
+    "tier": "A"
+   },
+   "id": "ce9037de-03d2-5cfe-bfd7-167ca05bfad7",
+   "last_updated_ts": "2026-11-05T01:11:32.139487Z",
+   "notification_message": "The game is about to begin!",
+   "primary_event_tickers": [
+    "KXNCAAFGAME-26NOV07TXAMSCAR",
+    "KXNCAAFSPREAD-26NOV07TXAMSCAR",
+    "KXNCAAFTOTAL-26NOV07TXAMSCAR"
+   ],
+   "related_event_tickers": [
+    "KXNCAAFGAME-26NOV07TXAMSCAR",
+    "KXNCAAF1H-26NOV07TXAMSCAR",
+    "KXNCAAFOT-26NOV07TXAMSCAR",
+    "KXNCAAFSPREAD-26NOV07TXAMSCAR",
+    "KXNCAAFTOTAL-26NOV07TXAMSCAR",
+    "KXNCAAFTEAMTOTAL-26NOV07TXAMSCAR",
+    "KXNCAAF1HSPREAD-26NOV07TXAMSCAR",
+    "KXNCAAF1HTOTAL-26NOV07TXAMSCAR",
+    "KXNCAAFFIRSTTDTEAM-26NOV07TXAMSCAR",
+    "KXNCAAF1HFT-26NOV07TXAMSCAR",
+    "KXNCAAF1HTEAMTOTAL-26NOV07TXAMSCAR",
+    "KXNCAAF2H-26NOV07TXAMSCAR",
+    "KXNCAAF2HSPREAD-26NOV07TXAMSCAR",
+    "KXNCAAF2HTOTAL-26NOV07TXAMSCAR",
+    "KXNCAAF1Q-26NOV07TXAMSCAR",
+    "KXNCAAF1QSPREAD-26NOV07TXAMSCAR",
+    "KXNCAAF1QTOTAL-26NOV07TXAMSCAR",
+    "KXNCAAF2Q-26NOV07TXAMSCAR",
+    "KXNCAAF2QSPREAD-26NOV07TXAMSCAR",
+    "KXNCAAF2QTOTAL-26NOV07TXAMSCAR",
+    "KXNCAAF3Q-26NOV07TXAMSCAR",
+    "KXNCAAF3QSPREAD-26NOV07TXAMSCAR",
+    "KXNCAAF3QTOTAL-26NOV07TXAMSCAR",
+    "KXNCAAF4Q-26NOV07TXAMSCAR",
+    "KXNCAAF4QSPREAD-26NOV07TXAMSCAR",
+    "KXNCAAF4QTOTAL-26NOV07TXAMSCAR",
+    "KXNCAAFTEAMRECTD-26NOV07TXAMSCAR",
+    "KXNCAAFDSTTD-26NOV07TXAMSCAR",
+    "KXNCAAFWINMARGIN-26NOV07TXAMSCAR",
+    "KXNCAAFTEAMRECYDS-26NOV07TXAMSCAR"
+   ],
+   "source_ids": {
+    "source_1_id": "2968595",
+    "source_2_id": "202611079B8ED6C1",
+    "source_6_id": "18225023"
+   },
+   "start_date": "2026-11-07T20:00:00Z",
+   "title": "Texas A&M at South Carolina",
+   "type": "football_game"
+  },
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "ab3974f1-c2f4-43de-85a0-62e0dd0b94bd",
+    "broadcasts": [
+     {
+      "name": "CBS Sports Network",
+      "scope": "national"
+     }
+    ],
+    "conference": "MID-AMERICAN",
+    "division": "FBS",
+    "home_team_id": "763afe17-0607-42d7-8d23-bbec306c1c4b",
+    "league": "NCAAFB",
+    "main_game_event_ticker": "KXNCAAFGAME-26NOV11MASSTOL",
+    "season": {
+     "type": "REG",
+     "week": 11,
+     "year": 2026
+    },
+    "status": "scheduled",
+    "tier": "C"
+   },
+   "id": "d5179d27-2b92-50b3-aa29-38534caa8dc5",
+   "last_updated_ts": "2026-11-05T01:11:55.491662Z",
+   "notification_message": "The game is about to begin!",
+   "primary_event_tickers": [
+    "KXNCAAFGAME-26NOV11MASSTOL"
+   ],
+   "related_event_tickers": [
+    "KXNCAAFGAME-26NOV11MASSTOL",
+    "KXNCAAF1H-26NOV11MASSTOL"
+   ],
+   "source_ids": {
+    "source_1_id": "2975029",
+    "source_2_id": "20261111B8ED3771",
+    "source_6_id": "18015478"
+   },
+   "start_date": "2026-11-12T00:30:00Z",
+   "title": "UMass at Toledo",
+   "type": "football_game"
+  }
+ ]
+}

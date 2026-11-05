@@ -38,6 +38,9 @@ class SportsSqlCase(RankSqlCase):
         with _rolled_back() as conn:
             if conn.execute("SELECT to_regclass('public.sports_events')").fetchone()[0] is None:
                 raise unittest.SkipTest("db/065 not pasted")
+            if conn.execute("SELECT 1 FROM information_schema.columns WHERE table_name = 'sports_events' "
+                            "AND column_name = 'neutral_site'").fetchone() is None:
+                raise unittest.SkipTest("the upsert writes neutral_site: db/066 not pasted")
 
     def upsert(self, conn: psycopg.Connection, *rows: dict) -> ledger.SportsUpsert:
         return ledger.sports_events_upsert(list(rows), is_test=True, conn=conn)
@@ -65,7 +68,7 @@ class Objects(SportsSqlCase):
             self.assertEqual({r[0] for r in conn.execute(
                 "SELECT indexname FROM pg_indexes WHERE tablename = 'sports_events'")},
                 {"sports_events_pkey", "sports_events_league_espn_id", "sports_events_league_starts",
-                 "sports_events_live"})
+                 "sports_events_live", "sports_events_kalshi_ticker"})  # the last from db/066
             self.assertEqual(conn.execute("SELECT string_agg(code, ',' ORDER BY sort) FROM sports_leagues "
                                           "WHERE owner_five").fetchone()[0], "cfb,nfl,nba,f1,pga")
             leagues = ledger.sports_leagues(conn=conn)
@@ -116,8 +119,9 @@ class Upsert(SportsSqlCase):
         with _rolled_back() as conn:
             a = _row(status="live", score={"home": 3, "away": 0})
             self.upsert(conn, a)
-            conn.execute("UPDATE sports_events SET kalshi_event_ticker = 'KXNFLGAME-TL' "
-                         "WHERE league = 'nfl' AND espn_id = %s", (a["espn_id"],))
+            # A whole link, as db/066's CHECKs require (a bare ticker is refused).
+            conn.execute("UPDATE sports_events SET kalshi_event_ticker = 'KXNFLGAME-TL', link_state = 'linked', "
+                         "link_method = 'team_pair' WHERE league = 'nfl' AND espn_id = %s", (a["espn_id"],))
             self.upsert(conn, dict(a, status="final", espn_status="STATUS_FINAL", score=None,
                                    content_hash=uuid.uuid4().hex))
             self.assertEqual(self.read(conn, a["espn_id"]), ("final", {"home": 3, "away": 0}, "KXNFLGAME-TL"))

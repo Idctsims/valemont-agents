@@ -1,0 +1,172 @@
+{
+ "cursor": "",
+ "events": [
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXWTAMATCH-26NOV05CIRSTO",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-04T09:21:26.766027Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-19T06:00:00Z",
+     "created_time": "2026-11-04T06:01:33.10458Z",
+     "custom_strike": {
+      "tennis_competitor": "d3eb0e9d-4691-4077-ae7a-083d098920c5"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXWTAMATCH-26NOV05CIRSTO",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-05T09:00:00Z",
+     "expiration_time": "2026-11-19T06:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.7800",
+     "latest_expiration_time": "2026-11-19T06:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.2300",
+     "no_bid_dollars": "0.2200",
+     "no_sub_title": "Sorana Cirstea",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-05T09:00:00Z",
+     "open_interest_fp": "608.02",
+     "open_time": "2026-11-04T06:06:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.0000",
+     "previous_yes_bid_dollars": "0.0000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Sorana Cirstea wins the Cirstea vs Stoiana professional tennis match in the 2026 WTA Hong Kong Round Of 16 after a ball has been played, then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the Cirstea vs Stoiana professional tennis match in the 2026 WTA Hong Kong Round Of 16 after a ball has been played. If the match does not occur (signaled by a ball being played) due to a player injury, walkover, forfeiture, or any other cancellation (all before the match starts), the market will resolve to a fair price in accordance with the rules. If this match is postponed or delayed, the market will remain open and close after the rescheduled match has finished (within two weeks).\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 60,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXWTAMATCH-26NOV05CIRSTO-CIR",
+     "title": "Sorana Cirstea wins",
+     "updated_time": "2026-11-04T09:21:26.772625Z",
+     "volume_24h_fp": "3723.51",
+     "volume_fp": "3723.51",
+     "yes_ask_dollars": "0.7800",
+     "yes_ask_size_fp": "1217.00",
+     "yes_bid_dollars": "0.7700",
+     "yes_bid_size_fp": "1825.00",
+     "yes_sub_title": "Sorana Cirstea"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-19T06:00:00Z",
+     "created_time": "2026-11-04T06:01:33.10458Z",
+     "custom_strike": {
+      "tennis_competitor": "2bc78183-e2ba-427d-a4ea-96c3a4910693"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXWTAMATCH-26NOV05CIRSTO",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-05T09:00:00Z",
+     "expiration_time": "2026-11-19T06:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.2300",
+     "latest_expiration_time": "2026-11-19T06:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.7800",
+     "no_bid_dollars": "0.7700",
+     "no_sub_title": "Mary Stoiana",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-05T09:00:00Z",
+     "open_interest_fp": "2451.51",
+     "open_time": "2026-11-04T06:06:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.0000",
+     "previous_yes_bid_dollars": "0.0000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Mary Stoiana wins the Cirstea vs Stoiana professional tennis match in the 2026 WTA Hong Kong Round Of 16 after a ball has been played, then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the Cirstea vs Stoiana professional tennis match in the 2026 WTA Hong Kong Round Of 16 after a ball has been played. If the match does not occur (signaled by a ball being played) due to a player injury, walkover, forfeiture, or any other cancellation (all before the match starts), the market will resolve to a fair price in accordance with the rules. If this match is postponed or delayed, the market will remain open and close after the rescheduled match has finished (within two weeks).\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 60,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXWTAMATCH-26NOV05CIRSTO-STO",
+     "title": "Mary Stoiana wins",
+     "updated_time": "2026-11-04T09:21:26.772625Z",
+     "volume_24h_fp": "2451.51",
+     "volume_fp": "2451.51",
+     "yes_ask_dollars": "0.2300",
+     "yes_ask_size_fp": "6402.00",
+     "yes_bid_dollars": "0.2200",
+     "yes_bid_size_fp": "1408.00",
+     "yes_sub_title": "Mary Stoiana"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "WTA Hong Kong",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXWTAMATCH",
+   "settlement_sources": [
+    {
+     "name": "WTA",
+     "url": "https://www.wtatennis.com/"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "Cirstea vs Stoiana (Nov 5)",
+   "title": "Cirstea vs Stoiana"
+  }
+ ],
+ "milestones": [
+  {
+   "category": "Sports",
+   "details": {
+    "best_of": "3",
+    "first_competitor_id": "d3eb0e9d-4691-4077-ae7a-083d098920c5",
+    "gender": "women",
+    "main_game_event_ticker": "KXWTAMATCH-26NOV05CIRSTO",
+    "round": "Round Of 16",
+    "second_competitor_id": "2bc78183-e2ba-427d-a4ea-96c3a4910693",
+    "status": "not_started",
+    "tour": "WTA",
+    "tournament_name": "WTA Hong Kong"
+   },
+   "id": "98c753d4-6fb8-4ba9-8ea7-696ba84e5671",
+   "last_updated_ts": "2026-11-04T09:21:26.753967Z",
+   "notification_message": "The match is about to begin.",
+   "primary_event_tickers": [
+    "KXWTAMATCH-26NOV05CIRSTO",
+    "KXWTASETWINNER-26NOV05CIRSTO-1",
+    "KXWTASETWINNER-26NOV05CIRSTO-2"
+   ],
+   "related_event_tickers": [
+    "KXWTAMATCH-26NOV05CIRSTO",
+    "KXWTASETWINNER-26NOV05CIRSTO-1",
+    "KXWTASETWINNER-26NOV05CIRSTO-2",
+    "KXWTAGTOTAL-26NOV05CIRSTO"
+   ],
+   "source_id": "sr:sport_event:76136074",
+   "source_ids": {
+    "source_1_id": "5441382",
+    "source_2_id": "202611052C54718E",
+    "source_3_id": "sr:sport_event:76136074"
+   },
+   "start_date": "2026-11-05T11:40:00Z",
+   "title": "Cirstea vs Stoiana",
+   "type": "tennis_tournament_singles"
+  }
+ ]
+}

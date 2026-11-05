@@ -73,6 +73,8 @@ class League:
     kind: str
     owner_five: bool = False
     sort: int = 0
+    #: The schedule pull's horizon in days (db/066: 14 for NFL and CFB).
+    days_ahead: int = 7
 
 
 @dataclass(frozen=True)
@@ -97,6 +99,9 @@ class SportsEvent:
     period: int | None = None
     clock: str | None = None
     score: Mapping[str, Any] | None = field(default=None)
+    #: ESPN's competitions[].neutralSite (db/066), games only; None where
+    #: ESPN does not say (soccer carries no flag).
+    neutral_site: bool | None = None
 
     @property
     def key(self) -> tuple[str, str]:
@@ -244,6 +249,12 @@ def _list(obj: Any, key: str, league: str, path: str) -> list[Any]:
 
 # ------------------------------------------------------------ team games
 
+#: Sports whose every game carries competitions[].neutralSite (checked in
+#: every NFL, CFB, NBA, NCAAB and NHL fixture, 2026-11-04): a missing flag is
+#: a shape failure there. Soccer carries none; MLB is unverified (off
+#: season), so it is optional there and stored NULL when absent.
+NEUTRAL_REQUIRED = frozenset({"football", "basketball", "hockey"})
+
 def _team(cp: Any, league: str, path: str) -> tuple[str, dict[str, Any], int | str | None]:
     side = req(cp, "homeAway", str, league, path)
     if side not in ("home", "away"):
@@ -290,6 +301,7 @@ def parse_games(lg: League, events: Sequence[Any]) -> list[SportsEvent]:
         st = read_status(c, lg.code, cp)
         names, national = broadcasts(c, lg.code, cp)
         valid = opt(c, "timeValid", bool, lg.code, cp)
+        neutral = (req if lg.path.split("/")[0] in NEUTRAL_REQUIRED else opt)(c, "neutralSite", bool, lg.code, cp)
         score = None
         if st.state != "pre" and sides["home"][1] is not None and sides["away"][1] is not None:
             score = {"home": sides["home"][1], "away": sides["away"][1]}
@@ -300,7 +312,7 @@ def parse_games(lg: League, events: Sequence[Any]) -> list[SportsEvent]:
             participants={"home": sides["home"][0], "away": sides["away"][0]},
             broadcast=names, national_tv=national, venue=venue_name(c, "venue", lg.code, cp),
             status=st.status, espn_status=st.espn, status_detail=st.detail, period=st.period,
-            clock=st.clock, score=score))
+            clock=st.clock, score=score, neutral_site=neutral))
     return out
 
 
