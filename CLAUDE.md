@@ -1179,7 +1179,27 @@ absent row as "I never looked."
 
     **Verified via db_inspect the same session (19:34 UTC):** (a) the log row; (b) the 14 leagues, kinds, fetch modes, owner five and CFB/NCAAB params as written; (c) both tables RLS on, 1 policy each, anon no select, authenticated select only (no insert/update/delete/truncate), readonly select; (d) the 4 indexes; (e) `sports_today` enabled, not a brief section, sort 46; (f) 0 events; `ctx_sports_today()` counts `{}`; anon executes neither function, readonly executes the ctx only, authenticated `add_test_sports_event`.
     - **Merge gate on `chat7-phase1` after the paste:** `tests/` 1235 OK; full `tests_live -v`, every connection metered: **483 OK, 0 skipped**, ~2.73 MB read (2,798 KB, 1,047 s; `test_sports_events_sql` 3 classes, ~2.7 KB).
-    - Next new file: `db/066`.
+  - **`db/066_kalshi_mapping.sql` applied 2026-11-05 04:10:29 UTC** (`migration_log`; the first paste; owner's paste, reported "db/066 pasted"; the self-test NOTICE was not reported here; the log row exists only if the self-test passed). Branch `chat7-phase2`, Chat 7 Phase 2 (`docs/kalshi_mapping.md`).
+    - `sports_leagues`: `kalshi_series`, `kalshi_map` (team_pair, player_pair, by_date, off) and `days_ahead` (14 for NFL and CFB, 7 for the rest; MLB off).
+    - `sports_team_aliases`: ESPN → Kalshi code exceptions only, 91 rows (owner kept all 12 FOR REVIEW).
+    - `sports_events`: `neutral_site` (nullable) and the link columns, with NULL-safe CHECKs; one Kalshi event per game, match or bout (golf rounds and F1 sessions share); `sports_events_link_guard`, the no-relink rule.
+    - The hand repair (owner, Nov 4): append-only `sports_event_relinks`, and the worker-only `sports_event_relink`, run only by `scripts.sports_event_relink`. The guard allows a linked row's change only with its log row from the same transaction; an unlink is for good (out_of_scope).
+    - Backward-compatible with the deployed Phase 1 worker (owner's condition for the paste).
+    - Before handover, the file was run on a throwaway local PG 17 as one transaction: the self-test passed and 8 mutations each failed it.
+
+    **Verified via db_inspect the same session (~04:11 UTC):**
+    - (a) The log row.
+    - (b) The 14 registry rows as written.
+    - (c) Aliases: cfb 14, epl 5, mcbb 61, mls 3, nba 6, nfl 2.
+    - (d) `sports_team_aliases` and (h) `sports_event_relinks`: RLS on, 1 policy each, anon no select, authenticated select only, readonly select.
+    - (e) The 9 new columns, all nullable.
+    - (f) Triggers `sports_events_link_guard` and `_link_insert`, and the log's stamp, immutable and no_truncate, all `O`.
+    - (g) The unique index on `kind IN ('game', 'match', 'bout')`.
+    - (h) `sports_event_relink` and the guard: executable by none of anon, authenticated or readonly.
+    - (i) 0 relinks, 0 link states, 0 tickers, 0 neutral flags, 965 events.
+    - The three pasted function bodies hash identically (md5) to the file's.
+    - The deployed Phase 1 worker kept writing after the paste: 9 rows by 04:11:28 UTC; `sports_live` ok, 0 failures.
+    - Next new file: `db/067`.
   - **Rule (owner, 2026-10-12): the migration record updates in the same session a migration is verified, never deferred to a merge.** Record `applied_at` from `migration_log` and the verification, and move "Next new file" here and in MASTER_PLAN §"Migration numbering", in their own commit.
 - **Known intermittent `tests_live` skip (identified 2026-10-12):** `test_system_jobs_sql.SystemJobsSql.test_claim_retry_and_finish` skips with "another poller claimed the test job first" when the production worker's 10 s `job_queue` poller claims the test's `noop` job first (observed 2 of 60 isolated runs). By design (skip, not fail); not a broken invariant. Two sibling tests in the same file skip the same way ("another poller claimed/failed the test job first"). Since 2026-10-13 `tests_live` runs with `-v`, so a skip is named, not assumed.
   - **2026-10-13, cleared (owner):** a quiet Phase 3 run reported "314 tests, OK (skipped=1)" with no name. The full verbose rerun had **0 skips** (314 OK, 593 s). The owner's judgment: the plausible cause is this documented poller race, since every migration-gated skip cannot fire (all applied). One alternative was not ruled out: a class whose own `setUpClass` hits a transient "database unreachable" is also reported as one skip.
