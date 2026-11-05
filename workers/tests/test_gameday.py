@@ -90,6 +90,46 @@ class Db068Shape(unittest.TestCase):
         self.assertIn("INSERT INTO migration_log (name) VALUES ('068_gameday')", self.sql)
 
 
+DB069 = REPO_ROOT / "db" / "069_nfl_first_marker_closed.sql"
+
+
+def _fn(sql: str, name: str) -> str:
+    """One CREATE FUNCTION's text, up to the next top-level statement after its closing $$."""
+    start = sql.index(f"CREATE OR REPLACE FUNCTION public.{name}(")
+    body_end = sql.index("$$;", sql.index("AS $$", start)) + 3
+    return sql[start:body_end]
+
+
+class Db069Shape(unittest.TestCase):
+    """db/069 (owner, Nov 5): NFL first on any night; e2e_marker_ok fails closed."""
+
+    def setUp(self) -> None:
+        self.sql = DB069.read_text(encoding="utf-8")
+
+    def test_gameday_brief_is_db068s_with_only_the_nfl_rule_changed(self) -> None:
+        old = _fn(DB068.read_text(encoding="utf-8"), "gameday_brief")
+        expected = (old.replace("    v_sunday boolean := extract(isodow FROM p_day) = 7;\n", "")
+                    .replace("    -- The owner's five's national-TV games, NFL first on a Sunday.",
+                             "    -- The owner's five's national-TV games, NFL first on any night it plays (owner, Nov 5).")
+                    .replace("row_number() OVER (ORDER BY (v_sunday AND e.league = 'nfl') DESC,",
+                             "row_number() OVER (ORDER BY (e.league = 'nfl') DESC,")
+                    .replace("'play, NFL first on a Sunday). Use these lines as given.',",
+                             "'play, NFL first on any night it plays). Use these lines as given.',"))
+        self.assertNotEqual(expected, old)
+        self.assertEqual(_fn(self.sql, "gameday_brief"), expected)
+
+    def test_the_marker_check_is_coalesced_to_false_and_keeps_its_shape(self) -> None:
+        fn = _fn(self.sql, "e2e_marker_ok")
+        self.assertIn("SELECT coalesce(", fn)
+        self.assertTrue(fn.rstrip().endswith("false);\n$$;") or fn.rstrip().endswith("false);\n$$;".rstrip()))
+        for part in ("SECURITY DEFINER", "SET search_path = ''", "STABLE", "public.is_owner()",
+                     "FROM public.e2e_markers m ORDER BY m.id DESC LIMIT 1"):
+            self.assertIn(part, fn)
+        self.assertNotIn("GRANT", self.sql.split("-- Self-test")[0].split("DO $$")[0])
+        self.assertIn("RAISE EXCEPTION 'selftest-rollback'", self.sql)
+        self.assertIn("INSERT INTO migration_log (name) VALUES ('069_nfl_first_marker_closed')", self.sql)
+
+
 class SportsBriefSection(unittest.TestCase):
     def setUp(self) -> None:
         for p in (mock.patch.object(ledger, "ai_spend_month_to_date", lambda: 0),

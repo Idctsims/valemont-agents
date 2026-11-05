@@ -29,7 +29,8 @@ written, NOT pasted. Not merged** (owner's gate: Phase 2's 22:00 UTC
    Chat 9); golf: the leader and Scheffler/Koepka's position and thru when in
    the field; F1: every stored session of the weekend.
 5. **Brief:** at most 5 lines; Alabama always when they play; then the
-   biggest national-TV games in the five; Sundays lead with the NFL; race
+   biggest national-TV games in the five; the NFL leads any night it plays
+   (Thu/Sun/Mon; owner, Nov 5, db/069; it was Sundays only in db/068); race
    weekends add session times; golf days add the followed players; a dead
    night says nothing.
 6. **Wags** answers "what's on tonight", "when does Bama play", "where can I
@@ -99,8 +100,9 @@ provider, the pattern of `tech_brief`, `screening_brief`, `arsenal_brief`.
 (today's and the rest of the weekend's stored sessions) and one golf line
 (today's round; the leader after the last scored round; each followed
 player's position, to par and thru) when there is one; the rest of the 5
-slots go to the five's `national_tv` games, NFL first on a Sunday, then by
-tier, best rank and start. Printed Alabama, games, F1, golf. NULL when
+slots go to the five's `national_tv` games, NFL first on any night it plays
+(db/069), then by tier, best rank and start. Game Day's day order matches:
+live, Alabama, NFL, then CFB, NBA, F1, golf (`DAY_ORDER`). Printed Alabama, games, F1, golf. NULL when
 there is nothing. `core/brief.py` prints these lines **as given** (a
 `DATA_LINE_SECTIONS` member, like the Arsenal's) and, because they replace
 the model's after validation, `fit_data_lines` trims a data section from
@@ -193,14 +195,16 @@ grants stubbed. db/051's grants are not in a schema-only dump, so the
 db/065/db/066 privilege tests are meaningless there (they fail on grants
 only, never on db/068).
 
-## 8. Found on the way (not changed here)
+## 8. Found on the way
 
 - **db/051 `e2e_marker_ok` answers NULL, not false, while `e2e_markers` is
   empty** (`hash = (SELECT … LIMIT 1)` is NULL), and `IF NOT NULL` does not
   raise: every marker-gated helper would then accept any marker. Production
   holds 1 marker row (read Nov 5), so it is not open today. db/068's two
-  helpers `coalesce` it. The one-line fix to `e2e_marker_ok` itself is the
-  owner's call (its own migration).
+  helpers `coalesce` it. **Fixed in db/069 (owner, Nov 5; awaiting the
+  paste):** the function itself fails closed, so every `add_test_*` helper
+  does; its self-test empties the table inside its rollback and checks false
+  both ways.
 
 ## 9. Pending (not verified)
 

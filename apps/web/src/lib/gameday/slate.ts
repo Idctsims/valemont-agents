@@ -144,8 +144,15 @@ export function sectionize(rows: readonly SlateRow[], today: string): Sections {
 
 // ------------------------------------------------------------------ order inside a day
 
+/**
+ * The order inside a day: the NFL leads whenever it plays (owner, 2026-11-05;
+ * db/069 does the same in the brief), then the rest of the five in the
+ * owner's order. On a night with no NFL game this is the owner's order.
+ */
+export const DAY_ORDER = ["nfl", "cfb", "nba", "f1", "pga"] as const;
+
 function leagueRank(league: string): number {
-  const i = (FIVE as readonly string[]).indexOf(league);
+  const i = (DAY_ORDER as readonly string[]).indexOf(league);
   return i >= 0 ? i : 10 + (LEAGUES[league]?.sort ?? 999);
 }
 
@@ -159,8 +166,8 @@ function cfbBucket(r: SlateRow): number {
 }
 
 /**
- * Owner, 2026-11-04: live first; Alabama; then the owner's five in order
- * (CFB, NFL, NBA, F1, golf), inside CFB ranked → SEC → national TV; then the
+ * Owner, 2026-11-04/05: live first; Alabama; then the NFL whenever it plays;
+ * then CFB, NBA, F1, golf, inside CFB ranked → SEC → national TV; then the
  * other leagues in registry order. Ties: start time, then the bigger network,
  * then id.
  */
