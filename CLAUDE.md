@@ -334,6 +334,16 @@ policies arrive in db/019+ before apps/web reads any table. db/019 (push_subscri
     `package.json` and `core/ai.py`), so both commits were missing them.
     It was caught before the push and recovered from the stash and a
     backup branch.
+- **One Claude Code session per checkout (owner, 2026-11-05).** A second
+  session works in its own git worktree
+  (`git worktree add -b <branch> ..\valemont-agents-<topic> origin/main`),
+  never in the same directory. Before a branch's first commit, check its
+  base: `git log --oneline origin/main..HEAD` must list only this branch's
+  own work.
+  - Why: on Nov 5 two sessions shared this checkout. PR #87's commit
+    `d4d3cb6` was made while `chat7-phase3` was checked out, so it landed
+    under Chat 7 Phase 3's first commit and rode into PR #88. It was
+    noticed only at a later push.
 - **Reports back to the planning chat state only what was actually verified.
   Anything not checked is recorded as pending, never as passed.** That
   includes anything taken from a template the owner pasted without filling
