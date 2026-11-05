@@ -445,7 +445,8 @@ class Registry(unittest.TestCase):
                           "screening_match", "screening_refresh", "screening_recs", "screening_release_push",
                           "arsenal_pool", "arsenal_pool_collect", "arsenal_drop", "arsenal_verify",
                           "arsenal_outcome", "arsenal_arm_verify", "arsenal_arm_sweep",
-                           "arsenal_title_hook", "arsenal_title_hook_sweep", "sports_schedule", "sports_live"})
+                           "arsenal_title_hook", "arsenal_title_hook_sweep", "sports_schedule", "sports_live",
+                           "kalshi_map"})
         # db/054 (Chat 5): the pool Sundays 03:30, the drop daily 05:30 (both
         # Chicago, both at boot), collect every 10 min; verify runs per queued
         # item, never on its own.
@@ -539,12 +540,13 @@ class SystemOnlyBoot(SystemTestCase):
                                "system:screening_release_push", "system:arsenal_pool",
                                "system:arsenal_pool_collect", "system:arsenal_drop",
                                "system:arsenal_arm_sweep", "system:arsenal_title_hook_sweep",
-                               "system:sports_schedule", "system:sports_live"})
+                               "system:sports_schedule", "system:sports_live",
+                               "system:kalshi_map"})
         # screening_match, feed_tech_summarize, feed_summarize, feed_score, feed_why and feed_repo_why
         # are registered (job_health rows, watched) but never scheduled: feed_ingest runs them.
         # arsenal_verify, arsenal_outcome and arsenal_arm_verify the same way: the job_queue handler runs them.
-        # 34 with db/065's sports_schedule and sports_live (Chat 7 Phase 1).
-        self.assertEqual(self.ledger.names().count("job_register"), 34)
+        # 34 with db/065's sports_schedule and sports_live (Chat 7 Phase 1); 35 with db/066's kalshi_map.
+        self.assertEqual(self.ledger.names().count("job_register"), 35)
         for chained in ("screening_match", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
                         "feed_repo_why", "arsenal_verify", "arsenal_outcome", "arsenal_arm_verify",
                         "arsenal_title_hook"):
@@ -600,7 +602,8 @@ class SystemOnlyBoot(SystemTestCase):
                           "screening_match", "screening_refresh", "screening_recs", "screening_release_push",
                           "arsenal_pool", "arsenal_pool_collect", "arsenal_drop", "arsenal_verify",
                           "arsenal_outcome", "arsenal_arm_verify", "arsenal_arm_sweep",
-                           "arsenal_title_hook", "arsenal_title_hook_sweep", "sports_schedule", "sports_live"})
+                           "arsenal_title_hook", "arsenal_title_hook_sweep", "sports_schedule", "sports_live",
+                           "kalshi_map"})
 
 
 if __name__ == "__main__":

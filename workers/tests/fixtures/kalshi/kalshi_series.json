@@ -1,0 +1,618 @@
+{
+ "KXNFLGAME": {
+  "series": {
+   "additional_prohibitions": [
+    "Current players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current players/coaches/staff of the specific sport in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men’s Basketball Team is playing in <event>, this prohibition will restrict trades by current players/coaches/staff on NCAA Basketball, rather than all current players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Sports"
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/FOOTBALLGAMEWIN.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/FOOTBALLGAMEWIN.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "custom",
+   "last_updated_ts": "2026-10-06T14:58:29.805933Z",
+   "product_metadata": {
+    "scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nfl.com/"
+    }
+   ],
+   "tags": [
+    "Football"
+   ],
+   "ticker": "KXNFLGAME",
+   "title": "NFL Game"
+  }
+ },
+ "KXNBAGAME": {
+  "series": {
+   "additional_prohibitions": [
+    "Current players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current players/coaches/staff of the specific sport in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men’s Basketball Team is playing in <event>, this prohibition will restrict trades by current players/coaches/staff on NCAA Basketball, rather than all current players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Sports"
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/BASKETBALLGAMEWIN.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/BASKETBALLGAMEWIN.pdf",
+   "exchange_index": 3,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "custom",
+   "last_updated_ts": "2026-10-26T16:44:13.457872Z",
+   "product_metadata": {
+    "scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "the Governing League",
+     "url": "https://www.nba.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNBAGAME",
+   "title": "NBA Game"
+  }
+ },
+ "KXNCAAMBGAME": {
+  "series": {
+   "additional_prohibitions": [
+    "Current players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current players/coaches/staff of the specific sport in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men’s Basketball Team is playing in <event>, this prohibition will restrict trades by current players/coaches/staff on NCAA Basketball, rather than all current players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Sports"
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/BASKETBALLGAMEWIN.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/BASKETBALLGAMEWIN.pdf",
+   "exchange_index": 3,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "custom",
+   "last_updated_ts": "2026-10-22T19:36:33.704514Z",
+   "product_metadata": {
+    "scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/basketball-men/d1"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "tags": [
+    "Basketball"
+   ],
+   "ticker": "KXNCAAMBGAME",
+   "title": "Men's College Basketball Game"
+  }
+ },
+ "KXNCAAFGAME": {
+  "series": {
+   "additional_prohibitions": [
+    "Current players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current players/coaches/staff of the specific sport in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men’s Basketball Team is playing in <event>, this prohibition will restrict trades by current players/coaches/staff on NCAA Basketball, rather than all current players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Sports"
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/FOOTBALLGAMEWIN.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/FOOTBALLGAMEWIN.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "custom",
+   "last_updated_ts": "2026-10-06T14:58:29.703542Z",
+   "product_metadata": {
+    "scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/football/fbs"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    }
+   ],
+   "tags": [
+    "Football"
+   ],
+   "ticker": "KXNCAAFGAME",
+   "title": "College Football Game"
+  }
+ },
+ "KXEPLGAME": {
+  "series": {
+   "additional_prohibitions": [
+    "Current players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current players/coaches/staff of the specific sport in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men’s Basketball Team is playing in <event>, this prohibition will restrict trades by current players/coaches/staff on NCAA Basketball, rather than all current players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Sports"
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/SOCCERGAMEWIN.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/SOCCERGAMEWIN.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "custom",
+   "last_updated_ts": "2026-10-14T19:05:10.373256Z",
+   "product_metadata": {
+    "important_info": {
+     "id": "SOCCERGAME-bulk-2026-04-09",
+     "markdown": "**Important information:** The following market is based on the outcome after 90 minutes plus stoppage time. This does not include extra time or penalties.",
+     "message": "",
+     "title": ""
+    },
+    "scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ],
+   "tags": [
+    "Soccer"
+   ],
+   "ticker": "KXEPLGAME",
+   "title": "English Premier League Game"
+  }
+ },
+ "KXMLSGAME": {
+  "series": {
+   "additional_prohibitions": [
+    "Current players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current players/coaches/staff of the specific sport in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men’s Basketball Team is playing in <event>, this prohibition will restrict trades by current players/coaches/staff on NCAA Basketball, rather than all current players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Sports"
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/SOCCERGAMEWIN.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/SOCCERGAMEWIN.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-10-14T19:05:09.648443Z",
+   "product_metadata": {
+    "important_info": {
+     "id": "SOCCERGAME-bulk-2026-04-09",
+     "markdown": "**Important information:** The following market is based on the outcome after 90 minutes plus stoppage time. This does not include extra time or penalties.",
+     "message": "",
+     "title": ""
+    },
+    "scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "MLS",
+     "url": "https://www.mlssoccer.com/"
+    }
+   ],
+   "tags": [
+    "Soccer"
+   ],
+   "ticker": "KXMLSGAME",
+   "title": "Major League Soccer Game"
+  }
+ },
+ "KXATPMATCH": {
+  "series": {
+   "additional_prohibitions": [
+    "Current players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current players/coaches/staff of the specific sport in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men’s Basketball Team is playing in <event>, this prohibition will restrict trades by current players/coaches/staff on NCAA Basketball, rather than all current players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Sports"
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/ACHIEVEMENTS.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/ACHIEVEMENTS.pdf",
+   "exchange_index": 3,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "custom",
+   "last_updated_ts": "2026-11-04T20:41:26.053498Z",
+   "product_metadata": {
+    "important_info": {
+     "id": "KXATPMATCH-2026-04-09",
+     "markdown": "**Important information**: If the match does not begin (signaled by a ball being played), all markets, including set winner markets, will resolve to a **fair price** for each player in accordance with the rules. If a player withdraws or forfeits after the match has begun, that player will resolve to **No** for the main match market. Any markets that can be definitively determined at that point will be settled accordingly, while any additional prop markets will resolve to a **fair price**.",
+     "message": "",
+     "title": ""
+    },
+    "scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "ATP",
+     "url": "https://www.atptour.com/"
+    }
+   ],
+   "tags": [
+    "Tennis"
+   ],
+   "ticker": "KXATPMATCH",
+   "title": "ATP Tennis Match"
+  }
+ },
+ "KXWTAMATCH": {
+  "series": {
+   "additional_prohibitions": [
+    "Current players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current players/coaches/staff of the specific sport in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men’s Basketball Team is playing in <event>, this prohibition will restrict trades by current players/coaches/staff on NCAA Basketball, rather than all current players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Sports"
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/ACHIEVEMENTS.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/ACHIEVEMENTS.pdf",
+   "exchange_index": 3,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "custom",
+   "last_updated_ts": "2026-11-04T20:41:27.15493Z",
+   "product_metadata": {
+    "important_info": {
+     "id": "KXWTAMATCH-2026-04-09",
+     "markdown": "**Important information**: If the match does not start (signaled by a ball being played), the market will resolve to a fair price for each player in accordance with the rules. If a player withdraws or forfeits after a match has started, that player will resolve to no.",
+     "message": "",
+     "title": ""
+    },
+    "scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "WTA",
+     "url": "https://www.wtatennis.com/"
+    }
+   ],
+   "tags": [
+    "Tennis"
+   ],
+   "ticker": "KXWTAMATCH",
+   "title": "WTA Tennis Match"
+  }
+ },
+ "KXUFCFIGHT": {
+  "series": {
+   "additional_prohibitions": [
+    "Current players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current players/coaches/staff of the specific sport in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men’s Basketball Team is playing in <event>, this prohibition will restrict trades by current players/coaches/staff on NCAA Basketball, rather than all current players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Sports"
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/UFCFIGHTWINNER.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/UFCFIGHTWINNER.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic",
+   "frequency": "custom",
+   "last_updated_ts": "2026-10-12T03:28:53.274649Z",
+   "product_metadata": {
+    "important_info": {
+     "id": "UFC-RULES4",
+     "markdown": "**Important information:** If the fight ends in a draw/no contest, both markets will resolve to **$0.50**. If the fight is cancelled or postponed more than 48 hours from its originally scheduled start, both markets will resolve to a **fair price**. Note that any revisions after Expiration will not be considered. Therefore, if a fighter is disqualified, removed, or the official result of the fight is reversed or changed in any way after the Contract expires, that will not impact resolution.",
+     "message": "",
+     "title": ""
+    },
+    "scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "DAZN",
+     "url": "https://www.dazn.com/en-US"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://foxsports.com"
+    },
+    {
+     "name": "Tapology",
+     "url": "https://www.tapology.com/"
+    },
+    {
+     "name": "the Governing League",
+     "url": "https://www.ufc.com/"
+    }
+   ],
+   "tags": [
+    "MMA"
+   ],
+   "ticker": "KXUFCFIGHT",
+   "title": "UFC Fight"
+  }
+ },
+ "KXF1RACE": {
+  "series": {
+   "additional_prohibitions": [
+    "Current players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current players/coaches/staff of the specific sport in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men’s Basketball Team is playing in <event>, this prohibition will restrict trades by current players/coaches/staff on NCAA Basketball, rather than all current players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Sports"
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/F1TOPFINISH.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/F1TOPFINISH.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "custom",
+   "last_updated_ts": "2026-10-14T19:51:46.323011Z",
+   "product_metadata": {
+    "important_info": {
+     "id": "F1-DELAY",
+     "markdown": "**Important information**: F1 races will be paid out after the 'Final Race Classification' has been posted by FIA [here](https://www.fia.com/). Determinations are not based on provisional results, we appreciate your patience.",
+     "message": "",
+     "title": ""
+    },
+    "scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "FIA",
+     "url": "https://www.fia.com"
+    }
+   ],
+   "tags": [
+    "Motorsport"
+   ],
+   "ticker": "KXF1RACE",
+   "title": "F1 Race"
+  }
+ },
+ "KXPGATOUR": {
+  "series": {
+   "additional_prohibitions": [
+    "Current players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current players/coaches/staff of the specific sport in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men’s Basketball Team is playing in <event>, this prohibition will restrict trades by current players/coaches/staff on NCAA Basketball, rather than all current players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Sports"
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/ACHIEVEMENTS.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/ACHIEVEMENTS.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "custom",
+   "last_updated_ts": "2026-11-04T20:41:26.983902Z",
+   "product_metadata": {
+    "scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "the Governing League",
+     "url": "https://www.pgatour.com/"
+    }
+   ],
+   "tags": [
+    "Golf"
+   ],
+   "ticker": "KXPGATOUR",
+   "title": "PGA Tour"
+  }
+ },
+ "KXMLBGAME": {
+  "series": {
+   "additional_prohibitions": [
+    "Current players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current players/coaches/staff of the specific sport in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men’s Basketball Team is playing in <event>, this prohibition will restrict trades by current players/coaches/staff on NCAA Basketball, rather than all current players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Sports"
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/BASEBALLGAMEWIN.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/BASEBALLGAMEWIN.pdf",
+   "exchange_index": 3,
+   "fee_multiplier": 0.5,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "custom",
+   "last_updated_ts": "2026-10-16T18:30:36.681221Z",
+   "product_metadata": {
+    "scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com"
+    },
+    {
+     "name": "the Governing League",
+     "url": "https://www.mlb.com/"
+    }
+   ],
+   "tags": [
+    "Baseball"
+   ],
+   "ticker": "KXMLBGAME",
+   "title": "Professional Baseball Game"
+  }
+ },
+ "KXUCLGAME": {
+  "series": {
+   "additional_prohibitions": [
+    "Current players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current players/coaches/staff of the specific sport in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men’s Basketball Team is playing in <event>, this prohibition will restrict trades by current players/coaches/staff on NCAA Basketball, rather than all current players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Sports"
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/SOCCERGAMEWIN.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/SOCCERGAMEWIN.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "custom",
+   "last_updated_ts": "2026-10-14T19:05:10.188173Z",
+   "product_metadata": {
+    "important_info": {
+     "id": "SOCCERGAME-bulk-2026-04-09",
+     "markdown": "**Important information:** The following market is based on the outcome after 90 minutes plus stoppage time. This does not include extra time or penalties.",
+     "message": "",
+     "title": ""
+    },
+    "scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ],
+   "tags": [
+    "Soccer"
+   ],
+   "ticker": "KXUCLGAME",
+   "title": "UEFA Champions League Game"
+  }
+ },
+ "KXNHLGAME": {
+  "series": {
+   "additional_prohibitions": [
+    "Current players, coaches, and staff of the league, association, or organization(s) governing the event. For college leagues/associations specifically, or where otherwise appropriate (as identified by the Exchange), this applies to current players/coaches/staff of the specific sport in <event> rather than the league/association as a whole (e.g., if the Division I Gonzaga Men’s Basketball Team is playing in <event>, this prohibition will restrict trades by current players/coaches/staff on NCAA Basketball, rather than all current players/coaches/staff in any NCAA sport).",
+    "Paid employees of the league and league participants",
+    "Owners of teams and the league",
+    "and household members and immediate family of all above",
+    "Persons who are employed by any of the Source Agencies are not permitted to trade on the Contract.",
+    "Persons who hold any material, non-public information on the Underlying are not permitted to trade on the Contract."
+   ],
+   "categories": [
+    "Sports"
+   ],
+   "category": "Sports",
+   "contract_terms_url": "https://assets.kalshi.com/contract_terms/HOCKEYWINNINGINPERIOD.pdf",
+   "contract_url": "https://assets.kalshi.com/regulatory/product-certifications/HOCKEYWINNINGINPERIOD.pdf",
+   "exchange_index": 0,
+   "fee_multiplier": 1,
+   "fee_type": "quadratic_with_maker_fees",
+   "frequency": "custom",
+   "last_updated_ts": "2026-10-19T16:27:16.864512Z",
+   "product_metadata": {
+    "scope": "Game"
+   },
+   "settlement_sources": [
+    {
+     "name": "NHL",
+     "url": "https://www.nhl.com"
+    },
+    {
+     "name": "ESPN",
+     "url": "https://espn.com"
+    }
+   ],
+   "tags": [
+    "Hockey"
+   ],
+   "ticker": "KXNHLGAME",
+   "title": "NHL Game"
+  }
+ }
+}

@@ -141,9 +141,11 @@
                              verified inline first; still short raises.
     sports_schedule  daily   04:00 America/Chicago, and 30 s after boot: every
                              league in sports_leagues (db/065) from yesterday
-                             to today + 7, upserted by (league, espn_id), only
+                             to today + its days_ahead (db/066: 14 NFL and CFB,
+                             7 the rest), upserted by (league, espn_id), only
                              rows whose content changed; also the daily ESPN
                              contract test (sports/jobs.py, docs/sports_data.md).
+                             Chains kalshi_map after every run.
     sports_live      60 s    calls ESPN only for a league with an event in play
                              or starting within 15 min (no-time golf rounds and
                              tennis every 10 min on their own day; a TBD start
@@ -151,6 +153,12 @@
                              event live past its stuck-live cap and flags it;
                              idle otherwise, with zero ESPN calls and zero
                              database reads.
+    kalshi_map       6 h     chained after sports_schedule, and 10:00, 16:00,
+                             22:00 Chicago: links each ESPN event inside the
+                             window to its Kalshi event (series -> events ->
+                             markets), writes only changed link states, never
+                             relinks; also the daily Kalshi contract test
+                             (sports/kalshi_map.py, docs/kalshi_mapping.md).
 
 Alerts go through core/push.py with deep link /settings/health.
 """
@@ -186,6 +194,7 @@ from feed import why as feed_why
 from screening import jobs as screening_jobs
 from screening import rec_jobs as screening_recs
 from sports import jobs as sports_jobs
+from sports import kalshi_map
 
 log = logging.getLogger("valemont.system")
 
@@ -654,6 +663,25 @@ def feed_ingest_job() -> None:
         _chain(SCREENING_MATCH, FEED_TECH_SUMMARIZE, FEED_SUMMARIZE, FEED_SCORE, FEED_WHY, FEED_REPO_WHY)
 
 
+#: ESPN events -> Kalshi events (db/066; sports/kalshi_map.py). Chained
+#: after every sports_schedule run, and on its own clock at 10:00, 16:00 and
+#: 22:00 Chicago: every 6 h. Never at boot on its own: the boot schedule
+#: run chains it once the schedule is fresh.
+KALSHI_MAP = SystemJob(kalshi_map.JOB, kalshi_map.INTERVAL_S,
+                       CronTrigger(hour="10,16,22", minute=0, timezone=OWNER_TZ),
+                       kalshi_map.map_job, misfire_grace=3600, run_at_boot=False)
+
+
+def sports_schedule_job() -> sports_jobs.SportsRun:
+    """The schedule pull, then the Kalshi mapping, even if a league failed
+    (its rows from earlier runs still map). A mapping failure is recorded in
+    kalshi_map's own job_health row; a schedule failure still propagates."""
+    try:
+        return sports_jobs.schedule_job()
+    finally:
+        _chain(KALSHI_MAP)
+
+
 def feed_profile_job() -> None:
     """Rebuild the profiles and rescore (skipped when built today), then the
     why-lines for whatever entered Home's top 8."""
@@ -769,10 +797,11 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
         # The sports data layer (db/065). The schedule run fills the cache the
         # live job plans from, so the live job is idle until it has run.
         SystemJob(sports_jobs.SCHEDULE_JOB, 24 * 60 * 60, CronTrigger(hour=4, minute=0, timezone=OWNER_TZ),
-                  sports_jobs.schedule_job, misfire_grace=3600, start_delay_s=30),
+                  sports_schedule_job, misfire_grace=3600, start_delay_s=30),
         SystemJob(sports_jobs.LIVE_JOB, sports_jobs.LIVE_INTERVAL_S,
                   IntervalTrigger(seconds=sports_jobs.LIVE_INTERVAL_S),
                   sports_jobs.live_job, start_delay_s=90),
+        KALSHI_MAP,
     ]
     if env.get("HEALTH_DRILL", "").strip().lower() == "true":
         log.warning("HEALTH_DRILL=true: scheduling health_drill, which always fails")

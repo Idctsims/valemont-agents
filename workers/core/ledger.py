@@ -5607,10 +5607,16 @@ class SportsLeagueRow:
     kind: str
     owner_five: bool
     sort: int
+    # db/066: the schedule pull's horizon and the league's Kalshi mapping.
+    sport: str = ""
+    days_ahead: int = 7
+    kalshi_series: str | None = None
+    kalshi_map: str = "off"
 
 
 SPORTS_LEAGUES_SQL: Final = """
-    SELECT code, espn_path, espn_params, fetch_mode, kind, owner_five, sort
+    SELECT code, espn_path, espn_params, fetch_mode, kind, owner_five, sort,
+           sport, days_ahead, kalshi_series, kalshi_map
       FROM sports_leagues WHERE active ORDER BY sort, code
 """
 
@@ -5618,15 +5624,16 @@ SPORTS_LEAGUES_SQL: Final = """
 SPORTS_EVENTS_UPSERT_SQL: Final = """
     INSERT INTO sports_events (league, kind, espn_id, parent_espn_id, event_name, session, starts_at, time_tbd,
                                home, away, participants, broadcast, national_tv, venue, status, espn_status,
-                               status_detail, period, clock, score, content_hash, is_test)
+                               status_detail, period, clock, score, neutral_site, content_hash, is_test)
     SELECT r.league, r.kind, r.espn_id, r.parent_espn_id, r.event_name, r.session, r.starts_at, r.time_tbd,
            r.home, r.away, r.participants, coalesce(r.broadcast, '{}'), r.national_tv, r.venue, r.status,
-           r.espn_status, r.status_detail, r.period, r.clock, r.score, r.content_hash, %(is_test)s
+           r.espn_status, r.status_detail, r.period, r.clock, r.score, r.neutral_site, r.content_hash, %(is_test)s
       FROM jsonb_to_recordset(%(rows)s) AS r (
                league text, kind text, espn_id text, parent_espn_id text, event_name text, session text,
                starts_at timestamptz, time_tbd boolean, home text, away text, participants jsonb,
                broadcast text[], national_tv boolean, venue text, status text, espn_status text,
-               status_detail text, period integer, clock text, score jsonb, content_hash text)
+               status_detail text, period integer, clock text, score jsonb, neutral_site boolean,
+               content_hash text)
     ON CONFLICT (league, espn_id) DO UPDATE SET
         kind = EXCLUDED.kind, parent_espn_id = EXCLUDED.parent_espn_id, event_name = EXCLUDED.event_name,
         session = EXCLUDED.session, starts_at = EXCLUDED.starts_at, time_tbd = EXCLUDED.time_tbd,
@@ -5634,7 +5641,7 @@ SPORTS_EVENTS_UPSERT_SQL: Final = """
         broadcast = EXCLUDED.broadcast, national_tv = EXCLUDED.national_tv, venue = EXCLUDED.venue,
         status = EXCLUDED.status, espn_status = EXCLUDED.espn_status, status_detail = EXCLUDED.status_detail,
         period = EXCLUDED.period, clock = EXCLUDED.clock,
-        score = coalesce(EXCLUDED.score, sports_events.score),
+        score = coalesce(EXCLUDED.score, sports_events.score), neutral_site = EXCLUDED.neutral_site,
         content_hash = EXCLUDED.content_hash, updated_at = now()
      WHERE sports_events.is_test = %(is_test)s
        -- Written only if a stored column would change: every column the SET
@@ -5644,13 +5651,13 @@ SPORTS_EVENTS_UPSERT_SQL: Final = """
             sports_events.starts_at, sports_events.time_tbd, sports_events.home, sports_events.away,
             sports_events.participants, sports_events.broadcast, sports_events.national_tv, sports_events.venue,
             sports_events.status, sports_events.espn_status, sports_events.status_detail, sports_events.period,
-            sports_events.clock, sports_events.score)
+            sports_events.clock, sports_events.score, sports_events.neutral_site)
            IS DISTINCT FROM
            (EXCLUDED.kind, EXCLUDED.parent_espn_id, EXCLUDED.event_name, EXCLUDED.session,
             EXCLUDED.starts_at, EXCLUDED.time_tbd, EXCLUDED.home, EXCLUDED.away,
             EXCLUDED.participants, EXCLUDED.broadcast, EXCLUDED.national_tv, EXCLUDED.venue,
             EXCLUDED.status, EXCLUDED.espn_status, EXCLUDED.status_detail, EXCLUDED.period,
-            EXCLUDED.clock, coalesce(EXCLUDED.score, sports_events.score))
+            EXCLUDED.clock, coalesce(EXCLUDED.score, sports_events.score), EXCLUDED.neutral_site)
     RETURNING (xmax = 0) AS inserted
 """
 
@@ -5669,8 +5676,8 @@ def sports_leagues(*, conn: psycopg.Connection | None = None) -> list[SportsLeag
     with _brief_conn(conn) as c:
         rows = c.execute(SPORTS_LEAGUES_SQL).fetchall()
     return [SportsLeagueRow(code, path, {str(k): str(v) for k, v in (params or {}).items()}, mode, kind,
-                            bool(five), int(sort))
-            for code, path, params, mode, kind, five, sort in rows]
+                            bool(five), int(sort), sport, int(days), series, kmap)
+            for code, path, params, mode, kind, five, sort, sport, days, series, kmap in rows]
 
 
 def sports_events_upsert(rows: Sequence[Mapping[str, Any]], *, is_test: bool = False,
@@ -5685,3 +5692,113 @@ def sports_events_upsert(rows: Sequence[Mapping[str, Any]], *, is_test: bool = F
                                          {"rows": Jsonb(list(rows)), "is_test": is_test}).fetchall()]
     inserted = sum(1 for f in flags if f)
     return SportsUpsert(inserted, len(flags) - inserted)
+
+
+# ---------------------------------------------------------------------------
+# Kalshi mapping (db/066; sports/kalshi_map.py, docs/kalshi_mapping.md). The
+# job reads the events inside its window (narrow columns: no names, no
+# reasons) and the alias exceptions; it writes the link columns only, in one
+# statement per kind of write, each touching only a row whose stored link
+# columns would change. A linked row is never relinked or unlinked: the
+# write skips it here, and sports_events_link_guard (db/066) refuses it in
+# the database whatever the writer.
+# ---------------------------------------------------------------------------
+
+SPORTS_TEAM_ALIASES_SQL: Final = "SELECT league, espn_code, kalshi_code FROM sports_team_aliases"
+
+#: Every row of a mapped league starting since %(since)s that is not out of
+#: scope: unlinked rows to decide, linked rows for the no-relink check and so
+#: no second row can take a linked event. Narrow: the two ESPN team codes,
+#: or the two names of a match or bout. tests_live runs this exact text.
+KALSHI_MAP_ROWS_SQL: Final = """
+    SELECT id, league, kind, session, starts_at,
+           participants->'home'->>'abbr', participants->'away'->>'abbr',
+           CASE WHEN kind IN ('match', 'bout') AND jsonb_typeof(participants) = 'array'
+                THEN (SELECT array_agg(p->>'name') FROM jsonb_array_elements(participants) p) END,
+           link_state, kalshi_event_ticker, link_conflict
+      FROM sports_events
+     WHERE is_test = %(is_test)s AND starts_at >= %(since)s AND league = ANY(%(leagues)s)
+       AND link_state IS DISTINCT FROM 'out_of_scope'
+     ORDER BY league, starts_at, id
+"""
+
+#: The decided state of each unlinked row. Written only where a link column
+#: would change, and never on a linked row. tests_live runs this exact text.
+SPORTS_LINK_WRITE_SQL: Final = """
+    UPDATE sports_events s
+       SET link_state = r.link_state, link_reason = r.link_reason, link_method = r.link_method,
+           kalshi_event_ticker = r.kalshi_event_ticker, home_away_swapped = r.home_away_swapped
+      FROM jsonb_to_recordset(%(rows)s) AS r (id bigint, link_state text, link_reason text, link_method text,
+                                              kalshi_event_ticker text, home_away_swapped boolean)
+     WHERE s.id = r.id AND s.is_test = %(is_test)s AND s.kalshi_event_ticker IS NULL
+       AND (s.link_state, s.link_reason, s.link_method, s.kalshi_event_ticker, s.home_away_swapped)
+           IS DISTINCT FROM
+           (r.link_state, r.link_reason, r.link_method, r.kalshi_event_ticker, r.home_away_swapped)
+    RETURNING s.id, s.link_state
+"""
+
+#: A linked row's flag: a different unique candidate found later. The link
+#: itself is untouched. tests_live runs this exact text.
+SPORTS_LINK_CONFLICT_SQL: Final = """
+    UPDATE sports_events s
+       SET link_conflict = r.link_conflict
+      FROM jsonb_to_recordset(%(rows)s) AS r (id bigint, link_conflict text)
+     WHERE s.id = r.id AND s.is_test = %(is_test)s AND s.kalshi_event_ticker IS NOT NULL
+       AND s.kalshi_event_ticker <> r.link_conflict
+       AND s.link_conflict IS DISTINCT FROM r.link_conflict
+    RETURNING s.id
+"""
+
+
+@dataclass(frozen=True)
+class MapRow:
+    id: int
+    league: str
+    kind: str
+    session: str | None
+    starts_at: datetime
+    home_abbr: str | None
+    away_abbr: str | None
+    names: tuple[str, ...]
+    link_state: str | None
+    ticker: str | None
+    link_conflict: str | None
+
+
+def sports_team_aliases(*, conn: psycopg.Connection | None = None) -> dict[tuple[str, str], str]:
+    """(league, ESPN code) -> Kalshi code: the exceptions; no entry = the same code."""
+    with _brief_conn(conn) as c:
+        return {(league, espn): kalshi for league, espn, kalshi in c.execute(SPORTS_TEAM_ALIASES_SQL).fetchall()}
+
+
+def kalshi_map_rows(since: datetime, leagues: Sequence[str], *, is_test: bool = False,
+                    conn: psycopg.Connection | None = None) -> list[MapRow]:
+    if not leagues:
+        return []
+    with _brief_conn(conn) as c:
+        rows = c.execute(KALSHI_MAP_ROWS_SQL, {"since": since, "leagues": list(leagues),
+                                               "is_test": is_test}).fetchall()
+    return [MapRow(int(i), league, kind, session, starts, home, away, tuple(n for n in (names or ()) if n),
+                   state, ticker, conflict)
+            for i, league, kind, session, starts, home, away, names, state, ticker, conflict in rows]
+
+
+def sports_link_write(rows: Sequence[Mapping[str, Any]], *, is_test: bool = False,
+                      conn: psycopg.Connection | None = None) -> list[tuple[int, str]]:
+    """Write each row's decided link state (one statement). Returns (id,
+    state) for every row actually written; an unchanged row is not."""
+    if not rows:
+        return []
+    with _brief_conn(conn) as c, c.transaction():
+        return [(int(i), s) for i, s in c.execute(SPORTS_LINK_WRITE_SQL,
+                                                   {"rows": Jsonb(list(rows)), "is_test": is_test}).fetchall()]
+
+
+def sports_link_conflicts(rows: Sequence[Mapping[str, Any]], *, is_test: bool = False,
+                          conn: psycopg.Connection | None = None) -> list[int]:
+    """Flag linked rows with a different unique candidate ({id, link_conflict})."""
+    if not rows:
+        return []
+    with _brief_conn(conn) as c, c.transaction():
+        return [int(r[0]) for r in c.execute(SPORTS_LINK_CONFLICT_SQL,
+                                             {"rows": Jsonb(list(rows)), "is_test": is_test}).fetchall()]

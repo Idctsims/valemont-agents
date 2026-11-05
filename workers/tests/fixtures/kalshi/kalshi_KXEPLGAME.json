@@ -1,0 +1,467 @@
+{
+ "cursor": "",
+ "events": [
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXEPLGAME-26NOV06EVECOV",
+   "exchange_index": 0,
+   "last_updated_ts": "2026-10-23T00:30:06.558172Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-08T20:00:00Z",
+     "created_time": "2026-10-23T00:29:05.560584Z",
+     "custom_strike": {
+      "soccer_team": "7abb495c-193e-4baf-b3d3-108e99eab8ed"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXEPLGAME-26NOV06EVECOV",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-11-06T23:00:00Z",
+     "expiration_time": "2026-11-08T20:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.5700",
+     "latest_expiration_time": "2026-11-08T20:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.4400",
+     "no_bid_dollars": "0.4300",
+     "no_sub_title": "Everton",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-06T23:00:00Z",
+     "open_interest_fp": "9463.61",
+     "open_time": "2026-10-23T00:33:00Z",
+     "previous_price_dollars": "0.5700",
+     "previous_yes_ask_dollars": "0.5700",
+     "previous_yes_bid_dollars": "0.5600",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Everton wins the Everton vs Coventry professional EPL soccer game originally scheduled for Nov 6, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties), then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the Everton vs Coventry professional EPL soccer game originally scheduled for Nov 6, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties). If the game ends in a tie, the market called \"Tie\" resolves to Yes. If the game is cancelled or rescheduled to over 48 hours away, the market will resolve to a fair price in accordance with the rules.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 0,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXEPLGAME-26NOV06EVECOV-EVE",
+     "title": "Everton wins",
+     "updated_time": "2026-10-23T00:33:00.586615Z",
+     "volume_24h_fp": "5194.63",
+     "volume_fp": "11202.43",
+     "yes_ask_dollars": "0.5700",
+     "yes_ask_size_fp": "74773.84",
+     "yes_bid_dollars": "0.5600",
+     "yes_bid_size_fp": "499.37",
+     "yes_sub_title": "Everton"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-08T20:00:00Z",
+     "created_time": "2026-10-23T00:29:05.560584Z",
+     "custom_strike": {
+      "soccer_team": "6fe2874c-1926-4182-b52c-c223bf8b4c2c"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXEPLGAME-26NOV06EVECOV",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-11-06T23:00:00Z",
+     "expiration_time": "2026-11-08T20:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.2000",
+     "latest_expiration_time": "2026-11-08T20:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.8100",
+     "no_bid_dollars": "0.8000",
+     "no_sub_title": "Coventry",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-06T23:00:00Z",
+     "open_interest_fp": "1316.76",
+     "open_time": "2026-10-23T00:33:00Z",
+     "previous_price_dollars": "0.2000",
+     "previous_yes_ask_dollars": "0.2000",
+     "previous_yes_bid_dollars": "0.1900",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Coventry wins the Everton vs Coventry professional EPL soccer game originally scheduled for Nov 6, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties), then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the Everton vs Coventry professional EPL soccer game originally scheduled for Nov 6, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties). If the game ends in a tie, the market called \"Tie\" resolves to Yes. If the game is cancelled or rescheduled to over 48 hours away, the market will resolve to a fair price in accordance with the rules.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 0,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXEPLGAME-26NOV06EVECOV-COV",
+     "title": "Coventry wins",
+     "updated_time": "2026-10-23T00:33:00.586615Z",
+     "volume_24h_fp": "190.94",
+     "volume_fp": "2060.47",
+     "yes_ask_dollars": "0.2000",
+     "yes_ask_size_fp": "27512.67",
+     "yes_bid_dollars": "0.1900",
+     "yes_bid_size_fp": "9057.28",
+     "yes_sub_title": "Coventry"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-08T20:00:00Z",
+     "created_time": "2026-10-23T00:29:05.560584Z",
+     "custom_strike": {
+      "soccer_team": "111193d4-9b1f-4bd8-ab7c-9de252737f05"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXEPLGAME-26NOV06EVECOV",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-11-06T23:00:00Z",
+     "expiration_time": "2026-11-08T20:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.2400",
+     "latest_expiration_time": "2026-11-08T20:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.7700",
+     "no_bid_dollars": "0.7500",
+     "no_sub_title": "Tie",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-06T23:00:00Z",
+     "open_interest_fp": "709.31",
+     "open_time": "2026-10-23T00:33:00Z",
+     "previous_price_dollars": "0.2500",
+     "previous_yes_ask_dollars": "0.2500",
+     "previous_yes_bid_dollars": "0.2300",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Tie is the result of the Everton vs Coventry professional EPL soccer game originally scheduled for Nov 6, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties), then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the Everton vs Coventry professional EPL soccer game originally scheduled for Nov 6, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties). If the game ends in a tie, the market called \"Tie\" resolves to Yes. If the game is cancelled or rescheduled to over 48 hours away, the market will resolve to a fair price in accordance with the rules.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 0,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXEPLGAME-26NOV06EVECOV-TIE",
+     "title": "Tie is the result",
+     "updated_time": "2026-10-23T00:33:00.586615Z",
+     "volume_24h_fp": "116.34",
+     "volume_fp": "861.32",
+     "yes_ask_dollars": "0.2500",
+     "yes_ask_size_fp": "55780.04",
+     "yes_bid_dollars": "0.2300",
+     "yes_bid_size_fp": "15821.85",
+     "yes_sub_title": "Tie"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "EPL",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXEPLGAME",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "EVE vs COV (Nov 6)",
+   "title": "Everton vs Coventry"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXEPLGAME-26NOV07LEETOT",
+   "exchange_index": 0,
+   "last_updated_ts": "2026-10-24T00:30:54.752078Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-09T12:30:00Z",
+     "created_time": "2026-10-24T00:28:34.955428Z",
+     "custom_strike": {
+      "soccer_team": "98aa1226-ef50-4226-9216-33a1096b597f"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXEPLGAME-26NOV07LEETOT",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-11-07T15:30:00Z",
+     "expiration_time": "2026-11-09T12:30:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.3700",
+     "latest_expiration_time": "2026-11-09T12:30:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.6500",
+     "no_bid_dollars": "0.6400",
+     "no_sub_title": "Leeds United",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-07T15:30:00Z",
+     "open_interest_fp": "3398.28",
+     "open_time": "2026-10-24T00:34:00Z",
+     "previous_price_dollars": "0.3700",
+     "previous_yes_ask_dollars": "0.3700",
+     "previous_yes_bid_dollars": "0.3600",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Leeds United wins the Leeds United vs Tottenham professional EPL soccer game originally scheduled for Nov 7, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties), then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the Leeds United vs Tottenham professional EPL soccer game originally scheduled for Nov 7, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties). If the game ends in a tie, the market called \"Tie\" resolves to Yes. If the game is cancelled or rescheduled to over 48 hours away, the market will resolve to a fair price in accordance with the rules.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 0,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXEPLGAME-26NOV07LEETOT-LEE",
+     "title": "Leeds United wins",
+     "updated_time": "2026-10-24T00:34:00.628324Z",
+     "volume_24h_fp": "1342.87",
+     "volume_fp": "5349.49",
+     "yes_ask_dollars": "0.3600",
+     "yes_ask_size_fp": "124.00",
+     "yes_bid_dollars": "0.3500",
+     "yes_bid_size_fp": "26781.14",
+     "yes_sub_title": "Leeds United"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-09T12:30:00Z",
+     "created_time": "2026-10-24T00:28:34.955428Z",
+     "custom_strike": {
+      "soccer_team": "95c3aaf8-3f26-4129-b67c-c99562cb3dc9"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXEPLGAME-26NOV07LEETOT",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-11-07T15:30:00Z",
+     "expiration_time": "2026-11-09T12:30:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.3600",
+     "latest_expiration_time": "2026-11-09T12:30:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.6500",
+     "no_bid_dollars": "0.6400",
+     "no_sub_title": "Tottenham",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-07T15:30:00Z",
+     "open_interest_fp": "33368.71",
+     "open_time": "2026-10-24T00:34:00Z",
+     "previous_price_dollars": "0.3600",
+     "previous_yes_ask_dollars": "0.3600",
+     "previous_yes_bid_dollars": "0.3500",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Tottenham wins the Leeds United vs Tottenham professional EPL soccer game originally scheduled for Nov 7, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties), then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the Leeds United vs Tottenham professional EPL soccer game originally scheduled for Nov 7, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties). If the game ends in a tie, the market called \"Tie\" resolves to Yes. If the game is cancelled or rescheduled to over 48 hours away, the market will resolve to a fair price in accordance with the rules.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 0,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXEPLGAME-26NOV07LEETOT-TOT",
+     "title": "Tottenham wins",
+     "updated_time": "2026-10-24T00:34:00.628324Z",
+     "volume_24h_fp": "18472.06",
+     "volume_fp": "34766.47",
+     "yes_ask_dollars": "0.3600",
+     "yes_ask_size_fp": "76192.54",
+     "yes_bid_dollars": "0.3500",
+     "yes_bid_size_fp": "14718.92",
+     "yes_sub_title": "Tottenham"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-09T12:30:00Z",
+     "created_time": "2026-10-24T00:28:34.955428Z",
+     "custom_strike": {
+      "soccer_team": "111193d4-9b1f-4bd8-ab7c-9de252737f05"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXEPLGAME-26NOV07LEETOT",
+     "exchange_index": 0,
+     "expected_expiration_time": "2026-11-07T15:30:00Z",
+     "expiration_time": "2026-11-09T12:30:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.2900",
+     "latest_expiration_time": "2026-11-09T12:30:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.7200",
+     "no_bid_dollars": "0.7100",
+     "no_sub_title": "Tie",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-07T15:30:00Z",
+     "open_interest_fp": "947.99",
+     "open_time": "2026-10-24T00:34:00Z",
+     "previous_price_dollars": "0.2900",
+     "previous_yes_ask_dollars": "0.2900",
+     "previous_yes_bid_dollars": "0.2800",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Tie is the result of the Leeds United vs Tottenham professional EPL soccer game originally scheduled for Nov 7, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties), then the market resolves to Yes.",
+     "rules_secondary": "The following market refers to the Leeds United vs Tottenham professional EPL soccer game originally scheduled for Nov 7, 2026 after 90 minutes plus stoppage time (does not include extra time or penalties). If the game ends in a tie, the market called \"Tie\" resolves to Yes. If the game is cancelled or rescheduled to over 48 hours away, the market will resolve to a fair price in accordance with the rules.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the Governing League. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 0,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXEPLGAME-26NOV07LEETOT-TIE",
+     "title": "Tie is the result",
+     "updated_time": "2026-10-24T00:34:00.628324Z",
+     "volume_24h_fp": "440.65",
+     "volume_fp": "1140.64",
+     "yes_ask_dollars": "0.2900",
+     "yes_ask_size_fp": "33216.34",
+     "yes_bid_dollars": "0.2800",
+     "yes_bid_size_fp": "14925.78",
+     "yes_sub_title": "Tie"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "EPL",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXEPLGAME",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com/"
+    },
+    {
+     "name": "Fox Sports",
+     "url": "https://www.foxsports.com/"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "LEE vs TOT (Nov 7)",
+   "title": "Leeds United vs Tottenham"
+  }
+ ],
+ "milestones": [
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "6fe2874c-1926-4182-b52c-c223bf8b4c2c",
+    "coverage": {},
+    "home_team_id": "7abb495c-193e-4baf-b3d3-108e99eab8ed",
+    "is_ko": false,
+    "league": "EPL",
+    "main_game_event_ticker": "KXEPLGAME-26NOV06EVECOV",
+    "status": "not_started",
+    "tie_id": "111193d4-9b1f-4bd8-ab7c-9de252737f05"
+   },
+   "id": "80ec1895-72b3-50c7-9ae4-b708c0cca1d8",
+   "last_updated_ts": "2026-11-04T20:02:49.240572Z",
+   "notification_message": "The game is about to begin.",
+   "primary_event_tickers": [
+    "KXEPLGAME-26NOV06EVECOV",
+    "KXEPLSPREAD-26NOV06EVECOV",
+    "KXEPLTOTAL-26NOV06EVECOV",
+    "KXEPLBTTS-26NOV06EVECOV",
+    "KXEPL1H-26NOV06EVECOV",
+    "KXEPL1HSPREAD-26NOV06EVECOV",
+    "KXEPL1HTOTAL-26NOV06EVECOV",
+    "KXEPL1HBTTS-26NOV06EVECOV",
+    "KXEPL2H-26NOV06EVECOV",
+    "KXEPL2HSPREAD-26NOV06EVECOV",
+    "KXEPL2HTOTAL-26NOV06EVECOV",
+    "KXEPL2HBTTS-26NOV06EVECOV",
+    "KXEPLTEAMTOTAL-26NOV06EVECOV"
+   ],
+   "related_event_tickers": [
+    "KXEPLGAME-26NOV06EVECOV",
+    "KXEPLSPREAD-26NOV06EVECOV",
+    "KXEPLTOTAL-26NOV06EVECOV",
+    "KXEPLBTTS-26NOV06EVECOV",
+    "KXEPLTCORNERS-26NOV06EVECOV",
+    "KXEPLCORNERS-26NOV06EVECOV",
+    "KXEPLSCORE-26NOV06EVECOV",
+    "KXEPL1HSCORE-26NOV06EVECOV",
+    "KXEPL1H-26NOV06EVECOV",
+    "KXEPL1HSPREAD-26NOV06EVECOV",
+    "KXEPL1HTOTAL-26NOV06EVECOV",
+    "KXEPL1HBTTS-26NOV06EVECOV",
+    "KXEPL2H-26NOV06EVECOV",
+    "KXEPL2HSPREAD-26NOV06EVECOV",
+    "KXEPL2HTOTAL-26NOV06EVECOV",
+    "KXEPL2HBTTS-26NOV06EVECOV",
+    "KXEPLTEAMTOTAL-26NOV06EVECOV"
+   ],
+   "source_ids": {
+    "source_2_id": "2026110779435FC7"
+   },
+   "start_date": "2026-11-06T20:00:00Z",
+   "title": "Everton vs Coventry",
+   "type": "soccer_tournament_multi_leg"
+  },
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "95c3aaf8-3f26-4129-b67c-c99562cb3dc9",
+    "coverage": {},
+    "home_team_id": "98aa1226-ef50-4226-9216-33a1096b597f",
+    "is_ko": false,
+    "league": "EPL",
+    "main_game_event_ticker": "KXEPLGAME-26NOV07LEETOT",
+    "status": "not_started",
+    "tie_id": "111193d4-9b1f-4bd8-ab7c-9de252737f05"
+   },
+   "id": "379f219d-43dc-5750-b10f-7875ec895c43",
+   "last_updated_ts": "2026-11-04T13:01:06.544076Z",
+   "notification_message": "The game is about to begin.",
+   "primary_event_tickers": [
+    "KXEPLGAME-26NOV07LEETOT",
+    "KXEPLSPREAD-26NOV07LEETOT",
+    "KXEPLTOTAL-26NOV07LEETOT",
+    "KXEPLBTTS-26NOV07LEETOT"
+   ],
+   "related_event_tickers": [
+    "KXEPLGAME-26NOV07LEETOT",
+    "KXEPLSPREAD-26NOV07LEETOT",
+    "KXEPLTOTAL-26NOV07LEETOT",
+    "KXEPLBTTS-26NOV07LEETOT",
+    "KXEPLTCORNERS-26NOV07LEETOT",
+    "KXEPLCORNERS-26NOV07LEETOT"
+   ],
+   "source_ids": {
+    "source_2_id": "20261107C6A9BA44"
+   },
+   "start_date": "2026-11-07T12:30:00Z",
+   "title": "Leeds United vs Tottenham",
+   "type": "soccer_tournament_multi_leg"
+  }
+ ]
+}

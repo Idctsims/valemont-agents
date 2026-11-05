@@ -1,0 +1,1019 @@
+{
+ "cursor": "",
+ "events": [
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXNCAAMBGAME-26NOV06MICHCONN",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-03T02:19:29.412203Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-09T01:00:00Z",
+     "created_time": "2026-11-03T02:17:37.780944Z",
+     "custom_strike": {
+      "basketball_team": "8f7b8ef0-6325-4ca2-828b-97ddb568f42b"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV06MICHCONN",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-07T04:00:00Z",
+     "expiration_time": "2026-11-09T01:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.7100",
+     "latest_expiration_time": "2026-11-09T01:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.3000",
+     "no_bid_dollars": "0.2800",
+     "no_sub_title": "UConn",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-07T04:00:00Z",
+     "open_interest_fp": "1227.19",
+     "open_time": "2026-11-03T02:18:00Z",
+     "previous_price_dollars": "0.7000",
+     "previous_yes_ask_dollars": "0.7000",
+     "previous_yes_bid_dollars": "0.6700",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If UConn wins the Michigan vs UConn men's college basketball game originally scheduled for Nov 6, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV06MICHCONN-CONN",
+     "title": "UConn wins",
+     "updated_time": "2026-11-03T02:18:00.324745Z",
+     "volume_24h_fp": "1076.51",
+     "volume_fp": "1324.39",
+     "yes_ask_dollars": "0.7200",
+     "yes_ask_size_fp": "3174.33",
+     "yes_bid_dollars": "0.7000",
+     "yes_bid_size_fp": "15.00",
+     "yes_sub_title": "UConn"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-09T01:00:00Z",
+     "created_time": "2026-11-03T02:17:37.780944Z",
+     "custom_strike": {
+      "basketball_team": "5de6200f-c507-4bab-915b-be8955635cf5"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV06MICHCONN",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-07T04:00:00Z",
+     "expiration_time": "2026-11-09T01:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.3000",
+     "latest_expiration_time": "2026-11-09T01:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.7100",
+     "no_bid_dollars": "0.7000",
+     "no_sub_title": "Michigan",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-07T04:00:00Z",
+     "open_interest_fp": "644.09",
+     "open_time": "2026-11-03T02:18:00Z",
+     "previous_price_dollars": "0.3300",
+     "previous_yes_ask_dollars": "0.3300",
+     "previous_yes_bid_dollars": "0.3000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Michigan wins the Michigan vs UConn men's college basketball game originally scheduled for Nov 6, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV06MICHCONN-MICH",
+     "title": "Michigan wins",
+     "updated_time": "2026-11-03T02:18:00.324745Z",
+     "volume_24h_fp": "396.79",
+     "volume_fp": "659.21",
+     "yes_ask_dollars": "0.3000",
+     "yes_ask_size_fp": "25.56",
+     "yes_bid_dollars": "0.2900",
+     "yes_bid_size_fp": "100.00",
+     "yes_sub_title": "Michigan"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "College Basketball (M)",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXNCAAMBGAME",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/basketball-men/d1"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "MICH vs CONN (Nov 6)",
+   "title": "Michigan vs UConn"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXNCAAMBGAME-26NOV06PORTUTA",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-03T05:06:13.930584Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-09T02:30:00Z",
+     "created_time": "2026-11-03T05:04:59.280375Z",
+     "custom_strike": {
+      "basketball_team": "9ab41e99-43d0-40e1-b07d-8171de96af29"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV06PORTUTA",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-07T05:30:00Z",
+     "expiration_time": "2026-11-09T02:30:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.0000",
+     "latest_expiration_time": "2026-11-09T02:30:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.6100",
+     "no_bid_dollars": "0.5700",
+     "no_sub_title": "UT Arlington",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-07T05:30:00Z",
+     "open_interest_fp": "0.00",
+     "open_time": "2026-11-03T05:07:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.5700",
+     "previous_yes_bid_dollars": "0.3800",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If UT Arlington wins the Portland vs UT Arlington men's college basketball game originally scheduled for Nov 6, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV06PORTUTA-UTA",
+     "title": "UT Arlington wins",
+     "updated_time": "2026-11-03T05:07:00.262477Z",
+     "volume_24h_fp": "0.00",
+     "volume_fp": "0.00",
+     "yes_ask_dollars": "0.4300",
+     "yes_ask_size_fp": "7.00",
+     "yes_bid_dollars": "0.3900",
+     "yes_bid_size_fp": "3.00",
+     "yes_sub_title": "UT Arlington"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-09T02:30:00Z",
+     "created_time": "2026-11-03T05:04:59.280375Z",
+     "custom_strike": {
+      "basketball_team": "2ed54e84-20fd-4fd6-a7c5-fec04c7b1986"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV06PORTUTA",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-07T05:30:00Z",
+     "expiration_time": "2026-11-09T02:30:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.6000",
+     "latest_expiration_time": "2026-11-09T02:30:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.4300",
+     "no_bid_dollars": "0.3900",
+     "no_sub_title": "Portland",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-07T05:30:00Z",
+     "open_interest_fp": "2.62",
+     "open_time": "2026-11-03T05:07:00Z",
+     "previous_price_dollars": "0.6100",
+     "previous_yes_ask_dollars": "0.6200",
+     "previous_yes_bid_dollars": "0.4300",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Portland wins the Portland vs UT Arlington men's college basketball game originally scheduled for Nov 6, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV06PORTUTA-PORT",
+     "title": "Portland wins",
+     "updated_time": "2026-11-03T05:07:00.262477Z",
+     "volume_24h_fp": "1.62",
+     "volume_fp": "2.62",
+     "yes_ask_dollars": "0.6100",
+     "yes_ask_size_fp": "8.00",
+     "yes_bid_dollars": "0.5700",
+     "yes_bid_size_fp": "7.00",
+     "yes_sub_title": "Portland"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "College Basketball (M)",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXNCAAMBGAME",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/basketball-men/d1"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "PORT vs UTA (Nov 6)",
+   "title": "Portland vs UT Arlington"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXNCAAMBGAME-26NOV06MIZZSLU",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-03T02:14:22.452544Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-09T00:00:00Z",
+     "created_time": "2026-11-03T02:12:19.309575Z",
+     "custom_strike": {
+      "basketball_team": "dccafa18-01ae-43ff-b6e1-8749c192f52a"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV06MIZZSLU",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-07T03:00:00Z",
+     "expiration_time": "2026-11-09T00:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.3200",
+     "latest_expiration_time": "2026-11-09T00:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.6700",
+     "no_bid_dollars": "0.6100",
+     "no_sub_title": "Saint Louis",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-07T03:00:00Z",
+     "open_interest_fp": "226.89",
+     "open_time": "2026-11-03T02:13:00Z",
+     "previous_price_dollars": "0.4800",
+     "previous_yes_ask_dollars": "0.4700",
+     "previous_yes_bid_dollars": "0.3800",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Saint Louis wins the Missouri vs Saint Louis men's college basketball game originally scheduled for Nov 6, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV06MIZZSLU-SLU",
+     "title": "Saint Louis wins",
+     "updated_time": "2026-11-03T02:13:00.273231Z",
+     "volume_24h_fp": "264.09",
+     "volume_fp": "354.09",
+     "yes_ask_dollars": "0.3900",
+     "yes_ask_size_fp": "3.00",
+     "yes_bid_dollars": "0.3300",
+     "yes_bid_size_fp": "4.00",
+     "yes_sub_title": "Saint Louis"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-09T00:00:00Z",
+     "created_time": "2026-11-03T02:12:19.309575Z",
+     "custom_strike": {
+      "basketball_team": "5268f705-6f12-4155-bb26-69adaf8ac1bd"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV06MIZZSLU",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-07T03:00:00Z",
+     "expiration_time": "2026-11-09T00:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.6400",
+     "latest_expiration_time": "2026-11-09T00:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.3900",
+     "no_bid_dollars": "0.3300",
+     "no_sub_title": "Missouri",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-07T03:00:00Z",
+     "open_interest_fp": "623.86",
+     "open_time": "2026-11-03T02:13:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.6200",
+     "previous_yes_bid_dollars": "0.5300",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Missouri wins the Missouri vs Saint Louis men's college basketball game originally scheduled for Nov 6, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV06MIZZSLU-MIZZ",
+     "title": "Missouri wins",
+     "updated_time": "2026-11-03T02:13:00.273231Z",
+     "volume_24h_fp": "644.35",
+     "volume_fp": "644.35",
+     "yes_ask_dollars": "0.6700",
+     "yes_ask_size_fp": "3.00",
+     "yes_bid_dollars": "0.6100",
+     "yes_bid_size_fp": "4.09",
+     "yes_sub_title": "Missouri"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "College Basketball (M)",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXNCAAMBGAME",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/basketball-men/d1"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "MIZZ vs SLU (Nov 6)",
+   "title": "Missouri vs Saint Louis"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXNCAAMBGAME-26NOV05MASSLMRMK",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-02T02:24:40.450675Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-08T00:00:00Z",
+     "created_time": "2026-11-02T02:22:44.035708Z",
+     "custom_strike": {
+      "basketball_team": "61e23a9c-7688-48c8-8d08-c4c77e625117"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV05MASSLMRMK",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-06T03:00:00Z",
+     "expiration_time": "2026-11-08T00:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.0000",
+     "latest_expiration_time": "2026-11-08T00:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.2700",
+     "no_bid_dollars": "0.2600",
+     "no_sub_title": "Merrimack",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-06T03:00:00Z",
+     "open_interest_fp": "0.00",
+     "open_time": "2026-11-02T02:23:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.8200",
+     "previous_yes_bid_dollars": "0.7300",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Merrimack wins the UMass Lowell vs Merrimack men's college basketball game originally scheduled for Nov 5, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV05MASSLMRMK-MRMK",
+     "title": "Merrimack wins",
+     "updated_time": "2026-11-02T02:23:00.867214Z",
+     "volume_24h_fp": "0.00",
+     "volume_fp": "0.00",
+     "yes_ask_dollars": "0.7400",
+     "yes_ask_size_fp": "3.00",
+     "yes_bid_dollars": "0.7300",
+     "yes_bid_size_fp": "10.00",
+     "yes_sub_title": "Merrimack"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-08T00:00:00Z",
+     "created_time": "2026-11-02T02:22:44.035708Z",
+     "custom_strike": {
+      "basketball_team": "4409ec0f-fab2-4674-8404-694f73f6936a"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV05MASSLMRMK",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-06T03:00:00Z",
+     "expiration_time": "2026-11-08T00:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.3100",
+     "latest_expiration_time": "2026-11-08T00:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.7600",
+     "no_bid_dollars": "0.7400",
+     "no_sub_title": "UMass Lowell",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-06T03:00:00Z",
+     "open_interest_fp": "8.88",
+     "open_time": "2026-11-02T02:23:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.2700",
+     "previous_yes_bid_dollars": "0.1800",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If UMass Lowell wins the UMass Lowell vs Merrimack men's college basketball game originally scheduled for Nov 5, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV05MASSLMRMK-MASSL",
+     "title": "UMass Lowell wins",
+     "updated_time": "2026-11-02T02:23:00.867214Z",
+     "volume_24h_fp": "8.88",
+     "volume_fp": "8.88",
+     "yes_ask_dollars": "0.2600",
+     "yes_ask_size_fp": "10.00",
+     "yes_bid_dollars": "0.2400",
+     "yes_bid_size_fp": "25.00",
+     "yes_sub_title": "UMass Lowell"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "College Basketball (M)",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXNCAAMBGAME",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/basketball-men/d1"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "MASSL vs MRMK (Nov 5)",
+   "title": "UMass Lowell vs Merrimack"
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXNCAAMBGAME-26NOV08BUTBSU",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-04T20:06:37.501021Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-10T19:00:00Z",
+     "created_time": "2026-11-04T20:04:56.392545Z",
+     "custom_strike": {
+      "basketball_team": "e3adca8c-02c2-4557-84e0-c3270897fa1c"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV08BUTBSU",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-08T22:00:00Z",
+     "expiration_time": "2026-11-10T19:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.0000",
+     "latest_expiration_time": "2026-11-10T19:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.4200",
+     "no_bid_dollars": "0.2500",
+     "no_sub_title": "Boise St.",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-08T22:00:00Z",
+     "open_interest_fp": "0.00",
+     "open_time": "2026-11-04T20:07:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.0000",
+     "previous_yes_bid_dollars": "0.0000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Boise St. wins the Butler vs Boise St. men's college basketball game originally scheduled for Nov 8, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV08BUTBSU-BSU",
+     "title": "Boise St. wins",
+     "updated_time": "2026-11-04T20:07:00.339667Z",
+     "volume_24h_fp": "0.00",
+     "volume_fp": "0.00",
+     "yes_ask_dollars": "0.7500",
+     "yes_ask_size_fp": "3.00",
+     "yes_bid_dollars": "0.5800",
+     "yes_bid_size_fp": "3.00",
+     "yes_sub_title": "Boise St."
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-10T19:00:00Z",
+     "created_time": "2026-11-04T20:04:56.392545Z",
+     "custom_strike": {
+      "basketball_team": "f015b759-da5b-47b5-a4a5-2168e3085b41"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV08BUTBSU",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-08T22:00:00Z",
+     "expiration_time": "2026-11-10T19:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.0000",
+     "latest_expiration_time": "2026-11-10T19:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.7600",
+     "no_bid_dollars": "0.5900",
+     "no_sub_title": "Butler",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-08T22:00:00Z",
+     "open_interest_fp": "0.00",
+     "open_time": "2026-11-04T20:07:00Z",
+     "previous_price_dollars": "0.0000",
+     "previous_yes_ask_dollars": "0.0000",
+     "previous_yes_bid_dollars": "0.0000",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Butler wins the Butler vs Boise St. men's college basketball game originally scheduled for Nov 8, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV08BUTBSU-BUT",
+     "title": "Butler wins",
+     "updated_time": "2026-11-04T20:07:00.339667Z",
+     "volume_24h_fp": "0.00",
+     "volume_fp": "0.00",
+     "yes_ask_dollars": "0.4100",
+     "yes_ask_size_fp": "3.00",
+     "yes_bid_dollars": "0.2400",
+     "yes_bid_size_fp": "3.00",
+     "yes_sub_title": "Butler"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "College Basketball (M)",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXNCAAMBGAME",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/basketball-men/d1"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "BUT vs BSU (Nov 8)",
+   "title": "Butler vs Boise St."
+  },
+  {
+   "category": "Sports",
+   "collateral_return_type": "MECNET",
+   "event_ticker": "KXNCAAMBGAME-26NOV04FDUBUT",
+   "exchange_index": 3,
+   "last_updated_ts": "2026-11-01T01:07:57.740075Z",
+   "markets": [
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-07T00:00:00Z",
+     "created_time": "2026-11-01T01:05:31.583442Z",
+     "custom_strike": {
+      "basketball_team": "f015b759-da5b-47b5-a4a5-2168e3085b41"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV04FDUBUT",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-05T03:00:00Z",
+     "expiration_time": "2026-11-07T00:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.9900",
+     "latest_expiration_time": "2026-11-07T00:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "0.0100",
+     "no_bid_dollars": "0.0000",
+     "no_sub_title": "Butler",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-05T03:00:00Z",
+     "open_interest_fp": "61077.58",
+     "open_time": "2026-11-01T01:07:00Z",
+     "previous_price_dollars": "0.9900",
+     "previous_yes_ask_dollars": "0.9900",
+     "previous_yes_bid_dollars": "0.9800",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If Butler wins the FDU vs Butler men's college basketball game originally scheduled for Nov 4, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV04FDUBUT-BUT",
+     "title": "Butler wins",
+     "updated_time": "2026-11-01T01:07:00.802969Z",
+     "volume_24h_fp": "61474.13",
+     "volume_fp": "61543.52",
+     "yes_ask_dollars": "1.0000",
+     "yes_ask_size_fp": "0.00",
+     "yes_bid_dollars": "0.9900",
+     "yes_bid_size_fp": "129318.20",
+     "yes_sub_title": "Butler"
+    },
+    {
+     "can_close_early": true,
+     "close_time": "2026-11-07T00:00:00Z",
+     "created_time": "2026-11-01T01:05:31.583442Z",
+     "custom_strike": {
+      "basketball_team": "a1073465-c1be-4136-93cb-4c3678a74fa8"
+     },
+     "early_close_condition": "This market will close and expire after a winner is declared.",
+     "event_ticker": "KXNCAAMBGAME-26NOV04FDUBUT",
+     "exchange_index": 3,
+     "expected_expiration_time": "2026-11-05T03:00:00Z",
+     "expiration_time": "2026-11-07T00:00:00Z",
+     "expiration_value": "",
+     "last_price_dollars": "0.0100",
+     "latest_expiration_time": "2026-11-07T00:00:00Z",
+     "market_type": "binary",
+     "no_ask_dollars": "1.0000",
+     "no_bid_dollars": "0.9900",
+     "no_sub_title": "FDU",
+     "notional_value_dollars": "1.0000",
+     "occurrence_datetime": "2026-11-05T03:00:00Z",
+     "open_interest_fp": "146874.76",
+     "open_time": "2026-11-01T01:07:00Z",
+     "previous_price_dollars": "0.0200",
+     "previous_yes_ask_dollars": "0.0200",
+     "previous_yes_bid_dollars": "0.0100",
+     "price_level_structure": "linear_cent",
+     "price_ranges": [
+      {
+       "end": "1.0000",
+       "start": "0.0000",
+       "step": "0.0100"
+      }
+     ],
+     "result": "",
+     "rules_primary": "If FDU wins the FDU vs Butler men's college basketball game originally scheduled for Nov 4, 2026, then the market resolves to Yes.",
+     "rules_secondary": "If the game is postponed but begins within 48 hours of its originally scheduled start time, the market will remain open and resolve based on the official final result. If the game is cancelled or not started within 48 hours of its originally scheduled start, both markets will resolve to a fair price.\n\nKalshi is not affiliated, associated, authorized, endorsed by, or in any way officially connected with the NCAA. All trademarks, logos, and brand names are the property of their respective owners.",
+     "settlement_bounds_type": "default",
+     "settlement_timer_seconds": 45,
+     "status": "active",
+     "strike_type": "structured",
+     "ticker": "KXNCAAMBGAME-26NOV04FDUBUT-FDU",
+     "title": "FDU wins",
+     "updated_time": "2026-11-01T01:07:00.802969Z",
+     "volume_24h_fp": "143401.48",
+     "volume_fp": "148612.17",
+     "yes_ask_dollars": "0.0100",
+     "yes_ask_size_fp": "240366.47",
+     "yes_bid_dollars": "0.0000",
+     "yes_bid_size_fp": "0.00",
+     "yes_sub_title": "FDU"
+    }
+   ],
+   "mutually_exclusive": true,
+   "product_metadata": {
+    "competition": "College Basketball (M)",
+    "competition_scope": "Game"
+   },
+   "series_ticker": "KXNCAAMBGAME",
+   "settlement_sources": [
+    {
+     "name": "ESPN",
+     "url": "https://www.espn.com"
+    },
+    {
+     "name": "Kalshi using information originating from the NCAA",
+     "url": "https://www.ncaa.com/sports/basketball-men/d1"
+    }
+   ],
+   "strike_period": "",
+   "sub_title": "FDU vs BUT (Nov 4)",
+   "title": "FDU vs Butler"
+  }
+ ],
+ "milestones": [
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "5268f705-6f12-4155-bb26-69adaf8ac1bd",
+    "broadcasts": [
+     {
+      "name": "ESPNU",
+      "scope": "national"
+     }
+    ],
+    "home_team_id": "dccafa18-01ae-43ff-b6e1-8749c192f52a",
+    "league": "NCAAMB",
+    "main_game_event_ticker": "KXNCAAMBGAME-26NOV06MIZZSLU",
+    "player_id_mapping": {},
+    "source": "statsperform",
+    "source_id": "3006524",
+    "status": "scheduled"
+   },
+   "id": "ace54641-9cd6-5384-944b-f61357c4b57f",
+   "last_updated_ts": "2026-11-05T01:31:33.845191Z",
+   "notification_message": "The game is about to begin!",
+   "primary_event_tickers": [
+    "KXNCAAMBGAME-26NOV06MIZZSLU"
+   ],
+   "related_event_tickers": [
+    "KXNCAAMBGAME-26NOV06MIZZSLU",
+    "KXNCAAMB1H-26NOV06MIZZSLU"
+   ],
+   "source_ids": {
+    "source_1_id": "3006524",
+    "source_2_id": "20261107736C0947"
+   },
+   "start_date": "2026-11-07T00:00:00Z",
+   "title": "Missouri at Saint Louis",
+   "type": "basketball_game"
+  },
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "5de6200f-c507-4bab-915b-be8955635cf5",
+    "broadcasts": [
+     {
+      "name": "TNT",
+      "scope": "national"
+     },
+     {
+      "name": "truTV",
+      "scope": "national"
+     },
+     {
+      "name": "HBO Max",
+      "scope": "national"
+     }
+    ],
+    "home_team_id": "8f7b8ef0-6325-4ca2-828b-97ddb568f42b",
+    "league": "NCAAMB",
+    "main_game_event_ticker": "KXNCAAMBGAME-26NOV06MICHCONN",
+    "player_id_mapping": {},
+    "source": "statsperform",
+    "source_id": "2997907",
+    "status": "scheduled"
+   },
+   "id": "0fe9fec8-d918-573b-b112-80280f4acf01",
+   "last_updated_ts": "2026-11-05T01:31:45.937683Z",
+   "notification_message": "The game is about to begin!",
+   "primary_event_tickers": [
+    "KXNCAAMBGAME-26NOV06MICHCONN"
+   ],
+   "related_event_tickers": [
+    "KXNCAAMBGAME-26NOV06MICHCONN",
+    "KXNCAAMB1H-26NOV06MICHCONN",
+    "KXNCAAMB2H-26NOV06MICHCONN",
+    "KXNCAAMBOT-26NOV06MICHCONN"
+   ],
+   "source_ids": {
+    "source_1_id": "2997907"
+   },
+   "start_date": "2026-11-07T01:00:00Z",
+   "title": "Michigan at UConn",
+   "type": "basketball_game"
+  },
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "f015b759-da5b-47b5-a4a5-2168e3085b41",
+    "broadcasts": [
+     {
+      "name": "USA Network",
+      "scope": "national"
+     }
+    ],
+    "home_team_id": "e3adca8c-02c2-4557-84e0-c3270897fa1c",
+    "league": "NCAAMB",
+    "main_game_event_ticker": "KXNCAAMBGAME-26NOV08BUTBSU",
+    "player_id_mapping": {},
+    "source": "statsperform",
+    "source_id": "3006316",
+    "status": "scheduled"
+   },
+   "id": "d1383a23-7660-5805-a022-e90b6724e812",
+   "last_updated_ts": "2026-11-05T01:32:24.167903Z",
+   "notification_message": "The game is about to begin!",
+   "primary_event_tickers": [
+    "KXNCAAMBGAME-26NOV08BUTBSU"
+   ],
+   "related_event_tickers": [
+    "KXNCAAMBGAME-26NOV08BUTBSU"
+   ],
+   "source_ids": {
+    "source_1_id": "3006316",
+    "source_2_id": "202611084222A8A3"
+   },
+   "start_date": "2026-11-08T19:00:00Z",
+   "title": "Butler at Boise St.",
+   "type": "basketball_game"
+  },
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "a1073465-c1be-4136-93cb-4c3678a74fa8",
+    "broadcasts": [
+     {
+      "name": "ESPN+",
+      "scope": "national"
+     }
+    ],
+    "home_team_id": "f015b759-da5b-47b5-a4a5-2168e3085b41",
+    "league": "NCAAMB",
+    "main_game_event_ticker": "KXNCAAMBGAME-26NOV04FDUBUT",
+    "player_id_mapping": {},
+    "source": "statsperform",
+    "source_id": "3006315",
+    "status": "in_progress"
+   },
+   "id": "474bf423-cd16-5116-a7ab-2c14a1cd77ff",
+   "last_updated_ts": "2026-11-05T01:31:03.523936Z",
+   "notification_message": "The game is about to begin!",
+   "primary_event_tickers": [
+    "KXNCAAMBGAME-26NOV04FDUBUT",
+    "KXNCAAMBSPREAD-26NOV04FDUBUT",
+    "KXNCAAMBTOTAL-26NOV04FDUBUT"
+   ],
+   "related_event_tickers": [
+    "KXNCAAMBGAME-26NOV04FDUBUT",
+    "KXNCAAMBSPREAD-26NOV04FDUBUT",
+    "KXNCAAMBTOTAL-26NOV04FDUBUT",
+    "KXNCAAMB1H-26NOV04FDUBUT"
+   ],
+   "source_ids": {
+    "source_1_id": "3006315",
+    "source_6_id": "18330772"
+   },
+   "start_date": "2026-11-05T00:00:00Z",
+   "title": "FDU at Butler",
+   "type": "basketball_game"
+  },
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "2ed54e84-20fd-4fd6-a7c5-fec04c7b1986",
+    "home_team_id": "9ab41e99-43d0-40e1-b07d-8171de96af29",
+    "league": "NCAAMB",
+    "main_game_event_ticker": "KXNCAAMBGAME-26NOV06PORTUTA",
+    "player_id_mapping": {},
+    "source": "statsperform",
+    "source_id": "3037082",
+    "status": "scheduled"
+   },
+   "id": "3ce3325a-4c0f-51f0-9004-c794fff710df",
+   "last_updated_ts": "2026-11-05T01:31:55.180406Z",
+   "notification_message": "The game is about to begin!",
+   "primary_event_tickers": [
+    "KXNCAAMBGAME-26NOV06PORTUTA"
+   ],
+   "related_event_tickers": [
+    "KXNCAAMBGAME-26NOV06PORTUTA"
+   ],
+   "source_ids": {
+    "source_1_id": "3037082",
+    "source_2_id": "20261107D16AB661"
+   },
+   "start_date": "2026-11-07T02:30:00Z",
+   "title": "Portland at UT Arlington",
+   "type": "basketball_game"
+  },
+  {
+   "category": "Sports",
+   "details": {
+    "away_team_id": "4409ec0f-fab2-4674-8404-694f73f6936a",
+    "broadcasts": [
+     {
+      "name": "ESPN+",
+      "scope": "national"
+     }
+    ],
+    "home_team_id": "61e23a9c-7688-48c8-8d08-c4c77e625117",
+    "league": "NCAAMB",
+    "main_game_event_ticker": "KXNCAAMBGAME-26NOV05MASSLMRMK",
+    "player_id_mapping": {},
+    "source": "statsperform",
+    "source_id": "3020206",
+    "status": "scheduled"
+   },
+   "id": "123f1526-5010-530a-bf4f-6f909b5e43ac",
+   "last_updated_ts": "2026-11-05T01:31:14.662723Z",
+   "notification_message": "The game is about to begin!",
+   "primary_event_tickers": [
+    "KXNCAAMBGAME-26NOV05MASSLMRMK"
+   ],
+   "related_event_tickers": [
+    "KXNCAAMBGAME-26NOV05MASSLMRMK"
+   ],
+   "source_ids": {
+    "source_1_id": "3020206",
+    "source_2_id": "20261106B2DB9770"
+   },
+   "start_date": "2026-11-06T00:00:00Z",
+   "title": "UMass Lowell at Merrimack",
+   "type": "basketball_game"
+  }
+ ]
+}

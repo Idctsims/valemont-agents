@@ -2,7 +2,8 @@
 docs/sports_data.md §5).
 
     sports_schedule  daily 04:00 America/Chicago, and at boot: every active
-                     league from yesterday to today + 7 (Eastern dates), one
+                     league from yesterday to today + its days_ahead (db/066:
+                     14 for NFL and CFB, 7 for the rest; Eastern dates), one
                      call per date for a team league, one range call for the
                      others. It is also the daily contract test: every
                      response is validated, an empty day included. Fills the
@@ -73,7 +74,8 @@ DONE = frozenset({"final", "postponed", "canceled", "suspended"})
 
 
 def league_of(row: ledger.SportsLeagueRow) -> League:
-    return League(row.code, row.espn_path, dict(row.espn_params), row.fetch_mode, row.kind, row.owner_five, row.sort)
+    return League(row.code, row.espn_path, dict(row.espn_params), row.fetch_mode, row.kind, row.owner_five, row.sort,
+                  row.days_ahead)
 
 
 def eastern_day(t: datetime) -> date:
@@ -308,9 +310,11 @@ def _finish(run: SportsRun, provider: Provider) -> None:
                                 + f" ({run.job_note})")
 
 
-def schedule_window(now: datetime) -> list[date]:
+def schedule_window(now: datetime, days_ahead: int = DAYS_AHEAD) -> list[date]:
+    """Yesterday through today + days_ahead (the league's, db/066: 14 for NFL
+    and CFB, whose Kalshi games list up to ~12 days out; 7 for the rest)."""
     today = now.astimezone(OWNER_TZ).date()
-    return [today + timedelta(days=d) for d in range(-DAYS_BACK, DAYS_AHEAD + 1)]
+    return [today + timedelta(days=d) for d in range(-DAYS_BACK, days_ahead + 1)]
 
 
 def schedule_job(*, provider: Provider | None = None, env: Mapping[str, str] = os.environ,
@@ -324,12 +328,12 @@ def schedule_job(*, provider: Provider | None = None, env: Mapping[str, str] = o
     registry.update({lg.code: lg for lg in leagues})
     p = provider or provider_from_env(env)
     run = SportsRun()
-    days = schedule_window(now())
+    t = now()
     try:
         def store(lg: League, events: list[SportsEvent]) -> None:
             cache.replace_league(lg.code, _write(run, events, cache), now())
 
-        _fetch_each(p, {lg.code: (lg, days) for lg in leagues}, run, store)
+        _fetch_each(p, {lg.code: (lg, schedule_window(t, lg.days_ahead)) for lg in leagues}, run, store)
         # A league no longer in the registry leaves the cache with it.
         for k in [k for k in cache.events if k[0] not in registry]:
             del cache.events[k]
