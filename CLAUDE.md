@@ -460,6 +460,15 @@ each in phases with a "done when" checklist). It supersedes the former steps
   - the first real Monday quiz, Mon Nov 9;
   - the Undo fix re-run, the 390 px From-line check, worker RSS at rest;
   - **#77 deployed** (merge `4b9c47d` 18:38:41 UTC; the worker's boot runs 18:39:06 UTC). **#78's pins live on the worker: pending until it deploys.**
+- **Chat 7, Phase 1** (ESPN adapter, `sports_events`, `sports_schedule` and `sports_live`; `docs/sports_data.md`) ✓ **GREEN 2026-11-04 (owner).** PR #79 (merge `6b73d87`) and PR #80, the live cache fix (merge `89bbf12`, 20:26:06 UTC Nov 4; gate `tests/` 1238 OK, full `tests_live -v` metered 483 OK, 0 skipped, ~2.79 MB); db/065 applied. Evidence (read via db_inspect and the job notes, sampled every 60 s):
+  - **One game end to end:** PHI at DET (nba 401909922) scheduled 20:00:26 UTC; live first written 00:13:39 UTC (Q1 11:55, 0–0, at the real tip); every change written in its minute through end Q1 00:41, halftime 01:27, Q3 01:42, end Q3 02:11; final 02:57:45 UTC (PHI 112–106), not polled after.
+  - **0 unchanged writes:** 380 live runs after the fix, every row sent was written (the 81 tennis re-sends at 20:01 were before it).
+  - **ESPN at peak:** ~214 calls an hour (00 UTC; 01 UTC 212), ~3.4 MB over the wire; off-peak 60–174.
+  - **Supabase reads:** ~0 KB a live run, ~12 KB a schedule run.
+  - **RAM: new baseline ~155 MB at rest** (owner): 148–158 MB from 21:00 to 02:40 UTC with one 161 MB heartbeat; 151 MB at 03:29 UTC, past the 6 h mark: flat, under ~160, closed. Busiest-job peak 160 MB.
+  - **The 60-day ceiling on the seen-rows map** (whatever its status; the settled-and-14-days prune is the normal path): **owner-accepted.**
+  - **Watch items:** golf's live `score` (position and thru for Scheffler and Koepka) on PGA round 1, Thu Nov 5 (fixture-verified only so far); the F1 sprint shape at the first sprint weekend (an unknown session type fails loud).
+  - **Phase 2 merge waits on:** Railway Hobby funded, and the owner's db/066 fixes.
 - **Next, by the sequence change (owner, 2026-11-02), now that Chat 5 is closed:** Chat 7 (sports data layer, Game Day), then Chat 8 (betting; **Railway Hobby funded first**), then Chat 9 (slips, manual entry, live tracker: it needs Chat 8's consensus engine and generated bets), then Chats 10–12 (crypto). Chat 6 (Lookbook) moves last, before Chat 13. In short: 7 → 8 → 9 → 10–12 → 6 → 13. MASTER_PLAN §6.
 
 Reason for deploying at step 4 and not at the end: "works locally, dies
@@ -1163,7 +1172,7 @@ absent row as "I never looked."
     - Why: Nov 4's fresh batch refused 20 of 36 references as "invalid" and the reasons were only logged (`docs/arsenal.md` §11.8).
 
     **Verified via db_inspect the same session (~08:07 UTC):** (a) the log row; (b) the CHECK names `status = 'collected'`; (c) the column is jsonb and `valemont_readonly` can select it; (d) 0 rows carry refusals (no collect since).
-  - **`db/065_sports_events.sql` applied 2026-11-04 19:30:12 UTC** (`migration_log`; the first paste; owner's paste, reported "db/065 pasted"; the self-test NOTICE was not reported here; the log row exists only if the self-test passed). Branch `chat7-phase1`, Chat 7 Phase 1 (`docs/sports_data.md`).
+  - **`db/065_sports_events.sql` applied 2026-11-04 19:30:12 UTC** (`migration_log`; the first paste; owner's paste, reported "db/065 pasted"; **the self-test NOTICE was not seen (owner saw only "Success"); the log row is present**, and it exists only if the self-test passed). Branch `chat7-phase1`, Chat 7 Phase 1 (`docs/sports_data.md`).
     - `sports_leagues`: the registry (14 leagues; the owner's five cfb, nfl, nba, f1, pga first; `fetch_mode` per_day for team sports, whose date ranges ESPN refuses).
     - `sports_events`: UNIQUE (league, espn_id); (league, kind) must match the registry; a test row is exactly an `e2e-` id; indexes for today by league and live now. The worker upserts in place, never touching `kalshi_event_ticker` (Phase 2).
     - `add_test_sports_event` (verified e2e marker); `ctx_sports_today`, provider `sports_today` (sort 46), not a brief section.
