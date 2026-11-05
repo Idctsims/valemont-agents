@@ -173,7 +173,7 @@ test.describe("navigation registry", () => {
     );
   });
 
-  test("only built pages render: today, Home, Goals, News, Morning brief, Wags, Ventures HQ, Capital Tracker, The Arsenal, Screening Room, Tech Hub and Sports News", () => {
+  test("only built pages render: today, Home, Goals, News, Morning brief, Wags, Ventures HQ, Capital Tracker, The Arsenal, Screening Room, Tech Hub, Sports News and Game Day", () => {
     expect(builtGroups()).toEqual([
       {
         key: "command",
@@ -193,8 +193,9 @@ test.describe("navigation registry", () => {
                                                  { label: "Screening Room", href: "/screening" }] },
       // Chat 4 Phase 1.
       { key: "tech", name: "Tech", pages: [{ label: "Tech Hub", href: "/tech" }] },
-      // Chat 3 Phase 3.
-      { key: "sports", name: "Sports", pages: [{ label: "Sports News", href: "/sports" }] },
+      // Chat 3 Phase 3 (Sports News); Chat 7 Phase 3 (Game Day).
+      { key: "sports", name: "Sports", pages: [{ label: "Sports News", href: "/sports" },
+                                               { label: "Game Day", href: "/gameday" }] },
     ]);
     const unbuilt = NAV.flatMap((g) => g.pillars.filter((p) => !p.built).map((p) => p.href));
     const shown = builtGroups().flatMap((g) => g.pages.map((p) => p.href));

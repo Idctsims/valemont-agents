@@ -72,7 +72,8 @@ export const NAV: NavGroup[] = [
     name: "Sports",
     pillars: [
       { n: 9, name: "Sports News", built: true, href: "/sports" },
-      { n: 10, name: "Game Day", built: false, href: "/game-day" },
+      // Built in Chat 7 Phase 3 (db/068); the owner named the route /gameday.
+      { n: 10, name: "Game Day", built: true, href: "/gameday" },
       { n: 11, name: "Betting", built: false, href: "/betting" },
       { n: 12, name: "Live Bet Tracker", built: false, href: "/live-tracker" },
     ],

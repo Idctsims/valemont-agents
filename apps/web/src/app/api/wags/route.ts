@@ -5,6 +5,7 @@ import { checkBudget, recordUsage, type BudgetCheck } from "@/lib/ai/budget";
 import { mockAllowed } from "@/lib/ai/policy";
 import { costUsd, CHEAPEST_MODEL, WAGS_MODEL, type Usage } from "@/lib/ai/pricing";
 import { requireOwner } from "@/lib/auth";
+import { annotateSportsContext } from "@/lib/gameday/services";
 import { createClient } from "@/lib/supabase/server";
 import { forModel, loadThread, ventureNames } from "@/lib/wags/history";
 import { proposalLineTransform } from "@/lib/wags/proposals";
@@ -135,7 +136,11 @@ export async function POST(req: Request) {
   }
 
   const [{ messages: history }, names] = await Promise.all([loadThread(supabase, threadId), ventureNames(supabase)]);
-  const context = Object.fromEntries(Object.entries(payload).filter(([k]) => !(CLOCK_KEYS as readonly string[]).includes(k)));
+  // Game Day's services map (lib/gameday/services.ts) marks which games stream
+  // on the owner's services, so "where can I watch X" is answered from it.
+  const context = annotateSportsContext(
+    Object.fromEntries(Object.entries(payload).filter(([k]) => !(CLOCK_KEYS as readonly string[]).includes(k))),
+  );
   const system: SystemModelMessage[] = [
     { role: "system", content: PERSONA },
     {
