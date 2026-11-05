@@ -11,7 +11,7 @@ Oct 7, 2026 · @Terrell Sims · **Updated Nov 4, 2026: Chat 5 (the Arsenal) clos
 | Chat 3 — Learning engine, Home feed, Sports News | **Done.** Phases 1–3 green; carried items in §6 | Oct 13, 2026 |
 | Chat 4 — Tech Hub and Screening Room | Phases 1–2 green; Phases 3–4 open on their readings (§6) | — |
 | Chat 5 — The Arsenal | **Done.** Phases 1–3 closed; verifier work stopped by the owner; carried items in §6 | Nov 4, 2026 |
-| Chat 7 — Sports data layer and Game Day | **Next**, by the Nov 2 sequence change (§6) | — |
+| Chat 7 — Sports data layer and Game Day | **In progress**: Phase 1 GREEN 2026-11-04 (owner); Phase 2 waits on Hobby and db/066 (§6) | — |
 | Chats 6, 8–13 | Not started | — |
 
 What changed from this plan during Chats 1 and 2 is recorded where it applies, marked **(as built)**. The repo's `CLAUDE.md` Current State holds the full detail: commits, test counts, drill timelines.
@@ -447,8 +447,17 @@ In short: 7 → 8 → 9 → 10–12 → 6 (Lookbook) → 13.
 **Set up in this chat:** nothing new; ESPN needs no key. API-Sports free key only if the fallback is needed.
 
 1. ESPN adapter with schema checks, API-Sports fallback, `sports_events`, mapping to Kalshi event tickers.
-   - [ ] Tonight's games across your five sports show times, channels and matchups
+   - [x] Tonight's games across your five sports show times, channels and matchups (in `sports_events`; the page is item 2)
    - [ ] Every NFL and NBA game links to its Kalshi event
+
+**Phase 1 (ESPN adapter, `sports_events`): GREEN 2026-11-04 (owner).** PRs #79 (merge `6b73d87`) and #80 (merge `89bbf12`); db/065 (NOTICE not seen, owner saw only "Success"; log row present). Evidence, read via db_inspect and the 60 s job notes:
+- PHI at DET (nba 401909922): scheduled 20:00:26 UTC → live 00:13:39 UTC at the tip → every change written within its minute (end Q1 00:41, halftime 01:27, Q3 01:42, end Q3 02:11) → final 02:57:45 UTC, 112–106.
+- 0 unchanged writes over 380 live runs after the cache fix.
+- ESPN ~214 calls an hour at peak (00 UTC), ~3.4 MB over the wire; Supabase ~0 KB a live run, ~12 KB a schedule run.
+- RAM: new baseline ~155 MB at rest (148–158 MB 21:00–02:40 UTC, one 161 MB heartbeat; 151 MB at 03:29 UTC past 6 h, flat): closed.
+- The seen-rows map's 60-day ceiling: owner-accepted.
+- Watch: golf live `score` on PGA round 1 (Thu Nov 5); the F1 sprint shape at the first sprint weekend.
+- Phase 2 (Kalshi mapping, db/066) merges only after Railway Hobby is funded and the owner's db/066 fixes.
 2. Game Day page and tonight's slate in the Morning Brief.
    - [ ] Tapping a game opens its detail page (bets attach in Chat 9)
 
