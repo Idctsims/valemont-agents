@@ -409,8 +409,11 @@ def parse_golf(lg: League, events: Sequence[Any]) -> list[SportsEvent]:
             raise EspnShapeError(lg.code, f"{p}.competitions", "empty")
         cp = f"{p}.competitions[0]"
         c = comps[0]
-        competitors = _list(c, "competitors", lg.code, cp)
         st = read_status(c, lg.code, cp)
+        # A future tournament has no "competitors" key until its field is set
+        # (seen 2026-11-05); once play starts the field is required.
+        competitors = (opt(c, "competitors", list, lg.code, cp) or [] if st.state == "pre"
+                       else _list(c, "competitors", lg.code, cp))
         names, national = broadcasts(c, lg.code, cp)
         venue = venue_name(c, "venue", lg.code, cp)
         current = st.period or 0
