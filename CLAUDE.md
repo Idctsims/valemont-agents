@@ -1199,6 +1199,10 @@ absent row as "I never looked."
     - (i) 0 relinks, 0 link states, 0 tickers, 0 neutral flags, 965 events.
     - The three pasted function bodies hash identically (md5) to the file's.
     - The deployed Phase 1 worker kept writing after the paste: 9 rows by 04:11:28 UTC; `sports_live` ok, 0 failures.
+    - **Merge gate on `chat7-phase2`** (rebased onto `90866df`) **after the paste:**
+      - `tests/` 1314 OK.
+      - Full `tests_live -v`, every connection metered: **493 OK, 0 skipped**, ~2.83 MB read (2,968,418 bytes, 1,140 s).
+      - The first run had 1 error. A Phase 1 test wrote a bare `kalshi_event_ticker`, which db/066's `sports_events_linked_has_ticker` refuses by design. The test now writes a whole link.
     - Next new file: `db/067`.
   - **Rule (owner, 2026-10-12): the migration record updates in the same session a migration is verified, never deferred to a merge.** Record `applied_at` from `migration_log` and the verification, and move "Next new file" here and in MASTER_PLAN §"Migration numbering", in their own commit.
 - **Known intermittent `tests_live` skip (identified 2026-10-12):** `test_system_jobs_sql.SystemJobsSql.test_claim_retry_and_finish` skips with "another poller claimed the test job first" when the production worker's 10 s `job_queue` poller claims the test's `noop` job first (observed 2 of 60 isolated runs). By design (skip, not fail); not a broken invariant. Two sibling tests in the same file skip the same way ("another poller claimed/failed the test job first"). Since 2026-10-13 `tests_live` runs with `-v`, so a skip is named, not assumed.

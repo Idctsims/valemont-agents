@@ -119,8 +119,9 @@ class Upsert(SportsSqlCase):
         with _rolled_back() as conn:
             a = _row(status="live", score={"home": 3, "away": 0})
             self.upsert(conn, a)
-            conn.execute("UPDATE sports_events SET kalshi_event_ticker = 'KXNFLGAME-TL' "
-                         "WHERE league = 'nfl' AND espn_id = %s", (a["espn_id"],))
+            # A whole link, as db/066's CHECKs require (a bare ticker is refused).
+            conn.execute("UPDATE sports_events SET kalshi_event_ticker = 'KXNFLGAME-TL', link_state = 'linked', "
+                         "link_method = 'team_pair' WHERE league = 'nfl' AND espn_id = %s", (a["espn_id"],))
             self.upsert(conn, dict(a, status="final", espn_status="STATUS_FINAL", score=None,
                                    content_hash=uuid.uuid4().hex))
             self.assertEqual(self.read(conn, a["espn_id"]), ("final", {"home": 3, "away": 0}, "KXNFLGAME-TL"))
