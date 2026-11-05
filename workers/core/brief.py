@@ -10,7 +10,9 @@ THE SECTION CONTRACT (read this before adding a pillar)
     otherwise and a NULL section is left out), screening_brief (db/053: one
     line, today's releases on the shelves and the top For you pick; NULL
     when there is neither), arsenal_brief (db/054: one line, today's Power
-    Word and the strongest reference with its room; NULL before the drop).
+    Word and the strongest reference with its room; NULL before the drop),
+    sports_brief (db/068 Game Day: tonight's slate, at most 5 lines already
+    worded by gameday_brief(); NULL on a dead night).
     A later chat that
     ships a pillar adds its provider function and registry row in its own
     migration and sets brief_section = true; its section appears in the next
@@ -285,10 +287,24 @@ def generate_ai(payload: Mapping[str, Any], sections: Sequence[ledger.BriefSecti
                 s["lines"] = s["lines"][:1]
             if s["key"] in DATA_LINE_SECTIONS:
                 s["lines"] = FALLBACK_SECTIONS[s["key"]](payload, str(payload.get("local_date"))) or s["lines"]
+        body = fit_data_lines(body)
         body = fill_missing(body, payload, sections)
         usage_id, model = recorded[-1] if recorded else (None, MODEL)
         return Generated(body, model, usage_id, False, word_count(body))
     raise BriefInvalid(f"invalid twice: {last_error}")
+
+
+def fit_data_lines(body: dict[str, Any]) -> dict[str, Any]:
+    """The data lines replace the model's AFTER validation, so they can push a
+    valid brief past MAX_WORDS (Game Day's slate is up to 5 lines). Trim the
+    data sections' last lines, the longest section first, never below one
+    line, until the brief fits."""
+    while word_count(body) > MAX_WORDS:
+        data = [s for s in body["sections"] if s["key"] in DATA_LINE_SECTIONS and len(s["lines"]) > 1]
+        if not data:
+            break
+        max(data, key=lambda s: len(s["lines"]))["lines"].pop()
+    return body
 
 
 def fill_missing(body: dict[str, Any], payload: Mapping[str, Any],
@@ -459,6 +475,15 @@ def _arsenal_lines(t: Mapping[str, Any]) -> list[str]:
     return [" ".join(parts)] if parts else []
 
 
+def _sports_lines(t: Mapping[str, Any]) -> list[str]:
+    """Tonight's slate (db/068 gameday_brief): at most 5 lines, worded by the
+    database from the rows (Alabama first when they play, then the owner's
+    five's national-TV games, NFL first on a Sunday; an F1 weekend's
+    sessions; a golf day's leader and followed players). Used as given, in
+    the AI brief too (DATA_LINE_SECTIONS): the model must not pick games."""
+    return [str(x) for x in (t.get("lines") or []) if isinstance(x, str) and x.strip()][:5]
+
+
 ARSENAL_ROOM_PHRASES = {"boardroom": "for the boardroom", "pitch": "for the pitch",
                         "negotiation": "for the negotiation", "homies": "with the homies"}
 
@@ -471,7 +496,7 @@ ONE_LINE_SECTIONS = frozenset({"tech_brief", "screening_brief", "arsenal_brief"}
 #: Sections whose line is always the data template, in the AI brief too: the
 #: model once wrote "Power word: asymmetric. … Test every move today against
 #: it." (brief 1018), dropping the reference and adding an exhortation.
-DATA_LINE_SECTIONS = frozenset({"arsenal_brief"})
+DATA_LINE_SECTIONS = frozenset({"arsenal_brief", "sports_brief"})
 
 #: How the fallback words each section it knows. A later pillar adds one.
 FALLBACK_SECTIONS: dict[str, Callable[[Mapping[str, Any], str], list[str]]] = {
@@ -482,6 +507,7 @@ FALLBACK_SECTIONS: dict[str, Callable[[Mapping[str, Any], str], list[str]]] = {
     "tech_brief": lambda p, _today: _tech_lines(p.get("tech_brief") or {}),
     "screening_brief": lambda p, _today: _screening_lines(p.get("screening_brief") or {}),
     "arsenal_brief": lambda p, _today: _arsenal_lines(p.get("arsenal_brief") or {}),
+    "sports_brief": lambda p, _today: _sports_lines(p.get("sports_brief") or {}),
 }
 
 

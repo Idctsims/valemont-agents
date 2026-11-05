@@ -249,6 +249,15 @@
   padding-right: max(1rem, env(safe-area-inset-right, 0px));
 }
 
+/* Game Day (Chat 7 Phase 3): a team and its score on one line; a
+   leaderboard row (position, name, to par). */
+@utility grid-score {
+  grid-template-columns: 1fr auto;
+}
+@utility grid-board {
+  grid-template-columns: 3rem 1fr auto;
+}
+
 /* Shell geometry. */
 @utility w-rail {
   width: var(--vm-rail-width);
