@@ -179,6 +179,7 @@ test.describe("tiers (the twin of db/068 sports_tv_tier)", () => {
     expect(tvTier(["SEC Network"])).toBe(2);
     expect(tvTier(["truTV"])).toBe(2);
     expect(tvTier(["Golf Chnl"])).toBe(2);
+    for (const name of ["TBS", "FS2", "NHL Net", "NHL Network", "ESPNEWS"]) expect(tvTier([name]), name).toBe(2);
     expect(tvTier(["ESPN+"])).toBe(3);
     expect(tvTier(["Prime Video"])).toBe(3);
     expect(tvTier(["MNMT"])).toBe(3);

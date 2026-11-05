@@ -9,6 +9,8 @@ export const BROADCAST_NETWORKS = ["ABC", "CBS", "NBC", "FOX"] as const;
 export const NATIONAL_CABLE = [
   "ESPN", "ESPN2", "ESPNU", "FS1", "SEC NETWORK", "BTN", "ACC NETWORK", "CBSSN", "CW", "USA NET", "TNT", "TRUTV",
   "NFL NET", "NBA TV", "GOLF CHNL",
+  // Added by the owner, 2026-11-05. ESPN stores NHL Network as NHL Net; both spellings count.
+  "TBS", "FS2", "NHL NET", "NHL NETWORK", "ESPNEWS",
 ] as const;
 
 export type TvTier = 1 | 2 | 3 | 4;

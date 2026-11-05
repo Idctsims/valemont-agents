@@ -39,7 +39,9 @@ written, NOT pasted. Not merged** (owner's gate: Phase 2's 22:00 UTC
    since no stored row says which poll it is.
 8. **National-TV tiers** (approved Nov 5): 1 broadcast (ABC, CBS, NBC, FOX)
    > 2 national cable (ESPN, ESPN2, ESPNU, FS1, SEC Network, BTN, ACC
-   Network, CBSSN, CW, USA Net, TNT, truTV, NFL Net, NBA TV, Golf Chnl) > 3
+   Network, CBSSN, CW, USA Net, TNT, truTV, NFL Net, NBA TV, Golf Chnl;
+   plus TBS, FS2, NHL Network (stored by ESPN as "NHL Net"; both spellings)
+   and ESPNEWS, added by the owner on Nov 5) > 3
    anything else (streaming-only and regional) > 4 none.
 
 ## 2. Step 0 findings (2026-11-05, read only)
@@ -213,5 +215,3 @@ only, never on db/068).
   TBD, the gold mark; Alabama on top; a live score updating; the detail
   page; the next Morning Brief's slate; Wags' "what's on tonight?"; the
   screenshot gate.
-- TBS, FS2, NHL Net and ESPNEWS are not in the tier lists (the owner
-  approved the list as proposed); add them if they show up.

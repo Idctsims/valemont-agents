@@ -96,7 +96,8 @@ AS $$
         WHEN EXISTS (SELECT 1 FROM unnest(p_broadcast) b
                       WHERE upper(btrim(b)) IN ('ESPN', 'ESPN2', 'ESPNU', 'FS1', 'SEC NETWORK', 'BTN',
                                                 'ACC NETWORK', 'CBSSN', 'CW', 'USA NET', 'TNT', 'TRUTV',
-                                                'NFL NET', 'NBA TV', 'GOLF CHNL')) THEN 2
+                                                'NFL NET', 'NBA TV', 'GOLF CHNL', 'TBS', 'FS2', 'NHL NET',
+                                                'NHL NETWORK', 'ESPNEWS')) THEN 2
         ELSE 3
     END;
 $$;
@@ -641,6 +642,9 @@ BEGIN
         IF public.sports_tv_tier(ARRAY['ABC']) <> 1 OR public.sports_tv_tier(ARRAY['Fox']) <> 1
            OR public.sports_tv_tier(ARRAY['ESPN+', 'CBS']) <> 1
            OR public.sports_tv_tier(ARRAY['SEC Network']) <> 2 OR public.sports_tv_tier(ARRAY['truTV']) <> 2
+           OR public.sports_tv_tier(ARRAY['TBS']) <> 2 OR public.sports_tv_tier(ARRAY['FS2']) <> 2
+           OR public.sports_tv_tier(ARRAY['NHL Net']) <> 2 OR public.sports_tv_tier(ARRAY['NHL Network']) <> 2
+           OR public.sports_tv_tier(ARRAY['ESPNEWS']) <> 2
            OR public.sports_tv_tier(ARRAY['ESPN+']) <> 3 OR public.sports_tv_tier(ARRAY['MNMT']) <> 3
            OR public.sports_tv_tier(ARRAY[]::text[]) <> 4 OR public.sports_tv_tier(NULL) <> 4 THEN
             RAISE EXCEPTION 'SELFTEST FAILED: sports_tv_tier';
