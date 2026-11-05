@@ -9,8 +9,8 @@ check a link rate any time after.
     narrow columns, every result metered (core/egress.result_bytes). Before
     the paste the link columns do not exist and every row reads as never
     evaluated; after it, the stored state is used, as the job would.
-  * Registry and aliases: read from db/066's marked blocks (KALSHI REGISTRY,
-    ALIASES), so the run tests exactly the seed under review.
+  * Registry: db/066's KALSHI REGISTRY block. Aliases: the ALIASES block of
+    every migration that has one (db/066's seed, db/067's sweep row, ...).
   * Kalshi: public, the read-only client, series -> events -> markets.
 
 Prints per league linked / not_listed / not_linked / out_of_scope with every
@@ -78,6 +78,24 @@ def migration_seed(path: Path = MIGRATION) -> tuple[dict[str, tuple[str, str, in
     return reg, aliases
 
 
+def migration_aliases(db_dir: Path = REPO_ROOT / "db") -> list[tuple[str, str, str, str]]:
+    """Every alias any migration adds: the ALIASES block of each numbered
+    file that has one, in file order (db/066's seed, then db/067's sweep row,
+    ...). What production holds once every file is pasted. Raises on a tuple
+    of the wrong arity, as migration_seed does."""
+    out: list[tuple[str, str, str, str]] = []
+    for path in sorted(db_dir.glob("[0-9][0-9][0-9]_*.sql")):
+        sql = path.read_text(encoding="utf-8")
+        if "-- ALIASES BEGIN" not in sql:
+            continue
+        for t in _values(sql, "ALIASES"):
+            if len(t) != 4:
+                raise ValueError(f"{path.name}: alias tuple with {len(t)} values: {t}")
+            league, espn, kalshi, note = (str(_lit(x)) for x in t)
+            out.append((league, espn, kalshi, note))
+    return out
+
+
 ROWS_PRE_066 = """
     SELECT id, league, kind, session, starts_at,
            participants->'home'->>'abbr', participants->'away'->>'abbr',
@@ -96,7 +114,8 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     t0 = time.monotonic()
     now = datetime.now(timezone.utc)
-    reg, alias_rows = migration_seed()
+    reg, _ = migration_seed()
+    alias_rows = migration_aliases()
     aliases = {(lg, e): k for lg, e, k, _ in alias_rows}
     kb = Counter()
     with psycopg.connect(readonly_url()) as conn:

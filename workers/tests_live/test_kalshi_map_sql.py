@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 import psycopg
 
 from core import ledger
-from scripts.kalshi_map_dry_run import migration_seed
+from scripts.kalshi_map_dry_run import migration_aliases, migration_seed
 from tests_live.test_feed_rank_sql import _rolled_back
 from tests_live.test_sports_events_sql import SportsSqlCase, _row
 
@@ -58,7 +58,8 @@ class MapSqlCase(SportsSqlCase):
 
 class Objects(MapSqlCase):
     def test_aliases_registry_columns_triggers_index(self) -> None:
-        reg, aliases = migration_seed()
+        reg, _ = migration_seed()
+        aliases = migration_aliases()  # every migration's block: db/066's seed, db/067, ...
         with _rolled_back() as conn:
             row = conn.execute(
                 "SELECT relrowsecurity, (SELECT count(*) FROM pg_policies p WHERE p.tablename = c.relname), "
