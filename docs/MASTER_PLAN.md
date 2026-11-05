@@ -457,13 +457,14 @@ In short: 7 → 8 → 9 → 10–12 → 6 (Lookbook) → 13.
 - RAM: new baseline ~155 MB at rest (148–158 MB 21:00–02:40 UTC, one 161 MB heartbeat; 151 MB at 03:29 UTC past 6 h, flat): closed.
 - The seen-rows map's 60-day ceiling: owner-accepted.
 - Watch: golf live `score` on PGA round 1 (Thu Nov 5); the F1 sprint shape at the first sprint weekend.
-- PGA R1, Nov 5: leaders parse on production (Chris Kirk, 1, thru 18, −9); `followed` `[]` correctly (neither golfer in the field), so that check stays pending. The same day `sports_schedule` began failing PGA on future tournaments with no field yet: PR #84, open.
+- PGA R1, Nov 5: leaders parse on production (Chris Kirk, 1, thru 18, −9); `followed` `[]` correctly (neither golfer in the field), so that check stays pending. The same day `sports_schedule` began failing PGA on future tournaments with no field yet. PR #84 fixed it (merge `1db01e7`); the boot run passed at 20:16:05 UTC, and "Recovered" was pushed.
 
 **Phase 2 (Kalshi mapping, db/066): merged and deployed 2026-11-05, readings pending.** Hobby funded (owner, Nov 5). PR #83 merge `d174095` (20:03:28 UTC); worker boot 20:03:58 UTC with `kalshi_map` registered. Read via db_inspect and the Railway log:
 - First run (20:04:29–20:05:17 UTC): 802 sent and written, 0 conflicts, 0 relinks; contract 14/14; 33 Kalshi calls (4 × 429), 48.4 s, ~97 KB read, RSS 102 MB (peak 106).
 - Every NFL (29) and NBA (25) game inside Kalshi's listed window linked; each not_listed starts after the series' latest listed event (NFL 1, NBA 28). NFL and CFB rows reach 14 days (Nov 20).
 - Every not_linked carries its reason. USC at Indiana (cfb) is an alias gap (`IU → IND` exists for mcbb, not cfb; Kalshi `KXNCAAFGAME-26NOV14USCIND`): a db/067 row, the owner's call. Detail: CLAUDE.md, Chat 7 Phase 2.
-- Pending: 0 writes without a change (needs the second run), and RSS at rest past 6 h.
+- After #84's reboot: sent 333 (a restart re-sends every non-linked row), and the database wrote only the 4 that changed. No 429 has failed a run.
+- Pending: sent = changed at the 22:00 UTC run; RSS at rest past 6 h from #84's boot (20:15:25 UTC).
 2. Game Day page and tonight's slate in the Morning Brief.
    - [ ] Tapping a game opens its detail page (bets attach in Chat 9)
 
