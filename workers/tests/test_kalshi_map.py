@@ -23,7 +23,7 @@ from typing import Any
 from unittest import mock
 
 from core import ledger
-from scripts.kalshi_map_dry_run import migration_seed
+from scripts.kalshi_map_dry_run import migration_aliases, migration_seed
 from sports import espn, jobs, kalshi_map as km
 from sports.espn import EspnShapeError, League
 from venues.kalshi.client import KalshiClient
@@ -595,6 +595,24 @@ class Migration066(unittest.TestCase):
             self.assertRegex(kalshi, r"^[A-Z0-9]{1,12}$")
             self.assertNotEqual(espn_code.upper(), kalshi)
             self.assertTrue(note)
+
+    def test_every_migrations_aliases_together_keep_the_table_rules(self) -> None:
+        # db/066's seed plus every later ALIASES block (db/067: cfb IU -> IND):
+        # one row per (league, ESPN code) and per (league, Kalshi code), no
+        # identity, and each later file's self-test counts the cumulative set.
+        every = migration_aliases()
+        self.assertEqual(every[:len(SEED_ALIASES)], SEED_ALIASES)
+        self.assertIn(("cfb", "IU", "IND"), [a[:3] for a in every])
+        self.assertEqual(len({(a[0], a[1]) for a in every}), len(every))
+        self.assertEqual(len({(a[0], a[2]) for a in every}), len(every))
+        for lg, espn_code, kalshi, note in every:
+            self.assertRegex(espn_code, r"^[A-Za-z0-9&'.-]{1,12}$")
+            self.assertRegex(kalshi, r"^[A-Z0-9]{1,12}$")
+            self.assertNotEqual(espn_code.upper(), kalshi)
+            self.assertTrue(note and len(note) <= 200)
+        want = ",".join(f"{lg} {n}" for lg, n in sorted(Counter(a[0] for a in every).items()))
+        sql067 = (pathlib.Path(__file__).resolve().parents[2] / "db" / "067_cfb_alias_indiana.sql").read_text(encoding="utf-8")
+        self.assertIn(f"<> '{want}'", sql067)
 
     def test_the_self_test_counts_match_the_seed(self) -> None:
         want = ",".join(f"{lg} {n}" for lg, n in sorted(Counter(a[0] for a in SEED_ALIASES).items()))
