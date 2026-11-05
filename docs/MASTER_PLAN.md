@@ -11,7 +11,7 @@ Oct 7, 2026 · @Terrell Sims · **Updated Nov 4, 2026: Chat 5 (the Arsenal) clos
 | Chat 3 — Learning engine, Home feed, Sports News | **Done.** Phases 1–3 green; carried items in §6 | Oct 13, 2026 |
 | Chat 4 — Tech Hub and Screening Room | Phases 1–2 green; Phases 3–4 open on their readings (§6) | — |
 | Chat 5 — The Arsenal | **Done.** Phases 1–3 closed; verifier work stopped by the owner; carried items in §6 | Nov 4, 2026 |
-| Chat 7 — Sports data layer and Game Day | **In progress**: Phase 1 GREEN 2026-11-04 (owner); Phase 2 waits on Hobby and db/066 (§6) | — |
+| Chat 7 — Sports data layer and Game Day | **In progress**: Phase 1 GREEN 2026-11-04 (owner); Phase 2 merged and deployed 2026-11-05 (#83), readings pending (§6) | — |
 | Chats 6, 8–13 | Not started | — |
 
 What changed from this plan during Chats 1 and 2 is recorded where it applies, marked **(as built)**. The repo's `CLAUDE.md` Current State holds the full detail: commits, test counts, drill timelines.
@@ -167,7 +167,7 @@ Views the app reads: `v_model_performance` (hit rate, ROI net of fees and CLV by
 
 ## 4. API and services inventory
 
-**(as built) Expected spend is about $5–25/month:** Railway Hobby from Oct 13 ($5 a month including $5 of usage; the feed took the worker from about 40 MB to about 130 MB at rest, past the Free plan's $1 credit) and the Claude API (starting with $5 prepaid and a **$20 monthly cap**, owner decision Oct 9; it was $10). Everything else runs on free tiers. Original estimate, for when the full build is running: about **$40–60/month**, with Railway Hobby (about $7–10) and the Claude API (about $30–50). The Claude API has no free tier, and a Claude Pro subscription doesn't cover API usage.
+**(as built) Expected spend is about $5–25/month:** Railway Hobby from Nov 5 (funded by the owner; the "Oct 13" once written here was wrong, corrected Oct 20) ($5 a month including $5 of usage; the feed took the worker from about 40 MB to about 130 MB at rest, past the Free plan's $1 credit) and the Claude API (starting with $5 prepaid and a **$20 monthly cap**, owner decision Oct 9; it was $10). Everything else runs on free tiers. Original estimate, for when the full build is running: about **$40–60/month**, with Railway Hobby (about $7–10) and the Claude API (about $30–50). The Claude API has no free tier, and a Claude Pro subscription doesn't cover API usage.
 
 **How the Claude estimate is built.** **Re-sized Oct 14 (owner): about 1,300 stories a day is the new normal**, measured on production: kept new stories 941 (Oct 11), 1,289 (Oct 12), 1,265 (Oct 13), about 1,550 items a day, summarized by direct Haiku calls of about 7 stories each (483 calls for 3,303 stories in 72 h). Measured cost: `feed_summarize` $0.18 on Oct 13 (307 calls, including a backlog), so about $3–6 a month for summaries; month-to-date AI spend on Oct 14 was $0.47 of the $20 cap. Detail: `docs/feed_ranking.md`, "Daily volume". The original assumption was about 300 summaries a day on the Haiku tier through the Batch API (about $5), Wags at about 20 messages a day on Sonnet 5.5 with prompt caching (about $14), and the Morning Brief, Arsenal, slip parsing, Lookbook tagging and bot reasoning together at about $15. Every call is logged to `ai_usage`, and a budget guard downgrades non-critical calls to Haiku if the month runs hot. **(as built)** The guard lives in `workers/core/ai.py`, the only file allowed to call Claude: at 80% of `AI_MONTHLY_BUDGET_USD` (code default $10; the owner set **$20**, Oct 9) non-critical calls downgrade to the cheapest model; at 100% they're refused; one push per threshold per month. The web side gets a TypeScript twin in Chat 2, reading the same table.
 
@@ -177,7 +177,7 @@ Views the app reads: `v_model_performance` (hit rate, ROI net of fees and CLV by
 | --- | --- | --- | --- | --- | --- |
 | Vercel | Next.js app, API routes, watchdog route | Hobby, free (personal use). **Live at `valemont-command.vercel.app`**; builds only when `apps/web` changes | 0 | Vercel account linked to GitHub; env: Supabase URL, publishable key, `OWNER_USER_ID`, VAPID keys, `SUPABASE_SECRET_KEY` (watchdog only), `WATCHDOG_TOKEN`, `WATCHDOG_PING_URL` | Cloudflare Pages |
 | Supabase | Postgres, Auth, Storage, pgvector, Edge Functions | Free: 500 MB DB, 1 GB storage, pauses after 7 idle days (the heartbeat prevents it) | 0 | Existing project; publishable key (browser), a dedicated `vercel-watchdog` secret key (server, one route), Session pooler URL, read-only role URL | Pro at $25 if the cap is hit |
-| Railway | All Python workers and the scheduler | **Corrected Oct 20 (owner): the account stayed on the trial; the Oct 13 "Hobby" entry was wrong.** The trial ended and removed the worker at about 20:06 UTC Oct 19; the owner switched to **Free** ($1 credit, 0.5 GB per service) on Oct 20. The worker rests at about 141 MB (Oct 16–19), about $1.3–1.4/month of memory alone at about $10 per GB-month, past Free's $1, so left alone on Free it lapses mid-month. **Decided (owner, Oct 20): Free until the owner funds Hobby ($5/month including $5 of usage), before the credit runs out; the owner checks the usage page weekly and upgrades below $0.25 left** | 0 now; 5 on Hobby | Existing account | Fly.io or Render |
+| Railway | All Python workers and the scheduler | **Hobby, funded 2026-11-05 (owner): the plan page reads Hobby**; the weekly Free-credit check is retired. History: **Corrected Oct 20 (owner): the account stayed on the trial; the Oct 13 "Hobby" entry was wrong.** The trial ended and removed the worker at about 20:06 UTC Oct 19; the owner switched to **Free** ($1 credit, 0.5 GB per service) on Oct 20. The worker rests at about 141 MB (Oct 16–19), about $1.3–1.4/month of memory alone at about $10 per GB-month, past Free's $1, so left alone on Free it lapses mid-month. **Decided (owner, Oct 20): Free until the owner funds Hobby ($5/month including $5 of usage), before the credit runs out; the owner checks the usage page weekly and upgrades below $0.25 left** | 5 (Hobby, from Nov 5) | Existing account | Fly.io or Render |
 | Claude API | Summaries, vision, Brief, Wags, Arsenal, reasoning | Pay as you go | Start: $5 prepaid, $20 cap (Oct 9; was $10) | Console API key with a monthly spend limit set (Chat 2) | Haiku-only mode via budget guard |
 | Embeddings | Learning engine, Lookbook similarity | Supabase built-in gte-small (384-dim) in Edge Functions, free | 0 | None | sentence-transformers on Railway |
 | Web Push | All push alerts | Self-hosted VAPID: `web-push` on Vercel, `pywebpush` on the worker, free. **Proven on a locked iPhone from both senders** | 0 | VAPID key pair in Vercel and Railway | Email digest |
@@ -457,13 +457,20 @@ In short: 7 → 8 → 9 → 10–12 → 6 (Lookbook) → 13.
 - RAM: new baseline ~155 MB at rest (148–158 MB 21:00–02:40 UTC, one 161 MB heartbeat; 151 MB at 03:29 UTC past 6 h, flat): closed.
 - The seen-rows map's 60-day ceiling: owner-accepted.
 - Watch: golf live `score` on PGA round 1 (Thu Nov 5); the F1 sprint shape at the first sprint weekend.
-- Phase 2 (Kalshi mapping, db/066) merges only after Railway Hobby is funded and the owner's db/066 fixes.
+- PGA R1, Nov 5: leaders parse on production (Chris Kirk, 1, thru 18, −9); `followed` `[]` correctly (neither golfer in the field), so that check stays pending. The same day `sports_schedule` began failing PGA on future tournaments with no field yet. PR #84 fixed it (merge `1db01e7`); the boot run passed at 20:16:05 UTC, and "Recovered" was pushed.
+
+**Phase 2 (Kalshi mapping, db/066): merged and deployed 2026-11-05, readings pending.** Hobby funded (owner, Nov 5). PR #83 merge `d174095` (20:03:28 UTC); worker boot 20:03:58 UTC with `kalshi_map` registered. Read via db_inspect and the Railway log:
+- First run (20:04:29–20:05:17 UTC): 802 sent and written, 0 conflicts, 0 relinks; contract 14/14; 33 Kalshi calls (4 × 429), 48.4 s, ~97 KB read, RSS 102 MB (peak 106).
+- Every NFL (29) and NBA (25) game inside Kalshi's listed window linked; each not_listed starts after the series' latest listed event (NFL 1, NBA 28). NFL and CFB rows reach 14 days (Nov 20).
+- Every not_linked carries its reason. USC at Indiana (cfb) is an alias gap (`IU → IND` exists for mcbb, not cfb; Kalshi `KXNCAAFGAME-26NOV14USCIND`): a db/067 row, the owner's call. Detail: CLAUDE.md, Chat 7 Phase 2.
+- After #84's reboot: sent 333 (a restart re-sends every non-linked row), and the database wrote only the 4 that changed. No 429 has failed a run.
+- Pending: sent = changed at the 22:00 UTC run; RSS at rest past 6 h from #84's boot (20:15:25 UTC).
 2. Game Day page and tonight's slate in the Morning Brief.
    - [ ] Tapping a game opens its detail page (bets attach in Chat 9)
 
 ### Chat 8 — Betting: consensus engine and Parlay Generator
 
-**Prerequisite (owner, 2026-11-02): Railway Hobby is funded before this chat starts.**
+**Prerequisite (owner, 2026-11-02): Railway Hobby is funded before this chat starts.** Met 2026-11-05 (owner).
 
 **Set up in this chat:** The Odds API free key. Kalshi needs none.
 
