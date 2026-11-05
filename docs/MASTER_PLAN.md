@@ -468,6 +468,8 @@ In short: 7 → 8 → 9 → 10–12 → 6 (Lookbook) → 13.
 2. Game Day page and tonight's slate in the Morning Brief.
    - [ ] Tapping a game opens its detail page (bets attach in Chat 9)
 
+**Phase 3 (Game Day, db/068): built and tested on `chat7-phase3` 2026-11-05; db/068 not pasted; not merged** (gate: Phase 2's 22:00 UTC reading, then the paste and `tests_live -v`). Design, Step 0 findings, measured KB and the pending list: `docs/gameday.md`. Pre-paste: db/068 passed its self-test and 18 mutations on a scratch copy of production's schema and sports rows; `tests_live/test_gameday_sql.py` 9/9 there; `tests/` 1329 OK; `pnpm test:unit` 183.
+
 ### Chat 8 — Betting: consensus engine and Parlay Generator
 
 **Prerequisite (owner, 2026-11-02): Railway Hobby is funded before this chat starts.** Met 2026-11-05 (owner).

@@ -912,6 +912,55 @@ export async function storyReactions(storyId: number): Promise<{ pillar: string;
   });
 }
 
+/**
+ * Game Day (db/068 add_test_gameday_event): one TEST sports event (is_test,
+ * an e2e- id), as the owner with the marker. It shows only to a request
+ * carrying the marker, never in the brief or Wags' context. Rows stay.
+ */
+export async function addTestGamedayEvent(opts: {
+  league: string;
+  startsAt: string;
+  home?: string;
+  away?: string;
+  status?: "scheduled" | "live" | "final" | "postponed";
+  broadcast?: string[];
+  participants?: Record<string, unknown>;
+  score?: Record<string, unknown>;
+  timeTbd?: boolean;
+  eventName?: string;
+  session?: string;
+  parent?: string;
+  linkState?: "not_listed" | "not_linked" | "out_of_scope";
+  linkReason?: string;
+  venue?: string;
+  neutral?: boolean;
+}): Promise<number> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.rpc("add_test_gameday_event", {
+      p_marker: e2eMarker(), p_league: opts.league, p_starts_at: opts.startsAt, p_home: opts.home ?? null,
+      p_away: opts.away ?? null, p_status: opts.status ?? "scheduled", p_broadcast: opts.broadcast ?? [],
+      p_participants: opts.participants ?? null, p_score: opts.score ?? null, p_time_tbd: opts.timeTbd ?? false,
+      p_event_name: opts.eventName ?? null, p_session: opts.session ?? null, p_parent: opts.parent ?? null,
+      p_link_state: opts.linkState ?? null, p_link_reason: opts.linkReason ?? null, p_venue: opts.venue ?? null,
+      p_neutral: opts.neutral ?? null, p_ticker: null,
+    });
+    if (error) throw new Error(`add_test_gameday_event failed: ${error.message}`);
+    return Number(data);
+  });
+}
+
+/** db/068 set_test_sports_live: a test event's live state (test rows only). */
+export async function setTestSportsLive(id: number, status: string, score: Record<string, unknown>, detail?: string,
+                                        clock?: string): Promise<void> {
+  await asOwner(async (supabase) => {
+    const { error } = await supabase.rpc("set_test_sports_live", {
+      p_marker: e2eMarker(), p_id: id, p_status: status, p_score: score, p_detail: detail ?? null,
+      p_clock: clock ?? null, p_period: null,
+    });
+    if (error) throw new Error(`set_test_sports_live failed: ${error.message}`);
+  });
+}
+
 /** The owner's local date (America/Chicago), as the app computes it. */
 export function chicagoDay(offsetDays = 0): string {
   const d = new Date(Date.now() + offsetDays * 86_400_000);
