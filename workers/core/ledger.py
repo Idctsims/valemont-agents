@@ -5802,3 +5802,40 @@ def sports_link_conflicts(rows: Sequence[Mapping[str, Any]], *, is_test: bool = 
     with _brief_conn(conn) as c, c.transaction():
         return [int(r[0]) for r in c.execute(SPORTS_LINK_CONFLICT_SQL,
                                              {"rows": Jsonb(list(rows)), "is_test": is_test}).fetchall()]
+
+
+@dataclass(frozen=True)
+class EventLink:
+    id: int
+    league: str
+    event_name: str
+    starts_at: datetime
+    link_state: str | None
+    link_method: str | None
+    ticker: str | None
+    link_conflict: str | None
+
+
+SPORTS_EVENT_LINK_SQL: Final = """
+    SELECT id, league, event_name, starts_at, link_state, link_method, kalshi_event_ticker, link_conflict
+      FROM sports_events WHERE id = %(id)s
+"""
+
+
+def sports_event_link(event_id: int, *, conn: psycopg.Connection | None = None) -> EventLink | None:
+    """One event's link, for the hand repair (scripts.sports_event_relink)."""
+    with _brief_conn(conn) as c:
+        row = c.execute(SPORTS_EVENT_LINK_SQL, {"id": event_id}).fetchone()
+    return None if row is None else EventLink(int(row[0]), *row[1:])
+
+
+def sports_event_relink(event_id: int, new_ticker: str | None, reason: str, *, swapped: bool | None = None,
+                        conn: psycopg.Connection | None = None) -> int:
+    """db/066 sports_event_relink: HAND USE ONLY (scripts.sports_event_relink;
+    nothing in the worker calls it). Logs the repair in the append-only
+    sports_event_relinks, then relinks the event to `new_ticker` (method
+    'manual') or, with None, unlinks it for good (out_of_scope). Returns the
+    log row's id; the database refuses anything else."""
+    with _brief_conn(conn) as c, c.transaction():
+        return int(c.execute("SELECT sports_event_relink(%s, %s, %s, %s)",
+                             (event_id, new_ticker, reason, swapped)).fetchone()[0])

@@ -38,7 +38,8 @@ The rules (docs/kalshi_mapping.md §2):
   * A linked row is NEVER relinked or unlinked. If a later run finds a
     different unique candidate, the row keeps its link and is flagged
     (link_conflict), logged once. The database refuses a relink anyway
-    (sports_events_link_guard).
+    (sports_events_link_guard). The one repair is by hand, never from here:
+    scripts.sports_event_relink, which logs it in sports_event_relinks first.
   * Out of scope: a league whose kalshi_map is off (MLB, off season), F1
     sessions other than the race. FCS games never reach sports_events.
 
@@ -74,6 +75,10 @@ DAY_TOLERANCE = 1
 #: A listed event starting further out than this is a future (the Masters
 #: next April), not part of the rolling listing: it never sets the horizon.
 FUTURES_BEYOND = timedelta(days=30)
+#: The kinds held to one ESPN row per Kalshi event, as db/066's unique index
+#: sports_events_kalshi_ticker is (test_kalshi_map checks the two agree).
+#: Golf rounds and F1 sessions may share their tournament's / weekend's event.
+UNIQUE_KINDS = frozenset({"game", "match", "bout"})
 #: A golf round on day D belongs to a tournament starting D-4 .. D+1.
 GOLF_START_BEFORE, GOLF_START_AFTER = 4, 1
 #: The F1 sessions Kalshi lists an event for (KXF1RACE: the race winner).
@@ -264,7 +269,7 @@ def decide_league(lg: MapLeague, rows: Sequence[ledger.MapRow], events: Sequence
         for e in found[r.id][0]:
             claims[e.ticker].append(r.id)
     linked_to = {r.ticker: r.id for r in live if r.ticker}
-    shared = lg.kind == "golf_round"  # a tournament's rounds share its event
+    shared = lg.kind not in UNIQUE_KINDS  # golf rounds, F1 sessions share their event
     hz = horizon(events, now)
     for r in live:
         cands, cannot = found[r.id]

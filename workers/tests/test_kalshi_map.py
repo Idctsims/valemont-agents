@@ -624,7 +624,7 @@ class Migration066(unittest.TestCase):
         checked = 0
         for m in re.finditer(r"INSERT INTO [\w.]+ \(([^)]*)\)\s*VALUES\s*(.*?);", sql, re.S):
             cols = len(split_top(m.group(1)))
-            body_ = m.group(2).split("RETURNING")[0]
+            body_ = re.split(r"\bRETURNING\b|\bON CONFLICT\b", m.group(2))[0]
             for t in re.finditer(r"\((.*?)\)(?=\s*(?:,\s*\(|$))", body_.strip(), re.S):
                 self.assertEqual(len(split_top(t.group(1))), cols, t.group(0)[:80])
                 checked += 1
@@ -636,6 +636,72 @@ class Migration066(unittest.TestCase):
                     self.assertEqual(len(split_top(line[1:-1])), cols, line[:80])
                     checked += 1
         self.assertGreaterEqual(checked, 14 + 91 + 2 + 3)
+
+    def test_the_worker_shares_an_event_exactly_where_the_index_allows(self) -> None:
+        m = re.search(r"CREATE UNIQUE INDEX IF NOT EXISTS sports_events_kalshi_ticker .*? kind IN \(([^)]*)\);",
+                      self.SQL, re.S)
+        self.assertIsNotNone(m)
+        self.assertEqual(frozenset(re.findall(r"'(\w+)'", m.group(1))), km.UNIQUE_KINDS)
+        self.assertEqual(km.UNIQUE_KINDS, frozenset({"game", "match", "bout"}))
+
+    def test_phase_1s_upsert_is_in_the_self_test_as_deployed(self) -> None:
+        """The self-test's Phase-1-shaped statements name every column the
+        deployed db/065 upsert writes, and no db/066 column."""
+        phase1 = ("league, kind, espn_id, parent_espn_id, event_name, session, starts_at, time_tbd, home, away, "
+                  "participants, broadcast, national_tv, venue, status, espn_status, status_detail, period, clock, "
+                  "score, content_hash, is_test")
+        cols = [re.sub(r"\s+", " ", m.group(1)) for m in re.finditer(
+            r"INSERT INTO public\.sports_events \(([^)]*)\)\s*VALUES \('nfl', 'game', '999066001'", self.SQL)]
+        self.assertEqual(cols, [phase1, phase1])
+        # And it is today's upsert with neutral_site taken out: no other column differs.
+        today = re.search(r"INSERT INTO sports_events \(([^)]*)\)", ledger.SPORTS_EVENTS_UPSERT_SQL).group(1)
+        self.assertEqual(re.sub(r"\s+", " ", today).replace(" neutral_site,", ""), phase1)
+
+    def test_hand_repair_has_one_caller_the_script(self) -> None:
+        """Never automatic: nothing in the worker but the hand script calls
+        the repair (ledger.sports_event_relink / db/066's function)."""
+        root = pathlib.Path(__file__).resolve().parents[1]
+        callers = sorted(str(p.relative_to(root)).replace("\\", "/") for p in root.rglob("*.py")
+                         if "sports_event_relink(" in p.read_text(encoding="utf-8")
+                         and p.parts[len(root.parts)] not in ("tests", "tests_live"))
+        self.assertEqual(callers, ["core/ledger.py", "scripts/sports_event_relink.py"])
+
+
+class RelinkScript(unittest.TestCase):
+    """scripts.sports_event_relink against a stubbed ledger."""
+
+    def run_script(self, argv: list[str], link: ledger.EventLink | None) -> tuple[int, str, mock.MagicMock]:
+        from scripts import sports_event_relink as script
+        out: list[str] = []
+        with mock.patch.object(script, "load_env"), mock.patch.object(ledger, "close_pool"), \
+                mock.patch.object(ledger, "sports_event_link", return_value=link), \
+                mock.patch.object(ledger, "sports_event_relink", return_value=7) as relink, \
+                mock.patch("builtins.print", side_effect=lambda s="": out.append(str(s))):
+            code = script.main(argv)
+        return code, "\n".join(out), relink
+
+    LINKED = ledger.EventLink(5, "nfl", "A at H", NOW, "linked", "team_pair", "KXNFLGAME-26NOV09AH", None)
+
+    def test_relink_and_unlink_call_the_repair_once(self) -> None:
+        code, out, relink = self.run_script(["--event", "5", "--ticker", "KXNFLGAME-26NOV10AH", "--swapped",
+                                             "--reason", "wrong week"], self.LINKED)
+        self.assertEqual(code, 0)
+        relink.assert_called_once_with(5, "KXNFLGAME-26NOV10AH", "wrong week", swapped=True)
+        self.assertIn("sports_event_relinks 7", out)
+        code, _, relink = self.run_script(["--event", "5", "--unlink", "--reason", "no event"], self.LINKED)
+        relink.assert_called_once_with(5, None, "no event", swapped=None)
+
+    def test_refusals_write_nothing(self) -> None:
+        for argv, link in ((["--event", "5", "--unlink", "--reason", "x", "--dry-run"], self.LINKED),
+                           (["--event", "9", "--unlink", "--reason", "x"], None),
+                           (["--event", "5", "--unlink", "--reason", "x"],
+                            ledger.EventLink(5, "nfl", "A at H", NOW, "not_linked", None, None, None))):
+            with self.subTest(argv=argv):
+                code, _, relink = self.run_script(argv, link)
+                relink.assert_not_called()
+                self.assertEqual(code, 0 if "--dry-run" in argv else 1)
+        with self.assertRaises(SystemExit), mock.patch("sys.stderr"):
+            self.run_script(["--event", "5", "--unlink", "--swapped", "--reason", "x"], self.LINKED)
 
 
 if __name__ == "__main__":

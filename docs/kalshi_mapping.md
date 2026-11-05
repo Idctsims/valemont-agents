@@ -59,9 +59,25 @@ the paste.
 | `link_conflict_at` | when the conflict was flagged; stamped by the database |
 
 - **Every CHECK is NULL-safe** (db/031's lesson).
-- **`sports_events_kalshi_ticker`** is a partial unique index: one game,
-  match, bout or race per Kalshi event. A golf tournament's rounds share
-  their tournament's event, so golf is exempt.
+- **`sports_events_kalshi_ticker`** is a partial unique index: one team game,
+  tennis match or UFC bout per Kalshi event (`kind IN ('game', 'match',
+  'bout')`; owner, Nov 4). Golf rounds share their tournament's event and F1
+  sessions their weekend's. The worker's `UNIQUE_KINDS` matches the index,
+  and a fast test fails if they drift apart.
+- **`link_method`** also allows `manual`, set only by a hand repair (below).
+- **Backward-compatible with the deployed Phase 1 worker** (owner, Nov 4):
+  - every new column is nullable with no default value, so Phase 1's upsert,
+    which names none of them, inserts as before;
+  - `neutral_site` is required only by the Phase 2 parser, never by the
+    database;
+  - both triggers fire only when a link column is set or changes, which
+    Phase 1 never does.
+
+  The self-test runs Phase 1's exact statement shape: an insert, then a live
+  score and clock update on a linked row. Before the paste, the deployed
+  text from `origin/main` was also run verbatim against a local db/066 (PG
+  17). It inserted the row and updated it; the link was unchanged and
+  `neutral_site` stayed NULL.
 
 **`neutral_site`** is ESPN's `competitions[].neutralSite`:
 - **Required** for football, basketball and hockey games. It is present in
@@ -75,9 +91,33 @@ after the deploy, as its flag arrives.
 **`sports_events_link_guard`** is a trigger, BEFORE INSERT and BEFORE UPDATE.
 It fires only when a link column changes, so ESPN's upsert never reaches it.
 It enforces the **no-relink rule**: once a row is linked, its ticker, method
-and home/away flag never change, and a relink or an unlink raises. It also
-stamps `linked_at`, `link_state_at` and `link_conflict_at` from `now()` and
-ignores any value a client sends for them.
+and home/away flag never change, and a relink or an unlink raises, unless
+the repair log holds a row for exactly that change (below). It also stamps
+`linked_at`, `link_state_at` and `link_conflict_at` from `now()` and ignores
+any value a client sends for them.
+
+**The repair path: hand use only** (owner, Nov 4).
+- `sports_event_relinks` is an append-only, TRUNCATE-guarded log. Each row
+  holds the event, its old ticker, the new ticker (NULL means unlinked), the
+  reason, and the role, transaction and time, all stamped by the database.
+- `sports_event_relink(event, new_ticker | NULL, reason[, swapped])` is
+  worker-only (no client role and not the read-only role can run it). It is
+  run only from `scripts.sports_event_relink`, and a fast test fails if
+  anything else in the worker calls it. It writes the log row first, then
+  the link, in one transaction.
+- The guard allows a linked row's ticker to change only when a log row
+  matches this event, its current ticker and the new one, **written in the
+  same transaction**. A log row for a different change does not count.
+- **A relink** sets method `manual`, records the given home/away flag (NULL
+  when not given) and clears any conflict.
+- **An unlink** is for good. The row becomes `out_of_scope` with the reason
+  "unlinked by hand: …", kalshi_map never reads it again, and the guard
+  refuses any later link to it. To move a link, relink instead.
+
+```
+..\venv\Scripts\python.exe -m scripts.sports_event_relink --event 123 --ticker KX... --reason "..." [--swapped | --not-swapped] [--dry-run]
+..\venv\Scripts\python.exe -m scripts.sports_event_relink --event 123 --unlink --reason "..." [--dry-run]
+```
 
 ## 2. The rules
 
@@ -119,7 +159,8 @@ ignores any value a client sends for them.
 
 **Deciding a row:**
 - **Linked:** exactly one candidate, which no other row claims and isn't
-  already linked elsewhere. Golf rounds may share their event.
+  already linked elsewhere. Golf rounds and F1 sessions may share their
+  event.
 - **not_linked, two or more candidates:** the reason lists them.
 - **not_linked, one event claimed by several ESPN rows:** every one of those
   rows, with the reason.
@@ -145,7 +186,7 @@ ignores any value a client sends for them.
   The candidate goes into `link_conflict`, and a WARNING is logged once (the
   flag is written once).
 - The job's write skips any linked row, and the database guard refuses a
-  relink from any writer.
+  relink from any writer that has no log row (the repair path, §1).
 
 ## 3. The job
 
@@ -223,13 +264,46 @@ whole with their milestones; golf and F1 market lists are cut to 4.
   - take the first of two candidates: 1;
   - relink a linked row: 2;
   - no `not_listed` horizon: 3.
+- **Added Nov 4 (now 50 tests):**
+  - `UNIQUE_KINDS` equals the index's kinds;
+  - the self-test's Phase 1 statements name exactly the deployed column list;
+  - the only callers of the repair are the ledger and the script;
+  - the script relinks or unlinks once and writes nothing on a refusal.
 
-**`tests_live/test_kalshi_map_sql.py`** runs the job's own SQL and the
-guard:
+**`tests_live/test_kalshi_map_sql.py`, 10 tests,** runs the job's own SQL,
+the guard and the repair:
 - the narrow read; write-once; no-relink, both skipped by the write and
   refused by the database;
-- the conflict flag; one game per event, with golf rounds sharing;
-- ESPN's upsert leaving the link columns alone while writing `neutral_site`.
+- the conflict flag; one game per event, with golf rounds and F1 sessions
+  sharing and tennis matches refused;
+- ESPN's upsert leaving the link columns alone while writing `neutral_site`;
+- the repair:
+  - refused without its log row, or with a log row for another change;
+  - a relink with its log row, and the log row's stamps;
+  - after a relink, a second move needs a second log row;
+  - the unlink: out of scope for good, and the job cannot link it again;
+  - the function's refusals;
+  - the log is append-only, and TRUNCATE is refused.
+
+**db/066's self-test was run before handover** on a throwaway local PG 17
+cluster, with stubs for the db/001–db/064 objects it needs and db/065's two
+tables. The file ran as one transaction (`psql -1`), the way the SQL Editor
+runs a paste, and passed. Eight mutations of the file each failed it:
+- uniqueness for golf only;
+- uniqueness for games only;
+- no log row needed;
+- a log row for any new ticker;
+- unlinks not kept;
+- the function skipping the log;
+- `neutral_site NOT NULL`;
+- the log mutable.
+
+The 10 live tests also passed against that database. The cross-transaction
+case can't be tested inside one DO block or a rolled-back live test, so it
+was checked once by hand on the scratch database: a log row committed in an
+earlier transaction did not open the guard in a later one ("never relinked
+or unlinked without its sports_event_relinks row"; the ticker was
+unchanged).
 
 `test_sports_events_sql.py` skips until db/066 is pasted, because the upsert
 now writes `neutral_site`.

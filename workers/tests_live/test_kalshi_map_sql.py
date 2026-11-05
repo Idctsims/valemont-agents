@@ -82,6 +82,27 @@ class Objects(MapSqlCase):
                                           "('linked_at', 'home_away_swapped', 'neutral_site'))").fetchone()[0], 9)
             self.assertEqual(conn.execute("SELECT has_function_privilege('authenticated', "
                                           "'public.sports_events_link_guard()', 'EXECUTE')").fetchone()[0], False)
+            # The repair log: append-only, owner and readonly read it, nobody else writes it.
+            row = conn.execute(
+                "SELECT relrowsecurity, (SELECT count(*) FROM pg_policies p WHERE p.tablename = c.relname), "
+                "has_table_privilege('anon', oid, 'SELECT,INSERT,UPDATE,DELETE'), "
+                "has_table_privilege('authenticated', oid, 'SELECT'), "
+                "has_table_privilege('authenticated', oid, 'INSERT,UPDATE,DELETE,TRUNCATE'), "
+                "has_table_privilege('valemont_readonly', oid, 'SELECT') "
+                "FROM pg_class c WHERE oid = 'public.sports_event_relinks'::regclass").fetchone()
+            self.assertEqual(row, (True, 1, False, True, False, True))
+            self.assertEqual({r[0] for r in conn.execute(
+                "SELECT tgname FROM pg_trigger WHERE tgrelid = 'public.sports_event_relinks'::regclass "
+                "AND NOT tgisinternal AND tgenabled = 'O'")},
+                {"sports_event_relinks_stamp", "sports_event_relinks_immutable", "sports_event_relinks_no_truncate"})
+            fn = "'public.sports_event_relink(bigint, text, text, boolean)'"
+            self.assertEqual(conn.execute(
+                f"SELECT has_function_privilege('anon', {fn}, 'EXECUTE'), "
+                f"has_function_privilege('authenticated', {fn}, 'EXECUTE'), "
+                f"has_function_privilege('valemont_readonly', {fn}, 'EXECUTE')").fetchone(), (False, False, False))
+            # One row per Kalshi event for games, matches and bouts only.
+            self.assertIn("kind = ANY (ARRAY['game'::text, 'match'::text, 'bout'::text])", conn.execute(
+                "SELECT indexdef FROM pg_indexes WHERE indexname = 'sports_events_kalshi_ticker'").fetchone()[0])
 
 
 class Reads(MapSqlCase):
@@ -184,6 +205,93 @@ class Writes(MapSqlCase):
             self.assertEqual(conn.execute("SELECT neutral_site, status, kalshi_event_ticker, linked_at, link_state_at "
                                           "FROM sports_events WHERE id = %s", (a,)).fetchone(),
                              (True, "live", t) + tuple(before))
+
+
+class Repairs(MapSqlCase):
+    """db/066's hand repair: refused without its sports_event_relinks row,
+    allowed with it; an unlink is for good."""
+
+    def test_relink_and_unlink_only_with_the_log_row(self) -> None:
+        with _rolled_back() as conn:
+            a, b = self.add(conn, 2)
+            t, t2 = _t("RA"), _t("RB")
+            ledger.sports_link_write([self.decision(a, "linked", None, "team_pair", t, False)], is_test=True,
+                                     conn=conn)
+            # Without its log row: refused (a log row for another change does not count).
+            conn.execute("INSERT INTO sports_event_relinks (event_id, old_ticker, new_ticker, reason) "
+                         "VALUES (%s, %s, %s, 'test: another change')", (a, t, _t("RC")))
+            with self.assertRaisesRegex(psycopg.errors.RaiseException, "without its sports_event_relinks row"):
+                with conn.transaction():
+                    conn.execute("UPDATE sports_events SET kalshi_event_ticker = %s WHERE id = %s", (t2, a))
+            # With it: the relink, method manual, the conflict cleared.
+            log_id = ledger.sports_event_relink(a, t2, "test: wrong game", swapped=True, conn=conn)
+            self.assertEqual(self.links(conn, a)[:6],
+                             ("linked", "relinked by hand: test: wrong game", "manual", t2, True, None))
+            self.assertEqual(conn.execute("SELECT event_id, old_ticker, new_ticker, reason, by_role = current_user, "
+                                          "xact_id = pg_current_xact_id(), created_at = now() "
+                                          "FROM sports_event_relinks WHERE id = %s", (log_id,)).fetchone(),
+                             (a, t, t2, "test: wrong game", True, True, True))
+            # The job's own write still skips it, and a second move needs a second log row.
+            self.assertEqual(ledger.sports_link_write([self.decision(a, "linked", None, "team_pair", t, False)],
+                                                      is_test=True, conn=conn), [])
+            with self.assertRaisesRegex(psycopg.errors.RaiseException, "never relinked or unlinked"):
+                with conn.transaction():
+                    conn.execute("UPDATE sports_events SET kalshi_event_ticker = %s WHERE id = %s", (t, a))
+            # The unlink: out of scope for good; kalshi_map never reads it, and nothing links it again.
+            ledger.sports_event_relink(a, None, "test: no Kalshi event", conn=conn)
+            self.assertEqual(self.links(conn, a)[:6],
+                             ("out_of_scope", "unlinked by hand: test: no Kalshi event", None, None, None, None))
+            self.assertNotIn(a, [r.id for r in ledger.kalshi_map_rows(FAR, ["nfl"], is_test=True, conn=conn)])
+            with self.assertRaisesRegex(psycopg.errors.RaiseException, "unlinked by hand; it stays unlinked"):
+                with conn.transaction():
+                    ledger.sports_link_write([self.decision(a, "linked", None, "team_pair", t, False)],
+                                             is_test=True, conn=conn)
+            # The freed ticker can go to the right game.
+            self.assertEqual(ledger.sports_link_write([self.decision(b, "linked", None, "team_pair", t2, False)],
+                                                      is_test=True, conn=conn), [(b, "linked")])
+
+    def test_the_functions_refusals_and_the_log_is_append_only(self) -> None:
+        with _rolled_back() as conn:
+            a, b = self.add(conn, 2)
+            t = _t("RF")
+            ledger.sports_link_write([self.decision(a, "linked", None, "team_pair", t)], is_test=True, conn=conn)
+            for args, msg in (((b, _t("RG"), "test"), "is not linked"),
+                              ((a, t, "test"), "is already linked to"),
+                              ((a, _t("RH"), "  "), "a reason is required"),
+                              ((a, None, "test"), None)):
+                with self.subTest(msg=msg):
+                    if msg is None:
+                        with self.assertRaisesRegex(psycopg.errors.RaiseException, "takes no home/away flag"):
+                            with conn.transaction():
+                                ledger.sports_event_relink(*args, swapped=False, conn=conn)
+                        continue
+                    with self.assertRaisesRegex(psycopg.errors.RaiseException, msg):
+                        with conn.transaction():
+                            ledger.sports_event_relink(*args, conn=conn)
+            log_id = ledger.sports_event_relink(a, _t("RI"), "test: kept", conn=conn)
+            for sql in ("UPDATE sports_event_relinks SET reason = 'rewritten' WHERE id = %s",
+                        "DELETE FROM sports_event_relinks WHERE id = %s"):
+                with self.subTest(sql=sql[:30]):
+                    with self.assertRaisesRegex(psycopg.errors.RaiseException, "append-only"):
+                        with conn.transaction():
+                            conn.execute(sql, (log_id,))
+            with self.assertRaisesRegex(psycopg.errors.RaiseException, "TRUNCATE is refused"):
+                with conn.transaction():
+                    conn.execute("TRUNCATE sports_event_relinks")
+
+    def test_f1_sessions_share_an_event_matches_do_not(self) -> None:
+        with _rolled_back() as conn:
+            f = self.add(conn, 2, league="f1", kind="race_session", home=None, away=None, participants=None)
+            tf = _t("F1")
+            self.assertEqual(len(ledger.sports_link_write([self.decision(i, "linked", None, "by_date", tf) for i in f],
+                                                          is_test=True, conn=conn)), 2)
+            m = self.add(conn, 2, league="atp", kind="match", home=None, away=None,
+                         participants=[{"name": "Ben Shelton"}, {"name": "Arthur Rinderknech"}])
+            tm = _t("AT")
+            with self.assertRaises(psycopg.errors.UniqueViolation):
+                with conn.transaction():
+                    ledger.sports_link_write([self.decision(i, "linked", None, "player_pair", tm) for i in m],
+                                             is_test=True, conn=conn)
 
 
 if __name__ == "__main__":
