@@ -140,6 +140,24 @@ class Parsing(unittest.TestCase):
         self.assertTrue(all(r.time_tbd and r.status == "scheduled" and r.score is None for r in rounds))
         self.assertEqual([r.starts_at - rounds[0].starts_at for r in rounds], [timedelta(days=d) for d in range(4)])
 
+    def test_a_future_tournament_with_no_field_yet_still_parses(self) -> None:
+        # Seen 2026-11-05: a dated range lists the next tournaments with no
+        # "competitors" key at all until their field is set (Austin, the RSM).
+        data = fixture("pga_scheduled")
+        del data["events"][0]["competitions"][0]["competitors"]
+        rounds = espn.parse(LEAGUES["pga"], data)
+        self.assertEqual([r.espn_id for r in rounds], [f"401850979-r{n}" for n in (1, 2, 3, 4)])
+        self.assertTrue(all(r.status == "scheduled" and r.score is None for r in rounds))
+
+    def test_a_tournament_in_play_with_no_field_fails_loud(self) -> None:
+        data = fixture("pga_final")
+        c = data["events"][0]["competitions"][0]
+        c["status"]["period"] = 2
+        c["status"]["type"].update(name="STATUS_IN_PROGRESS", state="in", completed=False)
+        del c["competitors"]
+        with self.assertRaisesRegex(EspnShapeError, r"competitors"):
+            espn.parse(LEAGUES["pga"], data)
+
     def test_golf_final_standings_on_the_last_round(self) -> None:
         rounds = parse("pga_final")
         self.assertEqual([r.status for r in rounds], ["final"] * 4)
