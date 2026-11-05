@@ -77,7 +77,7 @@ test.describe("sections", () => {
 });
 
 test.describe("order inside a day (owner, 2026-11-04)", () => {
-  test("live first; Alabama; then CFB, NFL, NBA, F1, golf; then the other leagues", () => {
+  test("live first; Alabama; then the NFL whenever it plays; then CFB, NBA, F1, golf; then the other leagues", () => {
     const at = "2026-11-07T18:00:00Z";
     const rows = [
       row({ league: "nhl", at }), row({ league: "pga", at }), row({ league: "f1", at }), row({ league: "nba", at }),
@@ -85,7 +85,16 @@ test.describe("order inside a day (owner, 2026-11-04)", () => {
       row({ league: "mcbb", at, status: "live" }),
     ];
     const order = [...rows].sort(compareInDay).map((r) => (r.bama ? "bama" : r.status === "live" ? "live" : r.league));
-    expect(order).toEqual(["live", "bama", "cfb", "nfl", "nba", "f1", "pga", "nhl"]);
+    expect(order).toEqual(["live", "bama", "nfl", "cfb", "nba", "f1", "pga", "nhl"]);
+  });
+
+  test("a Thursday NFL game on ESPN+ still leads a CFB game on ABC; with no NFL, CFB leads", () => {
+    const thuCfb = row({ league: "cfb", tier: 1, at: "2026-11-13T00:00:00Z" });
+    const thuNfl = row({ league: "nfl", tier: 3, at: "2026-11-13T01:15:00Z" });
+    expect([thuCfb, thuNfl].sort(compareInDay).map((r) => r.league)).toEqual(["nfl", "cfb"]);
+    const wedNba = row({ league: "nba", tier: 2, at: "2026-11-12T00:00:00Z" });
+    const wedCfb = row({ league: "cfb", tier: 1, at: "2026-11-12T01:00:00Z" });
+    expect([wedNba, wedCfb].sort(compareInDay).map((r) => r.league)).toEqual(["cfb", "nba"]);
   });
 
   test("inside CFB: ranked, then SEC, then national TV, then the rest; then by start", () => {
