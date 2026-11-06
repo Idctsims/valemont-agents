@@ -165,7 +165,7 @@ returned; ingest takes at most 50.
 | `roll-bama-roll` | Roll Bama Roll | sports | cfb | rss | https://www.rollbamaroll.com/rss/index.xml | 10 | 2 h | 10 “so close” graphs from the Georgia game | ok |
 | `pft` | ProFootballTalk | sports | nfl | rss | https://www.nbcsports.com/profootballtalk.atom | 30 | 6 min | C.J. Stroud on reuniting with Marvin Harrison Jr.: It's perfect for him | ok |
 | `liberty-ballers` | Liberty Ballers | sports | nba | rss | https://www.libertyballers.com/rss/index.xml | 10 | 20 h | Sixers Bell Ringer: Edgecombe’s growth, Walker’s strong preseason continue | ok |
-| `racefans` | RaceFans | sports | f1 | rss | https://www.racefans.net/feed/ | 20 | 6 h | Norris incorrectly believed Hamilton “would have to let me past” after turn one move / For | ok |
+| `racefans` | RaceFans | sports | f1 | rss | https://www.racefans.net/feed/ | 20 | 6 h | Norris incorrectly believed Hamilton “would have to let me past” after turn one move / For | **inactive** (owner, 2026-11-06: not a feed from the worker since 01:06 UTC Nov 6; valid from the owner's machine) |
 | `golf-channel` | Golf Channel | sports | golf | rss | https://www.nbcsports.com/golf.atom | 7 | 26 h | Adam Scott, Justin Thomas move into contention at the PGA Tour’s Japan event | ok |
 | `no-laying-up` | No Laying Up | sports | golf | rss | https://feeds.megaphone.fm/nolayingup | 1221 | 118 h | 1219: Deane Beman | ok, **inactive** (podcast episodes only) |
 | `yahoo-nfl` | Yahoo Sports NFL | sports | nfl | rss | https://sports.yahoo.com/nfl/rss/ | 50 | 6 min | Packers dominate banged-up Bears as Tyson Bagent is benched late | ok |

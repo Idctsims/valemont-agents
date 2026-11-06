@@ -147,13 +147,15 @@ class Canonicalization(unittest.TestCase):
 
 
 class SourcesFile(unittest.TestCase):
-    def test_the_real_file_loads_with_46_active_of_50(self) -> None:
-        # Home and Sports: 46 active of 50 (Chat 3). Tech (db/045) is pinned
-        # in tests/test_tech.py, Screening (db/051) in tests/test_screening.py.
+    def test_the_real_file_loads_with_45_active_of_50(self) -> None:
+        # Home and Sports: 46 active of 50 (Chat 3); 45 since RaceFans was
+        # retired (owner, 2026-11-06). Tech (db/045) is pinned in
+        # tests/test_tech.py, Screening (db/051) in tests/test_screening.py.
         specs = [s for s in load_sources() if "tech" not in s.pillars and "screening" not in s.pillars]
         self.assertEqual(len(specs), 50)
-        self.assertEqual(sum(s.active for s in specs), 46)
+        self.assertEqual(sum(s.active for s in specs), 45)
         by = {s.slug: s for s in specs}
+        self.assertFalse(by["racefans"].active)
         self.assertEqual(by["semafor-business"].include_categories, ("Business", "Media"))
         self.assertIn("when%3A7d", by["the-real-deal-miami"].url)
         boat = by["boat-international"]
