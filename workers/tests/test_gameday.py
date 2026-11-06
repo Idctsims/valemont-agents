@@ -211,7 +211,50 @@ class SportsBriefSection(unittest.TestCase):
         self.assertLessEqual(made.words, brief.MAX_WORDS)
         self.assertGreaterEqual(len(sports["lines"]), 1)
         self.assertLess(len(sports["lines"]), 5)
-        self.assertEqual(sports["lines"], SLATE[:len(sports["lines"])], "trimmed from the end, in order")
+        kept = sports["lines"]
+        self.assertEqual(kept, [line for line in SLATE if line in kept], "the kept lines keep their order")
+        self.assertEqual(kept[0], SLATE[0], "Alabama stays")
+        self.assertIn(SLATE[3], kept, "a race weekend's F1 line is protected (owner, Nov 6)")
+        self.assertNotIn(SLATE[4], kept, "golf with no followed player is still the first to go")
+
+    def test_the_trim_takes_the_lowest_cfb_line_when_golf_or_f1_is_protected(self) -> None:
+        cfb = ["CFB: A at B, 6:00 PM on ESPN.", "CFB: C at D, 7:00 PM on ESPN2."]
+        nba = "NBA: E at F, 6:30 PM on Prime Video."
+        golf_followed = "Golf, TL Open: R2 today; Lead Er leads at -9 after R1; Scottie Scheffler T5 (-6, thru 12)."
+        golf_koepka = "Golf, TL Open: R1 today; Brooks Koepka T9 (-3, thru 18)."
+        golf_plain = "Golf, World Wide Technology Championship: R2 today; Chris Kirk leads at -9 after R1."
+        f1 = "F1, TL GP: Qualifying today 1:00 PM; Race Sun 1:00 PM."
+        bama = "CFB: No. 5 Alabama Crimson Tide at No. 14 LSU Tigers, 2:30 PM on ABC."
+        trim = brief._sports_trim_index
+        # Protected: the lowest CFB line goes instead.
+        self.assertEqual(trim(cfb + [nba, golf_followed]), 1)
+        self.assertEqual(trim(cfb + [nba, golf_koepka]), 1)
+        self.assertEqual(trim(cfb + [f1]), 1)
+        self.assertEqual(trim(cfb + [f1, golf_plain]), 3, "an unprotected last line still goes first")
+        # Not protected: the last line, as before (Nov 6's golf line).
+        self.assertEqual(trim(cfb + [nba, golf_plain]), 3)
+        self.assertEqual(trim(cfb + [nba]), 2)
+        # Alabama is never the CFB line dropped; the lowest other line goes.
+        self.assertEqual(trim([bama, nba, f1]), 1)
+        self.assertEqual(trim([bama, f1, golf_followed]), 2, "nothing else to drop: the last line")
+
+    def test_fit_data_lines_keeps_a_followed_golfer_and_drops_the_lowest_cfb(self) -> None:
+        lines = ["CFB: A at B, 6:00 PM on ESPN.", "CFB: C at D, 7:00 PM on ESPN2.",
+                 "NBA: E at F, 6:30 PM on Prime Video.",
+                 "Golf, TL Open: R2 today; Lead Er leads at -9 after R1; Brooks Koepka T9 (-3, thru 18)."]
+        sports = {"key": "sports_brief", "title": "S", "lines": list(lines)}
+        body: dict[str, Any] = {"headline": "h", "one_move": "m", "sections": [
+            {"key": "goals", "title": "G", "lines": ["word"]}, sports]}
+        filler = brief.MAX_WORDS - brief.word_count(body) + 2  # one line over the cap
+        body["sections"][0]["lines"] = ["word " * (1 + filler)]
+        out = brief.fit_data_lines(body)
+        self.assertLessEqual(brief.word_count(out), brief.MAX_WORDS)
+        self.assertEqual(out["sections"][1]["lines"], [lines[0], lines[2], lines[3]])
+        # Without a followed player the golf line is the one that goes.
+        plain = lines[:3] + ["Golf, TL Open: R2 today; Lead Er leads at -9 after R1; Some One T9 (-3, thru 18)."]
+        body["sections"][1] = {"key": "sports_brief", "title": "S", "lines": list(plain)}
+        out = brief.fit_data_lines(body)
+        self.assertEqual(out["sections"][1]["lines"], plain[:3])
 
     def test_fit_data_lines_never_goes_below_one_line(self) -> None:
         body: dict[str, Any] = {"headline": "h", "one_move": "m", "sections": [

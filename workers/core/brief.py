@@ -298,13 +298,39 @@ def fit_data_lines(body: dict[str, Any]) -> dict[str, Any]:
     """The data lines replace the model's AFTER validation, so they can push a
     valid brief past MAX_WORDS (Game Day's slate is up to 5 lines). Trim the
     data sections' last lines, the longest section first, never below one
-    line, until the brief fits."""
+    line, until the brief fits. Game Day trims by `_sports_trim_index`."""
     while word_count(body) > MAX_WORDS:
         data = [s for s in body["sections"] if s["key"] in DATA_LINE_SECTIONS and len(s["lines"]) > 1]
         if not data:
             break
-        max(data, key=lambda s: len(s["lines"]))["lines"].pop()
+        section = max(data, key=lambda s: len(s["lines"]))
+        lines = section["lines"]
+        lines.pop(_sports_trim_index(lines) if section["key"] == "sports_brief" else -1)
     return body
+
+
+def _sports_line_protected(line: str) -> bool:
+    """Owner, Nov 6: an F1 line (written only on a race weekend) and a golf
+    line naming a followed player in the field are never the line the word
+    cap drops while another can go."""
+    from sports.espn import FOLLOWED_GOLFERS
+
+    return line.startswith("F1, ") or (line.startswith("Golf, ") and any(g in line for g in FOLLOWED_GOLFERS))
+
+
+def _sports_trim_index(lines: Sequence[str]) -> int:
+    """Which Game Day line the word cap drops. The last line, unless it is
+    protected (`_sports_line_protected`); then the lowest CFB line that is not
+    Alabama's (owner, Nov 6), else the lowest unprotected line, else the last."""
+    if not _sports_line_protected(lines[-1]):
+        return len(lines) - 1
+    for i in range(len(lines) - 1, -1, -1):
+        if lines[i].startswith("CFB: ") and "Alabama Crimson Tide" not in lines[i]:
+            return i
+    for i in range(len(lines) - 1, -1, -1):
+        if not _sports_line_protected(lines[i]) and "Alabama Crimson Tide" not in lines[i]:
+            return i
+    return len(lines) - 1
 
 
 def fill_missing(body: dict[str, Any], payload: Mapping[str, Any],
