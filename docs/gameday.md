@@ -116,9 +116,15 @@ the end (never below one line) if the brief would pass 260 words.
   on tonight across the five. All sports shows the rest."; "Nothing
   scheduled across the five in the next 7 days."
 - A row (`components/gameday/game-row.tsx`): hairline, the whole row a
-  link; mono `NFL · 7:15 PM` (or the status once started); away over home
-  with `No. N` ranks and "at"/"vs"; the score in a right column once live;
-  networks or **Not listed**, then the gold marks.
+  link; mono `NFL · 7:15 PM` (a time-TBD event in play shows its round,
+  `Golf · R1`, never TBD; once over, its status); away over home with
+  `No. N` ranks and "at"/"vs"; the score in a right column once live; each
+  network once (owner, Nov 5): **the gold chip when it is on the owner's
+  services** (the chip says the network, "CBS"; the service is its title),
+  plain text otherwise, **Not listed** when ESPN gives none. Golf's leader:
+  "Leader: Chris Kirk −9 (thru 18)" (a real minus, no position); the
+  followed players keep theirs. The golf venue is the course
+  (`docs/sports_data.md` §8).
 - `/gameday/[id]`: back link; the score header (`EventScore`, live-polled);
   Where to watch; Leaderboard (golf); This weekend (F1; practice is not
   stored); Kalshi; Venue (+ Neutral site); Your bets.

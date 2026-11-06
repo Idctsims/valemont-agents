@@ -37,6 +37,11 @@ export const BROADCAST_SERVICES: Readonly<Record<string, Service>> = {
   //   To flip: "PRIME VIDEO (LOCAL)": "Prime Video",
 };
 
+/** The owner's service one broadcaster streams on, or null. */
+export function serviceFor(name: string): Service | null {
+  return BROADCAST_SERVICES[name.trim().toUpperCase()] ?? null;
+}
+
 /** The owner's services a broadcast list streams on, once each, in ESPN's order. */
 export function servicesFor(broadcast: readonly string[] | null | undefined): Service[] {
   const out: Service[] = [];

@@ -5710,6 +5710,13 @@ SPORTS_TEAM_ALIASES_SQL: Final = "SELECT league, espn_code, kalshi_code FROM spo
 #: scope: unlinked rows to decide, linked rows for the no-relink check and so
 #: no second row can take a linked event. Narrow: the two ESPN team codes,
 #: or the two names of a match or bout. tests_live runs this exact text.
+#:
+#: A time-TBD row (a golf round, most tennis) has no real start: starts_at is
+#: ESPN's day start (midnight Eastern), so it is read until the END of that
+#: day plus the window, one day later than a timed row. Without this a round
+#: whose placeholder was over 6 h old at the first run was never read: WWT
+#: R1 (row 206) stayed "Not checked yet" on Nov 5 (owner, Nov 5).
+KALSHI_MAP_TBD_GRACE: Final = timedelta(days=1)
 KALSHI_MAP_ROWS_SQL: Final = """
     SELECT id, league, kind, session, starts_at,
            participants->'home'->>'abbr', participants->'away'->>'abbr',
@@ -5717,7 +5724,9 @@ KALSHI_MAP_ROWS_SQL: Final = """
                 THEN (SELECT array_agg(p->>'name') FROM jsonb_array_elements(participants) p) END,
            link_state, kalshi_event_ticker, link_conflict
       FROM sports_events
-     WHERE is_test = %(is_test)s AND starts_at >= %(since)s AND league = ANY(%(leagues)s)
+     WHERE is_test = %(is_test)s AND league = ANY(%(leagues)s)
+       AND starts_at >= %(since)s - %(tbd_grace)s::interval
+       AND (starts_at >= %(since)s OR time_tbd)
        AND link_state IS DISTINCT FROM 'out_of_scope'
      ORDER BY league, starts_at, id
 """
@@ -5776,8 +5785,8 @@ def kalshi_map_rows(since: datetime, leagues: Sequence[str], *, is_test: bool = 
     if not leagues:
         return []
     with _brief_conn(conn) as c:
-        rows = c.execute(KALSHI_MAP_ROWS_SQL, {"since": since, "leagues": list(leagues),
-                                               "is_test": is_test}).fetchall()
+        rows = c.execute(KALSHI_MAP_ROWS_SQL, {"since": since, "leagues": list(leagues), "is_test": is_test,
+                                               "tbd_grace": KALSHI_MAP_TBD_GRACE}).fetchall()
     return [MapRow(int(i), league, kind, session, starts, home, away, tuple(n for n in (names or ()) if n),
                    state, ticker, conflict)
             for i, league, kind, session, starts, home, away, names, state, ticker, conflict in rows]

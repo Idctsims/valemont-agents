@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-import { BROADCAST_SERVICES, annotateSportsContext, servicesFor } from "../src/lib/gameday/services";
+import { BROADCAST_SERVICES, annotateSportsContext, serviceFor, servicesFor } from "../src/lib/gameday/services";
 import {
-  addDays, applyPatches, compareInDay, dayLabel, gameDay, kalshiUrl, matchup, pollIds, sectionize, startLabel, tvLabel,
-  type SlateRow,
+  addDays, applyPatches, compareInDay, dayLabel, followedLine, gameDay, kalshiUrl, leaderLine, matchup, minusSign,
+  pollIds, sectionize, startLabel, timeSlot, tvItems, tvLabel, type SlateRow,
 } from "../src/lib/gameday/slate";
 import { tvTier } from "../src/lib/gameday/tiers";
 
@@ -224,6 +224,38 @@ test.describe("the live poll", () => {
     expect(a).toMatchObject({ status: "final", score: { home: 24, away: 17 }, detail: "Final" });
     expect(a.clock).toBeUndefined();
     expect(b).toBe(other);
+  });
+});
+
+test.describe("polish (owner, Nov 5)", () => {
+  test("one label per network: the gold chip carries the network's own name", () => {
+    expect(tvItems(["CBS", "Paramount+", "ESPN", "cbs", " TNT "], serviceFor)).toEqual([
+      { name: "CBS", service: "Paramount+" },
+      { name: "Paramount+", service: "Paramount+" },
+      { name: "ESPN", service: null },
+      { name: "TNT", service: "HBO Max" },
+    ]);
+    expect(tvItems([], serviceFor)).toEqual([]);
+    expect(serviceFor("CBSSN")).toBeNull();
+  });
+
+  test("the golf leader: a real minus, no position, thru in brackets", () => {
+    expect(leaderLine({ name: "Chris Kirk", pos: "1", to_par: "-9", thru: 18 })).toBe("Chris Kirk −9 (thru 18)");
+    expect(leaderLine({ name: "A", to_par: "E" })).toBe("A E");
+    expect(leaderLine({ name: "A", to_par: "+2", thru: "F" })).toBe("A +2 (thru F)");
+    expect(followedLine({ name: "Scottie Scheffler", pos: "T5", to_par: "-4", thru: 18 }))
+      .toBe("Scottie Scheffler T5 (−4, thru 18)");
+    expect(minusSign("-12")).toBe("−12");
+    expect(minusSign(undefined)).toBe("");
+  });
+
+  test("a live golf round shows its round, never TBD; TBD only before play", () => {
+    const round = { at: "2026-11-06T05:00:00Z", tbd: true, session: "R2" } as const;
+    expect(timeSlot({ ...round, status: "scheduled" })).toBe("TBD");
+    expect(timeSlot({ ...round, status: "live", detail: "Round 2 - In Progress" })).toBe("R2");
+    expect(timeSlot({ ...round, status: "final", detail: "Final" })).toBe("Final");
+    expect(timeSlot({ at: "2026-11-08T01:15:00Z", status: "live", detail: "Q2 4:12" })).toBe("7:15 PM");
+    expect(timeSlot({ at: "2026-11-08T01:15:00Z", status: "postponed" })).toBe("Postponed");
   });
 });
 

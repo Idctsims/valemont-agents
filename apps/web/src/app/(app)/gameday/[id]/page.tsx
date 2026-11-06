@@ -5,12 +5,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { EventScore } from "@/components/gameday/event-score";
-import { ServiceMark } from "@/components/gameday/game-row";
+import { Networks } from "@/components/gameday/game-row";
 import { requireOwner } from "@/lib/auth";
 import { loadEvent, type GameEvent } from "@/lib/gameday/data";
-import { servicesFor } from "@/lib/gameday/services";
 import {
-  dateLabel, gameDay, kalshiUrl, startLabel, tvLabel, type Golfer, type Score, type SlateRow,
+  dateLabel, gameDay, kalshiUrl, minusSign, startLabel, timeSlot, type Golfer, type Score, type SlateRow,
 } from "@/lib/gameday/slate";
 import { createClient } from "@/lib/supabase/server";
 
@@ -86,7 +85,7 @@ function GolfBoard({ ev }: { ev: GameEvent }) {
       <span className="font-mono tabular-nums text-text-muted">{g.pos ?? ""}</span>
       <span className="text-text">{g.name}</span>
       <span className="font-mono tabular-nums text-text">
-        {g.to_par ?? ""}{g.thru != null && g.thru !== "" ? <span className="text-text-muted"> · thru {g.thru}</span> : null}
+        {minusSign(g.to_par)}{g.thru != null && g.thru !== "" ? <span className="text-text-muted"> · thru {g.thru}</span> : null}
       </span>
     </li>
   );
@@ -112,7 +111,6 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
   const ev = await loadEvent(await createClient(), id);
   if (!ev) notFound();
   const row = asRow(ev);
-  const services = servicesFor(ev.broadcast);
 
   return (
     <article data-testid="game-detail" data-id={ev.id} className="lg:max-w-3xl">
@@ -130,11 +128,10 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
 
       <Section title="Where to watch" testId="detail-watch">
         <p className="text-base text-text">
-          {dateLabel(ev.day)} · {startLabel(row)}
+          {dateLabel(ev.day)} · {timeSlot(row)}
         </p>
-        <p className="mt-1 flex flex-wrap items-center gap-2 text-base text-text">
-          <span data-testid="detail-tv">{tvLabel(ev.broadcast)}</span>
-          {services.map((s) => <ServiceMark key={s} service={s} />)}
+        <p className="mt-1 text-base text-text">
+          <Networks tv={ev.broadcast} testId="detail-tv" />
         </p>
       </Section>
 

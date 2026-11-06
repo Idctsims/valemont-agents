@@ -1,0 +1,128 @@
+{
+    "id":  "401850979",
+    "name":  "World Wide Technology Championship",
+    "date":  "2026-11-05T05:00Z",
+    "endDate":  "2026-11-08T05:00Z",
+    "courses":  [
+                    {
+                        "id":  "11284",
+                        "name":  "El Cardonal at Diamante",
+                        "address":  {
+                                        "city":  "Cabo San Lucas",
+                                        "zipCode":  "23473",
+                                        "country":  "Mexico"
+                                    },
+                        "venue":  {
+                                      "$ref":  "http://sports.core.api.espn.com/v2/sports/golf/leagues/pga/venues/11284?lang=en\u0026region=us"
+                                  },
+                        "totalYards":  7452,
+                        "shotsToPar":  72,
+                        "parIn":  36,
+                        "parOut":  36,
+                        "holes":  [
+                                      {
+                                          "number":  1,
+                                          "shotsToPar":  5,
+                                          "totalYards":  582
+                                      },
+                                      {
+                                          "number":  2,
+                                          "shotsToPar":  3,
+                                          "totalYards":  208
+                                      },
+                                      {
+                                          "number":  3,
+                                          "shotsToPar":  4,
+                                          "totalYards":  351
+                                      },
+                                      {
+                                          "number":  4,
+                                          "shotsToPar":  4,
+                                          "totalYards":  483
+                                      },
+                                      {
+                                          "number":  5,
+                                          "shotsToPar":  4,
+                                          "totalYards":  438
+                                      },
+                                      {
+                                          "number":  6,
+                                          "shotsToPar":  5,
+                                          "totalYards":  601
+                                      },
+                                      {
+                                          "number":  7,
+                                          "shotsToPar":  4,
+                                          "totalYards":  489
+                                      },
+                                      {
+                                          "number":  8,
+                                          "shotsToPar":  4,
+                                          "totalYards":  474
+                                      },
+                                      {
+                                          "number":  9,
+                                          "shotsToPar":  3,
+                                          "totalYards":  200
+                                      },
+                                      {
+                                          "number":  10,
+                                          "shotsToPar":  4,
+                                          "totalYards":  344
+                                      },
+                                      {
+                                          "number":  11,
+                                          "shotsToPar":  3,
+                                          "totalYards":  189
+                                      },
+                                      {
+                                          "number":  12,
+                                          "shotsToPar":  4,
+                                          "totalYards":  401
+                                      },
+                                      {
+                                          "number":  13,
+                                          "shotsToPar":  4,
+                                          "totalYards":  475
+                                      },
+                                      {
+                                          "number":  14,
+                                          "shotsToPar":  5,
+                                          "totalYards":  554
+                                      },
+                                      {
+                                          "number":  15,
+                                          "shotsToPar":  4,
+                                          "totalYards":  462
+                                      },
+                                      {
+                                          "number":  16,
+                                          "shotsToPar":  3,
+                                          "totalYards":  154
+                                      },
+                                      {
+                                          "number":  17,
+                                          "shotsToPar":  4,
+                                          "totalYards":  462
+                                      },
+                                      {
+                                          "number":  18,
+                                          "shotsToPar":  5,
+                                          "totalYards":  585
+                                      }
+                                  ],
+                        "tournamentOverallStats":  {
+                                                       "$ref":  "http://sports.core.api.espn.com/v2/sports/golf/leagues/pga/events/401850979/courses/11284/rounds/0/statistics?lang=en\u0026region=us"
+                                                   },
+                        "tournamentRoundStats":  [
+                                                     {
+                                                         "$ref":  "http://sports.core.api.espn.com/v2/sports/golf/leagues/pga/events/401850979/courses/11284/rounds/1/statistics?lang=en\u0026region=us"
+                                                     },
+                                                     {
+                                                         "$ref":  "http://sports.core.api.espn.com/v2/sports/golf/leagues/pga/events/401850979/courses/11284/rounds/2/statistics?lang=en\u0026region=us"
+                                                     }
+                                                 ],
+                        "host":  true
+                    }
+                ]
+}

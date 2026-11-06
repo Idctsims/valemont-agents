@@ -321,6 +321,15 @@ the database), two maps:
 - **Date ranges for team sports** (400): one call per day instead.
 - **Golf:** no per-round competitions and no tee times in the scoreboard;
   rounds are derived (§3), and their start is a day, not a time.
+- **Golf: no course in the scoreboard** (no `courses`, no `venue`). The
+  course comes from ESPN's core API (owner, Nov 5):
+  `sports.core.api.espn.com/v2/sports/golf/leagues/pga/events/<id>`,
+  `courses[]`, the `host` course (else the first) as "Name, City"
+  (`espn.parse_course`; WWT: "El Cardonal at Diamante, Cabo San Lucas").
+  One call per tournament per worker process, cached and applied in
+  `Espn.events()` for both jobs, so the venue never flips; a failed, empty
+  or reshaped answer is logged once, never fails a run, leaves the venue
+  blank, and is tried again after 6 h. Fixture `espncore_pga_event.json`.
 - **Tennis:** no broadcasters on any match; unplayed rounds carry `TBD`
   players and day-only times; ESPN marked some unplayed finals
   `STATUS_CANCELED` (stored as ESPN says; the next run updates them); one WTA

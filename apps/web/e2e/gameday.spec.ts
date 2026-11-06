@@ -63,6 +63,13 @@ test.describe("owner", () => {
     ids.live = await addTestGamedayEvent({ league: "nba", startsAt: started, home: `${P}Live Home`, away: `${P}Live Away`,
                                            status: "live", broadcast: ["ESPN"], score: { home: 0, away: 0 } });
     await setTestSportsLive(ids.live, "live", { home: 0, away: 0 }, "Q1 11:40", "11:40");
+    // A golf round in play (ESPN gives a day, no tee time): its round in the time slot, never TBD.
+    ids.golf = await addTestGamedayEvent({
+      league: "pga", startsAt: `${today} 00:00:00 America/New_York`, timeTbd: true, session: "R1",
+      eventName: `${P}Test Open`, parent: `e2e-${P.replace(/\W/g, "")}`, status: "live", broadcast: ["Golf Chnl"],
+      score: { round: 1, leaders: [{ name: "Chris Kirk", pos: "1", to_par: "-9", thru: 18 }],
+               followed: [{ name: "Scottie Scheffler", pos: "T5", to_par: "-4", thru: 12 }] },
+    });
 
     context = await browser.newContext(testInfo.project.use);
     await useE2eMarker(context, testInfo.project.use.baseURL!);
@@ -95,9 +102,13 @@ test.describe("owner", () => {
     await expect(row(ids.tbd).getByTestId("game-tv")).toHaveText("Not listed");
   });
 
-  test("the gold mark on a game the owner can stream, and not on one he can't", async () => {
-    await expect(row(ids.nfl).getByTestId("service-mark")).toHaveText("Paramount+");
-    await expect(row(ids.bama).getByTestId("service-mark")).toHaveCount(0); // ABC
+  test("the network is the gold chip when it's on his services, plain text otherwise, never both", async () => {
+    const mark = row(ids.nfl).getByTestId("service-mark");
+    await expect(mark).toHaveText("CBS");
+    await expect(mark).toHaveAttribute("data-service", "Paramount+");
+    await expect(row(ids.nfl).getByTestId("game-tv")).toHaveText("CBS"); // one label, no extra text
+    await expect(row(ids.bama).getByTestId("service-mark")).toHaveCount(0);
+    await expect(row(ids.bama).getByTestId("network")).toHaveText("ABC");
   });
 
   test("All sports adds the other leagues, kept in the URL", async () => {
@@ -106,7 +117,8 @@ test.describe("owner", () => {
     await expect(page).toHaveURL(/\/gameday\?sports=all$/);
     await expect(page.getByTestId("gameday-chip-all")).toHaveAttribute("aria-current", "page");
     await expect(row(ids.nhl)).toBeVisible();
-    await expect(row(ids.nhl).getByTestId("service-mark")).toHaveText("HBO Max"); // TNT
+    await expect(row(ids.nhl).getByTestId("service-mark")).toHaveText("TNT");
+    await expect(row(ids.nhl).getByTestId("service-mark")).toHaveAttribute("data-service", "HBO Max");
     await page.getByTestId("gameday-chip-five").click();
     await expect(page).toHaveURL(/\/gameday$/);
     await expect(row(ids.nhl)).toHaveCount(0);
@@ -141,7 +153,19 @@ test.describe("owner", () => {
 
     await page.goto(`/gameday/${ids.nfl}`);
     await expect(page.getByTestId("kalshi-state")).toHaveText("Not listed yet");
-    await expect(page.getByTestId("detail-watch").getByTestId("service-mark")).toHaveText("Paramount+");
+    await expect(page.getByTestId("detail-watch").getByTestId("service-mark")).toHaveText("CBS");
+    await expect(page.getByTestId("detail-tv")).toHaveText("CBS");
+  });
+
+  test("a live golf round: its round in the time slot, the leader with a real minus and no position", async () => {
+    await page.goto("/gameday");
+    const golf = row(ids.golf);
+    await expect(golf.getByTestId("game-start")).toHaveText("R1");
+    await expect(golf.getByTestId("score-leader")).toHaveText("Leader: Chris Kirk −9 (thru 18)");
+    await page.goto(`/gameday/${ids.golf}`);
+    await expect(page.getByTestId("event-leader")).toHaveText("Leader: Chris Kirk −9 (thru 18)");
+    await expect(page.getByTestId("detail-watch")).toContainText("R1");
+    await expect(page.getByTestId("detail-watch")).not.toContainText("TBD");
   });
 
   test("an unknown game is a 404", async () => {

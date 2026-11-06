@@ -213,6 +213,58 @@ export function tvLabel(tv: readonly string[] | null | undefined): string {
   return tv && tv.length ? tv.join(" · ") : "Not listed";
 }
 
+/**
+ * Each network once, in ESPN's order, marked with the owner's service it
+ * streams on (owner, Nov 5: one label; the network is the gold chip when it
+ * is on the owner's services, plain text otherwise, never both).
+ */
+export function tvItems(tv: readonly string[] | null | undefined,
+                        serviceOf: (name: string) => string | null): { name: string; service: string | null }[] {
+  const seen = new Set<string>();
+  const out: { name: string; service: string | null }[] = [];
+  for (const raw of tv ?? []) {
+    const name = raw.trim();
+    if (!name || seen.has(name.toUpperCase())) continue;
+    seen.add(name.toUpperCase());
+    out.push({ name, service: serviceOf(name) });
+  }
+  return out;
+}
+
+/** "−9" with a real minus sign (U+2212), "E" and "+2" as given. */
+export function minusSign(v: string | number | null | undefined): string {
+  const s = v == null ? "" : String(v).trim();
+  return s.startsWith("-") ? `−${s.slice(1)}` : s;
+}
+
+function thruPart(g: Golfer): string {
+  return g.thru != null && g.thru !== "" ? `thru ${g.thru}` : "";
+}
+
+/** The leader (owner, Nov 5): "Chris Kirk −9 (thru 18)", no position. */
+export function leaderLine(g: Golfer): string {
+  const thru = thruPart(g);
+  return [g.name, minusSign(g.to_par), thru ? `(${thru})` : ""].filter(Boolean).join(" ");
+}
+
+/** A followed player keeps his position: "Scottie Scheffler T5 (−4, thru 18)". */
+export function followedLine(g: Golfer): string {
+  const inner = [minusSign(g.to_par), thruPart(g)].filter(Boolean).join(", ");
+  return [g.name, g.pos ?? "", inner ? `(${inner})` : ""].filter(Boolean).join(" ");
+}
+
+/**
+ * The card's time slot: the start ("7:15 PM", or TBD before play when ESPN
+ * has no time); once a time-TBD event is in play, its round ("R1"), never
+ * TBD (owner, Nov 5); once over or off, its status ("Final", "Postponed").
+ */
+export function timeSlot(r: Pick<SlateRow, "at" | "tbd" | "status" | "detail" | "session">): string {
+  const status = statusLabel(r);
+  if (isLive(r)) return r.tbd ? (r.session ?? "Live") : startLabel(r);
+  if (status) return status;
+  return startLabel(r);
+}
+
 export function statusLabel(r: Pick<SlateRow, "status" | "detail">): string | null {
   switch (r.status) {
     case "live":

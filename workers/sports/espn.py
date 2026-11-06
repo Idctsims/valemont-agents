@@ -15,14 +15,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Sequence
 
 BASE = "https://site.api.espn.com/apis/site/v2/sports/"
+#: ESPN's core API: a golf tournament's courses (the scoreboard has none).
+CORE = "https://sports.core.api.espn.com/v2/sports/"
+#: A failed course lookup is tried again after this long (never every minute).
+COURSE_RETRY = timedelta(hours=6)
 TIMEOUT_S = 20
+
+log = logging.getLogger("valemont.sports")
 USER_AGENT = "valemont-worker"
 RETRY_AFTER_S = 2.0
 
@@ -234,6 +241,31 @@ def venue_name(obj: Any, key: str, league: str, path: str) -> str | None:
         return None
     name = opt(v, "fullName", str, league, f"{path}.{key}")
     return name[:200] if name else None
+
+
+def parse_course(data: Any, league: str) -> str | None:
+    """A golf tournament's course from ESPN's core-API event (owner, Nov 5):
+    the host course (else the first) as "Name, City". Shape-checked when
+    present: courses absent or empty is None; a present field of the wrong
+    type raises EspnShapeError (the caller logs it and keeps the venue
+    blank: a course never fails a run)."""
+    if not isinstance(data, dict):
+        raise EspnShapeError(league, "core event", f"expected an object, got {type(data).__name__}")
+    courses = opt(data, "courses", list, league, "core event")
+    if not courses:
+        return None
+    for i, c in enumerate(courses):
+        if not isinstance(c, dict):
+            raise EspnShapeError(league, f"core event.courses[{i}]", f"expected an object, got {type(c).__name__}")
+    chosen = next((c for c in courses if c.get("host") is True), courses[0])
+    path = f"core event.courses[{courses.index(chosen)}]"
+    name = opt(chosen, "name", str, league, path)
+    if not name or not name.strip():
+        return None
+    address = opt(chosen, "address", dict, league, path)
+    city = opt(address, "city", str, league, f"{path}.address") if address else None
+    out = f"{name.strip()}, {city.strip()}" if city and city.strip() else name.strip()
+    return out[:200]
 
 
 def number(s: str | None) -> int | str | None:
@@ -583,15 +615,67 @@ def dates_param(days: Sequence[date]) -> str:
     return lo.strftime("%Y%m%d") if lo == hi else f"{lo:%Y%m%d}-{hi:%Y%m%d}"
 
 
+@dataclass
+class CourseHit:
+    """A course lookup's answer (None: no course or the lookup failed) and when."""
+
+    name: str | None
+    at: float
+
+
+#: Process-wide (the schedule and live jobs make a provider per run): one
+#: core-API call per tournament per process, and a failed or empty lookup at
+#: most every COURSE_RETRY. Memory: one short entry per tournament.
+COURSES: dict[tuple[str, str], CourseHit] = {}
+_COURSE_WARNED: set[tuple[str, str]] = set()
+
+
 class Espn:
     """Counts calls and bytes over the wire; one retry on 429, 5xx or a
     transport error, then EspnFetchError."""
 
-    def __init__(self, http: Http, *, sleep: Callable[[float], None] = time.sleep) -> None:
+    def __init__(self, http: Http, *, sleep: Callable[[float], None] = time.sleep,
+                 courses: dict[tuple[str, str], CourseHit] | None = None,
+                 clock: Callable[[], float] = time.monotonic) -> None:
         self.http = http
         self.sleep = sleep
         self.calls = 0
         self.wire_bytes = 0
+        self.courses = COURSES if courses is None else courses
+        self.clock = clock
+
+    def course(self, lg: League, event_id: str) -> str | None:
+        """The tournament's course (golf), or None. NEVER raises: a missing,
+        failed or reshaped response is logged once per tournament and the
+        venue stays blank (owner, Nov 5). One call, no retry: it is cosmetic."""
+        key = (lg.code, event_id)
+        hit = self.courses.get(key)
+        now = self.clock()
+        if hit is not None and (hit.name is not None or now - hit.at < COURSE_RETRY.total_seconds()):
+            return hit.name
+        sport, _, league = lg.path.partition("/")
+        url = f"{CORE}{sport}/leagues/{league}/events/{event_id}"
+        name: str | None = None
+        problem: str | None = None
+        try:
+            self.calls += 1
+            r = self.http(url, {"lang": "en", "region": "us"})
+            self.wire_bytes += r.wire_bytes
+            if r.status != 200:
+                problem = f"HTTP {r.status}"
+            else:
+                name = parse_course(r.data, lg.code)
+                if name is None:
+                    problem = "no course listed"
+        except EspnShapeError as exc:
+            problem = str(exc)
+        except Exception as exc:  # transport: timeout, DNS, reset; never fails the run
+            problem = type(exc).__name__
+        if problem and key not in _COURSE_WARNED:
+            _COURSE_WARNED.add(key)
+            log.warning("sports: no course for %s event %s (%s); venue stays blank", lg.code, event_id, problem)
+        self.courses[key] = CourseHit(name, now)
+        return name
 
     def scoreboard(self, lg: League, days: Sequence[date]) -> Any:
         params = dict(lg.params, dates=dates_param(days))
@@ -627,4 +711,12 @@ class Espn:
         for batch in batches:
             for ev in parse(lg, self.scoreboard(lg, batch)):
                 seen[ev.espn_id] = ev
+        if lg.kind == "golf_round":
+            # The course (owner, Nov 5), the same in the schedule and live
+            # jobs, so the venue never flips between a course and blank.
+            for eid, ev in list(seen.items()):
+                if ev.venue is None and ev.parent_espn_id:
+                    course = self.course(lg, ev.parent_espn_id)
+                    if course:
+                        seen[eid] = replace(ev, venue=course)
         return list(seen.values())

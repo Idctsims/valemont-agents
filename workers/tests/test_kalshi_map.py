@@ -10,6 +10,7 @@ games, as sports_events holds them.
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import json
 import logging
@@ -330,6 +331,35 @@ class PlayersAndDates(unittest.TestCase):
         # next week's round is "not listed" against the WWTC's start.
         self.assertEqual(res[20].state, "not_listed")
         self.assertEqual(km.horizon(events("KXPGATOUR"), NOW), at("2026-11-05T13:30"))
+
+    def test_a_round_first_seen_long_after_its_placeholder_links_by_date(self) -> None:
+        """Nov 5: WWT R1's placeholder (05:00 UTC) was 15 h old at the first
+        run (20:04 UTC). Once read, an in-play round with its tournament's
+        event open links like its siblings (owner, Nov 5)."""
+        r1 = ledger.MapRow(206, "pga", "golf_round", "R1", at("2026-11-05T05:00"), None, None, (), None, None, None)
+        lg = km.MapLeague("pga", "golf_round", "golf", "KXPGATOUR", "by_date")
+        res = km.decide_league(lg, [r1], events("KXPGATOUR"), ALIASES, at("2026-11-05T20:04"))
+        self.assertEqual([(d.state, d.ticker, d.method) for d in res.decisions],
+                         [("linked", "KXPGATOUR-WOWTC26", "by_date")])
+
+    def test_the_read_keeps_a_time_tbd_row_a_day_longer(self) -> None:
+        sql = " ".join(ledger.KALSHI_MAP_ROWS_SQL.split())
+        self.assertIn("AND starts_at >= %(since)s - %(tbd_grace)s::interval AND (starts_at >= %(since)s OR time_tbd)", sql)
+        self.assertEqual(ledger.KALSHI_MAP_TBD_GRACE, timedelta(days=1))
+        sent: list[dict] = []
+
+        class Conn:
+            def execute(self, _sql: str, params: dict):
+                sent.append(params)
+                return self
+
+            def fetchall(self) -> list:
+                return []
+
+        with mock.patch.object(ledger, "_brief_conn", lambda conn: contextlib.nullcontext(Conn())):
+            ledger.kalshi_map_rows(at("2026-11-05T14:04"), ["pga"])
+        self.assertEqual(sent[0]["tbd_grace"], timedelta(days=1))
+        self.assertEqual(sent[0]["since"], at("2026-11-05T14:04"))
 
     def test_an_off_league_is_out_of_scope(self) -> None:
         lg = km.MapLeague("mlb", "game", "baseball", "KXMLBGAME", "off")

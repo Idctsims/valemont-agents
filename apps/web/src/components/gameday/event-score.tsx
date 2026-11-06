@@ -5,16 +5,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pollLive } from "@/app/(app)/gameday/actions";
 import { StatusChip } from "@/components/ui/badges";
 import {
-  POLL_SECONDS, applyPatches, isLive, kindOf, pollIds, rankPrefix, startLabel, statusLabel, type Golfer, type SlateRow,
+  POLL_SECONDS, applyPatches, followedLine, isLive, kindOf, leaderLine, pollIds, rankPrefix, startLabel, statusLabel,
+  type SlateRow,
 } from "@/lib/gameday/slate";
 
 // The detail page's score and clock header, polled like the slate: every
 // POLL_SECONDS while the tab is visible and this game is in play or due.
-
-function golfer(g: Golfer): string {
-  const thru = g.thru != null && g.thru !== "" ? `, thru ${g.thru}` : "";
-  return `${g.pos ?? ""} ${g.name}${g.to_par ? ` ${g.to_par}${thru}` : ""}`.trim();
-}
 
 export function EventScore({ initial, when }: { initial: SlateRow; when: string }) {
   const [row, setRow] = useState(initial);
@@ -90,11 +86,11 @@ export function EventScore({ initial, when }: { initial: SlateRow; when: string 
           {row.session && <p className="mt-1 text-base text-text-muted">{row.session}</p>}
           {scored && row.score?.leader?.name && (
             <p data-testid="event-leader" className="mt-3 text-base text-text">
-              Leader: {kind === "golf_round" ? golfer(row.score.leader) : row.score.leader.name}
+              Leader: {kind === "golf_round" ? leaderLine(row.score.leader) : row.score.leader.name}
             </p>
           )}
           {scored && kind === "golf_round" && (row.score?.followed ?? []).map((g) => (
-            <p key={g.name} data-testid="event-followed" className="text-base text-text-muted">{golfer(g)}</p>
+            <p key={g.name} data-testid="event-followed" className="text-base text-text-muted">{followedLine(g)}</p>
           ))}
           {scored && row.score?.sets && (
             <p className="mt-3 font-mono text-xl tabular-nums text-text">

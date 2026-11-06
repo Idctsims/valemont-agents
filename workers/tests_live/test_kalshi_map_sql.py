@@ -13,7 +13,7 @@ from __future__ import annotations
 import unittest
 import uuid
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import psycopg
 
@@ -121,6 +121,30 @@ class Reads(MapSqlCase):
             self.assertEqual((got[g].home_abbr, got[g].away_abbr, got[g].names, got[g].link_state), ("JAX", "WSH", (), None))
             self.assertEqual((got[m].home_abbr, got[m].names), (None, ("Ben Shelton", "Arthur Rinderknech")))
             self.assertEqual(ledger.kalshi_map_rows(FAR, ["nfl"], is_test=False, conn=conn), [])  # real rows only
+
+    def test_a_time_tbd_row_is_read_until_a_day_past_the_window(self) -> None:
+        """WWT R1 (owner, Nov 5): a golf round's starts_at is its day start, so
+        a round 20 h past its placeholder is still read; a timed game 20 h old
+        is not; nothing over a day past the window is."""
+        golf = {"league": "pga", "kind": "golf_round", "home": None, "away": None, "participants": None,
+                "session": "R1", "time_tbd": True}
+
+        def put(hours: float, **kw) -> int:
+            r = _row(starts_at=(FAR + timedelta(hours=hours)).isoformat(), **kw)
+            self.upsert(conn, r)
+            return conn.execute("SELECT id FROM sports_events WHERE league = %s AND espn_id = %s",
+                                (r["league"], r["espn_id"])).fetchone()[0]
+
+        with _rolled_back() as conn:
+            tbd_20h = put(-20, **golf)
+            tbd_25h = put(-25, **golf)
+            timed_20h = put(-20)
+            timed_later = put(1)
+            got = {r.id for r in ledger.kalshi_map_rows(FAR, ["nfl", "pga"], is_test=True, conn=conn)}
+            self.assertIn(tbd_20h, got)
+            self.assertIn(timed_later, got)
+            self.assertNotIn(timed_20h, got)
+            self.assertNotIn(tbd_25h, got)
 
 
 class Writes(MapSqlCase):
