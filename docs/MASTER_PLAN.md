@@ -442,13 +442,13 @@ In short: 7 → 8 → 9 → 10–12 → 6 (Lookbook) → 13.
 4. Discovery feed (Unsplash and Pexels) with learning; Style DNA with fit and IG suggestions.
    - [ ] Style DNA summary updates after new saves
 
-### Chat 7 — Sports data layer and Game Day
+### Chat 7 — Sports data layer and Game Day ✓ (closed Nov 6, 2026; carried items below)
 
 **Set up in this chat:** nothing new; ESPN needs no key. API-Sports free key only if the fallback is needed.
 
 1. ESPN adapter with schema checks, API-Sports fallback, `sports_events`, mapping to Kalshi event tickers.
    - [x] Tonight's games across your five sports show times, channels and matchups (in `sports_events`; the page is item 2)
-   - [ ] Every NFL and NBA game links to its Kalshi event
+   - [x] Every NFL and NBA game links to its Kalshi event: every one inside Kalshi's listed window (Phase 2, Nov 5: NFL 29, NBA 25); each game past it is `not_listed` until Kalshi lists it
 
 **Phase 1 (ESPN adapter, `sports_events`): GREEN 2026-11-04 (owner).** PRs #79 (merge `6b73d87`) and #80 (merge `89bbf12`); db/065 (NOTICE not seen, owner saw only "Success"; log row present). Evidence, read via db_inspect and the 60 s job notes:
 - PHI at DET (nba 401909922): scheduled 20:00:26 UTC → live 00:13:39 UTC at the tip → every change written within its minute (end Q1 00:41, halftime 01:27, Q3 01:42, end Q3 02:11) → final 02:57:45 UTC, 112–106.
@@ -464,11 +464,37 @@ In short: 7 → 8 → 9 → 10–12 → 6 (Lookbook) → 13.
 - Every NFL (29) and NBA (25) game inside Kalshi's listed window linked; each not_listed starts after the series' latest listed event (NFL 1, NBA 28). NFL and CFB rows reach 14 days (Nov 20).
 - Every not_linked carries its reason. USC at Indiana (cfb) is an alias gap (`IU → IND` exists for mcbb, not cfb; Kalshi `KXNCAAFGAME-26NOV14USCIND`): a db/067 row, the owner's call. Detail: CLAUDE.md, Chat 7 Phase 2.
 - After #84's reboot: sent 333 (a restart re-sends every non-linked row), and the database wrote only the 4 that changed. No 429 has failed a run.
-- Carried, not part of the GREEN: RSS at rest past 6 h. The #87/#88/#89 reboots cut #84's curve; it is read from the last boot (CLAUDE.md, Chat 7 Phase 2).
+- Carried, not part of the GREEN: RSS at rest past 6 h. The #87/#88/#89 reboots cut #84's curve; it is read from the last boot (CLAUDE.md, Chat 7 Phase 2). **Closed Nov 6 on #91's boot (close-out below).**
 2. Game Day page and tonight's slate in the Morning Brief.
-   - [ ] Tapping a game opens its detail page (bets attach in Chat 9)
+   - [x] Tapping a game opens its detail page (bets attach in Chat 9): the owner's Nov 5 phone checks worked the card and the detail page (findings 1–5, fixed in #91)
 
 **Phase 3 (Game Day, db/068, db/069): merged and deployed 2026-11-05** (PR #88 merge `419a4ba`; db/068 applied 21:25:58 UTC, gate 502 OK / 0 skipped, KB not captured; db/069 (PR #89: NFL first on any night it plays; `e2e_marker_ok` fails closed) applied 22:05:16 UTC, gate 506 OK / 0 skipped, ~2.92 MB). The owner's phone checks and screenshot gate are pending. Design, Step 0 findings, measured KB and the pending list: `docs/gameday.md`. Pre-paste: db/068 passed its self-test and 18 mutations on a scratch copy of production's schema and sports rows; `tests_live/test_gameday_sql.py` 9/9 there; `tests/` 1329 OK; `pnpm test:unit` 183.
+
+**Phase 3 polish: PR #91 (merge `5cbd991`, 01:05:06 UTC Nov 6), no migration.** The owner's Nov 5 phone findings 1–5 (item 6 was not provided): each network named once (the gold chip when on the owner's services); the golf leader as "Leader: Chris Kirk −9 (thru 18)"; a live time-TBD round shows its round, not TBD; WWT R1's "Not checked yet" (`kalshi_map` now reads a time-TBD row one day longer); the golf course from ESPN's core API. `tests/` 1341 OK; `pnpm test:unit` 187; `gameday.spec` logged out 4/4. Railway deployment `ca77bfbc` SUCCESS, boot 01:05:37 UTC Nov 6.
+
+**The first brief with a Game Day section, Fri Nov 6** (read via db_inspect): brief 1650, real, `claude-sonnet-5-5`, not a fallback, 249 words, 12:15:20 UTC (06:15 Chicago, CST since Nov 1), `ai_usage` 9598 ($0.017445). Game Day, as stored: "CFB: Nebraska Cornhuskers at Illinois Fighting Illini, 7:00 PM on Fox." / "CFB: TCU Horned Frogs at No. 22 Arizona Wildcats, 9:15 PM on ESPN." / "CFB: Virginia Tech Hokies at SMU Mustangs, 6:00 PM on ESPN." / "CFB: South Florida Bulls at East Carolina Pirates, 6:30 PM on ESPN2."
+- **The 09:45 push failed:** Apple answered 410 to the 14:30 UTC release push (notification 993), so the worker marked the only subscription (17) inactive, and `morning_brief_push` raised "no active push subscriptions" at 15:45:01 UTC. The owner re-subscribed (subscription 794, 17:19:56 UTC; test push 994 sent 17:20:07 UTC, arrival confirmed by the owner); the brief was then pushed by hand (`scripts.morning_brief --push`): delivery 638 → notification 995, `sent` 17:20:50 UTC, Late.
+- **The golf line was trimmed:** `gameday_brief` returned 5 lines (the 4 above and "Golf, World Wide Technology Championship: R2 today; Chris Kirk leads at -9 after R1."); with it the brief was 263 words against the 260 cap, so `fit_data_lines` dropped the section's last line.
+- **Order and NBA:** rank, not the start time, ordered the lines inside a tier (9:15 before 6:00), and two national NBA games (PHI at CLE, POR at LAL, Prime Video, tier 3) lost to five tier 1–2 CFB games for the 4 lines golf left. **db/070 (PR #92, owner's rule):** the best national NBA game always gets a line; lines read NFL first, then the tier, then the start time. Self-test and 5 mutations on a scratch copy; **the paste is pending.**
+
+**Chat 7 CLOSED 2026-11-06 (owner).** Phase 1 GREEN Nov 4 (PRs #79, #80, #84; db/065), Phase 2 GREEN Nov 5 (PRs #83, #86, #87; db/066, db/067), Phase 3 merged Nov 5 with its polish Nov 6 (PRs #88, #89, #91; db/068, db/069). Migrations db/065–db/069, all applied (CLAUDE.md, Current State).
+- **Worker RSS, closed: the new baseline is ~140–150 MB at rest** (owner). Read from Railway's log, 9,180 RSS lines from #91's boot (01:05:37 UTC Nov 6) to 17:13:59 UTC, ~16 h: boot 77 MB; hourly heartbeat medians 144–146 MB (02–05 UTC), 148–152 MB (06–12 UTC), 140–144 MB (13–17 UTC); peaks 165 MB at the 10:00 UTC cluster (`sports_schedule`, `kalshi_map`, `feed_profile`, `feed_ingest` together), the heartbeat over 160 only twice (164 at 10:06, 161 at 10:36, both inside ingest); slope −0.26 MB/h from boot + 1 h, −1.1 MB/h from boot + 6 h.
+- **Sports jobs, Nov 6** (`job_health` and every failed/error log line since boot): `sports_live`, `sports_schedule`, `kalshi_map` ok, 0 failures, no failed run. The only sports alerts since Nov 5: "sports_schedule needs attention" 20:02:38 UTC Nov 5 (929) and "Recovered" 20:16:48 UTC (930), PR #84's fix.
+- **Railway:** Hobby funded Nov 5 (owner); the Railway CLI logged in on this machine (`railway whoami` names the owner's account, Nov 6), which closes the Nov 2 "logged out" note.
+
+Carried, each pending until read:
+- **Scheffler and Koepka's live position:** the first week either plays (fixture-verified only; neither was in the WWT field).
+- **The F1 sprint shape:** the first sprint weekend (an unknown session type fails loud).
+- **The push subscription:** 17 retired by Apple (410) at 14:30 UTC Nov 6; re-subscribed as 794 at 17:19:56 UTC. Closed by the test push (994) **and tomorrow's 09:45 push (Sat Nov 7): pending.**
+- **Chat 4's release-push reading (3):** the first real release push fired (notification 993, "Tonight: The Rainmaker on Prime Video", 14:30 UTC Nov 6) and was not delivered (410). Still pending: a delivered one.
+- **db/070 (PR #92):** the owner's review, the paste, its gate; then the slate reads with NBA in and by time.
+- **The Game Day line the word cap drops:** golf (or F1) is always the first trimmed, being last in the section. Not decided.
+- **RaceFans:** the source fails every fetch from the worker since 01:06 UTC Nov 6 ("not a feed"; last good fetch 00:43 UTC, last new item 11:32 UTC Nov 5), while the same URL and request return valid RSS from the owner's machine. Owner decision pending.
+- **From Phase 3:** phone item 6 (not provided), the screenshot gate, the kalshi.com link form, Wags' answers: not reported.
+- **Week 9 props archive, Tue Nov 10**, then every Tuesday to week 18 on Tue Jan 12 (CLAUDE.md, RECURRING).
+- **The first real Monday quiz, Mon Nov 9.**
+- **Chat 5's carries:** the outcome run with the pinned controls; the 3-card Arm Me check; the Undo fix re-run; the 390 px From-line check.
+- **Retention follow-ups** (clearing centroids, a 14-day similarity log): parked until the database passes ~350 MB (owner, Nov 6).
 
 ### Chat 8 — Betting: consensus engine and Parlay Generator
 
@@ -538,6 +564,8 @@ In short: 7 → 8 → 9 → 10–12 → 6 (Lookbook) → 13.
 2. Capital Tracker wiring audit across bets and bots, paper and live.
 3. Full end-to-end test (section 8), fixes, and the go-live checklist.
    - [ ] Every box in section 8's end-to-end test is ticked
+
+**Board (owner, Nov 6):** an alert when the last push subscription goes inactive: a Home banner, and an email through healthchecks.io (a push can't reach a phone with no subscription). Why: on Nov 6 Apple retired the only subscription (410) at 14:30 UTC, and the 09:45 brief push then failed with nothing to tell the owner.
 
 ## 7. Risk register
 
