@@ -379,6 +379,8 @@ sport = "f1"
 kind = "rss"
 url = "https://www.racefans.net/feed/"
 priority = 25
+active = false
+notes = "Retired by owner decision 2026-11-06: from the worker every fetch since 01:06 UTC Nov 6 was a 200 that is not a feed (last good fetch 00:43 UTC, last new item 11:32 UTC Nov 5), while the same request from the owner's machine returned valid RSS. Likely a block on Railway's IP (not confirmed: the body was not read). F1 keeps formula1, the-race and yahoo-f1."
 
 [[source]]
 slug = "yahoo-nfl"
