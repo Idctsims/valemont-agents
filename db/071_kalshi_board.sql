@@ -17,6 +17,9 @@
 --      sports_events row's start when there is one, else the milestone's),
 --      sports_event_id, close and expected expiration (the earliest of its
 --      markets'), combo_eligible / combo_yes_only / combo_collections,
+--      combo_size_max (associated_events[].size_max: how many of the event's
+--      markets one combo may use; NULL = absent, no stated cap, never
+--      coerced) and combo_quoters (the active_quoters count, never the list),
 --      fetched_at (the last pull that asked for it).
 --   3. kalshi_board: one row per market, narrow: kind (game_line | prop |
 --      other), variant ('protected' for the *PROT series), subject, stat,
@@ -89,6 +92,12 @@ CREATE TABLE IF NOT EXISTS kalshi_board_events (
     combo_eligible            BOOLEAN      NOT NULL DEFAULT false,
     combo_yes_only            BOOLEAN      NOT NULL DEFAULT false,
     combo_collections         TEXT[]       NOT NULL DEFAULT '{}',
+    -- associated_events[].size_max: how many of this event's markets one
+    -- combo may use. NULL = absent on the event (no stated per-event cap);
+    -- never coerced to 0 or 1 (owner, Nov 6).
+    combo_size_max            SMALLINT     CHECK (combo_size_max IS NULL OR combo_size_max >= 0),
+    -- len(associated_events[].active_quoters): a count only, never the list.
+    combo_quoters             SMALLINT     CHECK (combo_quoters IS NULL OR combo_quoters >= 0),
     is_test                   BOOLEAN      NOT NULL DEFAULT false,
     fetched_at                TIMESTAMPTZ  NOT NULL,
     created_at                TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -97,6 +106,9 @@ CREATE TABLE IF NOT EXISTS kalshi_board_events (
     CONSTRAINT kalshi_board_events_under_series CHECK (event_ticker LIKE series_ticker || '-%'),
     CONSTRAINT kalshi_board_events_combo CHECK (combo_eligible = (cardinality(combo_collections) > 0)
                                                 AND (combo_eligible OR NOT combo_yes_only)),
+    -- The leg limit and the quoters belong to an eligible event only.
+    CONSTRAINT kalshi_board_events_combo_limits CHECK (combo_eligible
+                                                       OR (combo_size_max IS NULL AND combo_quoters IS NULL)),
     CONSTRAINT kalshi_board_events_ticker_test UNIQUE (event_ticker, is_test)
 );
 
@@ -146,7 +158,8 @@ SELECT b.market_ticker, b.event_ticker, e.series_ticker, e.game_ticker, e.game_t
        CASE WHEN b.yes_ask IS NULL THEN NULL ELSE 1 - b.yes_ask END AS no_bid,
        CASE WHEN b.yes_bid IS NULL THEN NULL ELSE 1 - b.yes_bid END AS no_ask,
        b.volume, b.open_interest, b.taker_fee_at_ask, s.fee_type, s.fee_multiplier,
-       e.combo_eligible, e.combo_yes_only, e.combo_collections, e.close_time, e.expected_expiration_time,
+       e.combo_eligible, e.combo_yes_only, e.combo_collections, e.combo_size_max, e.combo_quoters,
+       e.close_time, e.expected_expiration_time,
        b.fetched_at, b.last_changed_at, e.fetched_at AS event_fetched_at, b.is_test
   FROM kalshi_board b
   JOIN kalshi_board_events e ON e.event_ticker = b.event_ticker
@@ -202,14 +215,17 @@ AS $$
     WITH w AS (
         INSERT INTO public.kalshi_board_events AS e
                (event_ticker, series_ticker, game_ticker, game_title, milestone_start, starts_at, close_time,
-                expected_expiration_time, combo_eligible, combo_yes_only, combo_collections, is_test, fetched_at)
+                expected_expiration_time, combo_eligible, combo_yes_only, combo_collections, combo_size_max,
+                combo_quoters, is_test, fetched_at)
         SELECT r.event_ticker, r.series_ticker, r.game_ticker, r.game_title, r.milestone_start,
                r.milestone_start, r.close_time, r.expected_expiration_time, coalesce(r.combo_eligible, false),
-               coalesce(r.combo_yes_only, false), coalesce(r.combo_collections, '{}'), p_is_test, p_at
+               coalesce(r.combo_yes_only, false), coalesce(r.combo_collections, '{}'), r.combo_size_max,
+               r.combo_quoters, p_is_test, p_at
           FROM jsonb_to_recordset(p_rows) AS r (
                    event_ticker text, series_ticker text, game_ticker text, game_title text,
                    milestone_start timestamptz, close_time timestamptz, expected_expiration_time timestamptz,
-                   combo_eligible boolean, combo_yes_only boolean, combo_collections text[])
+                   combo_eligible boolean, combo_yes_only boolean, combo_collections text[],
+                   combo_size_max smallint, combo_quoters smallint)
         ON CONFLICT (event_ticker) DO UPDATE SET
             series_ticker = EXCLUDED.series_ticker, game_ticker = EXCLUDED.game_ticker,
             game_title = EXCLUDED.game_title, milestone_start = EXCLUDED.milestone_start,
@@ -217,14 +233,17 @@ AS $$
             starts_at = CASE WHEN e.sports_event_id IS NULL THEN EXCLUDED.milestone_start ELSE e.starts_at END,
             close_time = EXCLUDED.close_time, expected_expiration_time = EXCLUDED.expected_expiration_time,
             combo_eligible = EXCLUDED.combo_eligible, combo_yes_only = EXCLUDED.combo_yes_only,
-            combo_collections = EXCLUDED.combo_collections, fetched_at = greatest(e.fetched_at, EXCLUDED.fetched_at)
+            combo_collections = EXCLUDED.combo_collections, combo_size_max = EXCLUDED.combo_size_max,
+            combo_quoters = EXCLUDED.combo_quoters, fetched_at = greatest(e.fetched_at, EXCLUDED.fetched_at)
          WHERE e.is_test = p_is_test
            AND (e.series_ticker, e.game_ticker, e.game_title, e.milestone_start, e.close_time,
-                e.expected_expiration_time, e.combo_eligible, e.combo_yes_only, e.combo_collections)
+                e.expected_expiration_time, e.combo_eligible, e.combo_yes_only, e.combo_collections,
+                e.combo_size_max, e.combo_quoters)
                IS DISTINCT FROM
                (EXCLUDED.series_ticker, EXCLUDED.game_ticker, EXCLUDED.game_title, EXCLUDED.milestone_start,
                 EXCLUDED.close_time, EXCLUDED.expected_expiration_time, EXCLUDED.combo_eligible,
-                EXCLUDED.combo_yes_only, EXCLUDED.combo_collections)
+                EXCLUDED.combo_yes_only, EXCLUDED.combo_collections, EXCLUDED.combo_size_max,
+                EXCLUDED.combo_quoters)
         RETURNING 1
     )
     SELECT count(*)::integer FROM w;
@@ -418,7 +437,8 @@ AS $$
 $$;
 
 -- One game's markets (on expand), one object per event: series title, combo
--- flags, fetched_at, and its markets as compact objects (kind, label, YES
+-- flags and the per-event leg limit (sm; left out when absent), fetched_at,
+-- and its markets as compact objects (kind, label, YES
 -- bid/ask, fee at the ask, variant): game lines first, then props, then other.
 CREATE OR REPLACE FUNCTION public.kalshi_board_game(p_game text, p_kind text DEFAULT NULL,
                                                     p_combo_only boolean DEFAULT false,
@@ -430,7 +450,8 @@ SECURITY INVOKER
 SET search_path = ''
 AS $$
     WITH m AS (
-        SELECT e.event_ticker, s.title AS series_title, e.combo_eligible, e.combo_yes_only, e.fetched_at,
+        SELECT e.event_ticker, s.title AS series_title, e.combo_eligible, e.combo_yes_only, e.combo_size_max,
+               e.fetched_at,
                b.market_kind, b.variant, b.label, b.subject, b.line, b.yes_bid, b.yes_ask, b.taker_fee_at_ask,
                CASE b.market_kind WHEN 'game_line' THEN 0 WHEN 'prop' THEN 1 ELSE 2 END AS k_order
           FROM public.kalshi_board b
@@ -443,6 +464,7 @@ AS $$
                'e', m.event_ticker, 'sr', min(m.series_title),
                'c', CASE WHEN bool_or(m.combo_eligible) THEN true END,
                'y', CASE WHEN bool_or(m.combo_yes_only) THEN true END,
+               'sm', max(m.combo_size_max),
                'asof', max(m.fetched_at),
                'm', jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
                         'k', m.market_kind, 'lb', m.label, 'b', m.yes_bid, 'a', m.yes_ask,
@@ -526,11 +548,11 @@ BEGIN
     ON CONFLICT (series_ticker) DO NOTHING;
     INSERT INTO public.kalshi_board_events (event_ticker, series_ticker, game_ticker, game_title, milestone_start,
                                             starts_at, combo_eligible, combo_yes_only, combo_collections,
-                                            is_test, fetched_at)
+                                            combo_size_max, combo_quoters, is_test, fetched_at)
     VALUES (v_game, 'E2ETEST', v_game, 'Test Away vs Test Home', p_starts_at, p_starts_at, true, true,
-            ARRAY['E2ECOLL-R'], true, now()),
+            ARRAY['E2ECOLL-R'], 1, 0, true, now()),
            (v_pts, 'E2ETEST', v_game, 'Test Away vs Test Home', p_starts_at, p_starts_at, false, false,
-            '{}', true, now());
+            '{}', NULL, NULL, true, now());
     INSERT INTO public.kalshi_board (market_ticker, event_ticker, market_kind, variant, subject, stat, line, label,
                                      yes_bid, yes_ask, volume, open_interest, taker_fee_at_ask, is_test,
                                      fetched_at, last_changed_at)
@@ -666,6 +688,49 @@ BEGIN
         IF v_n <> 2 THEN RAISE EXCEPTION 'SELFTEST FAILED: events insert wrote %', v_n; END IF;
         v_n := public.kalshi_board_events_upsert(v_events, v_t1);
         IF v_n <> 0 THEN RAISE EXCEPTION 'SELFTEST FAILED: unchanged events were rewritten (%)', v_n; END IF;
+
+        -- The per-event leg limit and quoters: absent stays NULL (never 0 or 1);
+        -- a stated value is written and read back; absent again is NULL again.
+        SELECT combo_size_max, combo_quoters INTO v_row FROM public.kalshi_board_events
+         WHERE event_ticker = 'KXSELFTEST071-26NOV07AAABBB';
+        IF v_row.combo_size_max IS NOT NULL OR v_row.combo_quoters IS NOT NULL THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: an absent leg limit was stored as %', v_row;
+        END IF;
+        v_n := public.kalshi_board_events_upsert(
+                   jsonb_set(jsonb_set(v_events, '{0,combo_size_max}', '1'), '{0,combo_quoters}', '0'), v_t1);
+        SELECT combo_size_max, combo_quoters INTO v_row FROM public.kalshi_board_events
+         WHERE event_ticker = 'KXSELFTEST071-26NOV07AAABBB';
+        IF v_n <> 1 OR v_row.combo_size_max IS DISTINCT FROM 1 OR v_row.combo_quoters IS DISTINCT FROM 0 THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: a leg limit of 1 and 0 quoters read % (wrote %)', v_row, v_n;
+        END IF;
+        -- The cap alone moves (the quoters stay 0): still written.
+        v_n := public.kalshi_board_events_upsert(
+                   jsonb_set(jsonb_set(v_events, '{0,combo_size_max}', '2'), '{0,combo_quoters}', '0'), v_t1);
+        SELECT combo_size_max INTO v_row FROM public.kalshi_board_events
+         WHERE event_ticker = 'KXSELFTEST071-26NOV07AAABBB';
+        IF v_n <> 1 OR v_row.combo_size_max IS DISTINCT FROM 2 THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: a cap-only change read % (wrote %)', v_row, v_n;
+        END IF;
+        v_n := public.kalshi_board_events_upsert(v_events, v_t1);
+        SELECT combo_size_max, combo_quoters INTO v_row FROM public.kalshi_board_events
+         WHERE event_ticker = 'KXSELFTEST071-26NOV07AAABBB';
+        IF v_n <> 1 OR v_row.combo_size_max IS NOT NULL OR v_row.combo_quoters IS NOT NULL THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: a leg limit gone absent read % (wrote %)', v_row, v_n;
+        END IF;
+        v_n := public.kalshi_board_events_upsert(jsonb_set(v_events, '{0,combo_size_max}', '1'), v_t1);
+        v_ok := false;
+        BEGIN
+            PERFORM public.kalshi_board_events_upsert(jsonb_set(v_events, '{1,combo_size_max}', '1'), v_t1);
+        EXCEPTION WHEN check_violation THEN v_ok := true;
+        END;
+        IF NOT v_ok THEN RAISE EXCEPTION 'SELFTEST FAILED: a leg limit on an ineligible event was accepted'; END IF;
+        v_ok := false;
+        BEGIN
+            PERFORM public.kalshi_board_events_upsert(jsonb_set(v_events, '{0,combo_size_max}', '-1'), v_t1);
+        EXCEPTION WHEN check_violation THEN v_ok := true;
+        END;
+        IF NOT v_ok THEN RAISE EXCEPTION 'SELFTEST FAILED: a negative leg limit was accepted'; END IF;
+
         v_n := public.kalshi_board_markets_upsert(v_mk, v_t0);
         IF v_n <> 3 THEN RAISE EXCEPTION 'SELFTEST FAILED: markets insert wrote %', v_n; END IF;
         v_n := public.kalshi_board_markets_upsert(v_mk, v_t1);
@@ -755,7 +820,7 @@ BEGIN
         END IF;
         SELECT x INTO v_j FROM public.kalshi_board_game('KXSELFTEST071GAME-26NOV07AAABBB') x;
         IF v_j IS NULL OR jsonb_array_length(v_j->'m') <> 2 OR v_j->'m'->0->>'lb' <> 'Player One: 10+'
-           OR NOT (v_j->>'c')::boolean THEN
+           OR NOT (v_j->>'c')::boolean OR v_j->>'sm' IS DISTINCT FROM '1' THEN
             RAISE EXCEPTION 'SELFTEST FAILED: kalshi_board_game reads %', v_j;
         END IF;
         SELECT count(*) INTO v_n FROM public.kalshi_board_game('KXSELFTEST071GAME-26NOV07AAABBB', 'game_line') x;

@@ -40,7 +40,12 @@ owner's Step 0 decisions (Nov 6).
    out-of-window events dropped as parsed. One page at a time; the raw JSON is
    dropped before the next call.
 
-### Departures from the approved path (owner to confirm)
+**The empty answer is a contract failure** (owner, Nov 6). A window series
+whose events return no open market is recorded; the other series are still
+written, linked, swept and pruned, and then the run fails, naming each empty
+series with its event count. A pull with no market at all fails the same way.
+
+### Departures from the approved path (approved by the owner, Nov 6)
 
 - **`/markets` takes ONE `event_ticker`.** A comma-separated list answers
   HTTP 200 with an empty list (verified Nov 6, five tickers: 0 markets; one
@@ -74,7 +79,9 @@ owner's Step 0 decisions (Nov 6).
   not after it, the contract resolves to the fair price before tip-off,
   unless the stat line was already reached. The ordinary series settles on
   the stats once the player enters the game. Both settle to a fair price if
-  the player never enters. No logic depends on it yet.
+  the player never enters. No logic depends on it yet. **Phase 4 (owner,
+  Nov 6):** the generator spec says which variant each leg uses and why.
+  The escalator series stay on the board as parse misses (kind prop, nulls).
 - `custom_strike` holds Kalshi's own player and team ids. It is read for the
   kind only and never stored.
 
@@ -92,6 +99,17 @@ owner's Step 0 decisions (Nov 6).
   `size_min` is 2 and `size_max` is 0. Per event: `size_max` 1 on 2,887
   events and absent on 519; `is_yes_only` on 449 (the game moneylines among
   them); `active_quoters` empty on all 3,406 read.
+- **The per-event leg limit decides a same-game combo** (owner, Nov 6). The
+  collections allow several markets from one event, but an event's own
+  `size_max` caps it: `kalshi_board_events.combo_size_max` (smallint). NULL
+  means absent on the event, i.e. no stated per-event cap; it is never
+  coerced to 0 or 1, by the worker or the database. Two collections stating
+  different caps: the tighter one is kept. A same-game parlay whose legs
+  exceed an event's cap cannot be one Kalshi combo: Phase 3 says "build
+  manually". `combo_quoters` keeps `active_quoters` as a count only, so a
+  future non-empty value shows without storing the list. Both are NULL on an
+  ineligible event (CHECK). The page shows the cap on the combo chip
+  ("Combo · YES only · max 1").
 
 ## 5. NO prices
 
@@ -130,7 +148,15 @@ all four prices, Nov 6), and again on every run (the job note).
 | Parse misses | 92 (KXNBAESCALATORPTS 48, KXNBAESCALATOR3PT 41, KXATPGSPREAD 3) |
 | NO complement | 0 mismatches of 35,521 |
 | Kalshi | 1,422 calls, 0 429s, ~88.7 MB, 361 s (200 a page) |
-| Peak RSS over the pull's start | +21.2 MB at 200 a page; **+18.9 MB at 100 a page** (the build: 35,680 markets, 1,593 calls, 0 429s, ~89.0 MB, 400 s, NO 0/35,680). Windows working set; the worker's Linux RSS is pending the first real run |
+| Peak RSS over the pull's start | +21.2 MB at 200 a page; **+18.9 MB at 100 a page** |
+
+**The final dry run (the build, 100 a page):** 35,680 markets / 4,821 events
+/ 615 series / 1,593 Kalshi calls / 0 429s / ~89.0 MB from Kalshi / 400 s /
++18.9 MB peak over the pull's start (Windows working set; the worker's Linux
+RSS comes with its first real run). The rows above at 200 a page are the run
+before it (35,521 / 4,811 / 609 / 1,422 calls / ~88.7 MB / 361 s); commit
+`53d19e1`'s evidence line paired that run's counts with this run's calls,
+time and RSS by mistake, and this table is the record.
 
 ## 8. The page
 

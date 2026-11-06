@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 
 import { expandGame } from "@/app/(app)/betting/actions";
 import {
-  asOfLabel, cents, countsLine, feeCents, orderEvents, startLabel,
+  asOfLabel, cents, comboLabel, countsLine, feeCents, orderEvents, startLabel,
   type BoardEvent, type BoardGame, type BoardMarket, type Kind,
 } from "@/lib/betting/board";
 
@@ -14,11 +14,13 @@ import {
 // the event's combo chip and source time. Phone-first: one column, the
 // prices in a fixed mono column on the right.
 
-function ComboChip({ yesOnly }: { yesOnly?: boolean }) {
+function ComboChip({ ev }: { ev: BoardEvent }) {
+  const cap = ev.sm !== undefined && ev.sm !== null;
   return (
-    <span data-testid="combo-chip" data-yes-only={yesOnly ? "true" : undefined}
+    <span data-testid="combo-chip" data-yes-only={ev.y ? "true" : undefined} data-size-max={cap ? ev.sm : undefined}
+          title={cap ? `A Kalshi combo may use at most ${ev.sm} of this event's markets` : undefined}
           className="label-mono inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-pill border border-accent px-2 text-accent">
-      {yesOnly ? "Combo · YES only" : "Combo"}
+      {comboLabel(ev)}
     </span>
   );
 }
@@ -46,7 +48,7 @@ function EventBlock({ ev }: { ev: BoardEvent }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h4 className="label-mono text-text-muted">{ev.sr}</h4>
         <span className="flex items-center gap-2">
-          {ev.c && <ComboChip yesOnly={ev.y} />}
+          {ev.c && <ComboChip ev={ev} />}
           <span data-testid="event-asof" className="label-mono text-text-muted">{asOfLabel(ev.asof)}</span>
         </span>
       </div>

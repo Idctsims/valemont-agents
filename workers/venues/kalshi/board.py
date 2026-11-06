@@ -146,6 +146,32 @@ class Series:
 class Combo:
     collections: tuple[str, ...]
     yes_only: bool
+    #: associated_events[].size_max: markets of this event one combo may use.
+    #: None = absent on the event (no stated per-event cap); never 0 or 1.
+    size_max: int | None = None
+    #: len(associated_events[].active_quoters); None when the field is absent.
+    quoters: int | None = None
+
+
+def _min_cap(a: int | None, b: int | None) -> int | None:
+    """Two collections' caps for one event: the tighter stated one; absent
+    only when neither states one."""
+    if a is None:
+        return b
+    return a if b is None else min(a, b)
+
+
+def _max_count(a: int | None, b: int | None) -> int | None:
+    if a is None:
+        return b
+    return a if b is None else max(a, b)
+
+
+def merge_combo(have: Combo | None, new: Combo) -> Combo:
+    if have is None:
+        return new
+    return Combo(have.collections + new.collections, have.yes_only or new.yes_only,
+                 _min_cap(have.size_max, new.size_max), _max_count(have.quoters, new.quoters))
 
 
 @dataclass
@@ -296,11 +322,16 @@ def parse_collections(body: Any, keep: set[str] | None = None) -> tuple[Collecti
         p = f"$.multivariate_contracts[{i}]"
         ticker = req(c, "collection_ticker", str, src, p)
         assoc = req(c, "associated_event_tickers", list, src, p)
-        yes_only = set()
+        per_event: dict[str, tuple[bool, int | None, int | None]] = {}
         for j, a in enumerate(opt(c, "associated_events", list, src, p) or []):
-            t = req(a, "ticker", str, src, f"{p}.associated_events[{j}]")
-            if opt(a, "is_yes_only", bool, src, f"{p}.associated_events[{j}]"):
-                yes_only.add(t)
+            q = f"{p}.associated_events[{j}]"
+            t = req(a, "ticker", str, src, q)
+            cap = opt(a, "size_max", int, src, q)
+            if cap is not None and cap < 0:
+                raise KalshiShapeError(src, f"{q}.size_max", f"is negative ({cap})")
+            quoters = opt(a, "active_quoters", list, src, q)
+            per_event[t] = (bool(opt(a, "is_yes_only", bool, src, q)), cap,
+                            None if quoters is None else len(quoters))
         out.meta[ticker] = {
             "series_ticker": opt(c, "series_ticker", str, src, p),
             "size_min": opt(c, "size_min", int, src, p), "size_max": opt(c, "size_max", int, src, p),
@@ -314,9 +345,8 @@ def parse_collections(body: Any, keep: set[str] | None = None) -> tuple[Collecti
                 raise KalshiShapeError(src, f"{p}.associated_event_tickers[{j}]", f"is {type(t).__name__}")
             if keep is not None and t not in keep:
                 continue
-            have = out.by_event.get(t)
-            out.by_event[t] = Combo(((have.collections if have else ()) + (ticker,)),
-                                    (have.yes_only if have else False) or t in yes_only)
+            yes_only, cap, quoters = per_event.get(t, (False, None, None))
+            out.by_event[t] = merge_combo(out.by_event.get(t), Combo((ticker,), yes_only, cap, quoters))
     return out, cursor
 
 
@@ -329,9 +359,7 @@ def collections(client: KalshiClient, keep: set[str] | None = None) -> Collectio
         del body
         out.meta.update(page.meta)
         for t, c in page.by_event.items():
-            have = out.by_event.get(t)
-            out.by_event[t] = c if have is None else Combo(have.collections + c.collections,
-                                                           have.yes_only or c.yes_only)
+            out.by_event[t] = merge_combo(out.by_event.get(t), c)
         if not cursor:
             return out
     raise KalshiShapeError("collections", "$.cursor", f"still paging after {MAX_PAGES} pages")

@@ -24,7 +24,15 @@ export type BoardGame = {
 
 /** kalshi_board_game: one event of an expanded game, with its markets. */
 export type BoardMarket = { k: Kind; lb?: string; b?: number; a?: number; f?: number; v?: string };
-export type BoardEvent = { e: string; sr: string; c?: boolean; y?: boolean; asof: string; m: BoardMarket[] };
+/** sm: how many of this event's markets one Kalshi combo may use (absent =
+ *  no stated per-event cap; never read as 0 or 1). */
+export type BoardEvent = { e: string; sr: string; c?: boolean; y?: boolean; sm?: number; asof: string; m: BoardMarket[] };
+
+/** The combo chip's words: "Combo", "Combo · YES only", "... · max 1". */
+export function comboLabel(ev: Pick<BoardEvent, "y" | "sm">): string {
+  return ["Combo", ev.y ? "YES only" : null, ev.sm !== undefined && ev.sm !== null ? `max ${ev.sm}` : null]
+    .filter(Boolean).join(" · ");
+}
 
 export type Filters = { sport: string | null; kind: Kind | null; combo: boolean };
 

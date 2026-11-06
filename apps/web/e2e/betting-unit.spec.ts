@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
-  asOfLabel, boardHref, cents, countsLine, feeCents, orderEvents, parseFilters, pickSport, startLabel,
+  asOfLabel, boardHref, cents, comboLabel, countsLine, feeCents, orderEvents, parseFilters, pickSport, startLabel,
   type BoardEvent,
 } from "../src/lib/betting/board";
 
@@ -54,6 +54,14 @@ test.describe("formatting", () => {
     expect(countsLine({ p: 1 })).toBe("1 prop");
     expect(countsLine({})).toBe("No markets");
   });
+});
+
+test("the combo chip: YES only and the per-event leg limit; absent is never 0 or 1", () => {
+  expect(comboLabel({})).toBe("Combo");
+  expect(comboLabel({ y: true })).toBe("Combo · YES only");
+  expect(comboLabel({ y: true, sm: 1 })).toBe("Combo · YES only · max 1");
+  expect(comboLabel({ sm: 0 })).toBe("Combo · max 0");
+  expect(comboLabel({ sm: undefined })).toBe("Combo");
 });
 
 test("events: game lines first, then props, then other", () => {

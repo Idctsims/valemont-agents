@@ -65,7 +65,13 @@ class FakeKalshi:
         if path in self.overrides:
             return 200, copy.deepcopy(self.overrides[path])
         if path == "/milestones":
-            return 200, load("milestones")
+            # Only events of recorded series: an unrecorded one would answer
+            # no market, which (rightly) fails the run.
+            body = load("milestones")
+            for m in body["milestones"]:
+                for key in ("primary_event_tickers", "related_event_tickers"):
+                    m[key] = [t for t in m.get(key) or [] if (FIXTURES / f"markets_{kb.series_of(t)}.json").exists()]
+            return 200, body
         if path == "/series":
             return 200, load("series")
         if path.startswith("/series/"):
@@ -301,6 +307,43 @@ class Collections(unittest.TestCase):
         self.assertEqual((meta["is_single_market_per_event"], meta["is_all_yes"], meta["is_ordered"]),
                          (False, False, False))
 
+    def test_the_per_event_leg_limit_and_quoters(self) -> None:
+        body = load("collections")
+        coll = body["multivariate_contracts"][0]
+        c, _ = kb.parse_collections(body)
+        for a in coll["associated_events"]:
+            with self.subTest(a["ticker"]):
+                combo = c.by_event[a["ticker"]]
+                self.assertEqual(combo.size_max, a.get("size_max"))  # None stays None
+                self.assertEqual(combo.quoters, len(a["active_quoters"]) if "active_quoters" in a else None)
+        # Both shapes are in the recorded page: a stated cap and an absent one.
+        self.assertTrue(any(a.get("size_max") is not None for a in coll["associated_events"]))
+        self.assertTrue(any(a.get("size_max") is None for a in coll["associated_events"]))
+
+    def test_an_absent_cap_is_never_0_or_1_and_the_tighter_cap_wins(self) -> None:
+        t = "KXNBAREB-26NOV06BOSCHA"
+        body = {"multivariate_contracts": [
+            {"collection_ticker": "A-R", "associated_event_tickers": [t],
+             "associated_events": [{"ticker": t, "is_yes_only": False, "active_quoters": []}]},
+            {"collection_ticker": "B-R", "associated_event_tickers": [t],
+             "associated_events": [{"ticker": t, "is_yes_only": True, "size_max": 3, "active_quoters": ["q1", "q2"]}]},
+            {"collection_ticker": "C-R", "associated_event_tickers": [t],
+             "associated_events": [{"ticker": t, "size_max": 2}]},
+        ]}
+        c, _ = kb.parse_collections(body)
+        self.assertEqual(c.by_event[t], kb.Combo(("A-R", "B-R", "C-R"), True, 2, 2))
+        alone, _ = kb.parse_collections({"multivariate_contracts": body["multivariate_contracts"][:1]})
+        self.assertEqual((alone.by_event[t].size_max, alone.by_event[t].quoters), (None, 0))
+        row = job.event_row(t, kb.Game("G", "g", NOW, None, None, (t,)), (None, None), alone.by_event[t])
+        self.assertIsNone(row["combo_size_max"])
+        self.assertEqual(row["combo_quoters"], 0)
+        none = job.event_row(t, kb.Game("G", "g", NOW, None, None, (t,)), (None, None), None)
+        self.assertEqual((none["combo_eligible"], none["combo_size_max"], none["combo_quoters"]), (False, None, None))
+        bad = copy.deepcopy(body)
+        bad["multivariate_contracts"][1]["associated_events"][0]["size_max"] = -1
+        with self.assertRaisesRegex(KalshiShapeError, "size_max"):
+            kb.parse_collections(bad)
+
     def test_keep_limits_to_the_window(self) -> None:
         body = load("collections")
         first = body["multivariate_contracts"][0]["associated_event_tickers"][0]
@@ -416,6 +459,29 @@ class FullJob(unittest.TestCase):
         fake = FakeKalshi(overrides={"/markets": {"markets": [], "cursor": ""}})
         with self.assertRaisesRegex(job.BoardFailed, "no open market returned"):
             self.run_full(fake=fake)
+
+    def test_a_window_series_with_events_but_no_market_fails_the_run_after_the_rest_is_written(self) -> None:
+        # The comma-list lesson (owner, Nov 6): an empty answer is a contract
+        # failure, never an empty board. KXNBAREB lists window events here.
+        fake = FakeKalshi()
+        orig = fake.__call__
+
+        def patched(url: str):
+            q = dict(urllib.parse.parse_qsl(url.partition("?")[2]))
+            if url.split("?")[0].endswith("/markets") and kb.series_of(
+                    q.get("event_ticker") or q.get("series_ticker", "")) == "KXNBAREB":
+                fake.urls.append(url)
+                return 200, {"markets": [], "cursor": ""}
+            return orig(url)
+
+        w = RecordingWriter()
+        with self.assertRaisesRegex(job.BoardFailed, r"KXNBAREB \(\d+ events\)"):
+            job.full_job(client=client(patched), now=lambda: NOW, state=job.BoardState(), writer=w)  # type: ignore[arg-type]
+        self.assertIn("KXNBAGAME-26NOV06BOSCHA-BOS", w.sent("markets"))  # the rest was written
+        self.assertEqual([k for k, _ in w.calls][-3:], ["touch", "link", "prune"])
+        dry = job.full_job(client=client(patched), now=lambda: NOW, state=job.BoardState(), dry_run=True)  # type: ignore[arg-type]
+        self.assertEqual(set(dry.empty_series), {"KXNBAREB"})
+        self.assertIn("EMPTY series KXNBAREB", dry.job_note)
 
     def test_a_changed_shape_fails_the_run(self) -> None:
         bad = load("collections")

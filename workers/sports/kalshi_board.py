@@ -137,6 +137,8 @@ class BoardRun:
     seconds: float = 0.0
     idle: str | None = None
     dry_run: bool = False
+    #: Window series that returned no open market: series -> its events asked for.
+    empty_series: dict[str, int] = field(default_factory=dict)
 
     @property
     def job_note(self) -> str:
@@ -155,6 +157,8 @@ class BoardRun:
                  f"parse misses {sum(self.misses.values())}"
                  + (" (" + ", ".join(f"{k} {v}" for k, v in self.misses.most_common(4)) + ")" if self.misses else ""),
                  f"NO complement mismatches {self.no_mismatch}/{self.no_checked}",
+                 ("EMPTY series " + ", ".join(f"{s} ({n} events)" for s, n in sorted(self.empty_series.items())[:8])
+                  if self.empty_series else ""),
                  f"{self.calls} Kalshi calls, {self.limited} 429s, ~{self.kalshi_bytes // 1024} KB from Kalshi, "
                  f"{self.seconds:.0f} s"]
         return "; ".join(p for p in parts if p)
@@ -232,7 +236,10 @@ def event_row(ticker: str, game: kb.Game, times: tuple[datetime | None, datetime
             "close_time": None if close is None else close.isoformat(),
             "expected_expiration_time": None if expiry is None else expiry.isoformat(),
             "combo_eligible": combo is not None, "combo_yes_only": bool(combo and combo.yes_only),
-            "combo_collections": list(combo.collections) if combo else []}
+            "combo_collections": list(combo.collections) if combo else [],
+            # None stays None: absent on the event is "no stated cap", never 0 or 1.
+            "combo_size_max": combo.size_max if combo else None,
+            "combo_quoters": combo.quoters if combo else None}
 
 
 # ------------------------------------------------------------------ runs
@@ -300,6 +307,11 @@ def _pull(client: KalshiClient, run: BoardRun, writer: Writer, state: BoardState
           combos: Mapping[str, kb.Combo], new_markets: dict[int, int], new_events: dict[str, int]) -> None:
     fl = _Flusher(run, writer, state, at, new_markets, new_events)
     for group, batch in kb.market_batches(client, tickers, dict(series)):
+        if not batch.rows:
+            # A window series with events but no open market (owner, Nov 6):
+            # the filter or the listing changed. The others are still written;
+            # the run then fails naming it.
+            run.empty_series[kb.series_of(group[0])] = len(group)
         ev_rows = [event_row(t, window[t], batch.times[t], combos.get(t)) for t in group if t in batch.times]
         run.events += len(ev_rows)
         run.markets += len(batch.rows)
@@ -383,6 +395,10 @@ def _full(client: KalshiClient | None, now: Callable[[], datetime], state: Board
     finally:
         _finish(run, counter, t0)
     log.info("kalshi board: %s", run.job_note)
+    if run.empty_series and not dry_run:
+        raise BoardFailed(f"kalshi board: {len(run.empty_series)} window series returned no open market: "
+                          + ", ".join(f"{s} ({n} events)" for s, n in sorted(run.empty_series.items()))
+                          + f" (the rest was written: {run.job_note})")
     return run
 
 

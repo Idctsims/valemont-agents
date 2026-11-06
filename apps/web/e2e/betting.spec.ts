@@ -71,7 +71,8 @@ test.describe("owner", () => {
     await expect(home.getByTestId("market-yes")).toHaveText("61¢ / 63¢");
     await expect(home.getByTestId("market-fee")).toHaveText("fee 1.63¢");
     const ml = card().getByTestId("board-event").first();
-    await expect(ml.getByTestId("combo-chip")).toHaveText("Combo · YES only");
+    await expect(ml.getByTestId("combo-chip")).toHaveText("Combo · YES only · max 1");
+    await expect(ml.getByTestId("combo-chip")).toHaveAttribute("data-size-max", "1");
     await expect(card().getByTestId("board-event").nth(1).getByTestId("combo-chip")).toHaveCount(0);
     await expect(markets.filter({ hasText: "protected" })).toHaveCount(1);
     await expect(ml.getByTestId("event-asof")).toContainText("as of");

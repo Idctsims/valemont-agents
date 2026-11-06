@@ -218,9 +218,15 @@ class Writes(BoardSqlCase):
                 raw = dict(raw, event_ticker=event, ticker=raw["ticker"].replace(raw["event_ticker"], event))
                 rows.append(kb.parse_market(raw, s, "$")[0])
             g = kb.Game(f"{series}GAME-1", "BOS vs CHA", NOW + timedelta(hours=2), "NBA", "basketball_game", (event,))
-            ledger.kalshi_board_events_upsert([job.event_row(event, g, (NOW + timedelta(days=2), None),
-                                                             kb.Combo(("TLCOLL-R",), True))], NOW, is_test=True,
-                                              conn=conn)
+            capped = f"{series}-26NOV06WASATL"
+            ledger.kalshi_board_events_upsert([
+                job.event_row(event, g, (NOW + timedelta(days=2), None), kb.Combo(("TLCOLL-R",), False, None, 0)),
+                job.event_row(capped, g, (None, None), kb.Combo(("TLCOLL-R",), True, 1, None))],
+                NOW, is_test=True, conn=conn)
+            self.assertEqual(conn.execute(
+                "SELECT event_ticker, combo_size_max, combo_quoters, combo_yes_only FROM kalshi_board_events "
+                "WHERE event_ticker = ANY(%s) ORDER BY event_ticker", ([event, capped],)).fetchall(),
+                [(event, None, 0, False), (capped, 1, None, True)])  # absent stays NULL, never 0 or 1
             self.assertEqual(ledger.kalshi_board_markets_upsert(rows, NOW, is_test=True, conn=conn), len(rows))
             got = conn.execute("SELECT subject, stat, line, yes_ask, taker_fee_at_ask, no_bid FROM v_kalshi_board "
                                "WHERE market_ticker = %s", (rows[0]["market_ticker"],)).fetchone()
