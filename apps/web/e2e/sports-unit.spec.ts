@@ -36,8 +36,10 @@ test.describe("feed URLs", () => {
 });
 
 test.describe("navigation", () => {
-  test("Sports News is built, at /sports (Game Day beside it, Chat 7 Phase 3)", () => {
+  test("Sports News is built, at /sports (Game Day beside it, Chat 7 Phase 3; Betting, Chat 8 Phase 1)", () => {
     const sports = builtGroups().find((g) => g.key === "sports");
-    expect(sports?.pages.map((p) => [p.label, p.href])).toEqual([["Sports News", "/sports"], ["Game Day", "/gameday"]]);
+    expect(sports?.pages.map((p) => [p.label, p.href])).toEqual([
+      ["Sports News", "/sports"], ["Game Day", "/gameday"], ["Betting", "/betting"],
+    ]);
   });
 });

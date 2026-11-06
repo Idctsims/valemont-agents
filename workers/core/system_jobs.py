@@ -159,6 +159,13 @@
                              markets), writes only changed link states, never
                              relinks; also the daily Kalshi contract test
                              (sports/kalshi_map.py, docs/kalshi_mapping.md).
+    kalshi_board     18 h    09:30 and 15:30 Chicago, and 150 s after boot:
+                             every open Kalshi sports market starting in the
+                             next 36 h, fees and combo eligibility, upserted
+                             changed-only, then linked, swept and pruned
+                             (sports/kalshi_board.py, docs/kalshi_board.md).
+    kalshi_board_refresh 15 min  re-prices what starts within 6 h, 08:00-23:00
+                             Chicago (idle otherwise, so never stale).
 
 Alerts go through core/push.py with deep link /settings/health.
 """
@@ -194,6 +201,7 @@ from feed import why as feed_why
 from screening import jobs as screening_jobs
 from screening import rec_jobs as screening_recs
 from sports import jobs as sports_jobs
+from sports import kalshi_board
 from sports import kalshi_map
 
 log = logging.getLogger("valemont.system")
@@ -802,6 +810,14 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
                   IntervalTrigger(seconds=sports_jobs.LIVE_INTERVAL_S),
                   sports_jobs.live_job, start_delay_s=90),
         KALSHI_MAP,
+        # The Kalshi board (db/071). After the boot schedule run (30 s), so
+        # kalshi_map's links exist for the first pull's link step.
+        SystemJob(kalshi_board.FULL_JOB, kalshi_board.FULL_INTERVAL_S,
+                  CronTrigger(hour="9,15", minute=30, timezone=OWNER_TZ),
+                  kalshi_board.full_job, misfire_grace=3600, start_delay_s=150),
+        SystemJob(kalshi_board.REFRESH_JOB, kalshi_board.REFRESH_INTERVAL_S,
+                  IntervalTrigger(seconds=kalshi_board.REFRESH_INTERVAL_S),
+                  kalshi_board.refresh_job, misfire_grace=600, start_delay_s=600),
     ]
     if env.get("HEALTH_DRILL", "").strip().lower() == "true":
         log.warning("HEALTH_DRILL=true: scheduling health_drill, which always fails")

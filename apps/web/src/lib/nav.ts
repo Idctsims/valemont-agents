@@ -74,7 +74,8 @@ export const NAV: NavGroup[] = [
       { n: 9, name: "Sports News", built: true, href: "/sports" },
       // Built in Chat 7 Phase 3 (db/068); the owner named the route /gameday.
       { n: 10, name: "Game Day", built: true, href: "/gameday" },
-      { n: 11, name: "Betting", built: false, href: "/betting" },
+      // Built in Chat 8 Phase 1 (db/071): the Board tab.
+      { n: 11, name: "Betting", built: true, href: "/betting" },
       { n: 12, name: "Live Bet Tracker", built: false, href: "/live-tracker" },
     ],
   },

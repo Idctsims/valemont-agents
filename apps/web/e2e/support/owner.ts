@@ -949,6 +949,22 @@ export async function addTestGamedayEvent(opts: {
   });
 }
 
+/**
+ * The Kalshi board (db/071 add_test_kalshi_board): one TEST game (series
+ * E2ETEST, sport Basketball) starting at `startsAt`: a moneyline event (2
+ * markets, combo-eligible, YES only) and a points event (3 props, one of them
+ * the protected variant). Shows only to a request carrying the marker. Test
+ * rows are pruned like real ones, by tests_live's kalshi_board_prune(true).
+ * Returns the game ticker.
+ */
+export async function addTestKalshiBoard(startsAt: string): Promise<string> {
+  return asOwner(async (supabase) => {
+    const { data, error } = await supabase.rpc("add_test_kalshi_board", { p_marker: e2eMarker(), p_starts_at: startsAt });
+    if (error) throw new Error(`add_test_kalshi_board failed: ${error.message}`);
+    return String(data);
+  });
+}
+
 /** db/068 set_test_sports_live: a test event's live state (test rows only). */
 export async function setTestSportsLive(id: number, status: string, score: Record<string, unknown>, detail?: string,
                                         clock?: string): Promise<void> {

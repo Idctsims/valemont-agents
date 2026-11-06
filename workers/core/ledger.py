@@ -5848,3 +5848,79 @@ def sports_event_relink(event_id: int, new_ticker: str | None, reason: str, *, s
     with _brief_conn(conn) as c, c.transaction():
         return int(c.execute("SELECT sports_event_relink(%s, %s, %s, %s)",
                              (event_id, new_ticker, reason, swapped)).fetchone()[0])
+
+# ---------------------------------------------------------------------------
+# The Kalshi board (db/071; sports/kalshi_board.py, docs/kalshi_board.md). A
+# current, pruned board of APP tables: the worker upserts in place through
+# db/071's writer functions (each writes only a row whose stored columns would
+# change, and returns the count; nothing else comes back), so the job reads
+# nothing from the database. Never the kalshi_markets archive.
+# ---------------------------------------------------------------------------
+
+#: tests_live runs these exact texts.
+KALSHI_BOARD_SERIES_UPSERT_SQL: Final = "SELECT kalshi_board_series_upsert(%(rows)s, %(is_test)s)"
+KALSHI_BOARD_EVENTS_UPSERT_SQL: Final = "SELECT kalshi_board_events_upsert(%(rows)s, %(at)s, %(is_test)s)"
+KALSHI_BOARD_MARKETS_UPSERT_SQL: Final = "SELECT kalshi_board_markets_upsert(%(rows)s, %(at)s, %(is_test)s)"
+KALSHI_BOARD_TOUCH_SQL: Final = "SELECT kalshi_board_touch(%(events)s, %(series)s, %(at)s, %(is_test)s)"
+KALSHI_BOARD_SWEEP_SQL: Final = "SELECT kalshi_board_sweep(%(events)s, %(markets)s, %(is_test)s)"
+KALSHI_BOARD_LINK_SQL: Final = "SELECT kalshi_board_link(%(is_test)s)"
+KALSHI_BOARD_PRUNE_SQL: Final = "SELECT kalshi_board_prune(%(is_test)s)"
+
+
+def _board_count(sql: str, params: Mapping[str, Any], conn: psycopg.Connection | None) -> int:
+    with _brief_conn(conn) as c, c.transaction():
+        return int(c.execute(sql, params).fetchone()[0])
+
+
+def kalshi_board_series_upsert(rows: Sequence[Mapping[str, Any]], *, is_test: bool = False,
+                               conn: psycopg.Connection | None = None) -> int:
+    if not rows:
+        return 0
+    return _board_count(KALSHI_BOARD_SERIES_UPSERT_SQL, {"rows": Jsonb(list(rows)), "is_test": is_test}, conn)
+
+
+def kalshi_board_events_upsert(rows: Sequence[Mapping[str, Any]], at: datetime, *, is_test: bool = False,
+                               conn: psycopg.Connection | None = None) -> int:
+    if not rows:
+        return 0
+    return _board_count(KALSHI_BOARD_EVENTS_UPSERT_SQL, {"rows": Jsonb(list(rows)), "at": at, "is_test": is_test},
+                        conn)
+
+
+def kalshi_board_markets_upsert(rows: Sequence[Mapping[str, Any]], at: datetime, *, is_test: bool = False,
+                                conn: psycopg.Connection | None = None) -> int:
+    if not rows:
+        return 0
+    return _board_count(KALSHI_BOARD_MARKETS_UPSERT_SQL, {"rows": Jsonb(list(rows)), "at": at, "is_test": is_test},
+                        conn)
+
+
+def kalshi_board_touch(events: Sequence[str], series: Sequence[str], at: datetime, *, is_test: bool = False,
+                       conn: psycopg.Connection | None = None) -> None:
+    """Stamp fetched_at / checked_at on what the pull asked for."""
+    if not events and not series:
+        return
+    with _brief_conn(conn) as c, c.transaction():
+        c.execute(KALSHI_BOARD_TOUCH_SQL, {"events": list(events), "series": list(series), "at": at,
+                                           "is_test": is_test})
+
+
+def kalshi_board_sweep(events: Sequence[str], markets: Sequence[str], *, is_test: bool = False,
+                       conn: psycopg.Connection | None = None) -> int:
+    """Delete markets of `events` that are not in `markets` (Kalshi no longer
+    lists them open). Returns the count."""
+    if not events:
+        return 0
+    return _board_count(KALSHI_BOARD_SWEEP_SQL, {"events": list(events), "markets": list(markets),
+                                                 "is_test": is_test}, conn)
+
+
+def kalshi_board_link(*, is_test: bool = False, conn: psycopg.Connection | None = None) -> int:
+    return _board_count(KALSHI_BOARD_LINK_SQL, {"is_test": is_test}, conn)
+
+
+def kalshi_board_prune(*, is_test: bool = False, conn: psycopg.Connection | None = None) -> dict[str, int]:
+    """The pre-game prune (db/071): {'events', 'markets', 'series'} deleted."""
+    with _brief_conn(conn) as c, c.transaction():
+        out = c.execute(KALSHI_BOARD_PRUNE_SQL, {"is_test": is_test}).fetchone()[0]
+    return {str(k): int(v) for k, v in (out or {}).items()}

@@ -1,0 +1,452 @@
+"""The Kalshi board's worker jobs (Chat 8 Phase 1; db/071; docs/kalshi_board.md).
+
+    kalshi_board          09:30 and 15:30 America/Chicago, and at boot: the
+                          full pull. Every open market of every sports event
+                          starting in the next 36 h (venues/kalshi/board.py:
+                          milestones -> /markets by event, never the raw
+                          open list), the series' fees, combo eligibility.
+                          Then the link to sports_events, the sweep of
+                          markets Kalshi no longer lists, and the prune.
+    kalshi_board_refresh  every 15 min; works 08:00-23:00 Chicago only (idle
+                          otherwise, so the health monitor still sees it on
+                          time): re-prices the events starting within 6 h,
+                          from the full pull's in-memory window.
+
+Changed-only: a market, event or series row is sent only when its content
+differs from what this process last had confirmed (a compact map of 64-bit
+hashes, rebuilt by every full pull; a restart re-sends every row once, and
+the database writes only a row whose stored columns differ). Nothing is read
+back from the database: the job's Supabase egress is statement replies only.
+
+The board is the PRE-GAME leg universe (owner, Nov 6): an event and its
+markets are deleted once coalesce(starts_at, close_time) + 6 h has passed.
+It is an app table, upserted in place; never the immutable kalshi_markets
+archive. Read-only to Kalshi: no key, no order (CLAUDE.md §1).
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import threading
+import time
+from collections import Counter
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from typing import Any, Callable, Iterable, Mapping
+from zoneinfo import ZoneInfo
+
+from core import ledger, memory
+from venues.kalshi import board as kb
+from venues.kalshi.client import KalshiClient
+
+log = logging.getLogger("valemont.kalshi_board")
+
+FULL_JOB = "kalshi_board"
+REFRESH_JOB = "kalshi_board_refresh"
+#: The longest gap between full pulls is 15:30 -> 09:30 (18 h).
+FULL_INTERVAL_S = 18 * 60 * 60
+REFRESH_INTERVAL_S = 15 * 60
+OWNER_TZ = ZoneInfo("America/Chicago")
+#: The refresh works from 08:00 up to and including the 23:00 run.
+REFRESH_HOURS = (8, 23)
+MIN_INTERVAL_S = 0.25
+#: Market rows buffered before a write (ten events' markets at most past it).
+FLUSH_ROWS = 1500
+
+#: Milestone league/tour label -> sports_leagues.code.
+LABELS: Mapping[str, str] = {
+    "NFL": "nfl", "NCAAFB": "cfb", "NBA": "nba", "NCAAMB": "mcbb", "NHL": "nhl", "MLB": "mlb",
+    "EPL": "epl", "MLS": "mls", "Champions League": "ucl", "UEFA Champions League": "ucl",
+    "UFC": "ufc", "ATP": "atp", "WTA": "wta",
+}
+#: Series ticker prefix -> code, for a series no milestone label maps.
+PREFIXES: tuple[tuple[str, str], ...] = tuple(sorted({
+    "KXNFL": "nfl", "KXNCAAF": "cfb", "KXNBA": "nba", "KXNCAAMB": "mcbb", "KXNHL": "nhl", "KXMLB": "mlb",
+    "KXEPL": "epl", "KXMLS": "mls", "KXUCL": "ucl", "KXUFC": "ufc", "KXATP": "atp", "KXWTA": "wta",
+    "KXF1": "f1", "KXPGA": "pga",
+}.items(), key=lambda kv: -len(kv[0])))
+
+
+def league_of(series: str, labels: Iterable[str | None]) -> str | None:
+    """Our league code, or None (most of Kalshi's sports: on the board all
+    the same, with Kalshi's sport tag)."""
+    for label in labels:
+        if label in LABELS:
+            return LABELS[label]
+    for prefix, code in PREFIXES:
+        if series.startswith(prefix):
+            return code
+    return None
+
+
+def digest(row: Mapping[str, Any]) -> int:
+    """A process-local hash of a row's values (a skip decision only: the
+    database still compares every column before it writes)."""
+    return hash(json.dumps(row, sort_keys=True, separators=(",", ":"), default=str))
+
+
+# ------------------------------------------------------------------ state
+
+@dataclass
+class BoardState:
+    """Process memory, never read back from the database."""
+
+    #: hash(ticker) -> digest of the row last confirmed written or unchanged.
+    markets: dict[int, int] = field(default_factory=dict)
+    events: dict[str, int] = field(default_factory=dict)
+    series_rows: dict[str, int] = field(default_factory=dict)
+    #: The last full pull's window: event ticker -> start (epoch s); and the
+    #: series it needs (fees) for the refresh.
+    window: dict[str, int] = field(default_factory=dict)
+    series: dict[str, kb.Series] = field(default_factory=dict)
+    #: The Chicago day `series` was first read on: the first pull of a new
+    #: day reads every series again (the current fee type, daily).
+    series_day: str | None = None
+
+
+STATE = BoardState()
+#: Held by a full pull; a refresh that finds it held stands down (15:30 fires
+#: both), so the two never share Kalshi's rate or the state maps.
+PULL_LOCK = threading.Lock()
+
+
+@dataclass
+class BoardRun:
+    kind: str = "full"
+    markets: int = 0
+    events: int = 0
+    series: int = 0
+    series_fetched: int = 0
+    by_sport: dict[str, Counter] = field(default_factory=dict)
+    combo_events: int = 0
+    combo_markets: int = 0
+    misses: Counter = field(default_factory=Counter)
+    no_checked: int = 0
+    no_mismatch: int = 0
+    sent: int = 0
+    written: int = 0
+    events_written: int = 0
+    series_written: int = 0
+    linked: int = 0
+    swept: int = 0
+    pruned: dict[str, int] = field(default_factory=dict)
+    calls: int = 0
+    limited: int = 0
+    kalshi_bytes: int = 0
+    seconds: float = 0.0
+    idle: str | None = None
+    dry_run: bool = False
+
+    @property
+    def job_note(self) -> str:
+        if self.idle:
+            return f"idle: {self.idle}"
+        by = "; ".join(f"{s} " + "/".join(f"{k} {c[k]}" for k in ("game_line", "prop", "other") if c[k])
+                       for s, c in sorted(self.by_sport.items(), key=lambda kv: -sum(kv[1].values()))[:8])
+        parts = [f"{self.kind}{' (dry run)' if self.dry_run else ''}: {self.markets} markets, "
+                 f"{self.events} events, {self.series} series ({self.series_fetched} read from /series)",
+                 by,
+                 f"combo-eligible {self.combo_markets} markets / {self.combo_events} events",
+                 f"sent {self.sent}, written {self.written} markets, {self.events_written} events, "
+                 f"{self.series_written} series",
+                 f"linked {self.linked}, swept {self.swept}, pruned "
+                 + (", ".join(f"{k} {v}" for k, v in self.pruned.items()) or "0"),
+                 f"parse misses {sum(self.misses.values())}"
+                 + (" (" + ", ".join(f"{k} {v}" for k, v in self.misses.most_common(4)) + ")" if self.misses else ""),
+                 f"NO complement mismatches {self.no_mismatch}/{self.no_checked}",
+                 f"{self.calls} Kalshi calls, {self.limited} 429s, ~{self.kalshi_bytes // 1024} KB from Kalshi, "
+                 f"{self.seconds:.0f} s"]
+        return "; ".join(p for p in parts if p)
+
+
+class BoardFailed(RuntimeError):
+    """The pull failed (a changed shape, an unmodelled fee, Kalshi down)."""
+
+
+# ------------------------------------------------------------------ writes
+
+class Writer:
+    """The database side, through core/ledger.py. A dry run swaps in NoWrite."""
+
+    def series(self, rows: list[dict[str, Any]]) -> int:
+        return ledger.kalshi_board_series_upsert(rows)
+
+    def events(self, rows: list[dict[str, Any]], at: datetime) -> int:
+        return ledger.kalshi_board_events_upsert(rows, at)
+
+    def markets(self, rows: list[dict[str, Any]], at: datetime) -> int:
+        return ledger.kalshi_board_markets_upsert(rows, at)
+
+    def touch(self, events: list[str], series: list[str], at: datetime) -> None:
+        ledger.kalshi_board_touch(events, series, at)
+
+    def sweep(self, events: list[str], markets: list[str]) -> int:
+        return ledger.kalshi_board_sweep(events, markets)
+
+    def link(self) -> int:
+        return ledger.kalshi_board_link()
+
+    def prune(self) -> dict[str, int]:
+        return ledger.kalshi_board_prune()
+
+
+class NoWrite(Writer):
+    def series(self, rows: list[dict[str, Any]]) -> int:
+        return 0
+
+    def events(self, rows: list[dict[str, Any]], at: datetime) -> int:
+        return 0
+
+    def markets(self, rows: list[dict[str, Any]], at: datetime) -> int:
+        return 0
+
+    def touch(self, events: list[str], series: list[str], at: datetime) -> None:
+        return None
+
+    def sweep(self, events: list[str], markets: list[str]) -> int:
+        return 0
+
+    def link(self) -> int:
+        return 0
+
+    def prune(self) -> dict[str, int]:
+        return {}
+
+
+# ------------------------------------------------------------------ rows
+
+def series_row(s: kb.Series, league: str | None, combo: Iterable[str]) -> dict[str, Any]:
+    colls = sorted(set(combo))
+    return {"series_ticker": s.ticker, "title": s.title, "sport": s.sport, "league": league,
+            "category": s.category or None, "tags": list(s.tags), "fee_type": s.regime.fee_type,
+            "fee_multiplier": str(s.regime.multiplier), "fee_regime": s.regime.as_payload() | {"fetched_at": None},
+            "combo_eligible": bool(colls), "collection_tickers": colls}
+
+
+def event_row(ticker: str, game: kb.Game, times: tuple[datetime | None, datetime | None],
+              combo: kb.Combo | None) -> dict[str, Any]:
+    close, expiry = times
+    return {"event_ticker": ticker, "series_ticker": kb.series_of(ticker), "game_ticker": game.game_ticker,
+            "game_title": game.title, "milestone_start": game.starts_at.isoformat(),
+            "close_time": None if close is None else close.isoformat(),
+            "expected_expiration_time": None if expiry is None else expiry.isoformat(),
+            "combo_eligible": combo is not None, "combo_yes_only": bool(combo and combo.yes_only),
+            "combo_collections": list(combo.collections) if combo else []}
+
+
+# ------------------------------------------------------------------ runs
+
+def _owner_hour(t: datetime) -> int:
+    return t.astimezone(OWNER_TZ).hour
+
+
+def _client(client: KalshiClient | None) -> tuple[KalshiClient, kb.Counting | None]:
+    if client is not None:
+        counter = client._transport if isinstance(client._transport, kb.Counting) else None
+        return client, counter
+    return kb.make_client(min_interval=MIN_INTERVAL_S)
+
+
+class _Flusher:
+    """Buffers one run's rows and writes them in bounded batches: events
+    before their markets (the foreign key), then the sweep of each written
+    group's markets Kalshi no longer lists."""
+
+    def __init__(self, run: BoardRun, writer: Writer, state: BoardState, at: datetime,
+                 new_markets: dict[int, int], new_events: dict[str, int]) -> None:
+        self.run, self.writer, self.state, self.at = run, writer, state, at
+        self.new_markets, self.new_events = new_markets, new_events
+        self.events: list[tuple[dict[str, Any], int]] = []
+        self.markets: list[tuple[dict[str, Any], int, int]] = []
+        self.seen_events: list[str] = []
+        self.seen_markets: list[str] = []
+
+    def add(self, group: list[str], ev_rows: list[dict[str, Any]], m_rows: list[dict[str, Any]]) -> None:
+        # Every event asked for is swept, one with no open market left included.
+        self.seen_events.extend(group)
+        for r in ev_rows:
+            d = digest(r)
+            self.new_events[r["event_ticker"]] = d
+            if self.state.events.get(r["event_ticker"]) != d:
+                self.events.append((r, d))
+        for r in m_rows:
+            k, d = hash(r["market_ticker"]), digest(r)
+            self.new_markets[k] = d
+            self.seen_markets.append(r["market_ticker"])
+            if self.state.markets.get(k) != d:
+                self.markets.append((r, k, d))
+        if len(self.markets) >= FLUSH_ROWS or len(self.seen_markets) >= 4 * FLUSH_ROWS:
+            self.flush()
+
+    def flush(self) -> None:
+        if self.events:
+            self.run.events_written += self.writer.events([r for r, _ in self.events], self.at)
+        if self.markets:
+            self.run.sent += len(self.markets)
+            self.run.written += self.writer.markets([r for r, _, _ in self.markets], self.at)
+        if self.seen_events:
+            self.run.swept += self.writer.sweep(self.seen_events, self.seen_markets)
+        # Confirmed: what was written (or found unchanged) is now the state.
+        for r, d in self.events:
+            self.state.events[r["event_ticker"]] = d
+        for _, k, d in self.markets:
+            self.state.markets[k] = d
+        self.events, self.markets, self.seen_events, self.seen_markets = [], [], [], []
+
+
+def _pull(client: KalshiClient, run: BoardRun, writer: Writer, state: BoardState, at: datetime,
+          tickers: list[str], window: Mapping[str, kb.Game], series: Mapping[str, kb.Series],
+          combos: Mapping[str, kb.Combo], new_markets: dict[int, int], new_events: dict[str, int]) -> None:
+    fl = _Flusher(run, writer, state, at, new_markets, new_events)
+    for group, batch in kb.market_batches(client, tickers, dict(series)):
+        ev_rows = [event_row(t, window[t], batch.times[t], combos.get(t)) for t in group if t in batch.times]
+        run.events += len(ev_rows)
+        run.markets += len(batch.rows)
+        run.no_checked += batch.checked
+        run.no_mismatch += batch.no_mismatch
+        run.misses.update(batch.misses)
+        for r in batch.rows:
+            sport = series[kb.series_of(r["event_ticker"])].sport
+            run.by_sport.setdefault(sport, Counter())[r["market_kind"]] += 1
+            if r["event_ticker"] in combos:
+                run.combo_markets += 1
+        run.combo_events += sum(1 for r in ev_rows if r["combo_eligible"])
+        fl.add(group, ev_rows, batch.rows)
+        del batch
+    fl.flush()
+
+
+def full_job(*, client: KalshiClient | None = None, now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+             state: BoardState = STATE, writer: Writer | None = None, dry_run: bool = False) -> BoardRun:
+    """The kalshi_board system job: the full 36 h pull."""
+    with PULL_LOCK:
+        return _full(client, now, state, writer, dry_run)
+
+
+def _full(client: KalshiClient | None, now: Callable[[], datetime], state: BoardState, writer: Writer | None,
+          dry_run: bool) -> BoardRun:
+    t0 = time.monotonic()
+    if dry_run:
+        # A dry run must never mark anything as sent for the next real run.
+        state = BoardState()
+    w = NoWrite() if dry_run else (writer or Writer())
+    c, counter = _client(client)
+    run = BoardRun(kind="full", dry_run=dry_run)
+    at = now()
+    try:
+        games = kb.milestones(c, at, at + kb.WINDOW)
+        window = kb.window_events(games)
+        wanted = {kb.series_of(t) for t in window}
+        sport_hint = {kb.series_of(t): g.kind for t, g in window.items()}
+        day = at.astimezone(OWNER_TZ).date().isoformat()
+        known = state.series if state.series_day == day else {}
+        series = kb.series_info(c, wanted, sport_hint, at, known)
+        run.series_fetched = len(set(series) - set(known))
+        combos = kb.collections(c, keep=set(window)).by_event
+        labels: dict[str, set[str | None]] = {}
+        for t, g in window.items():
+            labels.setdefault(kb.series_of(t), set()).add(g.label)
+        coll_by_series: dict[str, set[str]] = {}
+        for t, combo in combos.items():
+            coll_by_series.setdefault(kb.series_of(t), set()).update(combo.collections)
+        s_rows = [series_row(s, league_of(s.ticker, sorted(labels.get(s.ticker, ()), key=str)),
+                             coll_by_series.get(s.ticker, ())) for s in series.values()]
+        run.series = len(s_rows)
+        changed = [r for r in s_rows if state.series_rows.get(r["series_ticker"]) != digest(r)]
+        run.series_written = w.series(changed)
+        if not dry_run:
+            for r in changed:
+                state.series_rows[r["series_ticker"]] = digest(r)
+
+        new_markets: dict[int, int] = {}
+        new_events: dict[str, int] = {}
+        _pull(c, run, w, state, at, kb.order_events(window), window, series, combos, new_markets, new_events)
+        if window and not run.markets:
+            raise BoardFailed(f"kalshi board: no open market returned for {len(window)} window events "
+                              "(has the /markets filter changed?)")
+        w.touch(sorted(new_events), sorted(series), at)
+        run.linked = w.link()
+        run.pruned = w.prune()
+        # The window just read is the whole state now (what left it is pruned
+        # or swept in the database).
+        if not dry_run:
+            state.markets, state.events = new_markets, new_events
+            state.window = {t: int(g.starts_at.timestamp()) for t, g in window.items() if t in new_events}
+            # Kept for the refresh and for later pulls the same day (series
+            # that left the window drop out).
+            state.series = dict(series)
+            if state.series_day != day:
+                state.series_day = day
+    except kb.KalshiError as exc:
+        raise BoardFailed(f"kalshi board: {exc}") from exc
+    finally:
+        _finish(run, counter, t0)
+    log.info("kalshi board: %s", run.job_note)
+    return run
+
+
+def refresh_job(*, client: KalshiClient | None = None,
+                now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+                state: BoardState = STATE, writer: Writer | None = None) -> BoardRun:
+    """The kalshi_board_refresh system job: re-price what starts within 6 h."""
+    at = now()
+    hour = _owner_hour(at)
+    if not (REFRESH_HOURS[0] <= hour <= REFRESH_HOURS[1]) or (hour == REFRESH_HOURS[1] and
+                                                             at.astimezone(OWNER_TZ).minute >= 15):
+        return BoardRun(kind="refresh", idle="outside 08:00-23:00 Chicago")
+    if not state.window:
+        return BoardRun(kind="refresh", idle="no window yet (the full pull has not run in this process)")
+    lo, hi = at.timestamp(), (at + kb.REFRESH_WITHIN).timestamp()
+    soon = sorted((t for t, s in state.window.items() if lo <= s < hi), key=lambda t: (kb.series_of(t), t))
+    if not soon:
+        return BoardRun(kind="refresh", idle="nothing starts within 6 h")
+    if not PULL_LOCK.acquire(blocking=False):
+        return BoardRun(kind="refresh", idle="the full pull is running")
+    try:
+        return _refresh(client, at, soon, state, writer)
+    finally:
+        PULL_LOCK.release()
+
+
+def _refresh(client: KalshiClient | None, at: datetime, soon: list[str], state: BoardState,
+             writer: Writer | None) -> BoardRun:
+    t0 = time.monotonic()
+    w = writer or Writer()
+    c, counter = _client(client)
+    run = BoardRun(kind="refresh")
+    try:
+        for group, batch in kb.market_batches(c, soon, state.series):
+            run.events += len(batch.times)
+            run.markets += len(batch.rows)
+            run.no_checked += batch.checked
+            run.no_mismatch += batch.no_mismatch
+            run.misses.update(batch.misses)
+            changed = []
+            for r in batch.rows:
+                k, d = hash(r["market_ticker"]), digest(r)
+                if state.markets.get(k) != d:
+                    changed.append((r, k, d))
+            if changed:
+                run.sent += len(changed)
+                run.written += w.markets([r for r, _, _ in changed], at)
+                for _, k, d in changed:
+                    state.markets[k] = d
+            run.swept += w.sweep(group, [r["market_ticker"] for r in batch.rows])
+            del batch
+        if not run.markets:
+            raise BoardFailed(f"kalshi board refresh: no open market returned for {len(soon)} events "
+                              "starting within 6 h (has the /markets filter changed?)")
+        w.touch(soon, [], at)
+    except kb.KalshiError as exc:
+        raise BoardFailed(f"kalshi board refresh: {exc}") from exc
+    finally:
+        _finish(run, counter, t0)
+    return run
+
+
+def _finish(run: BoardRun, counter: kb.Counting | None, t0: float) -> None:
+    run.seconds = time.monotonic() - t0
+    if counter is not None:
+        run.calls, run.limited, run.kalshi_bytes = counter.calls, counter.limited, counter.bytes
+    memory.release()
