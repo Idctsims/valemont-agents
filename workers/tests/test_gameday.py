@@ -130,6 +130,45 @@ class Db069Shape(unittest.TestCase):
         self.assertIn("INSERT INTO migration_log (name) VALUES ('069_nfl_first_marker_closed')", self.sql)
 
 
+DB070 = REPO_ROOT / "db" / "070_brief_slate_order.sql"
+
+
+class Db070Shape(unittest.TestCase):
+    """db/070 (owner, Nov 6): a national NBA game always gets a line; the lines
+    read NFL first, then the tier, then the start time. Nothing else moves."""
+
+    GAMES = "    -- The owner's five's national-TV games"
+    LINES = "    v_lines := array_remove("
+    ABOUT = "        'about', "
+
+    def setUp(self) -> None:
+        self.sql = DB070.read_text(encoding="utf-8")
+        self.new = _fn(self.sql, "gameday_brief")
+        self.old = _fn(DB069.read_text(encoding="utf-8"), "gameday_brief")
+
+    def test_only_the_games_block_and_the_about_line_change(self) -> None:
+        self.assertEqual(self.new[:self.new.index(self.GAMES)], self.old[:self.old.index(self.GAMES)])
+        tail = lambda f: f[f.index(self.LINES):f.index(self.ABOUT)]  # noqa: E731
+        self.assertEqual(tail(self.new), tail(self.old))
+        after = lambda f: f[f.index("Use these lines as given.',"):]  # noqa: E731
+        self.assertEqual(after(self.new), after(self.old))
+        self.assertNotEqual(self.new, self.old)
+
+    def test_the_nba_rule_and_the_display_order(self) -> None:
+        games = self.new[self.new.index(self.GAMES):self.new.index(self.LINES)]
+        self.assertIn("array_agg(g.line ORDER BY g.nfl DESC, g.tier, g.starts_at, g.lsort, g.id)", games)
+        self.assertIn("ORDER BY c.nba_top DESC, c.nfl DESC, c.tier, c.best_rank, c.starts_at, c.lsort, c.id", games)
+        self.assertIn("AND e.kind = 'game' AND e.national_tv", games)
+        self.assertIn("LIMIT greatest(v_room, 0)) g;", games)
+
+    def test_paste_shape(self) -> None:
+        for bad in ("\nBEGIN;", "\nCOMMIT;", "\n\\i ", "\n\\copy", "GRANT ", "REVOKE "):
+            self.assertNotIn(bad, self.sql)
+        self.assertIn("RAISE EXCEPTION 'selftest-rollback'", self.sql)
+        self.assertIn("INSERT INTO migration_log (name) VALUES ('070_brief_slate_order')", self.sql)
+        self.assertEqual(self.sql.count("CREATE OR REPLACE FUNCTION"), 1)
+
+
 class SportsBriefSection(unittest.TestCase):
     def setUp(self) -> None:
         for p in (mock.patch.object(ledger, "ai_spend_month_to_date", lambda: 0),

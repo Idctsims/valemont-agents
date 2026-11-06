@@ -32,7 +32,11 @@ written, NOT pasted. Not merged** (owner's gate: Phase 2's 22:00 UTC
    biggest national-TV games in the five; the NFL leads any night it plays
    (Thu/Sun/Mon; owner, Nov 5, db/069; it was Sundays only in db/068); race
    weekends add session times; golf days add the followed players; a dead
-   night says nothing.
+   night says nothing. **db/070 (owner, Nov 6):** the night's best national
+   NBA game always gets a line; the lines read NFL first, then the TV tier,
+   then the start time (rank still picks who gets in, never the order).
+   Why: Nov 6's slate read 7:00, 9:15, 6:00, 6:30, and PHI at CLE and POR
+   at LAL (both national, Prime Video) were left out by tier and the cap.
 6. **Wags** answers "what's on tonight", "when does Bama play", "where can I
    watch X" from real rows.
 7. **Ranked** = ESPN's `curatedRank` as given (since the committee's first

@@ -244,6 +244,45 @@ class Brief(GamedaySqlCase):
                              "alabama_next", "about", "date"} <= ctx.keys())
 
 
+class BriefOrder070(GamedaySqlCase):
+    """db/070 (owner, Nov 6): the night's best national NBA game always gets a
+    line; the lines read NFL first, then the tier, then the start time (rank
+    picks who gets in, never the order)."""
+
+    FRI = date(2031, 11, 14)
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        with _rolled_back() as conn:
+            if conn.execute("SELECT 1 FROM migration_log WHERE name = '070_brief_slate_order'").fetchone() is None:
+                raise unittest.SkipTest("db/070 not pasted")
+
+    def test_a_friday_like_nov_6(self) -> None:
+        with _rolled_back() as conn:
+            fri = self.FRI
+            self.add(conn, league="cfb", at=local(fri, "19:00"), home="Fox Home", away="Fox Away", tv=["Fox"])
+            self.add(conn, league="cfb", at=local(fri, "21:15"), home="Rk Home", away="Rk Away", tv=["ESPN"],
+                     participants={"home": {"id": "901", "rank": 22}, "away": {"id": "902"}})
+            self.add(conn, league="cfb", at=local(fri, "18:00"), home="Early Home", away="Early Away", tv=["ESPN"])
+            self.add(conn, league="cfb", at=local(fri, "20:00"), home="Late Home", away="Late Away", tv=["CBSSN"])
+            self.add(conn, league="nba", at=local(fri, "18:30"), home="Nba1 Home", away="Nba1 Away",
+                     tv=["Prime Video"])
+            self.add(conn, league="nba", at=local(fri, "21:00"), home="Nba2 Home", away="Nba2 Away",
+                     tv=["Prime Video"])
+            self.add(conn, league="nba", at=local(fri, "17:00"), home="Reg Home", away="Reg Away", tv=["MNMT"],
+                     national=False)
+            self.add(conn, league="pga", kind="golf_round", at="timestamptz '2031-11-14 05:00:00+00'", tbd=True,
+                     home=None, away=None, name="TL Open", session="R2", parent="tl070open", tv=["Golf Chnl"])
+            self.assertEqual(self.brief(conn, fri), [
+                "CFB: Fox Away at Fox Home, 7:00 PM on Fox.",
+                "CFB: Early Away at Early Home, 6:00 PM on ESPN.",
+                "CFB: Rk Away at No. 22 Rk Home, 9:15 PM on ESPN.",
+                "NBA: Nba1 Away at Nba1 Home, 6:30 PM on Prime Video.",
+                "Golf, TL Open: R2 today.",
+            ])
+
+
 class Helpers(GamedaySqlCase):
     def test_the_test_helpers_need_the_marker_and_touch_test_rows_only(self) -> None:
         with _rolled_back() as conn, conn.cursor() as cur:

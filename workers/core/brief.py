@@ -476,9 +476,10 @@ def _arsenal_lines(t: Mapping[str, Any]) -> list[str]:
 
 
 def _sports_lines(t: Mapping[str, Any]) -> list[str]:
-    """Tonight's slate (db/068 gameday_brief, db/069's order): at most 5 lines,
+    """Tonight's slate (db/068 gameday_brief, db/070's order): at most 5 lines,
     worded by the database from the rows (Alabama first when they play, then
-    the owner's five's national-TV games, NFL first on any night it plays; an F1 weekend's
+    the owner's five's national-TV games, NFL first on any night it plays, then
+    by network and start time, a national NBA game always in; an F1 weekend's
     sessions; a golf day's leader and followed players). Used as given, in
     the AI brief too (DATA_LINE_SECTIONS): the model must not pick games."""
     return [str(x) for x in (t.get("lines") or []) if isinstance(x, str) and x.strip()][:5]
