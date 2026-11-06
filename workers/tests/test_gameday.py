@@ -130,6 +130,45 @@ class Db069Shape(unittest.TestCase):
         self.assertIn("INSERT INTO migration_log (name) VALUES ('069_nfl_first_marker_closed')", self.sql)
 
 
+DB070 = REPO_ROOT / "db" / "070_brief_slate_order.sql"
+
+
+class Db070Shape(unittest.TestCase):
+    """db/070 (owner, Nov 6): a national NBA game always gets a line; the lines
+    read NFL first, then the tier, then the start time. Nothing else moves."""
+
+    GAMES = "    -- The owner's five's national-TV games"
+    LINES = "    v_lines := array_remove("
+    ABOUT = "        'about', "
+
+    def setUp(self) -> None:
+        self.sql = DB070.read_text(encoding="utf-8")
+        self.new = _fn(self.sql, "gameday_brief")
+        self.old = _fn(DB069.read_text(encoding="utf-8"), "gameday_brief")
+
+    def test_only_the_games_block_and_the_about_line_change(self) -> None:
+        self.assertEqual(self.new[:self.new.index(self.GAMES)], self.old[:self.old.index(self.GAMES)])
+        tail = lambda f: f[f.index(self.LINES):f.index(self.ABOUT)]  # noqa: E731
+        self.assertEqual(tail(self.new), tail(self.old))
+        after = lambda f: f[f.index("Use these lines as given.',"):]  # noqa: E731
+        self.assertEqual(after(self.new), after(self.old))
+        self.assertNotEqual(self.new, self.old)
+
+    def test_the_nba_rule_and_the_display_order(self) -> None:
+        games = self.new[self.new.index(self.GAMES):self.new.index(self.LINES)]
+        self.assertIn("array_agg(g.line ORDER BY g.nfl DESC, g.tier, g.starts_at, g.lsort, g.id)", games)
+        self.assertIn("ORDER BY c.nba_top DESC, c.nfl DESC, c.tier, c.best_rank, c.starts_at, c.lsort, c.id", games)
+        self.assertIn("AND e.kind = 'game' AND e.national_tv", games)
+        self.assertIn("LIMIT greatest(v_room, 0)) g;", games)
+
+    def test_paste_shape(self) -> None:
+        for bad in ("\nBEGIN;", "\nCOMMIT;", "\n\\i ", "\n\\copy", "GRANT ", "REVOKE "):
+            self.assertNotIn(bad, self.sql)
+        self.assertIn("RAISE EXCEPTION 'selftest-rollback'", self.sql)
+        self.assertIn("INSERT INTO migration_log (name) VALUES ('070_brief_slate_order')", self.sql)
+        self.assertEqual(self.sql.count("CREATE OR REPLACE FUNCTION"), 1)
+
+
 class SportsBriefSection(unittest.TestCase):
     def setUp(self) -> None:
         for p in (mock.patch.object(ledger, "ai_spend_month_to_date", lambda: 0),
@@ -172,7 +211,50 @@ class SportsBriefSection(unittest.TestCase):
         self.assertLessEqual(made.words, brief.MAX_WORDS)
         self.assertGreaterEqual(len(sports["lines"]), 1)
         self.assertLess(len(sports["lines"]), 5)
-        self.assertEqual(sports["lines"], SLATE[:len(sports["lines"])], "trimmed from the end, in order")
+        kept = sports["lines"]
+        self.assertEqual(kept, [line for line in SLATE if line in kept], "the kept lines keep their order")
+        self.assertEqual(kept[0], SLATE[0], "Alabama stays")
+        self.assertIn(SLATE[3], kept, "a race weekend's F1 line is protected (owner, Nov 6)")
+        self.assertNotIn(SLATE[4], kept, "golf with no followed player is still the first to go")
+
+    def test_the_trim_takes_the_lowest_cfb_line_when_golf_or_f1_is_protected(self) -> None:
+        cfb = ["CFB: A at B, 6:00 PM on ESPN.", "CFB: C at D, 7:00 PM on ESPN2."]
+        nba = "NBA: E at F, 6:30 PM on Prime Video."
+        golf_followed = "Golf, TL Open: R2 today; Lead Er leads at -9 after R1; Scottie Scheffler T5 (-6, thru 12)."
+        golf_koepka = "Golf, TL Open: R1 today; Brooks Koepka T9 (-3, thru 18)."
+        golf_plain = "Golf, World Wide Technology Championship: R2 today; Chris Kirk leads at -9 after R1."
+        f1 = "F1, TL GP: Qualifying today 1:00 PM; Race Sun 1:00 PM."
+        bama = "CFB: No. 5 Alabama Crimson Tide at No. 14 LSU Tigers, 2:30 PM on ABC."
+        trim = brief._sports_trim_index
+        # Protected: the lowest CFB line goes instead.
+        self.assertEqual(trim(cfb + [nba, golf_followed]), 1)
+        self.assertEqual(trim(cfb + [nba, golf_koepka]), 1)
+        self.assertEqual(trim(cfb + [f1]), 1)
+        self.assertEqual(trim(cfb + [f1, golf_plain]), 3, "an unprotected last line still goes first")
+        # Not protected: the last line, as before (Nov 6's golf line).
+        self.assertEqual(trim(cfb + [nba, golf_plain]), 3)
+        self.assertEqual(trim(cfb + [nba]), 2)
+        # Alabama is never the CFB line dropped; the lowest other line goes.
+        self.assertEqual(trim([bama, nba, f1]), 1)
+        self.assertEqual(trim([bama, f1, golf_followed]), 2, "nothing else to drop: the last line")
+
+    def test_fit_data_lines_keeps_a_followed_golfer_and_drops_the_lowest_cfb(self) -> None:
+        lines = ["CFB: A at B, 6:00 PM on ESPN.", "CFB: C at D, 7:00 PM on ESPN2.",
+                 "NBA: E at F, 6:30 PM on Prime Video.",
+                 "Golf, TL Open: R2 today; Lead Er leads at -9 after R1; Brooks Koepka T9 (-3, thru 18)."]
+        sports = {"key": "sports_brief", "title": "S", "lines": list(lines)}
+        body: dict[str, Any] = {"headline": "h", "one_move": "m", "sections": [
+            {"key": "goals", "title": "G", "lines": ["word"]}, sports]}
+        filler = brief.MAX_WORDS - brief.word_count(body) + 2  # one line over the cap
+        body["sections"][0]["lines"] = ["word " * (1 + filler)]
+        out = brief.fit_data_lines(body)
+        self.assertLessEqual(brief.word_count(out), brief.MAX_WORDS)
+        self.assertEqual(out["sections"][1]["lines"], [lines[0], lines[2], lines[3]])
+        # Without a followed player the golf line is the one that goes.
+        plain = lines[:3] + ["Golf, TL Open: R2 today; Lead Er leads at -9 after R1; Some One T9 (-3, thru 18)."]
+        body["sections"][1] = {"key": "sports_brief", "title": "S", "lines": list(plain)}
+        out = brief.fit_data_lines(body)
+        self.assertEqual(out["sections"][1]["lines"], plain[:3])
 
     def test_fit_data_lines_never_goes_below_one_line(self) -> None:
         body: dict[str, Any] = {"headline": "h", "one_move": "m", "sections": [
