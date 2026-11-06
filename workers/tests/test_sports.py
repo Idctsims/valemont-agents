@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import pathlib
 import re
 import unittest
@@ -907,6 +908,85 @@ class Registered(unittest.TestCase):
         self.assertEqual(built["sports_live"].expected_interval_s, 60)
         self.assertEqual(built["sports_schedule"].expected_interval_s, 24 * 60 * 60)
         self.assertTrue(built["sports_schedule"].run_at_boot)
+
+
+class GolfCourse(unittest.TestCase):
+    """The course from ESPN's core API (owner, Nov 5): shape-checked when
+    present; a missing or reshaped response never fails a run, is logged
+    once, and leaves the venue blank."""
+
+    def setUp(self) -> None:
+        self.core = json.loads((FIXTURES / "espncore_pga_event.json").read_text(encoding="utf-8"))
+        self.calls: list[str] = []
+        self.answer: Any = espn.Resp(200, self.core, 7000)
+        self.now = 0.0
+        espn._COURSE_WARNED.clear()
+
+    def http(self, url: str, params: Any) -> espn.Resp:
+        self.calls.append(url)
+        if "scoreboard" in url:
+            return espn.Resp(200, fixture("nba_scheduled" if "/nba/" in url else "pga_scheduled"), 5000)
+        if isinstance(self.answer, Exception):
+            raise self.answer
+        return self.answer
+
+    def client(self) -> espn.Espn:
+        return espn.Espn(self.http, sleep=lambda s: None, courses={}, clock=lambda: self.now)
+
+    def test_the_real_core_event_gives_the_host_course_and_city(self) -> None:
+        self.assertEqual(espn.parse_course(self.core, "pga"), "El Cardonal at Diamante, Cabo San Lucas")
+
+    def test_the_host_course_wins_over_the_first(self) -> None:
+        data = {"courses": [{"name": "North Course"}, {"name": "South Course", "host": True,
+                                                       "address": {"city": "La Jolla"}}]}
+        self.assertEqual(espn.parse_course(data, "pga"), "South Course, La Jolla")
+
+    def test_absent_or_empty_courses_is_none_and_a_reshaped_field_is_a_shape_error(self) -> None:
+        for data in ({}, {"courses": []}, {"courses": [{"name": "  "}]}):
+            self.assertIsNone(espn.parse_course(data, "pga"), data)
+        for data in ({"courses": {"name": "x"}}, {"courses": ["x"]}, {"courses": [{"name": 7}]},
+                     {"courses": [{"name": "x", "address": "Cabo"}]}, ["not an object"]):
+            with self.subTest(data=data), self.assertRaises(EspnShapeError):
+                espn.parse_course(data, "pga")
+
+    def test_every_round_gets_the_course_with_one_core_call_per_tournament(self) -> None:
+        es = self.client()
+        lg = LEAGUES["pga"]
+        first = es.events(lg, [date(2026, 11, 5)])
+        self.assertEqual({e.venue for e in first}, {"El Cardonal at Diamante, Cabo San Lucas"})
+        self.assertEqual(len(first), 4)
+        again = es.events(lg, [date(2026, 11, 5)])          # the live job, a minute later
+        self.assertEqual({e.venue for e in again}, {"El Cardonal at Diamante, Cabo San Lucas"})
+        core_calls = [u for u in self.calls if u.startswith(espn.CORE)]
+        self.assertEqual(core_calls, [espn.CORE + "golf/leagues/pga/events/401850979"])
+        self.assertEqual(first[0].content_hash(), again[0].content_hash(), "the venue never flips")
+
+    def test_a_failed_or_reshaped_lookup_never_fails_the_run_logs_once_and_retries_after_6h(self) -> None:
+        logging.disable(logging.NOTSET)  # tests/__init__ silences logs; the warning is the behaviour here
+        self.addCleanup(logging.disable, logging.CRITICAL)
+        lg = LEAGUES["pga"]
+        for answer in (espn.Resp(404, None, 100), espn.Resp(200, {"courses": "x"}, 100), TimeoutError("slow")):
+            with self.subTest(answer=answer):
+                espn._COURSE_WARNED.clear()
+                self.answer, self.calls, self.now = answer, [], 0.0
+                es = self.client()
+                with self.assertLogs("valemont.sports", "WARNING") as logs:
+                    rows = es.events(lg, [date(2026, 11, 5)])
+                    es.events(lg, [date(2026, 11, 5)])
+                self.assertEqual(len(rows), 4)
+                self.assertEqual({e.venue for e in rows}, {None})
+                self.assertEqual(len(logs.records), 1, "logged once per tournament")
+                self.assertIn("venue stays blank", logs.output[0])
+                self.assertEqual(len([u for u in self.calls if u.startswith(espn.CORE)]), 1, "not every minute")
+                self.now = espn.COURSE_RETRY.total_seconds() + 1
+                self.answer = espn.Resp(200, self.core, 7000)
+                self.assertEqual({e.venue for e in es.events(lg, [date(2026, 11, 5)])},
+                                 {"El Cardonal at Diamante, Cabo San Lucas"})
+
+    def test_other_kinds_never_ask_for_a_course(self) -> None:
+        es = self.client()
+        es.events(LEAGUES["nba"], [date(2026, 11, 4)])
+        self.assertFalse([u for u in self.calls if u.startswith(espn.CORE)])
 
 
 if __name__ == "__main__":

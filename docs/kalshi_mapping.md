@@ -196,7 +196,11 @@ any value a client sends for them.
 - **Reads:**
   - The registry and the aliases.
   - Every row of every league that starts from 6 h ago on, except
-    out-of-scope rows. Columns: id, league, kind, session, `starts_at`, the
+    out-of-scope rows; **a time-TBD row (a golf round, most tennis) one day
+    longer**, since its `starts_at` is ESPN's day start, not a time (owner,
+    Nov 5: WWT R1, row 206, was first seen 15 h past its placeholder and
+    was never read, so it stayed "Not checked yet"; `KALSHI_MAP_TBD_GRACE`).
+    Columns: id, league, kind, session, `starts_at`, the
     two ESPN codes or the two names, `link_state`, the ticker,
     `link_conflict`.
   - Linked rows are read as well, which the brief didn't ask for. The
