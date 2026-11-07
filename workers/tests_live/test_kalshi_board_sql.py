@@ -278,9 +278,70 @@ class Readers(BoardSqlCase):
         with _rolled_back() as conn:
             self.game(conn, start=NOW + timedelta(hours=1))
             ctx = conn.execute("SELECT ctx_kalshi_board()").fetchone()[0]
-            self.assertEqual(set(ctx), {"about", "as_of", "counts", "combo_eligible", "top_tonight"})
+            # db/072 adds "scalar" (scalar markets counted apart by sport).
+            self.assertEqual(set(ctx), {"about", "as_of", "counts", "scalar", "combo_eligible", "top_tonight"})
             self.assertNotIn("TL Sport", ctx["counts"])
+            self.assertNotIn("TL Sport", ctx["scalar"])
             self.assertFalse(any("TL Player" in (t.get("market") or "") for t in ctx["top_tonight"]))
+
+
+class Payout072(BoardSqlCase):
+    """db/072: the worker's own parse of a ladder writes payout 'scalar', no
+    line, variant 'ladder'; the readers count it apart and keep it out of
+    every combo figure. Kalshi's market_type says 'binary' on it (Nov 7)."""
+
+    LADDER = {"Payout Per Unit": "$0.05", "football_player": "x", "football_team": "y", "scalar_cap": "20",
+              "scalar_floor": "0", "scalar_payout_type": "capped_cent", "statistic": "receptions"}
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        with _rolled_back() as conn:
+            if conn.execute("SELECT 1 FROM information_schema.columns WHERE table_name = 'kalshi_board' "
+                            "AND column_name = 'payout'").fetchone() is None:
+                raise unittest.SkipTest("db/072 not pasted")
+
+    def test_a_parsed_ladder_round_trips_and_is_counted_apart(self) -> None:
+        with _rolled_back() as conn:
+            series, event, game, markets = self.game(conn, n_markets=2)
+            raw = copy.deepcopy(json.loads((FIXTURES / "markets_KXNBAREB.json").read_bytes())["markets"][0])
+            raw.update(ticker=f"{event}-LAD", event_ticker=event, title="TL Player Receptions Ladder",
+                       yes_sub_title="TL Player", custom_strike=dict(self.LADDER), floor_strike=None,
+                       strike_type="custom", primary_participant_key="football_player", market_type="binary")
+            regime = FeeRegime(series=series, fee_type="quadratic", multiplier=Decimal(1), effective_from=None,
+                               fetched_at=NOW)
+            row, ex = kb.parse_market(raw, kb.Series(series, "TL", "TL Sport", ("TL Sport",), "Sports", regime),
+                                      "$.markets[0]")
+            self.assertFalse(ex["miss"])
+            self.assertEqual(ledger.kalshi_board_markets_upsert([row], NOW, is_test=True, conn=conn), 1)
+            self.assertEqual(conn.execute(
+                "SELECT payout, variant, subject, stat, line, label FROM kalshi_board WHERE market_ticker = %s",
+                (f"{event}-LAD",)).fetchone(),
+                ("scalar", "ladder", "TL Player", "receptions", None, "TL Player: receptions, $1 at 20"))
+            # The two binary props the fixture wrote say binary.
+            self.assertEqual({r[0] for r in conn.execute(
+                "SELECT payout FROM kalshi_board WHERE market_ticker = ANY(%s)", (markets,))}, {"binary"})
+            g = conn.execute("SELECT x FROM kalshi_board_games('TL Sport', NULL, false, true) x "
+                             "WHERE x->>'g' = %s", (game,)).fetchone()[0]
+            self.assertEqual((g.get("p"), g.get("s"), g.get("c")), (2, 1, 2))
+            ev = conn.execute("SELECT kalshi_board_game(%s, NULL, false, true)", (game,)).fetchone()[0]
+            self.assertEqual(sum(1 for m in ev["m"] if m.get("s")), 1)
+            combo = conn.execute("SELECT x FROM kalshi_board_games('TL Sport', NULL, true, true) x "
+                                 "WHERE x->>'g' = %s", (game,)).fetchone()[0]
+            self.assertNotIn("s", combo)
+            # Unchanged, it is not rewritten.
+            self.assertEqual(ledger.kalshi_board_markets_upsert([row], NOW, is_test=True, conn=conn), 0)
+
+    def test_the_checks_refuse_a_scalar_with_a_line_and_a_bad_payout(self) -> None:
+        for over, name in (({"payout": "scalar", "variant": "ladder"}, "kalshi_board_scalar_shape"),
+                           ({"payout": "range"}, "kalshi_board_payout_check"),
+                           ({"variant": "spiral"}, "kalshi_board_variant_check")):
+            with self.subTest(name), _rolled_back() as conn:
+                _, event, _, _ = self.game(conn, n_markets=0)
+                with self.assertRaises(psycopg.errors.CheckViolation) as cm:
+                    ledger.kalshi_board_markets_upsert([self.market(event, f"{event}-X", **over)], NOW,
+                                                       is_test=True, conn=conn)
+                self.assertEqual(cm.exception.diag.constraint_name, name)
 
 
 if __name__ == "__main__":

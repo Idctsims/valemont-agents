@@ -53,6 +53,9 @@ test.describe("formatting", () => {
     expect(countsLine({ l: 1 })).toBe("1 line");
     expect(countsLine({ p: 1 })).toBe("1 prop");
     expect(countsLine({})).toBe("No markets");
+    // db/072: scalar markets (ladders, escalators) are counted apart, last.
+    expect(countsLine({ l: 2, p: 3, s: 1 })).toBe("2 lines · 3 props · 1 scalar");
+    expect(countsLine({ s: 20 })).toBe("20 scalar");
   });
 });
 

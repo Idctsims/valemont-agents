@@ -164,8 +164,10 @@
                              next 36 h, fees and combo eligibility, upserted
                              changed-only, then linked, swept and pruned
                              (sports/kalshi_board.py, docs/kalshi_board.md).
-    kalshi_board_refresh 15 min  re-prices what starts within 6 h, 08:00-23:00
-                             Chicago (idle otherwise, so never stale).
+    kalshi_board_refresh 15 min  re-prices what starts within 3 h, one event a
+                             call, soonest first, <= 300 calls and 300 s;
+                             08:00-23:00 Chicago (idle otherwise, so never
+                             stale).
 
 Alerts go through core/push.py with deep link /settings/health.
 """

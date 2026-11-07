@@ -97,7 +97,45 @@ window is set before that failure is raised.
   the stats once the player enters the game. Both settle to a fair price if
   the player never enters. No logic depends on it yet. **Phase 4 (owner,
   Nov 6):** the generator spec says which variant each leg uses and why.
-  The escalator series stay on the board as parse misses (kind prop, nulls).
+- **`payout`: `binary` or `scalar` (owner, Nov 7; db/072).** A binary
+  market pays $1 or $0; a scalar one pays a fraction of $1 that grows with
+  a stat. **Scalar markets are never parlay legs** (no hit or miss), and
+  their YES price is not a probability. **Kalshi has no field that says
+  which:** `market_type` reads `binary` on every ladder and escalator (with
+  `settlement_bounds_type` `default` and `notional_value_dollars` 1.0000;
+  read Nov 7 on 4 scalar and 3 binary markets, the only differences being
+  `custom_strike`'s scalar keys, `strike_type` `custom`,
+  `price_level_structure` and `price_ranges`). So the worker sets
+  `payout = 'scalar'` when `custom_strike.scalar_cap` is present (the
+  owner's fallback rule), never from the series name. A CHECK ties it to
+  the variant: scalar exactly when the variant is `ladder` or `escalator`,
+  and a scalar row has no `line`.
+- **Phase 4's leg universe is `payout = 'binary'` only.** The board shows
+  scalar markets with a "Scales" chip and never a combo chip; the combo
+  filter and every combo count take binary markets only; the readers and
+  `ctx_kalshi_board` count scalar apart; parse misses count binary rows
+  only.
+- `variant` `ladder` and `escalator` (owner, Nov 7; db/072 widens the
+  CHECK): Kalshi's **scalar** player markets, every sport, read from
+  `custom_strike` (present `scalar_cap`; `exponent` present = escalator).
+  Read from the rules text on Nov 7:
+  - **ladder** (KXNFLLADDERREC, KXNFLLADDERRECYDS, KXNFLLADDERRSHYDS,
+    KXNFLFFPTSLADDER): YES pays a fixed amount per unit of the stat ($0.05 a
+    reception; $0.01 a PPR fantasy point, Sleeper's figure), capped at $1.00
+    at `scalar_cap`; NO pays $1.00 minus YES.
+  - **escalator** (KXNFLESCALATORREC, …RECYDS, …RSHYDS, KXNBAESCALATORPTS,
+    KXNBAESCALATOR3PT): YES pays `floor(10000 × (min(s, cap) / cap)^3) / 10000`
+    in `scalar_step` steps (yards in steps of 10, NBA points in 2s), $1.00 at
+    `scalar_cap`; NO pays $1.00 minus YES.
+
+  subject = `yes_sub_title` (the player), stat = `custom_strike.statistic`,
+  **line NULL** (no threshold to hit). The cap, the stat value at which YES
+  pays $1.00, rides in the label ("Emeka Egbuka: receptions, $1 at 20"); no
+  new column. A scalar row is never a parse miss. These were 241 of the 467
+  misses at the 15:30 UTC Nov 7 pull.
+- Two more Nov 7 fixes: the period prefix is word-bounded ("Seth McGowan:
+  10+ rushing yards" had lost its subject to "Set"), and a game line reads
+  "Ben Shelton -3.5 games" (KXATPGSPREAD's sub-title) as a spread.
 - `custom_strike` holds Kalshi's own player and team ids. It is read for the
   kind only and never stored.
 
@@ -139,8 +177,29 @@ all four prices, Nov 6), and again on every run (the job note).
 - `kalshi_board`: 09:30 and 15:30 Chicago and 150 s after boot. Expected
   interval 18 h.
 - `kalshi_board_refresh`: every 15 min, working 08:00–23:00 Chicago (idle
-  otherwise, so it is never stale). Re-prices the events of the last full
-  pull that start within 6 h. It stands down while a full pull runs.
+  otherwise, so it is never stale). **Rebuilt (owner, Nov 7)** after its
+  first Saturday: 453–631 s a run, 626–864 calls, ~10% 429s, 44–61 MB from
+  Kalshi, while re-pricing 6 h by series. Now:
+  - **Per event only** (`event_ticker=E`), never by series; scope: the last
+    full pull's events starting within **3 h** and not yet started,
+    **soonest first**.
+  - **Hard caps a run: ≤ 300 Kalshi calls (429s count) and ≤ 300 s.** No
+    call starts after 280 s, and each times out at 15 s, so a call in flight
+    still ends inside the cap. At a cap it stops; the note says how many
+    events it skipped, which cap, and the first skipped start; only events
+    read whole are swept and touched.
+  - **No overlap:** `max_instances=1` and `coalesce` (the scheduler's
+    defaults, pinned by a test for both jobs); it idles while a full pull
+    holds the lock.
+  - **Adaptive pacing** (`venues/kalshi/board.Paced`, AIMD): it starts at
+    0.5 s between calls; a 429 doubles the gap (≤ 4 s), and every 25 answers
+    without one ease it 10% (≥ 0.3 s). The pace carries over to the next run
+    in the process. The note carries the 429 count, its rate and the pace.
+    Target: under 2% of calls.
+  - Targets on a Saturday (owner): median run ≤ 120 s, ≤ 10 MB from Kalshi.
+- The full pull's note leads with `empty_series=<n>` (inside `job_health`'s
+  500 characters, so 0 is read, not inferred) and lists the top 10 parse
+  misses by series.
 - **Changed-only.** The process keeps a compact map of 64-bit hashes
   (rebuilt by each full pull) and sends only rows whose content changed. The
   database writes only rows whose stored columns differ. Nothing is read back,

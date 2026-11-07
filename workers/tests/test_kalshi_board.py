@@ -23,6 +23,7 @@ from venues.kalshi import board as kb
 from venues.kalshi.client import KalshiClient
 from venues.kalshi.events import KalshiShapeError
 from venues.kalshi.fees import FeeRegime, UnsupportedFeeType
+from tests.test_system_jobs import SystemTestCase
 
 FIXTURES = pathlib.Path(__file__).parent / "fixtures" / "kalshi_board"
 UTC = timezone.utc
@@ -521,8 +522,9 @@ class FullJob(unittest.TestCase):
         # The board was written, so the refresh has its window (minus the skipped series).
         self.assertTrue(st.window)
         self.assertFalse(any(kb.series_of(t) == "KXNBAREB" for t in st.window))
-        at = datetime(2026, 11, 6, 20, 0, tzinfo=UTC)
-        run = job.refresh_job(client=client(FakeKalshi()), now=lambda: at, state=st, writer=RecordingWriter())
+        clock = FakeClock()
+        run = job.refresh_job(http=http_of(FakeKalshi(), clock), now=lambda: AT, state=st, writer=RecordingWriter(),
+                              clock=clock, sleep=clock.sleep)
         self.assertIsNone(run.idle)
         self.assertGreater(run.markets, 0)
 
@@ -567,48 +569,347 @@ class FullJob(unittest.TestCase):
         self.assertEqual((st.markets, st.events, st.window, st.series_rows), ({}, {}, {}, {}))
 
 
+def http_of(fake: Any, clock: "FakeClock | None" = None, per_call_s: float = 0.0) -> kb.Http:
+    """FakeKalshi as raw HTTP (bytes), each call advancing the fake clock."""
+    def http(url: str) -> tuple[int, bytes | None]:
+        if clock is not None:
+            clock.t += per_call_s
+        status, body = fake(url)
+        return status, (None if body is None else json.dumps(body).encode())
+    return http
+
+
+class FakeClock:
+    def __init__(self) -> None:
+        self.t = 1000.0
+        self.slept: list[float] = []
+
+    def __call__(self) -> float:
+        return self.t
+
+    def sleep(self, s: float) -> None:
+        self.slept.append(s)
+        self.t += s
+
+
+#: 15:30 Chicago: the recorded games start at 00:00 UTC Nov 7 (2.5 h out);
+#: two others started at ~19:10 UTC Nov 6 (already under way).
+AT = datetime(2026, 11, 6, 21, 30, tzinfo=UTC)
+
+
 class Refresh(unittest.TestCase):
+    """The rebuilt refresh (owner, Nov 7): per event, 3 h, not started,
+    soonest first, <= 300 calls and <= 300 s, adaptive pacing."""
+
     def setUp(self) -> None:
         self.state = job.BoardState()
         job.full_job(client=client(FakeKalshi()), now=lambda: NOW, state=self.state, writer=RecordingWriter())
 
-    def refresh(self, at: datetime, writer: RecordingWriter | None = None) -> tuple[job.BoardRun, RecordingWriter]:
+    def refresh(self, at: datetime = AT, fake: Any = None, writer: RecordingWriter | None = None,
+                per_call_s: float = 0.0) -> tuple[job.BoardRun, RecordingWriter, FakeKalshi, FakeClock]:
         w = writer or RecordingWriter()
-        return job.refresh_job(client=client(FakeKalshi()), now=lambda: at, state=self.state, writer=w), w
+        f = fake if fake is not None else FakeKalshi()
+        clock = FakeClock()
+        run = job.refresh_job(http=http_of(f, clock, per_call_s), now=lambda: at, state=self.state, writer=w,
+                              clock=clock, sleep=clock.sleep)
+        return run, w, f, clock
+
+    def market_queries(self, fake: FakeKalshi) -> list[dict[str, str]]:
+        return [dict(urllib.parse.parse_qsl(u.partition("?")[2])) for u in fake.urls
+                if u.split("?")[0].endswith("/markets")]
 
     def test_idle_outside_hours_and_before_a_full_pull(self) -> None:
         late = datetime(2026, 11, 7, 6, 0, tzinfo=UTC)  # 00:00 Chicago
         self.assertIn("outside 08:00-23:00", self.refresh(late)[0].job_note)
-        run = job.refresh_job(client=client(FakeKalshi()), now=lambda: NOW, state=job.BoardState())
+        run = job.refresh_job(http=http_of(FakeKalshi()), now=lambda: NOW, state=job.BoardState())
         self.assertIn("no window yet", run.job_note)
 
-    def test_re_prices_only_what_starts_within_6_h_and_sends_only_changes(self) -> None:
-        at = datetime(2026, 11, 6, 20, 0, tzinfo=UTC)  # 14:00 Chicago; games at 00:00 UTC
-        run, w = self.refresh(at)
+    def test_always_per_event_within_3_h_never_started_soonest_first(self) -> None:
+        # One window event already under way (started an hour ago).
+        under_way = sorted(self.state.window)[0]
+        self.state.window[under_way] = int((AT - timedelta(hours=1)).timestamp())
+        run, w, fake, _ = self.refresh()
+        qs = self.market_queries(fake)
+        self.assertTrue(qs)
+        self.assertTrue(all("event_ticker" in q and "series_ticker" not in q for q in qs), qs[:3])
+        asked = [q["event_ticker"] for q in qs]
+        self.assertEqual(len(asked), len(set(asked)))  # one call an event (each fits one page)
+        lo, hi = AT.timestamp(), (AT + timedelta(hours=3)).timestamp()
+        in_scope = {t for t, s in self.state.window.items() if lo <= s < hi}
+        self.assertEqual(set(asked), in_scope)
+        started = {t for t, s in self.state.window.items() if s < lo}
+        self.assertTrue(started)  # the fixture's ~19:10 UTC games
+        self.assertFalse(started & set(asked))
+        self.assertEqual([self.state.window[t] for t in asked], sorted(self.state.window[t] for t in asked))
+        self.assertEqual((run.scope, run.events, run.skipped), (len(in_scope), len(in_scope), 0))
         self.assertGreater(run.markets, 0)
-        self.assertEqual(run.sent, 0)
-        self.assertEqual(w.sent("markets"), [])
-        swept = {t for k, v in w.calls if k == "sweep" for t in v[0]}
-        self.assertTrue(swept)
-        starts = {t: self.state.window[t] for t in swept}
-        self.assertTrue(all(at.timestamp() <= s < (at + kb.REFRESH_WITHIN).timestamp() for s in starts.values()))
+        self.assertEqual((run.sent, w.sent("markets")), (0, []))  # nothing moved since the full pull
+        self.assertEqual({t for k, v in w.calls if k == "sweep" for t in v[0]}, in_scope)
+        self.assertIn(f"refresh: {run.events} of {run.scope} events within 3 h", run.job_note)
         nothing = self.refresh(datetime(2026, 11, 6, 14, 0, tzinfo=UTC))[0]  # 08:00 Chicago: games 10 h out
-        self.assertIn("nothing starts within 6 h", nothing.job_note)
+        self.assertIn("nothing starts within 3 h", nothing.job_note)
+
+    def test_the_call_cap_stops_logs_the_skip_and_never_sweeps_an_unread_event(self) -> None:
+        with mock.patch.object(job, "REFRESH_MAX_CALLS", 3):
+            run, w, fake, _ = self.refresh()
+        self.assertEqual(len(fake.urls), 3)
+        self.assertEqual(run.calls, 3)
+        self.assertEqual((run.events, run.cap), (3, "calls"))
+        self.assertEqual(run.skipped, run.scope - 3)
+        self.assertGreater(run.skipped, 0)
+        asked = [q["event_ticker"] for q in self.market_queries(fake)]
+        swept = [t for k, v in w.calls if k == "sweep" for t in v[0]]
+        self.assertEqual(swept, asked)  # only the events read whole
+        soonest_skipped = sorted((s for t, s in self.state.window.items()
+                                  if AT.timestamp() <= s < (AT + timedelta(hours=3)).timestamp()
+                                  and t not in asked))[0]
+        self.assertEqual(run.skipped_from, datetime.fromtimestamp(soonest_skipped, UTC))
+        self.assertIn(f"SKIPPED {run.skipped} (calls cap; from ", run.job_note)
+
+    def test_the_time_cap_stops_before_300_s(self) -> None:
+        # A call in flight may take its whole timeout: the last call starts
+        # by MAX - MARGIN, so the run still ends inside MAX.
+        with mock.patch.object(job, "REFRESH_MAX_S", 10), mock.patch.object(job, "REFRESH_MARGIN_S", 4):
+            run, _, fake, clock = self.refresh(per_call_s=4.0)
+        self.assertEqual(run.cap, "time")
+        self.assertLessEqual(run.seconds, 10)
+        self.assertGreaterEqual(job.REFRESH_MARGIN_S, job.REFRESH_CALL_TIMEOUT_S)
+        self.assertLess(len(fake.urls), run.scope)
+        self.assertIn("(time cap; from ", run.job_note)
+
+    def test_the_real_caps(self) -> None:
+        self.assertEqual((job.REFRESH_MAX_CALLS, job.REFRESH_MAX_S), (300, 300))
+        self.assertEqual(kb.REFRESH_WITHIN, timedelta(hours=3))
+
+    def test_429s_slow_the_pace_and_the_rate_is_in_the_note(self) -> None:
+        fake = FakeKalshi()
+        limited = {"n": 0}
+
+        def flaky(url: str):
+            if url.split("?")[0].endswith("/markets") and limited["n"] < 2:
+                limited["n"] += 1
+                fake.urls.append(url)
+                return 429, None
+            return fake(url)
+
+        start = self.state.refresh_pace
+        run, _, _, clock = self.refresh(fake=flaky)
+        self.assertEqual(run.limited, 2)
+        self.assertGreater(run.pace, start)  # doubled twice, then eased at most a little
+        self.assertEqual(self.state.refresh_pace, run.pace)  # carried to the next run
+        self.assertIn(f"2 429s ({100 * 2 / run.calls:.1f}%)", run.job_note)
+        self.assertIn(f"pace {run.pace:.2f} s", run.job_note)
+        self.assertTrue(clock.slept)  # paced: it waited between calls
 
     def test_stands_down_while_a_full_pull_runs(self) -> None:
-        at = datetime(2026, 11, 6, 20, 0, tzinfo=UTC)
         with job.PULL_LOCK:
-            run, w = self.refresh(at)
+            run, w, fake, _ = self.refresh()
         self.assertIn("full pull is running", run.job_note)
-        self.assertEqual(w.calls, [])
+        self.assertEqual((w.calls, fake.urls), ([], []))
 
     def test_the_lock_is_released_after_a_failure(self) -> None:
-        at = datetime(2026, 11, 6, 20, 0, tzinfo=UTC)
         fake = FakeKalshi(overrides={"/markets": {"markets": [], "cursor": ""}})
-        with self.assertRaises(job.BoardFailed):
-            job.refresh_job(client=client(fake), now=lambda: at, state=self.state, writer=RecordingWriter())
+        with self.assertRaisesRegex(job.BoardFailed, "no open market returned"):
+            self.refresh(fake=fake)
         self.assertTrue(job.PULL_LOCK.acquire(blocking=False))
         job.PULL_LOCK.release()
+
+    def test_an_event_over_the_page_cap_is_skipped_never_swept_and_the_rest_go_on(self) -> None:
+        fake = FakeKalshi()
+        asked: list[str] = []
+        stuck: dict[str, str] = {}
+
+        def endless(url: str):
+            q = dict(urllib.parse.parse_qsl(url.partition("?")[2]))
+            if url.split("?")[0].endswith("/markets") and "event_ticker" in q:
+                asked.append(q["event_ticker"])
+                stuck.setdefault("e", q["event_ticker"])  # the first event asked pages forever
+                if q["event_ticker"] == stuck["e"]:
+                    fake.urls.append(url)
+                    return 200, {"markets": [], "cursor": "more"}
+            return fake(url)
+
+        with mock.patch.object(kb, "MAX_PAGES", 3):
+            run, w, _, _ = self.refresh(fake=endless)
+        self.assertEqual(run.overflowed, {kb.series_of(stuck["e"]): 1})
+        self.assertEqual(run.events, run.scope - 1)
+        self.assertNotIn(stuck["e"], {t for k, v in w.calls if k == "sweep" for t in v[0]})
+        self.assertIn("overflowed=1", run.job_note)
+
+    def test_a_moved_price_is_sent(self) -> None:
+        fake = FakeKalshi()
+
+        def moved(url: str):
+            status, body = fake(url)
+            if url.split("?")[0].endswith("/markets") and body and body["markets"]:
+                body["markets"][0]["yes_ask_dollars"] = "0.9900"
+            return status, body
+
+        run, w, _, _ = self.refresh(fake=moved)
+        self.assertEqual(run.sent, run.events)  # the first market of each event moved
+        self.assertEqual(run.written, run.sent)
+
+
+class Pacing(unittest.TestCase):
+    """kb.Paced: AIMD pacing under a hard budget."""
+
+    def paced(self, statuses: list[int], **kw: Any) -> tuple[kb.Paced, FakeClock]:
+        clock = FakeClock()
+        it = iter(statuses)
+
+        def http(url: str):
+            s = next(it)
+            return s, (b"{}" if s == 200 else None)
+
+        return kb.Paced(http=http, clock=clock, sleep=clock.sleep, **kw), clock
+
+    def test_a_429_doubles_and_a_clean_run_eases_to_the_floor(self) -> None:
+        p, _ = self.paced([429] + [200] * 400, interval=0.5)
+        p("u")
+        self.assertEqual(p.interval, 1.0)
+        for _ in range(kb.PACE_EASE_AFTER):
+            p("u")
+        self.assertAlmostEqual(p.interval, 0.9)
+        for _ in range(375):
+            p("u")
+        self.assertEqual(p.interval, kb.PACE_FLOOR)
+        self.assertAlmostEqual(p.limited_pct, 100 / 401)
+
+    def test_the_ceiling(self) -> None:
+        p, _ = self.paced([429] * 10, interval=0.5)
+        for _ in range(10):
+            p("u")
+        self.assertEqual(p.interval, kb.PACE_CEILING)
+
+    def test_calls_are_spaced_by_the_interval(self) -> None:
+        p, clock = self.paced([200] * 3, interval=0.5)
+        for _ in range(3):
+            p("u")
+        self.assertEqual(clock.slept, [0.5, 0.5])
+
+    def test_the_call_cap_and_the_deadline_raise_budget_spent(self) -> None:
+        p, _ = self.paced([200] * 5, interval=0.3, max_calls=2)
+        p("u"), p("u")
+        with self.assertRaises(kb.BudgetSpent) as cm:
+            p("u")
+        self.assertEqual(cm.exception.reason, "calls")
+        p, clock = self.paced([200] * 5, interval=0.3, deadline=1000.2)
+        p("u")
+        with self.assertRaises(kb.BudgetSpent) as cm:
+            p("u")  # the 0.3 s wait would end past the deadline
+        self.assertEqual(cm.exception.reason, "time")
+        with self.assertRaises(kb.BudgetSpent):
+            p.sleep(5.0)  # the client's own 429 backoff is held to it too
+
+    def test_budget_spent_is_not_a_kalshi_error(self) -> None:
+        # The client retries KalshiUnreachable; a spent budget must stop the run.
+        from venues.kalshi.client import KalshiError
+        self.assertFalse(issubclass(kb.BudgetSpent, KalshiError))
+        p, _ = self.paced([429, 429, 429], interval=0.3, max_calls=2)
+        c = KalshiClient(transport=p, min_interval=0, sleep=p.sleep)
+        with self.assertRaises(kb.BudgetSpent):
+            c.get("/markets")
+        self.assertEqual(p.calls, 2)
+
+
+class LadderAndEscalator(unittest.TestCase):
+    """Nov 7: 467 parse misses on the 15:30 UTC pull, mostly these (rules text
+    read from Kalshi the same day; shapes below are copied from it)."""
+
+    LADDER = {"Payout Per Unit": "$0.05", "football_player": "x", "football_team": "y", "scalar_cap": "20",
+              "scalar_floor": "0", "scalar_payout_type": "capped_cent", "statistic": "receptions"}
+    FANTASY = {"football_player": "x", "football_team": "y", "scalar_cap": "100", "scalar_floor": "0",
+               "scalar_payout_type": "capped_cent", "statistic": "fantasy points"}
+    ESCALATOR = {"Payout formula": "floor(10000 x (min(s, 14) / 14)^3) / 10000", "exponent": "3",
+                 "football_player": "x", "football_team": "y", "s": "official receptions", "scalar_cap": "14",
+                 "scalar_floor": "0", "scalar_payout_type": "capped_centicent", "scalar_step": "1",
+                 "statistic": "receptions"}
+    NBA_ESCALATOR = {"exponent": "3", "basketball_player": "x", "basketball_team": "y", "scalar_cap": "50",
+                     "scalar_floor": "0", "scalar_payout_type": "capped_centicent", "scalar_step": "2",
+                     "statistic": "points"}
+
+    def scalar(self, title: str, sub: str, strike: dict[str, Any], key: str = "football_player"):
+        return parse("KXNBAREB", title=title, yes_sub_title=sub, custom_strike=strike, floor_strike=None,
+                     strike_type="custom", primary_participant_key=key)
+
+    def test_ladders_are_scalar(self) -> None:
+        for title, strike, stat, cap in (("Emeka Egbuka Receptions Ladder", self.LADDER, "receptions", "20"),
+                                         ("Emeka Egbuka fantasy scalar ladder", self.FANTASY, "fantasy points",
+                                          "100")):
+            with self.subTest(title):
+                row, ex = self.scalar(title, "Emeka Egbuka", strike)
+                self.assertEqual((row["market_kind"], row["payout"], row["variant"], row["subject"], row["stat"],
+                                  row["line"]), ("prop", "scalar", "ladder", "Emeka Egbuka", stat, None))
+                self.assertEqual(row["label"], f"Emeka Egbuka: {stat}, $1 at {cap}")
+                self.assertFalse(ex["miss"])
+
+    def test_escalators_every_sport(self) -> None:
+        row, ex = self.scalar("Emeka Egbuka Receptions Escalator", "Emeka Egbuka", self.ESCALATOR)
+        self.assertEqual((row["payout"], row["variant"], row["subject"], row["stat"], row["line"], row["label"]),
+                         ("scalar", "escalator", "Emeka Egbuka", "receptions", None, "Emeka Egbuka: receptions, $1 at 14"))
+        self.assertFalse(ex["miss"])
+        row, ex = self.scalar("Victor Wembanyama player points escalator", "Victor Wembanyama",
+                              self.NBA_ESCALATOR, key="basketball_player")
+        self.assertEqual((row["market_kind"], row["payout"], row["variant"], row["stat"], row["line"]),
+                         ("prop", "scalar", "escalator", "points", None))
+        self.assertFalse(ex["miss"])
+
+    def test_a_scalar_is_never_a_parse_miss_and_keeps_the_market(self) -> None:
+        strike = {k: v for k, v in self.LADDER.items() if k != "statistic"}
+        row, ex = self.scalar("Emeka Egbuka Receptions Ladder", "Emeka Egbuka", strike)
+        self.assertFalse(ex["miss"])
+        self.assertEqual((row["payout"], row["variant"], row["stat"], row["subject"]),
+                         ("scalar", "ladder", None, "Emeka Egbuka"))
+        self.assertIsNotNone(row["yes_ask"])
+
+    def test_binary_markets_say_so(self) -> None:
+        # Kalshi's own market_type reads "binary" on scalars too (Nov 7), so it
+        # is never what decides; scalar_cap is.
+        row, _ = parse("KXNBAREB")
+        self.assertEqual(row["payout"], "binary")
+        row, _ = self.scalar("X Ladder", "X", self.LADDER, )
+        self.assertEqual(row["payout"], "scalar")
+        row, _ = parse("KXNBAREB", market_type="binary", custom_strike=dict(self.LADDER))
+        self.assertEqual(row["payout"], "scalar")  # market_type "binary" as Kalshi sends it on a ladder
+
+    def test_a_bad_cap_is_a_shape_error(self) -> None:
+        with self.assertRaisesRegex(KalshiShapeError, "scalar_cap"):
+            self.scalar("X Ladder", "X", dict(self.LADDER, scalar_cap="lots"))
+
+    def test_the_payout_and_variant_values_match_db_072(self) -> None:
+        sql = (pathlib.Path(__file__).parents[2] / "db" / "072_kalshi_board_payout.sql").read_text("utf-8")
+        self.assertIn("CHECK (payout IN ('binary', 'scalar'))", sql)
+        self.assertIn("variant IN ('protected', 'ladder', 'escalator')", sql)
+
+
+class TitleFixes(unittest.TestCase):
+    def test_a_player_named_seth_is_not_a_set(self) -> None:
+        row, ex = parse("KXNBAREB", title="Seth McGowan: 10+ rushing yards", yes_sub_title="Seth McGowan: 10+",
+                        floor_strike=9.5)
+        self.assertEqual((row["subject"], row["stat"], row["line"]), ("Seth McGowan", "rushing yards", "9.5"))
+        self.assertFalse(ex["miss"])
+        # A real set still strips.
+        p = kb.parse_subject("game_line", "Set 1: Over 9.5 games", None, "greater", Decimal("9.5"))
+        self.assertEqual(p.stat, "total")
+
+    def test_a_tennis_games_spread_from_the_sub_title(self) -> None:
+        p = kb.parse_subject("game_line", "Will Ben Shelton win at least 3.5 more games than Luca Van Assche?",
+                             "Ben Shelton -3.5 games", "greater", Decimal("3.5"))
+        self.assertEqual((p.subject, p.stat, p.miss), ("Ben Shelton", "spread", False))
+
+
+class Notes(unittest.TestCase):
+    def test_the_full_note_reads_empty_series_and_the_top_10_misses(self) -> None:
+        run = job.BoardRun(kind="full", markets=5, calls=100, limited=3)
+        run.misses.update({f"KXS{i:02d}": 20 - i for i in range(12)})
+        note = run.job_note
+        self.assertIn("empty_series=0", note)
+        self.assertLess(note.index("empty_series=0"), 120)  # inside job_health's 500 characters
+        self.assertIn("KXS09 11", note)
+        self.assertNotIn("KXS10", note)
+        self.assertIn("3 429s (3.0%)", note)
+        run.empty_series["KXNBAREB"] = 4
+        self.assertIn("empty_series=1", run.job_note)
 
 
 class Leagues(unittest.TestCase):
@@ -640,6 +941,25 @@ class Registration(unittest.TestCase):
             t = full.trigger.get_next_fire_time(None, t + timedelta(seconds=1))
             fires.append(t.astimezone(job.OWNER_TZ).strftime("%H:%M"))
         self.assertEqual(fires, ["09:30", "15:30", "09:30"])
+
+
+class NoOverlap(SystemTestCase):
+    """max_instances=1 and coalesce reach both board jobs (the scheduler's
+    job_defaults, core/orchestrator.py), with the stubbed ledger."""
+
+    def test_neither_job_can_overlap_itself(self) -> None:
+        from core import system_jobs
+        from core.orchestrator import Orchestrator
+        orch = Orchestrator()
+        for j in system_jobs.build_system_jobs({}):
+            orch.register_system_job(j)
+        orch._scheduler.start(paused=True)
+        self.addCleanup(orch._scheduler.shutdown, False)
+        orch._wire_system()
+        for name in (job.FULL_JOB, job.REFRESH_JOB):
+            with self.subTest(name):
+                sj = orch._scheduler.get_job(f"system:{name}")
+                self.assertEqual((sj.max_instances, sj.coalesce), (1, True))
 
 
 if __name__ == "__main__":
