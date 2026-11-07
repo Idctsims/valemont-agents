@@ -26,6 +26,10 @@ from venues.kalshi import board as kb
 from venues.kalshi.fees import FeeRegime
 
 FIXTURES = pathlib.Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "kalshi_board"
+#: Reset from the DATABASE clock before every test (BoardSqlCase.setUp): the
+#: SQL compares against now(), and in a 20-minute gate a clock read at import
+#: is stale by the time a test runs (the db/071 gate's first run, Nov 6:
+#: touch refused to move checked_at back to an import-time "later").
 NOW = datetime.now(timezone.utc)
 
 
@@ -40,6 +44,11 @@ class BoardSqlCase(RankSqlCase):
         with _rolled_back() as conn:
             if conn.execute("SELECT to_regclass('public.kalshi_board')").fetchone()[0] is None:
                 raise unittest.SkipTest("db/071 not pasted")
+
+    def setUp(self) -> None:
+        global NOW
+        with _rolled_back() as conn:
+            NOW = conn.execute("SELECT now()").fetchone()[0]
 
     def game(self, conn: psycopg.Connection, *, start: datetime | None = None, n_markets: int = 2,
              kind: str = "prop") -> tuple[str, str, str, list[str]]:

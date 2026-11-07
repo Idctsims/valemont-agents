@@ -30,6 +30,7 @@ def main() -> int:
     mode.add_argument("--dry-run", action="store_true")
     mode.add_argument("--full", action="store_true")
     ap.add_argument("--refresh-after", action="store_true", help="with --full: then one refresh run")
+    ap.add_argument("--flush", type=int, default=None, help="market rows buffered per write (measurement)")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
     if args.full:
@@ -37,6 +38,8 @@ def main() -> int:
         load_dotenv(ENV_FILE, override=False)
     from sports import kalshi_board as job
 
+    if args.flush:
+        job.FLUSH_ROWS = args.flush
     before = memory.rss_mb()
     with memory.PeakSampler() as s:
         run = job.full_job(dry_run=args.dry_run)
