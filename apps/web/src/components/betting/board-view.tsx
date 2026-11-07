@@ -25,12 +25,26 @@ function ComboChip({ ev }: { ev: BoardEvent }) {
   );
 }
 
+// A scalar market (db/072): YES pays a fraction of $1 that grows with the
+// stat, so it is not a hit-or-miss leg and gets no combo chip.
+function ScalesChip() {
+  return (
+    <span data-testid="scales-chip"
+          title="Scalar: YES pays a share of $1 that grows with the stat. Not a parlay leg."
+          className="label-mono ml-2 inline-flex h-6 items-center whitespace-nowrap rounded-pill border border-border px-2 align-middle text-text-muted">
+      Scales
+    </span>
+  );
+}
+
 function MarketRow({ m }: { m: BoardMarket }) {
   return (
-    <li data-testid="board-market" data-kind={m.k} className="flex items-baseline justify-between gap-x-4 py-2">
+    <li data-testid="board-market" data-kind={m.k} data-payout={m.s ? "scalar" : "binary"}
+        className="flex items-baseline justify-between gap-x-4 py-2">
       <span className="min-w-0 flex-1 text-sm text-text">
         {m.lb ?? "—"}
         {m.v && <span className="label-mono ml-2 text-text-muted">{m.v}</span>}
+        {m.s && <ScalesChip />}
       </span>
       <span className="shrink-0 text-right font-mono text-sm tabular-nums text-text">
         <span data-testid="market-yes" aria-label={`YES bid ${cents(m.b)}, ask ${cents(m.a)}`}>

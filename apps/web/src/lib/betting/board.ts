@@ -4,8 +4,11 @@
 
 export type Kind = "game_line" | "prop" | "other";
 
-/** kalshi_board_sports: one chip per sport. */
-export type SportChip = { sport: string; games: number; markets: number; lines?: number; props?: number; combo?: number };
+/** kalshi_board_sports: one chip per sport. lines, props and combo count
+ *  binary markets only; scalar (ladders, escalators) apart (db/072). */
+export type SportChip = {
+  sport: string; games: number; markets: number; lines?: number; props?: number; scalar?: number; combo?: number;
+};
 
 /** kalshi_board_games: one collapsed game. */
 export type BoardGame = {
@@ -17,15 +20,19 @@ export type BoardGame = {
   l?: number; // game-line markets
   p?: number; // props
   o?: number; // other
-  c?: number; // combo-eligible markets
+  s?: number; // scalar markets (ladders, escalators; db/072): never legs, counted apart
+  c?: number; // combo-eligible binary markets
   asof: string; // the event's last fetch
   test?: boolean;
 };
 
-/** kalshi_board_game: one event of an expanded game, with its markets. */
-export type BoardMarket = { k: Kind; lb?: string; b?: number; a?: number; f?: number; v?: string };
+/** kalshi_board_game: one event of an expanded game, with its markets.
+ *  s: a scalar market (a ladder or escalator: YES pays a fraction of $1 that
+ *  grows with the stat; its price is not a probability, never a parlay leg). */
+export type BoardMarket = { k: Kind; lb?: string; b?: number; a?: number; f?: number; v?: string; s?: boolean };
 /** sm: how many of this event's markets one Kalshi combo may use (absent =
- *  no stated per-event cap; never read as 0 or 1). */
+ *  no stated per-event cap; never read as 0 or 1). c, y and sm come from the
+ *  event's binary markets only (db/072): an all-scalar event has no combo chip. */
 export type BoardEvent = { e: string; sr: string; c?: boolean; y?: boolean; sm?: number; asof: string; m: BoardMarket[] };
 
 /** The combo chip's words: "Combo", "Combo · YES only", "... · max 1". */
@@ -98,12 +105,13 @@ export function asOfLabel(iso: string): string {
   return `as of ${new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: CHICAGO })}`;
 }
 
-/** "12 lines · 340 props · 6 other". */
-export function countsLine(g: Pick<BoardGame, "l" | "p" | "o">): string {
+/** "12 lines · 340 props · 6 other · 20 scalar" (scalar counted apart). */
+export function countsLine(g: Pick<BoardGame, "l" | "p" | "o" | "s">): string {
   const parts = [
     g.l ? `${g.l} ${g.l === 1 ? "line" : "lines"}` : null,
     g.p ? `${g.p} ${g.p === 1 ? "prop" : "props"}` : null,
     g.o ? `${g.o} other` : null,
+    g.s ? `${g.s} scalar` : null,
   ].filter(Boolean);
   return parts.join(" · ") || "No markets";
 }

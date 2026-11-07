@@ -11,7 +11,9 @@ import { addTestKalshiBoard, hasOwner, signIn, useE2eMarker } from "./support/ow
 //   * expanding loads its markets: game lines first, then props; YES bid/ask
 //     and the fee per contract at the ask; the combo chip (YES only) on the
 //     moneyline event; the protected variant marked;
-//   * the kind and combo filters, kept in the URL.
+//   * db/072: the ladder event's one scalar market shows "Scales" and its
+//     event no combo chip (although combo-eligible); scalar is counted apart;
+//   * the kind and combo filters, kept in the URL (combo drops scalar).
 //
 // Run (owner, CLAUDE.md §6, the Read-Host form):
 //   pnpm test:e2e e2e/betting.spec.ts --project=phone --output=test-results/betting
@@ -56,7 +58,7 @@ test.describe("owner", () => {
     await expect(page.getByTestId("betting-tab-board")).toHaveAttribute("aria-selected", "true");
     await expect(page.locator('[data-testid="board-sport-chip"][data-sport="Basketball"]')).toHaveAttribute("aria-current", "page");
     await expect(card()).toContainText("Test Away vs Test Home");
-    await expect(card().getByTestId("game-counts")).toHaveText("2 lines · 3 props");
+    await expect(card().getByTestId("game-counts")).toHaveText("2 lines · 3 props · 1 scalar");
     await expect(card()).toContainText("2 combo");
     await expect(card().getByTestId("board-game-markets")).toHaveCount(0);
   });
@@ -64,7 +66,7 @@ test.describe("owner", () => {
   test("expanding loads the markets: lines first, then props", async () => {
     await card().getByRole("button").click();
     const markets = card().getByTestId("board-market");
-    await expect(markets).toHaveCount(5);
+    await expect(markets).toHaveCount(6);
     await expect(markets.first()).toHaveAttribute("data-kind", "game_line");
     await expect(markets.nth(2)).toHaveAttribute("data-kind", "prop");
     const home = markets.filter({ hasText: "Test Home" });
@@ -73,18 +75,26 @@ test.describe("owner", () => {
     const ml = card().getByTestId("board-event").first();
     await expect(ml.getByTestId("combo-chip")).toHaveText("Combo · YES only · max 1");
     await expect(ml.getByTestId("combo-chip")).toHaveAttribute("data-size-max", "1");
-    await expect(card().getByTestId("board-event").nth(1).getByTestId("combo-chip")).toHaveCount(0);
+    await expect(card().locator('[data-testid="board-event"][data-event$="PTS"]').getByTestId("combo-chip")).toHaveCount(0);
     await expect(markets.filter({ hasText: "protected" })).toHaveCount(1);
+    // The scalar ladder: "Scales", and no combo chip on its event (combo-eligible on Kalshi).
+    const ladder = card().locator('[data-testid="board-event"][data-event$="LAD"]');
+    await expect(ladder.getByTestId("combo-chip")).toHaveCount(0);
+    await expect(ladder.getByTestId("board-market")).toHaveAttribute("data-payout", "scalar");
+    await expect(ladder.getByTestId("scales-chip")).toHaveText("Scales");
+    await expect(card().getByTestId("scales-chip")).toHaveCount(1);
+    await expect(ladder).toContainText("Test Player: points, $1 at 50");
     await expect(ml.getByTestId("event-asof")).toContainText("as of");
   });
 
   test("filters: props only, then combo-eligible only, in the URL", async () => {
     await page.getByTestId("board-kind-prop").click();
     await expect(page).toHaveURL(/kind=props/);
-    await expect(card().getByTestId("game-counts")).toHaveText("3 props");
+    await expect(card().getByTestId("game-counts")).toHaveText("3 props · 1 scalar");
     await page.getByTestId("board-combo-filter").click();
     await expect(page).toHaveURL(/kind=props.*combo=1|combo=1.*kind=props/);
-    // The test game's props are not combo-eligible: it drops out.
+    // The binary props are not combo-eligible and the combo filter drops the
+    // scalar ladder (never a leg): the game drops out.
     await expect(card()).toHaveCount(0);
     await page.getByTestId("board-kind-all").click();
     await expect(page).toHaveURL(/combo=1/);

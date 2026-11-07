@@ -21,7 +21,9 @@ The fetch path (owner, Nov 6), never the raw open-markets list (MASTER_PLAN
    events, else ``series_ticker=S``, its out-of-window events dropped as
    parsed. Processed one page at a time; the raw JSON is dropped before the
    next call. A pull whose window has events but returns no market fails
-   loud (the filter changed shape).
+   loud (the filter changed shape). The 15-min refresh reads event by event
+   only (``event_markets``), soonest first, under a call and a time cap
+   (``Paced``; owner, Nov 7).
 
 Every field read is shape-checked (venues/kalshi/events.py req/opt): a
 missing or mistyped one raises KalshiShapeError naming the series and the
@@ -64,8 +66,12 @@ from venues.kalshi.events import KalshiShapeError, opt, req
 from venues.kalshi.fees import FeeRegime, UnsupportedFeeType
 
 WINDOW = timedelta(hours=36)
-#: The light refresh re-prices events starting within this.
-REFRESH_WITHIN = timedelta(hours=6)
+#: The light refresh re-prices events starting within this, not yet started
+#: (owner, Nov 7; was 6 h).
+REFRESH_WITHIN = timedelta(hours=3)
+#: Paced's adaptive pacing, seconds between calls (owner, Nov 7: < 2% 429s).
+PACE_START, PACE_FLOOR, PACE_CEILING = 0.5, 0.3, 4.0
+PACE_EASE_AFTER = 25
 #: A series with at most this many wanted events is read event by event;
 #: a larger one in one series query (market_batches).
 PER_EVENT_MAX = 2
@@ -77,7 +83,11 @@ MAX_PAGES = 60
 #: Variant suffixes: a series ending so is the same stat on another ladder.
 VARIANTS = (("PROT", "protected"),)
 _LINE_TAIL = re.compile(r"(GAME|MATCH|FIGHT|SPREAD|TOTAL|[1-4]Q|[12]H|[1-9]P)$")
-_PERIOD = re.compile(r"^(Full Game|[^:]{0,30}(Half|Quarter|Period|Set|Inning|Map)[^:]{0,20}): ")
+#: Word-bounded: "Seth McGowan: 10+ rushing yards" is not a "Set" (the Nov 7
+#: misses: KXNFLRSHYDS, KXNFLTD, KXNHLPTS, ... for Seth McGowan and Seth Jarvis).
+_PERIOD = re.compile(r"^(Full Game|[^:]{0,30}\b(Half|Quarter|Period|Set|Inning|Map)\b[^:]{0,20}): ")
+#: "Ben Shelton -3.5 games" (KXATPGSPREAD's sub-title): a spread.
+_MINUS = re.compile(r"^(?P<subject>.+?) -(?P<n>\d+(?:\.\d+)?) [A-Za-z]+$")
 _NPLUS = re.compile(r"^(?P<subject>.+?): (?P<n>\d+(?:\.\d+)?)\+ (?P<stat>.+?)\s*$")
 _WINS_BY = re.compile(r"^(?P<subject>.+?) wins by (?:over|more than) (?P<n>\d+(?:\.\d+)?) ")
 _OVER = re.compile(r"^Over (?P<n>\d+(?:\.\d+)?) ")
@@ -88,34 +98,110 @@ SUBJECT_MAX, STAT_MAX, LABEL_MAX, TITLE_MAX = 120, 60, 160, 200
 
 # ------------------------------------------------------------- transport
 
+#: Raw HTTP: URL in, (status, the body's bytes or None) out.
+Http = Callable[[str], "tuple[int, bytes | None]"]
+
+
+def urlopen_http(url: str, timeout: float = 30.0) -> tuple[int, bytes | None]:
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as r:
+            return r.status, r.read()
+    except urllib.error.HTTPError as exc:
+        return exc.code, None
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise KalshiUnreachable(f"{url.split('?')[0]} unreachable: {exc}") from exc
+
+
 class Counting:
     """The client's transport, counting calls, 429s and raw bytes (Kalshi's
     side; not Supabase egress). The raw body is parsed and dropped here."""
 
-    def __init__(self, timeout: float = 30.0) -> None:
+    def __init__(self, timeout: float = 30.0, http: Http | None = None) -> None:
         self.calls = 0
         self.limited = 0
         self.bytes = 0
         self.timeout = timeout
+        self._http = http or (lambda url: urlopen_http(url, self.timeout))
+
+    @property
+    def limited_pct(self) -> float:
+        return 100.0 * self.limited / self.calls if self.calls else 0.0
 
     def __call__(self, url: str) -> tuple[int, Any]:
-        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
         self.calls += 1
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as r:
-                raw = r.read()
-                status = r.status
-        except urllib.error.HTTPError as exc:
-            if exc.code == 429:
-                self.limited += 1
-            return exc.code, None
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            raise KalshiUnreachable(f"{url.split('?')[0]} unreachable: {exc}") from exc
+        status, raw = self._http(url)
+        if status == 429:
+            self.limited += 1
+        if status != 200 or raw is None:
+            return status, None
         self.bytes += len(raw)
         try:
             return status, json.loads(raw)
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise KalshiError(f"{url.split('?')[0]} returned non-JSON") from exc
+
+
+class BudgetSpent(Exception):
+    """A capped run reached its call or time cap (sports/kalshi_board.py's
+    refresh). Not a KalshiError: the client never retries it, and the run
+    stops there, logging what it skipped. `reason` is 'calls' or 'time'."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"{reason} cap reached")
+        self.reason = reason
+
+
+class Paced(Counting):
+    """A Counting transport that paces itself and adapts to 429s, under a
+    hard budget (owner, Nov 7: the refresh's 429s were ~10% of its calls at a
+    fixed 0.25 s; the target is under 2%).
+
+    Pacing (AIMD): every call waits until `interval` has passed since the
+    last; a 429 doubles the interval (up to PACE_CEILING), and each
+    PACE_EASE_AFTER answers in a row without one ease it by 10% (down to
+    PACE_FLOOR). The client's own 429 backoff still applies on top.
+
+    Budget: a call past `max_calls`, or one that would start (or a wait that
+    would end) past `deadline`, raises BudgetSpent instead. The client is
+    built with min_interval 0 and `sleep=self.sleep`, so its backoff waits
+    are held to the deadline too. Calls count every request, 429s included."""
+
+    def __init__(self, *, interval: float, max_calls: int | None = None, deadline: float | None = None,
+                 http: Http | None = None, clock: Callable[[], float] = time.monotonic,
+                 sleep: Callable[[float], None] = time.sleep, timeout: float = 30.0) -> None:
+        super().__init__(timeout, http)
+        self.interval = min(max(interval, PACE_FLOOR), PACE_CEILING)
+        self.max_calls, self.deadline = max_calls, deadline
+        self._clock, self._sleep = clock, sleep
+        self._last: float | None = None
+        self._ok_run = 0
+
+    def sleep(self, seconds: float) -> None:
+        if self.deadline is not None and self._clock() + seconds > self.deadline:
+            raise BudgetSpent("time")
+        self._sleep(seconds)
+
+    def __call__(self, url: str) -> tuple[int, Any]:
+        if self.max_calls is not None and self.calls >= self.max_calls:
+            raise BudgetSpent("calls")
+        if self._last is not None:
+            wait = self.interval - (self._clock() - self._last)
+            if wait > 0:
+                self.sleep(wait)
+        if self.deadline is not None and self._clock() >= self.deadline:
+            raise BudgetSpent("time")
+        self._last = self._clock()
+        status, body = super().__call__(url)
+        if status == 429:
+            self.interval = min(self.interval * 2, PACE_CEILING)
+            self._ok_run = 0
+        else:
+            self._ok_run += 1
+            if self._ok_run >= PACE_EASE_AFTER:
+                self.interval = max(self.interval * 0.9, PACE_FLOOR)
+                self._ok_run = 0
+        return status, body
 
 
 # ------------------------------------------------------------- shapes
@@ -412,7 +498,7 @@ def parse_subject(kind: str, title: str, sub_title: str | None, strike_type: str
         # by over 7.5 points", "Over 66.5 points", "X over 6.5 points"); the
         # title varies ("X wins 1H by over", "1st Quarter: Over ...").
         for t in (s for s in ((sub_title or "").strip(), text) if s):
-            if m := _WINS_BY.match(t):
+            if (m := _WINS_BY.match(t)) or (m := _MINUS.match(t)):
                 return Parsed(_clip(m["subject"], SUBJECT_MAX), "spread", False)
             if m := _TEAM_OVER.match(t):
                 return Parsed(_clip(m["subject"], SUBJECT_MAX), "team_total", False)
@@ -432,6 +518,35 @@ def parse_subject(kind: str, title: str, sub_title: str | None, strike_type: str
         subject = _clip((sub_title or "").split(":", 1)[0], SUBJECT_MAX)
         return Parsed(subject, None, True)
     return Parsed(_clip(sub_title, SUBJECT_MAX), None, False)
+
+
+def scalar_terms(strike: dict[str, Any] | None, series: str, path: str) -> tuple[str, str | None, Decimal] | None:
+    """A scalar market's (variant, stat, cap), from custom_strike; None for
+    any other market. Read from the rules text (Nov 7), every sport:
+
+    * ladder: YES pays a fixed amount per unit of the stat ("$0.05 per
+      reception", "$0.01 per PPR fantasy point"), capped at $1.00 at
+      `scalar_cap`; NO pays $1.00 minus YES.
+    * escalator: YES pays on a cubic schedule,
+      floor(10000 x (min(s, cap) / cap)^3) / 10000 in `scalar_step` steps,
+      $1.00 at `scalar_cap`; NO pays $1.00 minus YES. Its custom_strike
+      carries `exponent`; a ladder's does not.
+
+    The stat is `statistic` ("receptions", "fantasy points"), None when
+    absent. Kalshi has no field that marks these scalar: market_type reads
+    'binary' on them (Nov 7), so scalar_cap's presence decides (owner's rule)."""
+    if not strike or "scalar_cap" not in strike:
+        return None
+    raw = strike["scalar_cap"]
+    try:
+        cap = Decimal(str(raw))
+    except Exception:  # noqa: BLE001 - any non-number is a shape error
+        raise KalshiShapeError(series, f"{path}.custom_strike.scalar_cap", f"not a number: {str(raw)[:20]!r}") from None
+    if not cap.is_finite() or cap <= 0:
+        raise KalshiShapeError(series, f"{path}.custom_strike.scalar_cap", f"is {cap}")
+    stat = strike.get("statistic")
+    stat = _clip(stat.lower(), STAT_MAX) if isinstance(stat, str) else None
+    return ("escalator" if "exponent" in strike else "ladder"), stat, cap
 
 
 def _price(raw: dict[str, Any], key: str, ticker: str, path: str) -> Decimal | None:
@@ -481,7 +596,10 @@ def parse_market(raw: Any, series: Series, path: str) -> tuple[dict[str, Any], d
         raise KalshiShapeError(s, f"{path}.floor_strike", f"is {type(line).__name__}")
     line_d = dec(line) if line is not None else None
     strike = opt(raw, "custom_strike", dict, s, path)
-    del strike  # read for the kind only (is_player), never stored: Kalshi's ids
+    # Read for the kind (is_player) and the scalar terms only; never stored:
+    # it carries Kalshi's participant ids.
+    scalar = scalar_terms(strike, s, path)
+    del strike
     strike_type = opt(raw, "strike_type", str, s, path)
     close = req(raw, "close_time", str, s, path)
     expiry = opt(raw, "expected_expiration_time", str, s, path)
@@ -491,12 +609,25 @@ def parse_market(raw: Any, series: Series, path: str) -> tuple[dict[str, Any], d
         raise KalshiShapeError(s, f"{path}.close_time", str(exc)) from None
     kind = market_kind(s, raw)
     _, variant = variant_of(s)
-    parsed = parse_subject(kind, title, sub, strike_type, line_d)
+    payout = "binary"
+    label = _clip(sub or title, LABEL_MAX)
+    if scalar is not None:
+        # A ladder or escalator (owner, Nov 7): payout scalar, never a parlay
+        # leg, never a parse miss (misses count binary rows only). No line (no
+        # threshold to hit); the cap rides in the label (db/072: no column).
+        payout = "scalar"
+        variant, stat, cap = scalar
+        line_d = None
+        subject = _clip(sub, SUBJECT_MAX)
+        parsed = Parsed(subject, stat, False)
+        label = _clip(f"{subject or title}: {stat or 'stat'}, $1 at {cap.normalize():f}", LABEL_MAX)
+    else:
+        parsed = parse_subject(kind, title, sub, strike_type, line_d)
     fee = series.regime.taker_fee(yes_ask) if yes_ask is not None and Decimal(0) < yes_ask < Decimal(1) else None
     row = {
-        "market_ticker": ticker, "event_ticker": event, "market_kind": kind, "variant": variant,
+        "market_ticker": ticker, "event_ticker": event, "market_kind": kind, "variant": variant, "payout": payout,
         "subject": parsed.subject, "stat": parsed.stat, "line": None if line_d is None else str(line_d),
-        "label": _clip(sub or title, LABEL_MAX),
+        "label": label,
         "yes_bid": None if yes_bid is None else str(yes_bid), "yes_ask": None if yes_ask is None else str(yes_ask),
         "volume": None if volume is None else str(volume), "open_interest": None if oi is None else str(oi),
         "taker_fee_at_ask": None if fee is None else str(fee),
@@ -584,6 +715,21 @@ def market_batches(client: KalshiClient, event_tickers: Sequence[str], series: d
             # Caught here, inside the generator, so the other series go on.
             batch = Batch(overflow=True)
         yield group, batch
+
+
+def has_unopened(client: KalshiClient, event: str) -> bool:
+    """Whether Kalshi lists a market of `event` that has not opened yet
+    (``status=unopened``, one row). Asked only for an event of a window series
+    that returned no open market (owner, Nov 7: the 21:30 UTC pull read
+    KXATPMATCH and KXATPDOUBLES minutes before their open_time, 21:35)."""
+    body = client.get("/markets", event_ticker=event, status="unopened", limit=1)
+    return bool(req(body, "markets", list, f"markets[{event}]", "$"))
+
+
+def event_markets(client: KalshiClient, series: dict[str, Series], event: str) -> Batch:
+    """Every open market of ONE event (``event_ticker=E``): the refresh's
+    only fetch shape (owner, Nov 7), never a series query."""
+    return _fetch(client, series, {event}, f"markets[{event}]", event_ticker=event)
 
 
 def order_events(events: dict[str, Game]) -> list[str]:

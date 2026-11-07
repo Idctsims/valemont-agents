@@ -9,8 +9,11 @@
                           markets Kalshi no longer lists, and the prune.
     kalshi_board_refresh  every 15 min; works 08:00-23:00 Chicago only (idle
                           otherwise, so the health monitor still sees it on
-                          time): re-prices the events starting within 6 h,
-                          from the full pull's in-memory window.
+                          time): re-prices the events starting within 3 h,
+                          not yet started, from the full pull's in-memory
+                          window: one event per call, soonest first, at most
+                          300 calls and 300 s a run, paced to keep 429s
+                          under 2% (owner, Nov 7).
 
 Changed-only: a market, event or series row is sent only when its content
 differs from what this process last had confirmed (a compact map of 64-bit
@@ -57,6 +60,14 @@ FLUSH_ROWS = 1500
 #: KXNFLPASSYDSPRECISE is a per-yard duplicate of KXNFLPASSYDS, 1,204 markets a
 #: game (16,856 in 14 events, ~44 MB from Kalshi), and overflowed the page cap.
 EXCLUDED_SERIES: frozenset[str] = frozenset({"KXNFLPASSYDSPRECISE"})
+#: The refresh's hard caps per run (owner, Nov 7). Past either it stops and
+#: logs what it skipped; the soonest-starting events are read first.
+REFRESH_MAX_CALLS = 300
+REFRESH_MAX_S = 300
+#: No call STARTS later than REFRESH_MAX_S minus this, so one in flight (at
+#: most REFRESH_CALL_TIMEOUT_S) and the last write still end inside the cap.
+REFRESH_MARGIN_S = 20
+REFRESH_CALL_TIMEOUT_S = 15.0
 
 #: Milestone league/tour label -> sports_leagues.code.
 LABELS: Mapping[str, str] = {
@@ -107,6 +118,8 @@ class BoardState:
     #: The Chicago day `series` was first read on: the first pull of a new
     #: day reads every series again (the current fee type, daily).
     series_day: str | None = None
+    #: The refresh's pace (s between calls) where its last run ended.
+    refresh_pace: float = kb.PACE_START
 
 
 STATE = BoardState()
@@ -143,10 +156,25 @@ class BoardRun:
     dry_run: bool = False
     #: Window series that returned no open market: series -> its events asked for.
     empty_series: dict[str, int] = field(default_factory=dict)
+    #: Events of an otherwise empty window series whose markets Kalshi lists
+    #: as not yet open (status=unopened): counted, never a failure.
+    not_yet_open: int = 0
     #: EXCLUDED_SERIES met in the window: series -> its window events (never read).
     excluded: dict[str, int] = field(default_factory=dict)
     #: Series whose /markets query hit the page cap: series -> its events (skipped).
     overflowed: dict[str, int] = field(default_factory=dict)
+    #: The refresh: events in scope (start within REFRESH_WITHIN, not started),
+    #: those left unread when a cap was hit, which cap, the first skipped
+    #: start, and the pace it ended on (s between calls).
+    scope: int = 0
+    skipped: int = 0
+    cap: str | None = None
+    skipped_from: datetime | None = None
+    pace: float | None = None
+
+    @property
+    def limited_pct(self) -> float:
+        return 100.0 * self.limited / self.calls if self.calls else 0.0
 
     @property
     def job_note(self) -> str:
@@ -154,16 +182,38 @@ class BoardRun:
             return f"idle: {self.idle}"
         by = "; ".join(f"{s} " + "/".join(f"{k} {c[k]}" for k in ("game_line", "prop", "other") if c[k])
                        for s, c in sorted(self.by_sport.items(), key=lambda kv: -sum(kv[1].values()))[:8])
-        # Early, inside job_health's 500 characters (owner, Nov 7).
-        guard = (f"excluded={len(self.excluded)}"
-                 + (" (" + ", ".join(f"{s} {n} events" for s, n in sorted(self.excluded.items())) + ")"
-                    if self.excluded else "")
-                 + f", overflowed={len(self.overflowed)}"
-                 + (" (" + ", ".join(f"{s} {n} events" for s, n in sorted(self.overflowed.items())) + ")"
-                    if self.overflowed else ""))
-        parts = [f"{self.kind}{' (dry run)' if self.dry_run else ''}: {self.markets} markets, "
-                 f"{self.events} events, {self.series} series ({self.series_fetched} read from /series)",
-                 guard if self.kind == "full" else "",
+        head = (f"{self.kind}{' (dry run)' if self.dry_run else ''}: {self.markets} markets, "
+                f"{self.events} events, {self.series} series ({self.series_fetched} read from /series)")
+        overflowed = (f"overflowed={len(self.overflowed)}"
+                      + (" (" + ", ".join(f"{s} {n} events" for s, n in sorted(self.overflowed.items())) + ")"
+                         if self.overflowed else ""))
+        if self.kind == "full":
+            # Early in the note, so job_health's 500-character cut keeps them:
+            # counts read, never an absence inferred (owner, Nov 7).
+            head += (f"; empty_series={len(self.empty_series)}, not_yet_open={self.not_yet_open}; "
+                     f"excluded={len(self.excluded)}"
+                     + (" (" + ", ".join(f"{s} {n} events" for s, n in sorted(self.excluded.items())) + ")"
+                        if self.excluded else "")
+                     + f", {overflowed}")
+        else:
+            head = (f"refresh: {self.events} of {self.scope} events within "
+                    f"{kb.REFRESH_WITHIN.total_seconds() / 3600:.0f} h, {self.markets} markets")
+            if self.skipped:
+                head += (f"; SKIPPED {self.skipped} ({self.cap} cap; from "
+                         f"{self.skipped_from:%H:%M} UTC)" if self.skipped_from else f" ({self.cap} cap)")
+            if self.overflowed:
+                head += f"; {overflowed}"
+        rate = (f"{self.calls} Kalshi calls, {self.limited} 429s ({self.limited_pct:.1f}%)"
+                + (f", pace {self.pace:.2f} s" if self.pace is not None else "")
+                + f", ~{self.kalshi_bytes // 1024} KB from Kalshi, {self.seconds:.0f} s")
+        if self.kind != "full":
+            return "; ".join(p for p in [
+                head, rate,
+                f"sent {self.sent}, written {self.written} markets; swept {self.swept}",
+                f"parse misses {sum(self.misses.values())}"
+                + (" (" + ", ".join(f"{k} {v}" for k, v in self.misses.most_common(10)) + ")" if self.misses else ""),
+                f"NO complement mismatches {self.no_mismatch}/{self.no_checked}"] if p)
+        parts = [head,
                  by,
                  f"combo-eligible {self.combo_markets} markets / {self.combo_events} events",
                  f"sent {self.sent}, written {self.written} markets, {self.events_written} events, "
@@ -171,12 +221,11 @@ class BoardRun:
                  f"linked {self.linked}, swept {self.swept}, pruned "
                  + (", ".join(f"{k} {v}" for k, v in self.pruned.items()) or "0"),
                  f"parse misses {sum(self.misses.values())}"
-                 + (" (" + ", ".join(f"{k} {v}" for k, v in self.misses.most_common(4)) + ")" if self.misses else ""),
+                 + (" (" + ", ".join(f"{k} {v}" for k, v in self.misses.most_common(10)) + ")" if self.misses else ""),
                  f"NO complement mismatches {self.no_mismatch}/{self.no_checked}",
                  ("EMPTY series " + ", ".join(f"{s} ({n} events)" for s, n in sorted(self.empty_series.items())[:8])
                   if self.empty_series else ""),
-                 f"{self.calls} Kalshi calls, {self.limited} 429s, ~{self.kalshi_bytes // 1024} KB from Kalshi, "
-                 f"{self.seconds:.0f} s"]
+                 rate]
         return "; ".join(p for p in parts if p)
 
 
@@ -330,9 +379,16 @@ def _pull(client: KalshiClient, run: BoardRun, writer: Writer, state: BoardState
             continue
         if not batch.rows:
             # A window series with events but no open market (owner, Nov 6):
-            # the filter or the listing changed. The others are still written;
-            # the run then fails naming it.
-            run.empty_series[kb.series_of(group[0])] = len(group)
+            # the filter or the listing changed, and the run fails naming it
+            # after the rest is written. Unless (owner, Nov 7) Kalshi lists the
+            # event's markets as not yet open: milestones list a match before
+            # its markets open (KXATPMATCH, 21:35 UTC Nov 7). Those events are
+            # counted as not_yet_open, never a failure; one with neither open
+            # nor unopened markets still fails the run.
+            waiting = sum(1 for t in group if kb.has_unopened(client, t))
+            run.not_yet_open += waiting
+            if waiting < len(group):
+                run.empty_series[kb.series_of(group[0])] = len(group) - waiting
         ev_rows = [event_row(t, window[t], batch.times[t], combos.get(t)) for t in group if t in batch.times]
         run.events += len(ev_rows)
         run.markets += len(batch.rows)
@@ -435,10 +491,16 @@ def _full(client: KalshiClient | None, now: Callable[[], datetime], state: Board
     return run
 
 
-def refresh_job(*, client: KalshiClient | None = None,
+def refresh_job(*, http: kb.Http | None = None,
                 now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
-                state: BoardState = STATE, writer: Writer | None = None) -> BoardRun:
-    """The kalshi_board_refresh system job: re-price what starts within 6 h."""
+                state: BoardState = STATE, writer: Writer | None = None,
+                clock: Callable[[], float] = time.monotonic,
+                sleep: Callable[[float], None] = time.sleep) -> BoardRun:
+    """The kalshi_board_refresh system job (rebuilt, owner, Nov 7): re-price
+    the events starting within 3 h and not yet started, ONE event per call,
+    soonest first, under REFRESH_MAX_CALLS and REFRESH_MAX_S. A run never
+    overlaps itself (the scheduler's max_instances=1 and coalesce) or a full
+    pull (PULL_LOCK: it idles while one runs)."""
     at = now()
     hour = _owner_hour(at)
     if not (REFRESH_HOURS[0] <= hour <= REFRESH_HOURS[1]) or (hour == REFRESH_HOURS[1] and
@@ -447,54 +509,89 @@ def refresh_job(*, client: KalshiClient | None = None,
     if not state.window:
         return BoardRun(kind="refresh", idle="no window yet (the full pull has not run in this process)")
     lo, hi = at.timestamp(), (at + kb.REFRESH_WITHIN).timestamp()
-    soon = sorted((t for t, s in state.window.items() if lo <= s < hi), key=lambda t: (kb.series_of(t), t))
+    soon = sorted((t for t, s in state.window.items() if lo <= s < hi), key=lambda t: (state.window[t], t))
     if not soon:
-        return BoardRun(kind="refresh", idle="nothing starts within 6 h")
+        return BoardRun(kind="refresh", idle=f"nothing starts within {kb.REFRESH_WITHIN.total_seconds() / 3600:.0f} h")
     if not PULL_LOCK.acquire(blocking=False):
         return BoardRun(kind="refresh", idle="the full pull is running")
     try:
-        return _refresh(client, at, soon, state, writer)
+        return _refresh(http, at, soon, state, writer, clock, sleep)
     finally:
         PULL_LOCK.release()
 
 
-def _refresh(client: KalshiClient | None, at: datetime, soon: list[str], state: BoardState,
-             writer: Writer | None) -> BoardRun:
-    t0 = time.monotonic()
+def _refresh(http: kb.Http | None, at: datetime, soon: list[str], state: BoardState, writer: Writer | None,
+             clock: Callable[[], float], sleep: Callable[[float], None]) -> BoardRun:
+    t0 = clock()
     w = writer or Writer()
-    c, counter = _client(client)
-    run = BoardRun(kind="refresh")
+    # The pace carries over from the last run in this process, so a rate
+    # limit learned once is not re-learned every 15 min.
+    paced = kb.Paced(interval=state.refresh_pace, max_calls=REFRESH_MAX_CALLS,
+                     deadline=t0 + REFRESH_MAX_S - REFRESH_MARGIN_S, http=http, clock=clock, sleep=sleep,
+                     timeout=REFRESH_CALL_TIMEOUT_S)
+    c = KalshiClient(transport=paced, min_interval=0, sleep=paced.sleep)
+    run = BoardRun(kind="refresh", scope=len(soon))
+    changed: list[tuple[dict[str, Any], int, int]] = []
+    done: list[str] = []
+    seen: list[str] = []
+
+    def flush() -> None:
+        nonlocal changed, done, seen
+        if changed:
+            run.sent += len(changed)
+            run.written += w.markets([r for r, _, _ in changed], at)
+            for _, k, d in changed:
+                state.markets[k] = d
+        if done:
+            # Only events read whole are swept: a capped run never deletes
+            # the markets of an event it did not finish reading.
+            run.swept += w.sweep(done, seen)
+            w.touch(done, [], at)
+        changed, done, seen = [], [], []
+
     try:
-        for group, batch in kb.market_batches(c, soon, state.series):
-            if batch.overflow:
-                # Never sweep what was not read (it would delete its markets).
-                run.overflowed[kb.series_of(group[0])] = len(group)
+        for i, t in enumerate(soon):
+            try:
+                batch = kb.event_markets(c, state.series, t)
+            except kb.BudgetSpent as cap:
+                run.skipped, run.cap = len(soon) - i, cap.reason
+                run.skipped_from = datetime.fromtimestamp(state.window[t], timezone.utc)
+                log.warning("kalshi board refresh: %s cap hit; %d of %d events skipped, the first starting %s",
+                            cap.reason, run.skipped, len(soon), run.skipped_from.isoformat())
+                break
+            except kb.PageCapExceeded:
+                # One event over the page cap: skipped, never swept (that would
+                # delete its markets); the others go on (owner, Nov 7).
+                s = kb.series_of(t)
+                run.overflowed[s] = run.overflowed.get(s, 0) + 1
                 continue
-            run.events += len(batch.times)
+            run.events += 1
             run.markets += len(batch.rows)
             run.no_checked += batch.checked
             run.no_mismatch += batch.no_mismatch
             run.misses.update(batch.misses)
-            changed = []
             for r in batch.rows:
                 k, d = hash(r["market_ticker"]), digest(r)
+                seen.append(r["market_ticker"])
                 if state.markets.get(k) != d:
                     changed.append((r, k, d))
-            if changed:
-                run.sent += len(changed)
-                run.written += w.markets([r for r, _, _ in changed], at)
-                for _, k, d in changed:
-                    state.markets[k] = d
-            run.swept += w.sweep(group, [r["market_ticker"] for r in batch.rows])
+            done.append(t)
             del batch
-        if not run.markets:
-            raise BoardFailed(f"kalshi board refresh: no open market returned for {len(soon)} events "
-                              "starting within 6 h (has the /markets filter changed?)")
-        w.touch(soon, [], at)
+            if len(changed) >= FLUSH_ROWS or len(seen) >= 4 * FLUSH_ROWS:
+                flush()
+        flush()
+        if run.events and not run.markets:
+            raise BoardFailed(f"kalshi board refresh: no open market returned for {run.events} events "
+                              f"starting within {kb.REFRESH_WITHIN.total_seconds() / 3600:.0f} h "
+                              "(has the /markets filter changed?)")
     except kb.KalshiError as exc:
         raise BoardFailed(f"kalshi board refresh: {exc}") from exc
     finally:
-        _finish(run, counter, t0)
+        state.refresh_pace = paced.interval
+        run.pace = paced.interval
+        run.calls, run.limited, run.kalshi_bytes = paced.calls, paced.limited, paced.bytes
+        run.seconds = clock() - t0
+        memory.release()
     return run
 
 
