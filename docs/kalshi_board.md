@@ -207,6 +207,13 @@ all four prices, Nov 6), and again on every run (the job note).
     in the process. The note carries the 429 count, its rate and the pace.
     Target: under 2% of calls.
   - Targets on a Saturday (owner): median run ≤ 120 s, ≤ 10 MB from Kalshi.
+  - **Stays as built (owner, Nov 7).** Its first Saturday run (22:31:55
+    UTC) hit the call cap: 300 of 1,056 events within 3 h, 756 skipped (from
+    00:00 UTC), 0 429s, pace 0.30 s, ~3.4 MB, 106 s. **The skip count is
+    expected on a busy slate:** the page shows each event's source time
+    ("as of"), and Phase 4 re-quotes every leg at commit, so a stale board
+    price never reaches a ledger row. No change unless the median run over
+    Sunday's slate exceeds 300 s or 429s exceed 2% of calls.
 - The full pull's note leads with `empty_series=<n>` (inside `job_health`'s
   500 characters, so 0 is read, not inferred) and lists the top 10 parse
   misses by series.
