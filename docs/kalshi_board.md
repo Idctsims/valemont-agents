@@ -56,7 +56,7 @@ series with its event count. A pull with no market at all fails the same way.
   still filtered, so no combo market can arrive.
 - **Not the bulk `/series?category=Sports` list.** Its one 6.5 MB response
   took the process to +41 MB while it was held (measured Nov 6, against the
-  +20 MB budget). Each window series is read alone instead, once a Chicago
+  +20 MB budget then in force; §8). Each window series is read alone instead, once a Chicago
   day. That is still the current fee type from `/series`, read daily.
 
 ## 3. Kinds, subject, stat, line (owner-approved, Nov 6)
@@ -158,7 +158,19 @@ before it (35,521 / 4,811 / 609 / 1,422 calls / ~88.7 MB / 361 s); commit
 `53d19e1`'s evidence line paired that run's counts with this run's calls,
 time and RSS by mistake, and this table is the record.
 
-## 8. The page
+## 8. Budgets (owner, Nov 6, at the merge of PR #97)
+
+- **The board: ≤ 25 MB in Postgres at steady state** (tables plus indexes,
+  under the start + 6 h prune). **The pull's peak: ≤ +35 MB over its start
+  on the worker** (the Linux RSS reading, not the Windows working set).
+- The Step 0 targets (< 10 MB, +20 MB) are retired. The first real run
+  measured ~15.8 MB for one window and +26.7 MB on the owner's machine.
+- The ways to shrink the rows (store the market ticker's suffix only,
+  `fillfactor` 90, a short kind code) are parked. Revisit them only if the
+  database passes ~350 MB: the same trigger as the parked feed retention
+  follow-ups.
+
+## 9. The page
 
 `/betting`, the Board tab: one sport at a time (chips, busiest first), the
 games collapsed (start, counts by kind, combo count, source time). A game's
