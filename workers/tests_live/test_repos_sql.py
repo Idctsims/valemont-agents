@@ -179,11 +179,19 @@ class TheRulesInSql(RepoSqlCase):
     def test_the_guard_refuses_the_same_repo_again_today(self) -> None:
         with _rolled_back() as conn:
             sid, rid, name = self.surfaced(conn, stars_7d=10)
-            stories = conn.execute("SELECT count(*) FROM stories").fetchone()[0]
+            src = self.gh_source(conn)
+            # Only this test's own rows are counted (CLAUDE.md §6): the whole
+            # stories table moves under the production feed ingest.
+            mine = ("SELECT (SELECT count(*) FROM stories WHERE title = %(n)s),"
+                    " (SELECT count(*) FROM content_items WHERE source_id = %(s)s),"
+                    " (SELECT count(*) FROM repo_surfacings WHERE repo_id = %(r)s)")
+            ids = {"n": name, "s": src.id, "r": rid}
+            before = conn.execute(mine, ids).fetchone()
+            self.assertEqual(before, (1, 0, 1))
             # The real path, guard on: refused (by the rule, or by the cap when
             # today's 8 are used), and nothing at all is written.
-            self.assertIsNone(ledger.repo_surface(self.gh_source(conn), rid, self.row(name, conn, 1000), conn=conn))
-            self.assertEqual(conn.execute("SELECT count(*) FROM stories").fetchone()[0], stories)
+            self.assertIsNone(ledger.repo_surface(src, rid, self.row(name, conn, 1000), conn=conn))
+            self.assertEqual(conn.execute(mine, ids).fetchone(), before)
             self.assertFalse(ledger.repo_may_surface(rid, 1000, conn=conn))
             today = ledger.owner_today(conn=conn)
             self.assertEqual(conn.execute("SELECT surfaced_on, stars_7d, stars_7d_source FROM repo_surfacings "
