@@ -1,0 +1,81 @@
+{
+ "multivariate_contracts": [
+  {
+   "associated_event_tickers": [
+    "KXNFLGAME-26NOV08CINATL",
+    "KXNFLSPREAD-26NOV08CINATL",
+    "KXNFLTOTAL-26NOV08CINATL",
+    "KXNFLTEAMTOTAL-26NOV08CINATL",
+    "KXNFL1HTEAMTOTAL-26NOV08CINATL",
+    "KXNFLTD-26NOV08CINATL"
+   ],
+   "associated_events": [
+    {
+     "active_quoters": [],
+     "is_yes_only": false,
+     "size_max": 1,
+     "ticker": "KXNFLGAME-26NOV08CINATL"
+    },
+    {
+     "active_quoters": [],
+     "is_yes_only": false,
+     "size_max": 1,
+     "ticker": "KXNFLSPREAD-26NOV08CINATL"
+    },
+    {
+     "active_quoters": [],
+     "is_yes_only": false,
+     "size_max": 1,
+     "ticker": "KXNFLTOTAL-26NOV08CINATL"
+    },
+    {
+     "active_quoters": [],
+     "is_yes_only": false,
+     "ticker": "KXNFLTEAMTOTAL-26NOV08CINATL"
+    },
+    {
+     "active_quoters": [],
+     "is_yes_only": false,
+     "ticker": "KXNFL1HTEAMTOTAL-26NOV08CINATL"
+    },
+    {
+     "active_quoters": [],
+     "is_yes_only": false,
+     "ticker": "KXNFLTD-26NOV08CINATL"
+    }
+   ],
+   "close_date": "2028-01-14T15:00:00Z",
+   "collection_ticker": "KXMVESPORTSMULTIGAMEEXTENDED-R",
+   "description": "Choose any combination of game stats and props.",
+   "exchange_index": 1,
+   "functional_description": "The resulting market will only resolve to YES if every associated market resolves to YES. Scalar outcomes are multiplied (rounded down).",
+   "is_all_yes": false,
+   "is_ordered": false,
+   "is_single_market_per_event": false,
+   "open_date": "2026-11-06T12:58:20Z",
+   "price_level_structure": "center_deci_edge_centi_cent",
+   "price_ranges": [
+    {
+     "end": "0.0100",
+     "start": "0.0000",
+     "step": "0.0001"
+    },
+    {
+     "end": "0.9900",
+     "start": "0.0100",
+     "step": "0.0010"
+    },
+    {
+     "end": "1.0000",
+     "start": "0.9900",
+     "step": "0.0001"
+    }
+   ],
+   "series_ticker": "KXMVESPORTSMULTIGAMEEXTENDED",
+   "size_max": 0,
+   "size_min": 2,
+   "title": "What will happen across all games?"
+  }
+ ],
+ "cursor": ""
+}

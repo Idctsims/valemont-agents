@@ -1,0 +1,109 @@
+{
+ "markets": [
+  {
+   "can_close_early": true,
+   "close_time": "2026-11-09T00:00:00Z",
+   "created_time": "2026-11-03T00:02:41.205143Z",
+   "custom_strike": {
+    "basketball_team": "7c980c51-fa76-4571-b165-242b2a00f3a1"
+   },
+   "early_close_condition": "This market will close and expire after a winner is declared.",
+   "event_ticker": "KXNBAGAME-26NOV06BOSCHA",
+   "exchange_index": 3,
+   "expected_expiration_time": "2026-11-07T03:00:00Z",
+   "expiration_time": "2026-11-09T00:00:00Z",
+   "expiration_value": "",
+   "last_price_dollars": "0.2400",
+   "latest_expiration_time": "2026-11-09T00:00:00Z",
+   "market_type": "binary",
+   "no_ask_dollars": "0.7700",
+   "no_bid_dollars": "0.7600",
+   "no_sub_title": "Charlotte",
+   "notional_value_dollars": "1.0000",
+   "occurrence_datetime": "2026-11-07T03:00:00Z",
+   "open_interest_fp": "53212.15",
+   "open_time": "2026-11-03T00:06:43.22069Z",
+   "previous_price_dollars": "0.2600",
+   "previous_yes_ask_dollars": "0.2400",
+   "previous_yes_bid_dollars": "0.2300",
+   "price_level_structure": "linear_cent",
+   "price_ranges": [
+    {
+     "end": "1.0000",
+     "start": "0.0000",
+     "step": "0.0100"
+    }
+   ],
+   "result": "",
+   "rules_primary": "If Charlotte wins the Boston vs Charlotte Pro Basketball gam",
+   "rules_secondary": "If the game is postponed but begins within 48 hours of its o",
+   "settlement_bounds_type": "default",
+   "settlement_timer_seconds": 45,
+   "status": "active",
+   "strike_type": "structured",
+   "ticker": "KXNBAGAME-26NOV06BOSCHA-CHA",
+   "title": "Charlotte wins",
+   "updated_time": "2026-11-03T00:06:44.153591Z",
+   "volume_24h_fp": "56529.06",
+   "volume_fp": "62933.52",
+   "yes_ask_dollars": "0.2400",
+   "yes_ask_size_fp": "616888.28",
+   "yes_bid_dollars": "0.2300",
+   "yes_bid_size_fp": "283.28",
+   "yes_sub_title": "Charlotte"
+  },
+  {
+   "can_close_early": true,
+   "close_time": "2026-11-09T00:00:00Z",
+   "created_time": "2026-11-03T00:02:41.205143Z",
+   "custom_strike": {
+    "basketball_team": "6dd427f5-fa02-40ef-aa90-cfa73e0c539e"
+   },
+   "early_close_condition": "This market will close and expire after a winner is declared.",
+   "event_ticker": "KXNBAGAME-26NOV06BOSCHA",
+   "exchange_index": 3,
+   "expected_expiration_time": "2026-11-07T03:00:00Z",
+   "expiration_time": "2026-11-09T00:00:00Z",
+   "expiration_value": "",
+   "last_price_dollars": "0.7700",
+   "latest_expiration_time": "2026-11-09T00:00:00Z",
+   "market_type": "binary",
+   "no_ask_dollars": "0.2400",
+   "no_bid_dollars": "0.2300",
+   "no_sub_title": "Boston",
+   "notional_value_dollars": "1.0000",
+   "occurrence_datetime": "2026-11-07T03:00:00Z",
+   "open_interest_fp": "116649.14",
+   "open_time": "2026-11-03T00:06:43.22069Z",
+   "previous_price_dollars": "0.7700",
+   "previous_yes_ask_dollars": "0.7700",
+   "previous_yes_bid_dollars": "0.7600",
+   "price_level_structure": "linear_cent",
+   "price_ranges": [
+    {
+     "end": "1.0000",
+     "start": "0.0000",
+     "step": "0.0100"
+    }
+   ],
+   "result": "",
+   "rules_primary": "If Boston wins the Boston vs Charlotte Pro Basketball game o",
+   "rules_secondary": "If the game is postponed but begins within 48 hours of its o",
+   "settlement_bounds_type": "default",
+   "settlement_timer_seconds": 45,
+   "status": "active",
+   "strike_type": "structured",
+   "ticker": "KXNBAGAME-26NOV06BOSCHA-BOS",
+   "title": "Boston wins",
+   "updated_time": "2026-11-03T00:06:44.153591Z",
+   "volume_24h_fp": "133316.83",
+   "volume_fp": "141390.87",
+   "yes_ask_dollars": "0.7700",
+   "yes_ask_size_fp": "403275.19",
+   "yes_bid_dollars": "0.7600",
+   "yes_bid_size_fp": "71503.28",
+   "yes_sub_title": "Boston"
+  }
+ ],
+ "cursor": ""
+}
