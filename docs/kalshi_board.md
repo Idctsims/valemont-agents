@@ -45,6 +45,16 @@ whose events return no open market is recorded; the other series are still
 written, linked, swept and pruned, and then the run fails, naming each empty
 series with its event count. A pull with no market at all fails the same way.
 
+**Not yet open is not empty (owner, Nov 7).** Before an empty window series
+is counted, each of its events is asked once for
+`/markets?event_ticker=E&status=unopened&limit=1`. An event Kalshi lists as
+not yet open counts as `not_yet_open=<n>` in the note and never fails the
+run (it joins the window at the next pull). An event with neither open nor
+unopened markets still counts as empty and fails the run. Why: the 21:30
+UTC Nov 7 pull read KXATPMATCH (7 events) and KXATPDOUBLES (3) minutes
+before their markets' `open_time` (21:35–21:36 UTC); milestones list a match
+before its markets open.
+
 **Excluded series, by name (owner, Nov 7):** `KXNFLPASSYDSPRECISE` ("Pass
 Yards Precise") is never read. It is a per-yard duplicate of `KXNFLPASSYDS`:
 1,204 open markets a game, one at every yard for each QB (16,856 in 14

@@ -717,6 +717,15 @@ def market_batches(client: KalshiClient, event_tickers: Sequence[str], series: d
         yield group, batch
 
 
+def has_unopened(client: KalshiClient, event: str) -> bool:
+    """Whether Kalshi lists a market of `event` that has not opened yet
+    (``status=unopened``, one row). Asked only for an event of a window series
+    that returned no open market (owner, Nov 7: the 21:30 UTC pull read
+    KXATPMATCH and KXATPDOUBLES minutes before their open_time, 21:35)."""
+    body = client.get("/markets", event_ticker=event, status="unopened", limit=1)
+    return bool(req(body, "markets", list, f"markets[{event}]", "$"))
+
+
 def event_markets(client: KalshiClient, series: dict[str, Series], event: str) -> Batch:
     """Every open market of ONE event (``event_ticker=E``): the refresh's
     only fetch shape (owner, Nov 7), never a series query."""

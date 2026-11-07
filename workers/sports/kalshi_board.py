@@ -156,6 +156,9 @@ class BoardRun:
     dry_run: bool = False
     #: Window series that returned no open market: series -> its events asked for.
     empty_series: dict[str, int] = field(default_factory=dict)
+    #: Events of an otherwise empty window series whose markets Kalshi lists
+    #: as not yet open (status=unopened): counted, never a failure.
+    not_yet_open: int = 0
     #: EXCLUDED_SERIES met in the window: series -> its window events (never read).
     excluded: dict[str, int] = field(default_factory=dict)
     #: Series whose /markets query hit the page cap: series -> its events (skipped).
@@ -187,7 +190,8 @@ class BoardRun:
         if self.kind == "full":
             # Early in the note, so job_health's 500-character cut keeps them:
             # counts read, never an absence inferred (owner, Nov 7).
-            head += (f"; empty_series={len(self.empty_series)}; excluded={len(self.excluded)}"
+            head += (f"; empty_series={len(self.empty_series)}, not_yet_open={self.not_yet_open}; "
+                     f"excluded={len(self.excluded)}"
                      + (" (" + ", ".join(f"{s} {n} events" for s, n in sorted(self.excluded.items())) + ")"
                         if self.excluded else "")
                      + f", {overflowed}")
@@ -375,9 +379,16 @@ def _pull(client: KalshiClient, run: BoardRun, writer: Writer, state: BoardState
             continue
         if not batch.rows:
             # A window series with events but no open market (owner, Nov 6):
-            # the filter or the listing changed. The others are still written;
-            # the run then fails naming it.
-            run.empty_series[kb.series_of(group[0])] = len(group)
+            # the filter or the listing changed, and the run fails naming it
+            # after the rest is written. Unless (owner, Nov 7) Kalshi lists the
+            # event's markets as not yet open: milestones list a match before
+            # its markets open (KXATPMATCH, 21:35 UTC Nov 7). Those events are
+            # counted as not_yet_open, never a failure; one with neither open
+            # nor unopened markets still fails the run.
+            waiting = sum(1 for t in group if kb.has_unopened(client, t))
+            run.not_yet_open += waiting
+            if waiting < len(group):
+                run.empty_series[kb.series_of(group[0])] = len(group) - waiting
         ev_rows = [event_row(t, window[t], batch.times[t], combos.get(t)) for t in group if t in batch.times]
         run.events += len(ev_rows)
         run.markets += len(batch.rows)

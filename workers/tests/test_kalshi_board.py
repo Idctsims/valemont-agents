@@ -534,6 +534,50 @@ class FullJob(unittest.TestCase):
         run.overflowed["KXNFLX"] = 14
         self.assertIn("overflowed=1 (KXNFLX 14 events)", run.job_note)
 
+    def test_a_series_not_yet_open_is_counted_not_failed(self) -> None:
+        # Nov 7, 21:30 UTC: milestones listed KXATPMATCH before its markets
+        # opened (open_time 21:35). Kalshi lists them as unopened: no failure.
+        fake = FakeKalshi()
+        asked_unopened: list[str] = []
+
+        def waiting(url: str):
+            q = dict(urllib.parse.parse_qsl(url.partition("?")[2]))
+            if url.split("?")[0].endswith("/markets") and kb.series_of(
+                    q.get("event_ticker") or q.get("series_ticker", "")) == "KXNBAREB":
+                fake.urls.append(url)
+                if q.get("status") == "unopened":
+                    asked_unopened.append(q["event_ticker"])
+                    return 200, {"markets": [{"ticker": q["event_ticker"] + "-X", "status": "initialized"}],
+                                 "cursor": ""}
+                return 200, {"markets": [], "cursor": ""}
+            return fake(url)
+
+        w, st = RecordingWriter(), job.BoardState()
+        run = job.full_job(client=client(waiting), now=lambda: NOW, state=st, writer=w)  # type: ignore[arg-type]
+        self.assertEqual(run.empty_series, {})
+        self.assertEqual(run.not_yet_open, len(asked_unopened))
+        self.assertGreater(run.not_yet_open, 0)
+        self.assertTrue(all(kb.series_of(t) == "KXNBAREB" for t in asked_unopened))
+        self.assertIn(f"empty_series=0, not_yet_open={run.not_yet_open}", run.job_note)
+        self.assertFalse(any(kb.series_of(t) == "KXNBAREB" for t in st.window))  # nothing to refresh yet
+        self.assertIn("KXNBAGAME-26NOV06BOSCHA-BOS", w.sent("markets"))
+
+    def test_an_empty_series_with_nothing_unopened_still_fails(self) -> None:
+        # The existing rule stands when Kalshi lists no unopened market either.
+        fake = FakeKalshi()
+
+        def gone(url: str):
+            q = dict(urllib.parse.parse_qsl(url.partition("?")[2]))
+            if url.split("?")[0].endswith("/markets") and kb.series_of(
+                    q.get("event_ticker") or q.get("series_ticker", "")) == "KXNBAREB":
+                fake.urls.append(url)
+                return 200, {"markets": [], "cursor": ""}
+            return fake(url)
+
+        with self.assertRaisesRegex(job.BoardFailed, r"KXNBAREB \(\d+ events\)"):
+            job.full_job(client=client(gone), now=lambda: NOW, state=job.BoardState(), writer=RecordingWriter())  # type: ignore[arg-type]
+        self.assertTrue(any("status=unopened" in u for u in fake.urls))  # it did ask
+
     def test_a_changed_shape_fails_the_run(self) -> None:
         bad = load("collections")
         del bad["multivariate_contracts"][0]["collection_ticker"]
