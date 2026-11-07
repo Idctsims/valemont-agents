@@ -504,6 +504,7 @@ Carried, each pending until read:
 
 1. Kalshi discovery across every sport series, combo eligibility, fee schedule.
    - [ ] Daily list of every open Kalshi sports market, grouped by sport, with fees
+   - **Phase 1 status (Nov 6): built, db/071 applied, not merged** (`docs/kalshi_board.md`; CLAUDE.md §7, Chat 8 Phase 1). First real run from the owner's machine: 36,048 markets in 4,844 events, 603 series; combo-eligible 20,146 markets in 1,926 events; NO complement 0 mismatches; 0 429s; 422 s. Over budget, open: Postgres ~15.8 MB (target 10) and peak RSS +26.7 MB on Windows (budget +20; the worker's Linux reading pending). The box ticks when the worker's own runs have filled it.
 2. Consensus engine: de-vigged sportsbook lines blended with the Kalshi mid; edge net of fees.
    - [ ] Each leg shows model probability, Kalshi price, fee and net edge
 3. Correlation model for same-game legs (historical joint outcomes, Gaussian copula fallback).
