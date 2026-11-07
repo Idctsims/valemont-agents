@@ -14,6 +14,7 @@ import threading
 import unittest
 import urllib.parse
 from datetime import datetime, timedelta, timezone
+from unittest import mock
 from decimal import Decimal
 from typing import Any
 
@@ -482,6 +483,54 @@ class FullJob(unittest.TestCase):
         dry = job.full_job(client=client(patched), now=lambda: NOW, state=job.BoardState(), dry_run=True)  # type: ignore[arg-type]
         self.assertEqual(set(dry.empty_series), {"KXNBAREB"})
         self.assertIn("EMPTY series KXNBAREB", dry.job_note)
+
+    def test_an_excluded_series_is_never_read_and_is_counted(self) -> None:
+        self.assertIn("KXNFLPASSYDSPRECISE", job.EXCLUDED_SERIES)  # by name, owner Nov 7
+        self.assertNotIn("KXNFLPASSYDS", job.EXCLUDED_SERIES)
+        fake = FakeKalshi()
+        with mock.patch.object(job, "EXCLUDED_SERIES", frozenset({"KXNBAREB"})):
+            run, w, st = self.run_full(fake=fake)
+        qs = [dict(urllib.parse.parse_qsl(u.partition("?")[2])) for u in fake.urls if "/markets?" in u]
+        self.assertFalse(any(kb.series_of(q.get("event_ticker") or q.get("series_ticker", "")) == "KXNBAREB"
+                             for q in qs))
+        self.assertIn("KXNBAREB", run.excluded)
+        self.assertFalse(any(kb.series_of(t) == "KXNBAREB" for t in st.window))
+        self.assertIn(f"excluded=1 (KXNBAREB {run.excluded['KXNBAREB']} events), overflowed=0", run.job_note)
+        self.assertLess(run.job_note.index("excluded="), 200)  # inside job_health's 500 characters
+        self.assertGreater(run.markets, 0)
+
+    def test_a_series_over_the_page_cap_is_skipped_the_rest_written_then_the_run_fails(self) -> None:
+        fake = FakeKalshi()
+
+        def endless(url: str):
+            q = dict(urllib.parse.parse_qsl(url.partition("?")[2]))
+            if url.split("?")[0].endswith("/markets") and kb.series_of(
+                    q.get("event_ticker") or q.get("series_ticker", "")) == "KXNBAREB":
+                fake.urls.append(url)
+                return 200, {"markets": [], "cursor": "more"}
+            return fake(url)
+
+        w, st = RecordingWriter(), job.BoardState()
+        with self.assertRaisesRegex(job.BoardFailed,
+                                    r"overflowed the page cap and were skipped: KXNBAREB \(\d+ events\)"):
+            job.full_job(client=client(endless), now=lambda: NOW, state=st, writer=w)  # type: ignore[arg-type]
+        self.assertIn("KXNBAGAME-26NOV06BOSCHA-BOS", w.sent("markets"))  # the rest was written
+        self.assertEqual([k for k, _ in w.calls][-3:], ["touch", "link", "prune"])
+        swept = {t for k, v in w.calls if k == "sweep" for t in v[0]}
+        self.assertFalse(any(kb.series_of(t) == "KXNBAREB" for t in swept))  # never swept unread
+        # The board was written, so the refresh has its window (minus the skipped series).
+        self.assertTrue(st.window)
+        self.assertFalse(any(kb.series_of(t) == "KXNBAREB" for t in st.window))
+        at = datetime(2026, 11, 6, 20, 0, tzinfo=UTC)
+        run = job.refresh_job(client=client(FakeKalshi()), now=lambda: at, state=st, writer=RecordingWriter())
+        self.assertIsNone(run.idle)
+        self.assertGreater(run.markets, 0)
+
+    def test_the_note_reads_excluded_and_overflowed(self) -> None:
+        run = job.BoardRun(kind="full")
+        self.assertIn("excluded=0, overflowed=0", run.job_note)
+        run.overflowed["KXNFLX"] = 14
+        self.assertIn("overflowed=1 (KXNFLX 14 events)", run.job_note)
 
     def test_a_changed_shape_fails_the_run(self) -> None:
         bad = load("collections")

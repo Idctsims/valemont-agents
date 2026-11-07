@@ -442,10 +442,18 @@ def _price(raw: dict[str, Any], key: str, ticker: str, path: str) -> Decimal | N
         raise KalshiShapeError(ticker, f"{path}.{key}", str(exc)) from None
 
 
+class PageCapExceeded(KalshiShapeError):
+    """A /markets query still paging at MAX_PAGES. The pull records the series
+    as overflowed, skips it (nothing of it written or swept), completes the
+    rest, then fails naming it (owner, Nov 7: KXNFLPASSYDSPRECISE)."""
+
+
 @dataclass
 class Batch:
     """One /markets fetch, parsed: market rows by event, and the counters."""
 
+    #: The query hit PageCapExceeded: no rows, nothing to write or sweep.
+    overflow: bool = False
     rows: list[dict[str, Any]] = field(default_factory=list)
     #: event ticker -> (min close_time, min expected_expiration_time)
     times: dict[str, tuple[datetime | None, datetime | None]] = field(default_factory=dict)
@@ -542,7 +550,7 @@ def _fetch(client: KalshiClient, series: dict[str, Series], keep: set[str], labe
         parse_markets_page(kept, series, batch, label)
         if not cursor:
             return batch
-    raise KalshiShapeError(label, "$.cursor", f"still paging after {MAX_PAGES} pages")
+    raise PageCapExceeded(label, "$.cursor", f"still paging after {MAX_PAGES} pages")
 
 
 def market_batches(client: KalshiClient, event_tickers: Sequence[str], series: dict[str, Series],
@@ -560,17 +568,21 @@ def market_batches(client: KalshiClient, event_tickers: Sequence[str], series: d
         by_series.setdefault(series_of(t), []).append(t)
     for s in sorted(by_series):
         group = by_series[s]
-        if len(group) <= per_event_max:
-            batch = Batch()
-            for t in group:
-                one = _fetch(client, series, {t}, f"markets[{t}]", event_ticker=t)
-                batch.rows.extend(one.rows)
-                batch.times.update(one.times)
-                batch.misses.update(one.misses)
-                batch.checked += one.checked
-                batch.no_mismatch += one.no_mismatch
-        else:
-            batch = _fetch(client, series, set(group), f"markets[{s}]", series_ticker=s)
+        try:
+            if len(group) <= per_event_max:
+                batch = Batch()
+                for t in group:
+                    one = _fetch(client, series, {t}, f"markets[{t}]", event_ticker=t)
+                    batch.rows.extend(one.rows)
+                    batch.times.update(one.times)
+                    batch.misses.update(one.misses)
+                    batch.checked += one.checked
+                    batch.no_mismatch += one.no_mismatch
+            else:
+                batch = _fetch(client, series, set(group), f"markets[{s}]", series_ticker=s)
+        except PageCapExceeded:
+            # Caught here, inside the generator, so the other series go on.
+            batch = Batch(overflow=True)
         yield group, batch
 
 
