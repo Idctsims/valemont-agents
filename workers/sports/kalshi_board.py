@@ -53,6 +53,10 @@ REFRESH_HOURS = (8, 23)
 MIN_INTERVAL_S = 0.25
 #: Market rows buffered before a write (ten events' markets at most past it).
 FLUSH_ROWS = 1500
+#: Series never read, by exact name (owner, Nov 7; docs/kalshi_board.md):
+#: KXNFLPASSYDSPRECISE is a per-yard duplicate of KXNFLPASSYDS, 1,204 markets a
+#: game (16,856 in 14 events, ~44 MB from Kalshi), and overflowed the page cap.
+EXCLUDED_SERIES: frozenset[str] = frozenset({"KXNFLPASSYDSPRECISE"})
 
 #: Milestone league/tour label -> sports_leagues.code.
 LABELS: Mapping[str, str] = {
@@ -139,6 +143,10 @@ class BoardRun:
     dry_run: bool = False
     #: Window series that returned no open market: series -> its events asked for.
     empty_series: dict[str, int] = field(default_factory=dict)
+    #: EXCLUDED_SERIES met in the window: series -> its window events (never read).
+    excluded: dict[str, int] = field(default_factory=dict)
+    #: Series whose /markets query hit the page cap: series -> its events (skipped).
+    overflowed: dict[str, int] = field(default_factory=dict)
 
     @property
     def job_note(self) -> str:
@@ -146,8 +154,16 @@ class BoardRun:
             return f"idle: {self.idle}"
         by = "; ".join(f"{s} " + "/".join(f"{k} {c[k]}" for k in ("game_line", "prop", "other") if c[k])
                        for s, c in sorted(self.by_sport.items(), key=lambda kv: -sum(kv[1].values()))[:8])
+        # Early, inside job_health's 500 characters (owner, Nov 7).
+        guard = (f"excluded={len(self.excluded)}"
+                 + (" (" + ", ".join(f"{s} {n} events" for s, n in sorted(self.excluded.items())) + ")"
+                    if self.excluded else "")
+                 + f", overflowed={len(self.overflowed)}"
+                 + (" (" + ", ".join(f"{s} {n} events" for s, n in sorted(self.overflowed.items())) + ")"
+                    if self.overflowed else ""))
         parts = [f"{self.kind}{' (dry run)' if self.dry_run else ''}: {self.markets} markets, "
                  f"{self.events} events, {self.series} series ({self.series_fetched} read from /series)",
+                 guard if self.kind == "full" else "",
                  by,
                  f"combo-eligible {self.combo_markets} markets / {self.combo_events} events",
                  f"sent {self.sent}, written {self.written} markets, {self.events_written} events, "
@@ -307,6 +323,11 @@ def _pull(client: KalshiClient, run: BoardRun, writer: Writer, state: BoardState
           combos: Mapping[str, kb.Combo], new_markets: dict[int, int], new_events: dict[str, int]) -> None:
     fl = _Flusher(run, writer, state, at, new_markets, new_events)
     for group, batch in kb.market_batches(client, tickers, dict(series)):
+        if batch.overflow:
+            # Nothing of it is written, swept or kept in the window; the run
+            # fails at the end naming it (owner, Nov 7).
+            run.overflowed[kb.series_of(group[0])] = len(group)
+            continue
         if not batch.rows:
             # A window series with events but no open market (owner, Nov 6):
             # the filter or the listing changed. The others are still written;
@@ -349,6 +370,10 @@ def _full(client: KalshiClient | None, now: Callable[[], datetime], state: Board
     try:
         games = kb.milestones(c, at, at + kb.WINDOW)
         window = kb.window_events(games)
+        for t in [t for t in window if kb.series_of(t) in EXCLUDED_SERIES]:
+            s = kb.series_of(t)
+            run.excluded[s] = run.excluded.get(s, 0) + 1
+            del window[t]
         wanted = {kb.series_of(t) for t in window}
         sport_hint = {kb.series_of(t): g.kind for t, g in window.items()}
         day = at.astimezone(OWNER_TZ).date().isoformat()
@@ -395,10 +420,18 @@ def _full(client: KalshiClient | None, now: Callable[[], datetime], state: Board
     finally:
         _finish(run, counter, t0)
     log.info("kalshi board: %s", run.job_note)
-    if run.empty_series and not dry_run:
-        raise BoardFailed(f"kalshi board: {len(run.empty_series)} window series returned no open market: "
-                          + ", ".join(f"{s} ({n} events)" for s, n in sorted(run.empty_series.items()))
-                          + f" (the rest was written: {run.job_note})")
+    # Both fail AFTER the rest was written and the state (the refresh's
+    # window) was set: the refresh keys on "the board was written", not on
+    # "the last pull was ok" (owner, Nov 7).
+    if (run.empty_series or run.overflowed) and not dry_run:
+        why = []
+        if run.overflowed:
+            why.append(f"{len(run.overflowed)} series overflowed the page cap and were skipped: "
+                       + ", ".join(f"{s} ({n} events)" for s, n in sorted(run.overflowed.items())))
+        if run.empty_series:
+            why.append(f"{len(run.empty_series)} window series returned no open market: "
+                       + ", ".join(f"{s} ({n} events)" for s, n in sorted(run.empty_series.items())))
+        raise BoardFailed(f"kalshi board: {'; '.join(why)} (the rest was written: {run.job_note})")
     return run
 
 
@@ -433,6 +466,10 @@ def _refresh(client: KalshiClient | None, at: datetime, soon: list[str], state: 
     run = BoardRun(kind="refresh")
     try:
         for group, batch in kb.market_batches(c, soon, state.series):
+            if batch.overflow:
+                # Never sweep what was not read (it would delete its markets).
+                run.overflowed[kb.series_of(group[0])] = len(group)
+                continue
             run.events += len(batch.times)
             run.markets += len(batch.rows)
             run.no_checked += batch.checked

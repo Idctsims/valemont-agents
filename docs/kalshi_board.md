@@ -45,6 +45,22 @@ whose events return no open market is recorded; the other series are still
 written, linked, swept and pruned, and then the run fails, naming each empty
 series with its event count. A pull with no market at all fails the same way.
 
+**Excluded series, by name (owner, Nov 7):** `KXNFLPASSYDSPRECISE` ("Pass
+Yards Precise") is never read. It is a per-yard duplicate of `KXNFLPASSYDS`:
+1,204 open markets a game, one at every yard for each QB (16,856 in 14
+events, ~44 MB from Kalshi, read Nov 7). Its series query overflowed the
+60-page cap and failed the 20:08 UTC Nov 7 boot pull. The list is exact
+names in `sports/kalshi_board.EXCLUDED_SERIES`, never a pattern; the note
+reads `excluded=<n> (<series> <events> events)`.
+
+**A page-cap overflow is a skipped series, not a dead pull (owner, Nov 7).**
+A series whose `/markets` query still pages at the cap is recorded as
+overflowed; nothing of it is written, swept or kept in the window; the rest
+of the pull is written, linked, swept and pruned; then the run fails naming
+it (`overflowed=<n>` in the note), so it alerts like an empty series. The
+refresh keys on "the board was written", not "the last pull was ok": its
+window is set before that failure is raised.
+
 ### Departures from the approved path (approved by the owner, Nov 6)
 
 - **`/markets` takes ONE `event_ticker`.** A comma-separated list answers
