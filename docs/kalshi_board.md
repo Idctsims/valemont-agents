@@ -207,6 +207,13 @@ all four prices, Nov 6), and again on every run (the job note).
     in the process. The note carries the 429 count, its rate and the pace.
     Target: under 2% of calls.
   - Targets on a Saturday (owner): median run ≤ 120 s, ≤ 10 MB from Kalshi.
+  - **Stays as built (owner, Nov 7).** Its first Saturday run (22:31:55
+    UTC) hit the call cap: 300 of 1,056 events within 3 h, 756 skipped (from
+    00:00 UTC), 0 429s, pace 0.30 s, ~3.4 MB, 106 s. **The skip count is
+    expected on a busy slate:** the page shows each event's source time
+    ("as of"), and Phase 4 re-quotes every leg at commit, so a stale board
+    price never reaches a ledger row. No change unless the median run over
+    Sunday's slate exceeds 300 s or 429s exceed 2% of calls.
 - The full pull's note leads with `empty_series=<n>` (inside `job_health`'s
   500 characters, so 0 is read, not inferred) and lists the top 10 parse
   misses by series.
@@ -243,13 +250,23 @@ before it (35,521 / 4,811 / 609 / 1,422 calls / ~88.7 MB / 361 s); commit
 `53d19e1`'s evidence line paired that run's counts with this run's calls,
 time and RSS by mistake, and this table is the record.
 
-## 8. Budgets (owner, Nov 6, at the merge of PR #97)
+## 8. Budgets (owner, Nov 6, at the merge of PR #97; the board revised Nov 8)
 
-- **The board: ≤ 25 MB in Postgres at steady state** (tables plus indexes,
-  under the start + 6 h prune). **The pull's peak: ≤ +35 MB over its start
-  on the worker** (the Linux RSS reading, not the Windows working set).
-- The Step 0 targets (< 10 MB, +20 MB) are retired. The first real run
-  measured ~15.8 MB for one window and +26.7 MB on the owner's machine.
+- **The board: ≤ 35 MB in Postgres at steady state** (tables plus indexes,
+  under the start + 6 h prune; owner, Nov 8). **The pull's peak: ≤ +35 MB
+  over its start on the worker** (the Linux RSS reading, not the Windows
+  working set).
+- The Step 0 targets (< 10 MB, +20 MB) are retired, and so is the Nov 6
+  board figure of 25 MB. The first real run measured ~15.8 MB for one
+  window and +26.7 MB on the owner's machine.
+- **The steady state, read 06:01 UTC Nov 8** (db_inspect; MB = 2^20):
+  `kalshi_board` 22.5 MB (heap 15.8, indexes 6.7; 54,608 rows),
+  `kalshi_board_events` 5.0 MB (6,416 rows), `kalshi_series_board` 0.6 MB
+  (745 rows): **28.1 MB** (29,458,432 bytes), over the old 25 MB, under the
+  new 35 MB. The steady state holds more rows than one pull fetches
+  (39–49k) because games started in the last 6 h stay until the prune. Not
+  bloat: 4,227 dead rows on `kalshi_board` (~8%) and 997 on events, both
+  auto-vacuumed since 22:00 UTC Nov 7. The database: 284,953,747 bytes.
 - The ways to shrink the rows (store the market ticker's suffix only,
   `fillfactor` 90, a short kind code) are parked. Revisit them only if the
   database passes ~350 MB: the same trigger as the parked feed retention
