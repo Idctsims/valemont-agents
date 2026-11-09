@@ -17,7 +17,7 @@
 --   p_kalshi      = the mid (yes_bid + yes_ask) / 2, NORMALIZED across an
 --                   event's markets when Kalshi flags the event mutually
 --                   exclusive, every market is quoted and the mids sum within
---                   0.90-1.10 (two teams; soccer's three ways incl. the draw);
+--                   0.95-1.05 (two teams; soccer's three ways incl. the draw);
 --                   a ladder rung (an event not mutually exclusive) uses its
 --                   plain mid, never normalized across rungs. The sum band
 --                   guards an exclusive but NOT exhaustive event (a cricket
@@ -28,8 +28,12 @@
 --                   mid, never before fees (venues/kalshi/edge.py's gate).
 --                   NO is bought at no_ask = 1 - yes_bid, p(NO) = 1 - p.
 --   taker fee     = ceil_6dp(0.07 x multiplier x P x (1 - P)) (fees.py).
--- A kalshi-tier edge is <= 0 in practice (the spread plus the fee); it is
--- still a valid leg.
+-- edge_claimed  = books or espn tier AND the better side's edge > 0. A
+--                   kalshi-tier leg NEVER claims edge (owner, Nov 9): a price
+--                   cannot have edge against itself, so a positive
+--                   kalshi-tier edge is a normalization artifact, reported
+--                   but never claimed. It is still a valid leg; Phase 4
+--                   counts only edge_claimed legs as edge legs.
 --
 -- What it adds:
 --   1. kalshi_board_events.mutually_exclusive (Kalshi's event flag; NULL until
@@ -39,16 +43,17 @@
 --      free ones too, with its x-requests-last / -used / -remaining.
 --      odds_api_usage(): this month's spend and the last remaining (the
 --      worker's credit guard and the /betting credits line).
---   3. book_lines: append-only, TRUNCATE-guarded: each pull's book prices per
---      game, market and subject (every book's line, both prices and its
---      power-de-vigged p), written only when they differ from the latest row.
---      The inputs of a future rung model (owner, Nov 9): NOT used by Phase 2.
+--   3. book_lines: an APP table with a prune, NOT append-only (owner, Nov 9):
+--      one row per game, market, subject and book (line, both prices, the
+--      power-de-vigged p), appended when it changes; once start + 6 h has
+--      passed, book_lines_prune() collapses each key to its last pre-start
+--      row. The inputs of a future rung model: NOT used by Phase 2.
 --   4. leg_consensus: outside-line rows only (books or espn), upserted
 --      changed-only, deleted with their board market (FK cascade: the board's
 --      sweep and its start + 6 h prune), and swept per game by the worker.
 --   5. kalshi_taker_fee, consensus_leg (the blend and the edges, one place)
 --      and leg_consensus_for(games): every binary market of the named games
---      with its tier, p, ask, fee and edge per side. v_leg_consensus is
+--      with its tier, p, ask, fee, edge per side and edge_claimed. v_leg_consensus is
 --      leg_consensus_for(NULL) (the whole board; ad hoc only).
 --   6. kalshi_board_game: each binary market carries its consensus ('q').
 --   7. ctx_consensus(): provider `consensus` (sort 49), NOT a brief section.
@@ -176,47 +181,42 @@ AS $$
 $$;
 
 -- ===================================================================== 3
+-- An APP table with a prune, not an append-only ledger (owner, Nov 9): no
+-- immutability or TRUNCATE trigger. Every change is kept while the game is
+-- upcoming; once start + 6 h has passed, book_lines_prune() collapses each
+-- (game, market, subject, book) to its LAST pre-start row and deletes the
+-- rest. What the Phase 4 rung model needs is the main line before the game
+-- (and the outcome, read elsewhere). Compact types: one row per book.
 CREATE TABLE IF NOT EXISTS book_lines (
-    id               BIGSERIAL    PRIMARY KEY,
-    source           TEXT         NOT NULL CHECK (source IN ('odds_api', 'espn')),
-    league           TEXT         NOT NULL CHECK (league ~ '^[a-z0-9_]{1,20}$'),
-    -- No foreign key: sports_events rows are pruned; this history is not.
-    sports_event_id  BIGINT,
-    event_key        TEXT         NOT NULL CHECK (event_key ~ '^[A-Za-z0-9_-]{1,64}$'),
+    -- No foreign key: sports_events rows are pruned; the collapsed rows stay.
+    sports_event_id  BIGINT       NOT NULL,
     starts_at        TIMESTAMPTZ  NOT NULL,
-    market           TEXT         NOT NULL CHECK (market ~ '^[a-z0-9_]{1,60}$'),
-    -- The team or player the prices are for (a team's side of h2h/spreads,
-    -- a player's over); NULL for a game total.
-    subject          TEXT         CHECK (subject IS NULL OR char_length(subject) BETWEEN 1 AND 120),
-    -- {book: [line|null, price_a, price_b|null, p_power|null]}: American
-    -- prices for (subject or over, other side or under); p_power is the
-    -- power-de-vigged probability of the first side (null: one-sided).
-    lines            JSONB        NOT NULL CHECK (jsonb_typeof(lines) = 'object' AND lines <> '{}'::jsonb
-                                                  AND octet_length(lines::text) <= 4000),
     fetched_at       TIMESTAMPTZ  NOT NULL,
+    source           CHAR(1)      NOT NULL CHECK (source IN ('o', 'e')),   -- o: the Odds API, e: ESPN
+    league           TEXT         NOT NULL CHECK (league ~ '^[a-z0-9_]{1,20}$'),
+    -- ml | spread | total | rec | rec_yds | rush_yds (and later props by the same short form).
+    market           TEXT         NOT NULL CHECK (market ~ '^[a-z0-9_]{1,24}$'),
+    -- The team (ml, spread) or player (props) the first price is for; NULL for a game total.
+    subject          TEXT         CHECK (subject IS NULL OR char_length(subject) BETWEEN 1 AND 120),
+    book             TEXT         NOT NULL CHECK (book ~ '^[a-z0-9_]{1,30}$'),
+    -- The line (NULL for a moneyline): the subject's spread, the total, the prop's half line.
+    line             REAL,
+    -- American prices: the subject or OVER side, then the other side or UNDER (NULL: one-sided).
+    price_a          INTEGER      NOT NULL CHECK (price_a <> 0 AND abs(price_a) >= 100),
+    price_b          INTEGER      CHECK (price_b IS NULL OR (price_b <> 0 AND abs(price_b) >= 100)),
+    -- The power-de-vigged p of the first side (a storage copy, recomputable from the prices; NULL if one-sided).
+    p_a              REAL         CHECK (p_a IS NULL OR (p_a > 0 AND p_a < 1)),
     is_test          BOOLEAN      NOT NULL DEFAULT false,
-    created_at       TIMESTAMPTZ  NOT NULL DEFAULT now()
+    CONSTRAINT book_lines_one_sided CHECK ((price_b IS NULL) = (p_a IS NULL))
 );
-CREATE INDEX IF NOT EXISTS book_lines_key ON book_lines (event_key, market, (coalesce(subject, '')), id DESC);
+CREATE INDEX IF NOT EXISTS book_lines_game ON book_lines (sports_event_id);
 COMMENT ON TABLE book_lines IS
-    'Book prices per game, market and subject, each pull, written only when they differ from the latest row. '
-    'Append-only history: the inputs of a future rung model, pre-registered in Phase 4 (owner, Nov 9). db/073.';
+    'Book main lines per game, market, subject and book (an app table): every change while the game is upcoming, '
+    'collapsed to the last pre-start row once start + 6 h has passed (book_lines_prune). The inputs of a future, '
+    'pre-registered rung model (owner, Nov 9); not used by Phase 2. db/073.';
 
-DROP TRIGGER IF EXISTS book_lines_stamp ON book_lines;
-CREATE TRIGGER book_lines_stamp
-    BEFORE INSERT ON book_lines
-    FOR EACH ROW EXECUTE FUNCTION public.arsenal_stamp_created();
-DROP TRIGGER IF EXISTS book_lines_immutable ON book_lines;
-CREATE TRIGGER book_lines_immutable
-    BEFORE UPDATE OR DELETE ON book_lines
-    FOR EACH ROW EXECUTE FUNCTION public.reject_mutation();
-DROP TRIGGER IF EXISTS book_lines_no_truncate ON book_lines;
-CREATE TRIGGER book_lines_no_truncate
-    BEFORE TRUNCATE ON book_lines
-    FOR EACH STATEMENT EXECUTE FUNCTION public.reject_truncate();
-
--- Appends each row whose lines differ from the latest stored row for the same
--- source, game, market and subject. Returns how many it wrote.
+-- Appends each row whose line or prices differ from the latest stored row
+-- (by fetched_at) for the same game, market, subject, book and source.
 CREATE OR REPLACE FUNCTION public.book_lines_append(p_rows jsonb, p_is_test boolean DEFAULT false)
 RETURNS integer
 LANGUAGE sql
@@ -225,24 +225,64 @@ SET search_path = ''
 AS $$
     WITH r AS (
         SELECT * FROM jsonb_to_recordset(p_rows) AS r (
-                   source text, league text, sports_event_id bigint, event_key text, starts_at timestamptz,
-                   market text, subject text, lines jsonb, fetched_at timestamptz)
+                   sports_event_id bigint, starts_at timestamptz, fetched_at timestamptz, source text, league text,
+                   market text, subject text, book text, line real, price_a integer, price_b integer, p_a real)
     ),
     w AS (
-        INSERT INTO public.book_lines (source, league, sports_event_id, event_key, starts_at, market, subject, lines,
-                                       fetched_at, is_test)
-        SELECT r.source, r.league, r.sports_event_id, r.event_key, r.starts_at, r.market, r.subject, r.lines,
-               r.fetched_at, p_is_test
+        INSERT INTO public.book_lines (sports_event_id, starts_at, fetched_at, source, league, market, subject, book,
+                                       line, price_a, price_b, p_a, is_test)
+        SELECT r.sports_event_id, r.starts_at, r.fetched_at, r.source, r.league, r.market, r.subject, r.book,
+               r.line, r.price_a, r.price_b, r.p_a, p_is_test
           FROM r
-         WHERE r.lines IS DISTINCT FROM (
-                   SELECT l.lines FROM public.book_lines l
-                    WHERE l.event_key = r.event_key AND l.market = r.market
-                      AND coalesce(l.subject, '') = coalesce(r.subject, '')
-                      AND l.source = r.source AND l.is_test = p_is_test
-                    ORDER BY l.id DESC LIMIT 1)
+         WHERE NOT EXISTS (
+                   SELECT 1
+                     FROM (SELECT l.line, l.price_a, l.price_b FROM public.book_lines l
+                            WHERE l.sports_event_id = r.sports_event_id AND l.market = r.market
+                              AND l.subject IS NOT DISTINCT FROM r.subject AND l.book = r.book
+                              AND l.source = r.source AND l.is_test = p_is_test
+                            ORDER BY l.fetched_at DESC LIMIT 1) z
+                    WHERE z.line IS NOT DISTINCT FROM r.line AND z.price_a = r.price_a
+                      AND z.price_b IS NOT DISTINCT FROM r.price_b)
         RETURNING 1
     )
     SELECT count(*)::integer FROM w;
+$$;
+
+-- The collapse: for each (game, market, subject, book, source) whose latest
+-- start + 6 h has passed, keep only the last row fetched before that start.
+-- Idempotent (a collapsed key has one row). Returns how many rows it deleted.
+CREATE OR REPLACE FUNCTION public.book_lines_prune(p_is_test boolean DEFAULT false)
+RETURNS integer
+LANGUAGE sql
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+    WITH k AS (
+        SELECT DISTINCT ON (l.sports_event_id, l.market, l.subject, l.book, l.source)
+               l.sports_event_id, l.market, l.subject, l.book, l.source, l.starts_at
+          FROM public.book_lines l
+         WHERE l.is_test = p_is_test
+         ORDER BY l.sports_event_id, l.market, l.subject, l.book, l.source, l.fetched_at DESC
+    ),
+    due AS (SELECT * FROM k WHERE k.starts_at + interval '6 hours' < now()),
+    keep AS (
+        SELECT DISTINCT ON (l.sports_event_id, l.market, l.subject, l.book, l.source) l.ctid AS t
+          FROM public.book_lines l
+          JOIN due d ON d.sports_event_id = l.sports_event_id AND d.market = l.market
+                    AND d.subject IS NOT DISTINCT FROM l.subject AND d.book = l.book AND d.source = l.source
+         WHERE l.is_test = p_is_test AND l.fetched_at < d.starts_at
+         ORDER BY l.sports_event_id, l.market, l.subject, l.book, l.source, l.fetched_at DESC
+    ),
+    del AS (
+        DELETE FROM public.book_lines l
+         USING due d
+         WHERE d.sports_event_id = l.sports_event_id AND d.market = l.market
+           AND d.subject IS NOT DISTINCT FROM l.subject AND d.book = l.book AND d.source = l.source
+           AND l.is_test = p_is_test
+           AND NOT EXISTS (SELECT 1 FROM keep WHERE keep.t = l.ctid)
+        RETURNING 1
+    )
+    SELECT count(*)::integer FROM del;
 $$;
 
 -- ===================================================================== 4
@@ -362,7 +402,7 @@ RETURNS TABLE (market_ticker text, event_ticker text, game_ticker text, series_t
                label text, is_test boolean, tier text, n_books smallint, p_books numeric, p_books_mult numeric,
                p_espn numeric, p_kalshi numeric, normalized boolean, p_consensus numeric, yes_bid numeric,
                yes_ask numeric, no_ask numeric, fee_yes numeric, fee_no numeric, edge_yes numeric,
-               edge_no numeric, inputs jsonb, computed_at timestamptz)
+               edge_no numeric, edge_claimed boolean, inputs jsonb, computed_at timestamptz)
 LANGUAGE sql
 STABLE
 SECURITY INVOKER
@@ -385,7 +425,7 @@ AS $$
     k AS (
         SELECT m.*,
                coalesce(m.mutually_exclusive AND m.n_ev >= 2 AND m.n_quoted = m.n_ev
-                        AND m.mid_sum BETWEEN 0.9 AND 1.1, false) AS norm
+                        AND m.mid_sum BETWEEN 0.95 AND 1.05, false) AS norm
           FROM m
     ),
     kk AS (
@@ -395,7 +435,10 @@ AS $$
            kk.market_kind, kk.subject, kk.stat, kk.line, kk.label, kk.is_test,
            coalesce(c.tier, 'kalshi'), coalesce(c.n_books, 0)::smallint, c.p_books, c.p_books_mult, c.p_espn,
            kk.pk, kk.norm, q.p_consensus, kk.yes_bid, kk.yes_ask, 1 - kk.yes_bid, q.fee_yes, q.fee_no,
-           q.edge_yes, q.edge_no, c.inputs, coalesce(c.computed_at, kk.last_changed_at)
+           q.edge_yes, q.edge_no,
+           -- Only an outside line can claim edge; the kalshi tier never does.
+           (c.tier IS NOT NULL AND greatest(coalesce(q.edge_yes, -1), coalesce(q.edge_no, -1)) > 0),
+           c.inputs, coalesce(c.computed_at, kk.last_changed_at)
       FROM kk
       LEFT JOIN public.leg_consensus c ON c.market_ticker = kk.market_ticker
      CROSS JOIN LATERAL public.consensus_leg(CASE c.tier WHEN 'books' THEN c.p_books WHEN 'espn' THEN c.p_espn END,
@@ -408,7 +451,8 @@ SELECT * FROM public.leg_consensus_for(NULL);
 -- ===================================================================== 6
 -- db/072's reader; each binary market gains 'q' (its consensus):
 --   t: tier b | e | k; n: books (omitted for kalshi); p: p_consensus;
---   sd: the better side y | n; e: that side's net edge; a: its ask; f: its fee.
+--   sd: the better side y | n; e: that side's net edge; a: its ask; f: its fee;
+--   ec: true when the edge is claimed (books or espn tier, edge > 0; never kalshi).
 CREATE OR REPLACE FUNCTION public.kalshi_board_game(p_game text, p_kind text DEFAULT NULL,
                                                     p_combo_only boolean DEFAULT false,
                                                     p_tests boolean DEFAULT false)
@@ -421,7 +465,7 @@ AS $$
     WITH q AS (
         SELECT x.market_ticker, x.tier, x.n_books, x.p_consensus,
                CASE WHEN coalesce(x.edge_no, -9) > coalesce(x.edge_yes, -9) THEN 'n' ELSE 'y' END AS sd,
-               x.edge_yes, x.edge_no, x.yes_ask, x.no_ask, x.fee_yes, x.fee_no
+               x.edge_yes, x.edge_no, x.yes_ask, x.no_ask, x.fee_yes, x.fee_no, x.edge_claimed
           FROM public.leg_consensus_for(ARRAY[p_game]) x
     ),
     m AS (
@@ -433,7 +477,8 @@ AS $$
                    't', left(q.tier, 1), 'n', nullif(q.n_books, 0), 'p', q.p_consensus, 'sd', q.sd,
                    'e', CASE q.sd WHEN 'y' THEN q.edge_yes ELSE q.edge_no END,
                    'a', CASE q.sd WHEN 'y' THEN q.yes_ask ELSE q.no_ask END,
-                   'f', CASE q.sd WHEN 'y' THEN q.fee_yes ELSE q.fee_no END)) END AS cq
+                   'f', CASE q.sd WHEN 'y' THEN q.fee_yes ELSE q.fee_no END,
+                   'ec', CASE WHEN q.edge_claimed THEN true END)) END AS cq
           FROM public.kalshi_board b
           JOIN public.kalshi_board_events e ON e.event_ticker = b.event_ticker
           JOIN public.kalshi_series_board s ON s.series_ticker = e.series_ticker
@@ -482,7 +527,7 @@ AS $$
                                                     WHERE up.tier IS NOT NULL
                                                       AND up.starts_at < now() + interval '12 hours'),
                                                  '{}'::text[])) x
-         WHERE x.tier <> 'kalshi' AND NOT x.is_test AND x.starts_at > now()
+         WHERE x.edge_claimed AND NOT x.is_test AND x.starts_at > now()
          ORDER BY edge DESC
          LIMIT 10
     )
@@ -587,7 +632,7 @@ ALTER TABLE odds_api_calls ENABLE ROW LEVEL SECURITY;
 ALTER TABLE book_lines ENABLE ROW LEVEL SECURITY;
 ALTER TABLE leg_consensus ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON odds_api_calls, book_lines, leg_consensus FROM anon, authenticated, PUBLIC;
-REVOKE ALL ON SEQUENCE odds_api_calls_id_seq, book_lines_id_seq FROM anon, authenticated, PUBLIC;
+REVOKE ALL ON SEQUENCE odds_api_calls_id_seq FROM anon, authenticated, PUBLIC;
 REVOKE ALL ON v_leg_consensus FROM anon, authenticated, PUBLIC;
 GRANT SELECT ON odds_api_calls, book_lines, leg_consensus, v_leg_consensus TO authenticated;
 GRANT SELECT ON odds_api_calls, book_lines, leg_consensus, v_leg_consensus TO valemont_readonly;
@@ -602,6 +647,7 @@ CREATE POLICY leg_consensus_owner_read ON leg_consensus FOR SELECT TO authentica
     USING ((SELECT public.is_owner()));
 
 REVOKE ALL ON FUNCTION public.book_lines_append(jsonb, boolean) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.book_lines_prune(boolean) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.leg_consensus_upsert(jsonb, timestamptz, boolean) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.leg_consensus_sweep(text[], text[], boolean) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.odds_api_usage() FROM PUBLIC, anon;
@@ -648,6 +694,8 @@ DECLARE
     v_sx      text := 'KXSELFTEST073X-26NOV09AAABBB';
     v_lad     text := 'KXSELFTEST073P-26NOV09AAABBB';
     v_thin    text := 'KXSELFTEST073T-26NOV09AAABBB';
+    v_pos     text := 'KXSELFTEST073T-26NOV09CCCDDD';
+    v_past    timestamptz := now() - interval '7 hours';
     v_series  jsonb := '[{"series_ticker": "KXSELFTEST073", "title": "Selftest 073 ML", "sport": "Basketball",
                           "league": "nba", "category": "Sports", "tags": ["Basketball"], "fee_type": "quadratic",
                           "fee_multiplier": "1", "fee_regime": {"fee_type": "quadratic"}, "combo_eligible": false,
@@ -711,11 +759,15 @@ BEGIN
                                'game_title', 'AAA vs BBB', 'milestone_start', v_soon, 'mutually_exclusive', true),
             jsonb_build_object('event_ticker', v_lad, 'series_ticker', 'KXSELFTEST073P', 'game_ticker', v_gt,
                                'game_title', 'AAA vs BBB', 'milestone_start', v_soon, 'mutually_exclusive', false),
-            -- Exclusive but not exhaustive (mids sum 0.80): never normalized.
+            -- Exclusive, mids summing 0.92 (under the 0.95-1.05 band): never normalized.
             jsonb_build_object('event_ticker', v_thin, 'series_ticker', 'KXSELFTEST073T', 'game_ticker', v_gt,
+                               'game_title', 'AAA vs BBB', 'milestone_start', v_soon, 'mutually_exclusive', true),
+            -- Exclusive, mids summing 0.95 (the band's edge): normalized, and the
+            -- normalization lifts YES past ask + fee: an artifact, never claimed.
+            jsonb_build_object('event_ticker', v_pos, 'series_ticker', 'KXSELFTEST073T', 'game_ticker', v_gt,
                                'game_title', 'AAA vs BBB', 'milestone_start', v_soon, 'mutually_exclusive', true));
         v_n := public.kalshi_board_events_upsert(v_events, v_t0);
-        IF v_n <> 4 THEN RAISE EXCEPTION 'SELFTEST FAILED: event insert wrote %', v_n; END IF;
+        IF v_n <> 5 THEN RAISE EXCEPTION 'SELFTEST FAILED: event insert wrote %', v_n; END IF;
         -- The deployed worker sends no flag: unchanged, nothing written, the flag kept.
         v_n := public.kalshi_board_events_upsert(
             (SELECT jsonb_agg(x - 'mutually_exclusive') FROM jsonb_array_elements(v_events) x), v_t1);
@@ -762,11 +814,15 @@ BEGIN
                                'variant', 'ladder', 'payout', 'scalar', 'subject', 'Player One', 'stat', 'points',
                                'label', 'Player One: points, $1 at 50', 'yes_bid', 0.30, 'yes_ask', 0.32),
             jsonb_build_object('market_ticker', v_thin || '-AAA', 'event_ticker', v_thin, 'market_kind', 'game_line',
-                               'subject', 'AAA', 'label', 'AAA', 'yes_bid', 0.39, 'yes_ask', 0.41),
+                               'subject', 'AAA', 'label', 'AAA', 'yes_bid', 0.45, 'yes_ask', 0.47),
             jsonb_build_object('market_ticker', v_thin || '-BBB', 'event_ticker', v_thin, 'market_kind', 'game_line',
-                               'subject', 'BBB', 'label', 'BBB', 'yes_bid', 0.39, 'yes_ask', 0.41));
+                               'subject', 'BBB', 'label', 'BBB', 'yes_bid', 0.45, 'yes_ask', 0.47),
+            jsonb_build_object('market_ticker', v_pos || '-CCC', 'event_ticker', v_pos, 'market_kind', 'game_line',
+                               'subject', 'CCC', 'label', 'CCC', 'yes_bid', 0.47, 'yes_ask', 0.48),
+            jsonb_build_object('market_ticker', v_pos || '-DDD', 'event_ticker', v_pos, 'market_kind', 'game_line',
+                               'subject', 'DDD', 'label', 'DDD', 'yes_bid', 0.47, 'yes_ask', 0.48));
         v_n := public.kalshi_board_markets_upsert(v_mk, v_t0);
-        IF v_n <> 10 THEN RAISE EXCEPTION 'SELFTEST FAILED: market insert wrote %', v_n; END IF;
+        IF v_n <> 12 THEN RAISE EXCEPTION 'SELFTEST FAILED: market insert wrote %', v_n; END IF;
 
         -- ------------------------------------------------ 3. normalization and the kalshi tier
         SELECT x.p_kalshi, x.normalized, x.tier, x.n_books, x.p_consensus INTO v_row
@@ -787,14 +843,26 @@ BEGIN
         END IF;
         SELECT x.p_kalshi, x.normalized INTO v_row
           FROM public.leg_consensus_for(ARRAY[v_gt]) x WHERE x.market_ticker = v_thin || '-AAA';
-        IF v_row.p_kalshi <> 0.40 OR v_row.normalized THEN
-            RAISE EXCEPTION 'SELFTEST FAILED: a non-exhaustive event was normalized: %', v_row;
+        IF v_row.p_kalshi <> 0.46 OR v_row.normalized THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: an event summing 0.92 was normalized: %', v_row;
         END IF;
         SELECT count(*) INTO v_n FROM public.leg_consensus_for(ARRAY[v_gt]) x;
-        IF v_n <> 9 THEN RAISE EXCEPTION 'SELFTEST FAILED: leg_consensus_for has % rows (scalar left out?)', v_n; END IF;
-        SELECT count(*) INTO v_n FROM public.leg_consensus_for(ARRAY[v_gt]) x
-         WHERE x.tier = 'kalshi' AND (x.edge_yes > 0 OR x.edge_no > 0);
-        IF v_n <> 0 THEN RAISE EXCEPTION 'SELFTEST FAILED: % kalshi-tier markets show a positive edge', v_n; END IF;
+        IF v_n <> 11 THEN RAISE EXCEPTION 'SELFTEST FAILED: leg_consensus_for has % rows (scalar left out?)', v_n; END IF;
+        -- The 0.95 event: p 0.5 against 0.48 + 0.017472, YES +0.002528 on both
+        -- markets. Reported, never claimed; nothing else in the game is positive.
+        SELECT x.p_kalshi, x.normalized, x.edge_yes, x.edge_claimed INTO v_row
+          FROM public.leg_consensus_for(ARRAY[v_gt]) x WHERE x.market_ticker = v_pos || '-CCC';
+        IF v_row.p_kalshi <> 0.5 OR NOT v_row.normalized OR v_row.edge_yes <> 0.002528
+           OR v_row.edge_claimed IS DISTINCT FROM false THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: the band-edge event reads %', v_row;
+        END IF;
+        SELECT count(*) FILTER (WHERE x.edge_yes > 0 OR x.edge_no > 0) AS pos,
+               count(*) FILTER (WHERE x.edge_claimed) AS claimed,
+               count(*) FILTER (WHERE x.edge_claimed IS NULL) AS unknown INTO v_row
+          FROM public.leg_consensus_for(ARRAY[v_gt]) x WHERE x.tier = 'kalshi';
+        IF v_row.pos <> 2 OR v_row.claimed <> 0 OR v_row.unknown <> 0 THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: kalshi tier (positive, claimed, null) reads %', v_row;
+        END IF;
         -- An unquoted market drops its exclusive event to plain mids, even when
         -- the quoted mids alone sum inside the band (0.66 + 0.30 = 0.96).
         v_n := public.kalshi_board_markets_upsert(
@@ -833,20 +901,21 @@ BEGIN
         IF v_n <> 1 OR v_row.p_books <> 0.67 OR v_row.computed_at <> v_t1 THEN
             RAISE EXCEPTION 'SELFTEST FAILED: a changed p read % (wrote %)', v_row, v_n;
         END IF;
-        SELECT x.tier, x.n_books, x.p_consensus, x.edge_yes, x.p_kalshi INTO v_row
+        SELECT x.tier, x.n_books, x.p_consensus, x.edge_yes, x.p_kalshi, x.edge_claimed INTO v_row
           FROM public.leg_consensus_for(ARRAY[v_gt]) x WHERE x.market_ticker = v_ml || '-AAA';
-        IF v_row.tier <> 'books' OR v_row.n_books <> 3
+        IF v_row.tier <> 'books' OR v_row.n_books <> 3 OR v_row.edge_claimed IS DISTINCT FROM true
            OR v_row.p_consensus <> round(0.7 * 0.67 + 0.3 * v_row.p_kalshi, 6)
            OR v_row.edge_yes <> v_row.p_consensus - (0.63 + 0.016317) THEN
             RAISE EXCEPTION 'SELFTEST FAILED: the books tier reads %', v_row;
         END IF;
-        SELECT x.tier, x.n_books, x.p_consensus INTO v_row
+        -- Its edges are negative both ways: an espn leg with no edge claims none.
+        SELECT x.tier, x.n_books, x.p_consensus, x.edge_claimed INTO v_row
           FROM public.leg_consensus_for(ARRAY[v_gt]) x WHERE x.market_ticker = v_sx || '-TIE';
-        IF v_row.tier <> 'espn' OR v_row.n_books <> 1
+        IF v_row.tier <> 'espn' OR v_row.n_books <> 1 OR v_row.edge_claimed IS DISTINCT FROM false
            OR v_row.p_consensus <> round(0.7 * 0.30 + 0.3 * round(0.32 / 1.02, 6), 6) THEN
             RAISE EXCEPTION 'SELFTEST FAILED: the espn tier reads %', v_row;
         END IF;
-        IF (SELECT count(*) FROM public.v_leg_consensus v WHERE v.game_ticker = v_gt) <> 9 THEN
+        IF (SELECT count(*) FROM public.v_leg_consensus v WHERE v.game_ticker = v_gt) <> 11 THEN
             RAISE EXCEPTION 'SELFTEST FAILED: v_leg_consensus disagrees with leg_consensus_for';
         END IF;
 
@@ -908,8 +977,16 @@ BEGIN
         IF (SELECT m->'q'->>'t' FROM jsonb_array_elements(v_j->'m') m WHERE m->>'lb' = 'AAA') IS DISTINCT FROM 'b'
            OR (SELECT (m->'q'->>'n')::int FROM jsonb_array_elements(v_j->'m') m WHERE m->>'lb' = 'AAA') <> 3
            OR (SELECT m->'q'->>'t' FROM jsonb_array_elements(v_j->'m') m WHERE m->>'lb' = 'BBB') IS DISTINCT FROM 'k'
-           OR (SELECT m->'q' ? 'n' FROM jsonb_array_elements(v_j->'m') m WHERE m->>'lb' = 'BBB') THEN
+           OR (SELECT m->'q' ? 'n' FROM jsonb_array_elements(v_j->'m') m WHERE m->>'lb' = 'BBB')
+           OR (SELECT (m->'q'->>'ec')::boolean FROM jsonb_array_elements(v_j->'m') m WHERE m->>'lb' = 'AAA')
+              IS DISTINCT FROM true THEN
             RAISE EXCEPTION 'SELFTEST FAILED: kalshi_board_game q reads %', v_j;
+        END IF;
+        -- The band-edge artifact shows its positive edge, never 'ec'.
+        SELECT x INTO v_j FROM public.kalshi_board_game(v_gt) x WHERE x->>'e' = v_pos;
+        IF (SELECT count(*) FROM jsonb_array_elements(v_j->'m') m
+             WHERE (m->'q'->>'e')::numeric > 0 AND m->'q'->>'t' = 'k' AND NOT (m->'q' ? 'ec')) <> 2 THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: the kalshi-tier artifact reads %', v_j;
         END IF;
         SELECT x INTO v_j FROM public.kalshi_board_game(v_gt) x WHERE x->>'e' = v_lad;
         IF (SELECT count(*) FROM jsonb_array_elements(v_j->'m') m WHERE m ? 'q') <> 2
@@ -956,40 +1033,75 @@ BEGIN
         END IF;
 
         -- ------------------------------------------------ 7. book_lines
+        -- A past game (-73001, started 7 h ago): its total moved twice before
+        -- the start and once after; its moneyline at one book once. An
+        -- upcoming game (-73002). Game ids are negative: no real row has one.
         v_bl := jsonb_build_array(
-            jsonb_build_object('source', 'odds_api', 'league', 'nba', 'event_key', 'selftest073abc',
-                               'starts_at', v_soon, 'market', 'h2h', 'subject', 'AAA',
-                               'lines', '{"draftkings": [null, -160, 135, 0.6012]}'::jsonb, 'fetched_at', v_t0),
-            jsonb_build_object('source', 'odds_api', 'league', 'nba', 'event_key', 'selftest073abc',
-                               'starts_at', v_soon, 'market', 'totals',
-                               'lines', '{"draftkings": [221.5, -110, -110, 0.5]}'::jsonb, 'fetched_at', v_t0));
+            jsonb_build_object('sports_event_id', -73001, 'starts_at', v_past, 'fetched_at', v_past - interval '3 hours',
+                               'source', 'o', 'league', 'nba', 'market', 'total', 'book', 'draftkings',
+                               'line', 221.5, 'price_a', -110, 'price_b', -110, 'p_a', 0.5),
+            jsonb_build_object('sports_event_id', -73001, 'starts_at', v_past, 'fetched_at', v_past - interval '2 hours',
+                               'source', 'o', 'league', 'nba', 'market', 'total', 'book', 'draftkings',
+                               'line', 222.5, 'price_a', -110, 'price_b', -110, 'p_a', 0.5),
+            jsonb_build_object('sports_event_id', -73001, 'starts_at', v_past, 'fetched_at', v_past + interval '30 minutes',
+                               'source', 'o', 'league', 'nba', 'market', 'total', 'book', 'draftkings',
+                               'line', 225.5, 'price_a', -110, 'price_b', -110, 'p_a', 0.5),
+            jsonb_build_object('sports_event_id', -73001, 'starts_at', v_past, 'fetched_at', v_past - interval '2 hours',
+                               'source', 'o', 'league', 'nba', 'market', 'ml', 'subject', 'AAA', 'book', 'fanduel',
+                               'price_a', -160, 'price_b', 135, 'p_a', 0.6012),
+            jsonb_build_object('sports_event_id', -73002, 'starts_at', v_soon, 'fetched_at', v_t0,
+                               'source', 'o', 'league', 'nba', 'market', 'total', 'book', 'draftkings',
+                               'line', 210.5, 'price_a', -110, 'price_b', -110, 'p_a', 0.5));
         v_n := public.book_lines_append(v_bl);
-        IF v_n <> 2 THEN RAISE EXCEPTION 'SELFTEST FAILED: book_lines insert wrote %', v_n; END IF;
-        v_n := public.book_lines_append(v_bl);
+        IF v_n <> 5 THEN RAISE EXCEPTION 'SELFTEST FAILED: book_lines insert wrote %', v_n; END IF;
+        -- The current prices again: nothing appended.
+        v_n := public.book_lines_append(jsonb_build_array(v_bl->2, v_bl->3, v_bl->4));
         IF v_n <> 0 THEN RAISE EXCEPTION 'SELFTEST FAILED: unchanged book lines appended %', v_n; END IF;
-        v_n := public.book_lines_append(jsonb_set(v_bl, '{1,lines}', '{"draftkings": [222.5, -110, -110, 0.5]}'));
-        IF v_n <> 1 THEN RAISE EXCEPTION 'SELFTEST FAILED: a moved total appended %', v_n; END IF;
-        v_n := public.book_lines_append(v_bl, true);
+        -- A moved price at the upcoming game, and the same line at another book.
+        v_n := public.book_lines_append(jsonb_build_array(
+            jsonb_set(jsonb_set(v_bl->4, '{fetched_at}', to_jsonb(v_t1)), '{price_a}', '-115'),
+            jsonb_set(v_bl->4, '{book}', '"fanduel"')));
+        IF v_n <> 2 THEN RAISE EXCEPTION 'SELFTEST FAILED: a moved price and a new book appended %', v_n; END IF;
+        -- v_bl->2 equals the real latest row: as a test row it must still be written.
+        v_n := public.book_lines_append(jsonb_build_array(v_bl->0, v_bl->2), true);
         IF v_n <> 2 THEN RAISE EXCEPTION 'SELFTEST FAILED: test rows compared against real ones (%)', v_n; END IF;
-        v_ok := false;
-        BEGIN
-            DELETE FROM public.book_lines WHERE event_key = 'selftest073abc';
-        EXCEPTION WHEN raise_exception THEN v_ok := SQLERRM LIKE '%append-only%';
-        END;
-        IF NOT v_ok THEN RAISE EXCEPTION 'SELFTEST FAILED: a book_lines DELETE was accepted'; END IF;
-        v_ok := false;
-        BEGIN
-            TRUNCATE public.book_lines;
-        EXCEPTION WHEN raise_exception THEN v_ok := true;
-        END;
-        IF NOT v_ok THEN RAISE EXCEPTION 'SELFTEST FAILED: book_lines TRUNCATE was accepted'; END IF;
+
+        -- The collapse: the past total keeps its last pre-start row (222.5);
+        -- the earlier one and the post-start one go; the moneyline's one row
+        -- stays; the upcoming game and the test rows are untouched.
+        v_n := public.book_lines_prune();
+        IF v_n <> 2 THEN RAISE EXCEPTION 'SELFTEST FAILED: the collapse deleted %', v_n; END IF;
+        SELECT count(*) AS n, min(line) AS line, min(fetched_at) AS at INTO v_row
+          FROM public.book_lines WHERE sports_event_id = -73001 AND market = 'total' AND NOT is_test;
+        IF v_row.n <> 1 OR v_row.line <> 222.5 OR v_row.at <> v_past - interval '2 hours' THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: the collapsed total reads %', v_row;
+        END IF;
+        IF (SELECT count(*) FROM public.book_lines WHERE sports_event_id = -73001 AND market = 'ml') <> 1
+           OR (SELECT count(*) FROM public.book_lines WHERE sports_event_id = -73002) <> 3
+           OR (SELECT count(*) FROM public.book_lines WHERE sports_event_id = -73001 AND is_test) <> 2 THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: the collapse touched a row it must keep';
+        END IF;
+        v_n := public.book_lines_prune();
+        IF v_n <> 0 THEN RAISE EXCEPTION 'SELFTEST FAILED: a second collapse deleted %', v_n; END IF;
+        v_n := public.book_lines_prune(true);
+        IF v_n <> 1 OR (SELECT count(*) FROM public.book_lines WHERE sports_event_id = -73001 AND is_test) <> 1 THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: the test collapse deleted %', v_n;
+        END IF;
         v_c := NULL;
         BEGIN
-            PERFORM public.book_lines_append(jsonb_set(v_bl, '{0,lines}', '{}'));
+            PERFORM public.book_lines_append(jsonb_build_array(jsonb_set(v_bl->0, '{price_a}', '50')));
         EXCEPTION WHEN check_violation THEN GET STACKED DIAGNOSTICS v_c = CONSTRAINT_NAME;
         END;
-        IF v_c IS DISTINCT FROM 'book_lines_lines_check' THEN
-            RAISE EXCEPTION 'SELFTEST FAILED: empty lines were accepted (%)', v_c;
+        IF v_c IS DISTINCT FROM 'book_lines_price_a_check' THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: an American price of +50 was accepted (%)', v_c;
+        END IF;
+        v_c := NULL;
+        BEGIN
+            PERFORM public.book_lines_append(jsonb_build_array(jsonb_set(v_bl->0, '{price_b}', 'null')));
+        EXCEPTION WHEN check_violation THEN GET STACKED DIAGNOSTICS v_c = CONSTRAINT_NAME;
+        END;
+        IF v_c IS DISTINCT FROM 'book_lines_one_sided' THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: a one-sided row with a p was accepted (%)', v_c;
         END IF;
 
         -- ------------------------------------------------ 8. ctx_consensus
@@ -1053,6 +1165,7 @@ BEGIN
            OR has_function_privilege('authenticated', 'public.leg_consensus_upsert(jsonb, timestamptz, boolean)',
                                      'EXECUTE')
            OR has_function_privilege('authenticated', 'public.book_lines_append(jsonb, boolean)', 'EXECUTE')
+           OR has_function_privilege('authenticated', 'public.book_lines_prune(boolean)', 'EXECUTE')
            OR has_function_privilege('authenticated', 'public.leg_consensus_sweep(text[], text[], boolean)', 'EXECUTE')
            OR has_function_privilege('anon', 'public.ctx_consensus()', 'EXECUTE')
            OR has_function_privilege('anon', 'public.leg_consensus_for(text[])', 'EXECUTE')
