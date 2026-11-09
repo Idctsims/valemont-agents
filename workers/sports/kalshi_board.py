@@ -283,6 +283,13 @@ class Writer:
     def prune(self) -> dict[str, int]:
         return ledger.kalshi_board_prune()
 
+    def game_series(self) -> frozenset[str]:
+        """The owner's five leagues' game series, from the sports_leagues
+        registry (the kalshi_series Chat 7 maps: KXNFLGAME, KXNBAGAME, …).
+        A read; asked only when a real run has zero-market events."""
+        return frozenset(lg.kalshi_series for lg in ledger.sports_leagues()
+                         if lg.code in OWNER_LEAGUES and lg.kalshi_series)
+
 
 class NoWrite(Writer):
     def series(self, rows: list[dict[str, Any]]) -> int:
@@ -510,7 +517,7 @@ def _full(client: KalshiClient | None, now: Callable[[], datetime], state: Board
     # Both fail AFTER the rest was written and the state (the refresh's
     # window) was set: the refresh keys on "the board was written", not on
     # "the last pull was ok" (owner, Nov 7).
-    broken = broken_fetch(run, labels)
+    broken = broken_fetch(run, w.game_series()) if run.no_markets and not dry_run else []
     if (broken or run.overflowed) and not dry_run:
         why = []
         if run.overflowed:
@@ -525,25 +532,27 @@ def _full(client: KalshiClient | None, now: Callable[[], datetime], state: Board
 #: an event before its markets exist; a broken fetch path (Nov 6's comma batch,
 #: 200 and empty) empties MANY events at once. So the run fails only when
 #: zero-market events exceed this share of the window's events, or when a
-#: series in the owner's five leagues has every window event at zero markets.
+#: GAME series of the owner's five leagues (the registry's kalshi_series:
+#: KXNFLGAME, KXNBAGAME, KXNCAAFGAME, KXF1RACE, KXPGATOUR) has every window
+#: event at zero markets. Props and other series of those leagues fall under
+#: the share only (owner, Nov 9).
 NO_MARKETS_MAX_SHARE = 0.02
 OWNER_LEAGUES: frozenset[str] = frozenset({"cfb", "nfl", "nba", "f1", "pga"})
 
 
-def broken_fetch(run: BoardRun, labels: Mapping[str, Iterable[str | None]]) -> list[str]:
+def broken_fetch(run: BoardRun, game_series: Iterable[str]) -> list[str]:
     """Why the zero-market events look like a broken fetch, or [] when they
     look like events listed before their markets exist."""
+    game_series = frozenset(game_series)
     why: list[str] = []
     total, window = sum(run.no_markets.values()), sum(run.window_by_series.values())
     if window and total > NO_MARKETS_MAX_SHARE * window:
         why.append(f"{total} of {window} window events have no market of any status "
                    f"(> {NO_MARKETS_MAX_SHARE:.0%}): "
                    + ", ".join(f"{s} ({n} events)" for s, n in sorted(run.no_markets.items())))
-    whole = sorted(s for s, n in run.no_markets.items()
-                   if n == run.window_by_series.get(s)
-                   and league_of(s, sorted(labels.get(s, ()), key=str)) in OWNER_LEAGUES)
+    whole = sorted(s for s, n in run.no_markets.items() if s in game_series and n == run.window_by_series.get(s))
     if whole:
-        why.append("every window event of an owner-league series has no market of any status: "
+        why.append("every window event of an owner-league game series has no market of any status: "
                    + ", ".join(f"{s} ({run.no_markets[s]} events)" for s in whole))
     return why
 
