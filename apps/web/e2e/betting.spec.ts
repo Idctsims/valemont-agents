@@ -87,6 +87,34 @@ test.describe("owner", () => {
     await expect(ml.getByTestId("event-asof")).toContainText("as of");
   });
 
+  // db/073: the home market's books row (p_books 0.66 from 3 books) blends
+  // 0.7 / 0.3 with Kalshi's normalized mid 0.62: p 64.8%; YES at 63¢ + 1.63¢
+  // leaves +0.17¢, claimed (up). The away market is Kalshi only: NO is the
+  // better side, -2.6¢, never claimed. The ladder carries no consensus.
+  test("each binary market shows its consensus row; the credits line is on the page", async () => {
+    await expect(page.getByTestId("betting-credits")).toContainText("/ 500 this month");
+    const markets = card().getByTestId("board-market");
+    const home = markets.filter({ hasText: "Test Home" }).getByTestId("market-consensus");
+    await expect(home).toHaveAttribute("data-tier", "b");
+    await expect(home).toHaveAttribute("data-claimed", "1");
+    await expect(home.getByTestId("consensus-tier")).toHaveText("Books · 3");
+    await expect(home.getByTestId("consensus-p")).toHaveText("p 64.8%");
+    await expect(home.getByTestId("consensus-ask")).toHaveText("YES 63¢");
+    await expect(home.getByTestId("consensus-fee")).toHaveText("fee 1.63¢");
+    await expect(home.getByTestId("consensus-edge")).toHaveText("edge +0.2¢");
+    await expect(home.getByTestId("consensus-edge")).toHaveClass(/text-hit/);
+    const away = markets.filter({ hasText: "Test Away" }).getByTestId("market-consensus");
+    await expect(away).toHaveAttribute("data-tier", "k");
+    await expect(away).toHaveAttribute("data-claimed", "0");
+    await expect(away.getByTestId("consensus-tier")).toHaveText("Kalshi only");
+    await expect(away.getByTestId("consensus-ask")).toHaveText("NO 63¢");
+    await expect(away.getByTestId("consensus-edge")).toHaveText("edge −2.6¢");
+    await expect(away.getByTestId("consensus-edge")).not.toHaveClass(/text-hit|text-danger/);
+    await expect(card().getByTestId("market-consensus")).toHaveCount(5);
+    const ladder = card().locator('[data-testid="board-event"][data-event$="LAD"]');
+    await expect(ladder.getByTestId("market-consensus")).toHaveCount(0);
+  });
+
   test("filters: props only, then combo-eligible only, in the URL", async () => {
     await page.getByTestId("board-kind-prop").click();
     await expect(page).toHaveURL(/kind=props/);

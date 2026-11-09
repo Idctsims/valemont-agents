@@ -29,7 +29,54 @@ export type BoardGame = {
 /** kalshi_board_game: one event of an expanded game, with its markets.
  *  s: a scalar market (a ladder or escalator: YES pays a fraction of $1 that
  *  grows with the stat; its price is not a probability, never a parlay leg). */
-export type BoardMarket = { k: Kind; lb?: string; b?: number; a?: number; f?: number; v?: string; s?: boolean };
+export type BoardMarket = {
+  k: Kind; lb?: string; b?: number; a?: number; f?: number; v?: string; s?: boolean; q?: Consensus;
+};
+
+/** A binary market's consensus (db/073 leg_consensus_for, on kalshi_board_game).
+ *  t: tier b(ooks) | e(spn) | k(alshi only); n: books at the exact line;
+ *  p: the consensus probability of YES; sd: the better side; e: that side's
+ *  net edge (p - ask - taker fee); a, f: that side's ask and fee; ec: the
+ *  edge is claimed (books or espn tier and e > 0). A kalshi-tier leg never
+ *  claims edge, whatever e reads (owner, Nov 9). */
+export type Consensus = {
+  t: "b" | "e" | "k"; n?: number; p?: number; sd?: "y" | "n"; e?: number; a?: number; f?: number; ec?: boolean;
+};
+
+/** "Books · 9", "ESPN · 1 book", "Kalshi only". */
+export function tierLabel(q: Pick<Consensus, "t" | "n">): string {
+  if (q.t === "b") return `Books · ${q.n ?? 0}`;
+  if (q.t === "e") return "ESPN · 1 book";
+  return "Kalshi only";
+}
+
+/** A probability as a percent with one decimal: 0.5153 -> "51.5%". */
+export function pct(v: number | null | undefined): string {
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  return `${(Math.round(v * 1000) / 10).toFixed(1)}%`;
+}
+
+/** A net edge in cents, signed: 0.04796 -> "+4.8¢", -0.0925 -> "−9.3¢". */
+export function edgeCents(v: number | null | undefined): string {
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  const c = Math.round(v * 1000) / 10;
+  if (c === 0) return "0.0¢";
+  return `${c > 0 ? "+" : "−"}${Math.abs(c).toFixed(1)}¢`;
+}
+
+/** up only for a claimed, positive edge; anything else is neutral (never
+ *  the danger colour: an edge at or under zero is not a loss). */
+export function edgeTone(q: Pick<Consensus, "e" | "ec">): "up" | "flat" {
+  return q.ec && (q.e ?? 0) > 0 ? "up" : "flat";
+}
+
+/** The Odds API's month (db/073 odds_api_usage). */
+export type Credits = { spent: number; allowance: number; remaining: number | null; calls: number };
+
+export function creditsLine(c: Credits): string {
+  return `Odds API credits: ${c.spent} / ${c.allowance} this month`
+    + (c.remaining !== null && c.remaining !== undefined ? ` · ${c.remaining} left on the account` : "");
+}
 /** sm: how many of this event's markets one Kalshi combo may use (absent =
  *  no stated per-event cap; never read as 0 or 1). c, y and sm come from the
  *  event's binary markets only (db/072): an all-scalar event has no combo chip. */

@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   asOfLabel, boardHref, cents, comboLabel, countsLine, feeCents, orderEvents, parseFilters, pickSport, startLabel,
-  type BoardEvent,
+  type BoardEvent, creditsLine, edgeCents, edgeTone, pct, tierLabel,
 } from "../src/lib/betting/board";
 
 // The Kalshi board's pure logic (Chat 8 Phase 1; db/071). No page, no server.
@@ -73,4 +73,35 @@ test("events: game lines first, then props, then other", () => {
   const out = orderEvents([ev("3", "Correct Score", "other"), ev("2", "Player Points", "prop"),
                            ev("1", "Spread", "game_line"), ev("0", "Game", "game_line")]);
   expect(out.map((e) => e.e)).toEqual(["0", "1", "2", "3"]);
+});
+
+test.describe("consensus (db/073)", () => {
+  test("the tier chip names its source", () => {
+    expect(tierLabel({ t: "b", n: 9 })).toBe("Books · 9");
+    expect(tierLabel({ t: "e", n: 1 })).toBe("ESPN · 1 book");
+    expect(tierLabel({ t: "k" })).toBe("Kalshi only");
+  });
+
+  test("p and edge read as people say them", () => {
+    expect(pct(0.515282)).toBe("51.5%");
+    expect(pct(undefined)).toBe("—");
+    expect(edgeCents(0.047957)).toBe("+4.8¢");
+    expect(edgeCents(-0.09253)).toBe("−9.3¢");
+    expect(edgeCents(0.00004)).toBe("0.0¢");
+    expect(edgeCents(null)).toBe("—");
+  });
+
+  test("only a claimed positive edge is up; a kalshi-tier positive stays neutral", () => {
+    expect(edgeTone({ e: 0.048, ec: true })).toBe("up");
+    expect(edgeTone({ e: 0.0025 })).toBe("flat");
+    expect(edgeTone({ e: -0.09, ec: true })).toBe("flat");
+    expect(edgeTone({ e: 0 })).toBe("flat");
+  });
+
+  test("the credits line: used of 500, and what the account has left", () => {
+    expect(creditsLine({ spent: 9, allowance: 500, remaining: 480, calls: 5 }))
+      .toBe("Odds API credits: 9 / 500 this month · 480 left on the account");
+    expect(creditsLine({ spent: 0, allowance: 500, remaining: null, calls: 0 }))
+      .toBe("Odds API credits: 0 / 500 this month");
+  });
 });
