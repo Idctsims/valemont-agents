@@ -31,9 +31,10 @@ def _refuse_database(*a: Any, **k: Any) -> Any:
 
 
 def row(job: str, *, failures: int = 0, stale: bool = False, state: str = "ok",
-        error: str | None = None, interval: int = 60) -> JobHealth:
+        error: str | None = None, interval: int = 60, stale_since_boot: bool | None = None) -> JobHealth:
     return JobHealth(job=job, expected_interval_s=interval, last_ok_at=None, last_error=error,
-                     consecutive_failures=failures, alert_state=state, stale=stale)
+                     consecutive_failures=failures, alert_state=state, stale=stale,
+                     stale_since_boot=stale_since_boot)
 
 
 @dataclass
@@ -58,7 +59,9 @@ class FakeLedger:
     def job_started(self, job): self._rec("job_started", job)
     def job_succeeded(self, job, note=None): self._rec("job_succeeded", job)
     def job_failed(self, job, error): self._rec("job_failed", job, error)
-    def job_health_rows(self): return list(self.health)
+    def job_health_rows(self, **kw):
+        self.health_kw = kw
+        return list(self.health)
     def set_job_alert_state(self, job, state): self._rec("set_job_alert_state", job, state)
     # db size
     def database_size(self, top: int = 10): return self.size
@@ -306,6 +309,74 @@ class IntervalChange(SystemTestCase):
         self.ledger.health = [row("arsenal_pool", interval=self.SIX_H, stale=True)]
         system_jobs.check_health({"arsenal_pool"})
         self.assertEqual([p.title for p in self.pushes], ["arsenal_pool needs attention"])
+
+
+class BootGrace(SystemTestCase):
+    """Owner, Nov 9: every job gets a grace after the worker's boot, counted
+    from max(last_ok_at, boot_at) for 2x its interval, before it can alert.
+    sports_live (60 s, first run 90 s after boot) pushed a false "needs
+    attention" + "Recovered" pair on each of Nov 9's three redeploys
+    (notifications 1080-1085)."""
+
+    from datetime import datetime as _dt, timezone as _tz
+    BOOT = _dt(2026, 11, 9, 20, 36, 40, tzinfo=_tz.utc)
+
+    def test_a_60s_job_right_after_boot_is_not_stale_past_the_grace_it_is(self) -> None:
+        first_pass = self.BOOT + timedelta(seconds=90)   # the monitor's first pass
+        # The old process's last good run, 3 min before boot (a drain plus a
+        # deploy): without the grace it is stale at the first pass (the bug).
+        old_ok = self.BOOT - timedelta(minutes=3)
+        self.assertTrue(ledger.job_stale(first_pass, 60, old_ok, old_ok, None))
+        self.assertFalse(ledger.job_stale(first_pass, 60, old_ok, old_ok, None, since=self.BOOT))
+        # Still never run 2 x 60 s after boot: stale, the grace is over.
+        late = self.BOOT + timedelta(seconds=121)
+        self.assertTrue(ledger.job_stale(late, 60, old_ok, old_ok, None, since=self.BOOT))
+        # A run after boot counts from that run, as before.
+        ran = self.BOOT + timedelta(seconds=90)
+        self.assertFalse(ledger.job_stale(ran + timedelta(seconds=100), 60, ran, ran, None, since=self.BOOT))
+
+    def test_no_alert_inside_the_grace_an_alert_after_it(self) -> None:
+        self.ledger.health = [row("sports_live", stale=True, stale_since_boot=False)]
+        system_jobs.check_health(["sports_live"])
+        self.assertEqual(self.pushes, [])
+        self.assertNotIn("set_job_alert_state", self.ledger.names())
+        self.ledger.health = [row("sports_live", stale=True, stale_since_boot=True)]
+        system_jobs.check_health(["sports_live"])
+        self.assertEqual([p.title for p in self.pushes], ["sports_live needs attention"])
+
+    def test_the_grace_never_closes_an_open_incident(self) -> None:
+        # Alerted before the restart and still stale: no false "Recovered".
+        self.ledger.health = [row("sports_live", stale=True, stale_since_boot=False, state="alerted")]
+        system_jobs.check_health(["sports_live"])
+        self.assertEqual(self.pushes, [])
+        # It recovers when the job really runs again.
+        self.ledger.health = [row("sports_live", stale=False, stale_since_boot=False, state="alerted")]
+        system_jobs.check_health(["sports_live"])
+        self.assertEqual([p.title for p in self.pushes], ["Recovered: sports_live"])
+
+    def test_failures_are_never_held_by_the_grace(self) -> None:
+        self.ledger.health = [row("sports_live", failures=2, stale_since_boot=False)]
+        system_jobs.check_health(["sports_live"])
+        self.assertEqual([p.title for p in self.pushes], ["sports_live needs attention"])
+
+    def test_the_monitor_passes_its_boot_and_the_rows_carry_both_readings(self) -> None:
+        with mock.patch.object(system_jobs, "BOOT_AT", self.BOOT):
+            system_jobs.check_health(["sports_live"])
+        self.assertEqual(self.ledger.health_kw, {"boot_at": self.BOOT})
+        db_now = self.BOOT + timedelta(seconds=90)
+        old_ok = self.BOOT - timedelta(minutes=3)
+        conn = mock.Mock()
+        conn.execute.return_value.fetchall.return_value = [
+            ("sports_live", 60, old_ok, None, 0, "ok", db_now, old_ok, None)]
+        [r] = REAL_JOB_HEALTH_ROWS(conn=conn, boot_at=self.BOOT)
+        self.assertEqual((r.stale, r.stale_since_boot), (True, False))
+        [r] = REAL_JOB_HEALTH_ROWS(conn=conn)
+        self.assertIsNone(r.stale_since_boot)
+
+    def test_build_system_jobs_stamps_the_boot(self) -> None:
+        with mock.patch.object(system_jobs, "BOOT_AT", None):
+            system_jobs.build_system_jobs({})
+            self.assertIsNotNone(system_jobs.BOOT_AT)
 
 
 class ExternalWatchdog(SystemTestCase):

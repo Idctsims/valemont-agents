@@ -176,7 +176,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Iterable, Mapping
 
 from dataclasses import replace
@@ -338,10 +338,20 @@ def _check_external(row: ledger.JobHealth) -> None:
             log.info("recovered: external %s", row.job)
 
 
+#: When this worker booted (set by build_system_jobs). The monitor gives every
+#: job a grace after it: no NEW stale alert until 2x the job's interval has
+#: passed since max(last_ok_at, BOOT_AT) (owner, Nov 9). A 60 s job that
+#: starts 90 s after boot (sports_live) was past 2x60 s from its last run in
+#: the old process at the monitor's first pass, and pushed a false "needs
+#: attention" + "Recovered" pair on every redeploy (notifications 1080-1085).
+BOOT_AT: datetime | None = None
+
+
 def check_health(scheduled: Iterable[str]) -> None:
     """One pass of the monitor over every job_health row this process answers for."""
     watched = set(scheduled)
-    for row in ledger.job_health_rows():
+    rows = ledger.job_health_rows(boot_at=BOOT_AT) if BOOT_AT is not None else ledger.job_health_rows()
+    for row in rows:
         if row.job in EXTERNAL_JOBS:
             _check_external(row)
             continue
@@ -367,11 +377,15 @@ def check_health(scheduled: Iterable[str]) -> None:
         # external watchdog covers that. Its own failures still count.
         stale = row.stale and row.job != MONITOR
         unhealthy = failing or stale
-        if unhealthy and row.alert_state == "ok" and ai.credit_note(row.last_error):
+        # The boot grace holds back a NEW stale alert only. An incident open
+        # from before the restart recovers on `stale` itself, so a reboot can
+        # never send a false "Recovered".
+        stale_new = stale and (row.stale_since_boot is None or row.stale_since_boot)
+        if (failing or stale_new) and row.alert_state == "ok" and ai.credit_note(row.last_error):
             # Failing for the Anthropic account's credit: core/ai.py sent the
             # one push for the outage; a "needs attention" per job would repeat it.
             continue
-        if unhealthy and row.alert_state == "ok":
+        if (failing or stale_new) and row.alert_state == "ok":
             why = (f"failed {row.consecutive_failures} times in a row"
                    if failing else "has not succeeded on schedule")
             body = f"{row.job} {why}."
@@ -736,6 +750,8 @@ def brief_trigger() -> OrTrigger:
 
 
 def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
+    global BOOT_AT
+    BOOT_AT = datetime.now(timezone.utc)
     jobs = [
         SystemJob("heartbeat", 60, IntervalTrigger(seconds=60), heartbeat),
         SystemJob("db_size", 24 * 60 * 60,
