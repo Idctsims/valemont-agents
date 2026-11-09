@@ -118,6 +118,11 @@ class BoardState:
     #: The Chicago day `series` was first read on: the first pull of a new
     #: day reads every series again (the current fee type, daily).
     series_day: str | None = None
+    #: Kalshi's mutually_exclusive per event (db/073), read with the series
+    #: once per Chicago day: the series already read on `flags_day`.
+    flags: dict[str, bool] = field(default_factory=dict)
+    flags_series: set[str] = field(default_factory=set)
+    flags_day: str | None = None
     #: The refresh's pace (s between calls) where its last run ended.
     refresh_pace: float = kb.PACE_START
 
@@ -135,6 +140,9 @@ class BoardRun:
     events: int = 0
     series: int = 0
     series_fetched: int = 0
+    #: mutually_exclusive read (db/073): series asked today, window events with a flag.
+    flag_series: int = 0
+    flag_events: int = 0
     by_sport: dict[str, Counter] = field(default_factory=dict)
     combo_events: int = 0
     combo_markets: int = 0
@@ -221,6 +229,7 @@ class BoardRun:
                      + (" (" + ", ".join(f"{s} {n} events" for s, n in sorted(self.excluded.items())) + ")"
                         if self.excluded else "")
                      + f", {overflowed}")
+            head += f"; flags {self.flag_events} events ({self.flag_series} series read)"
         else:
             head = (f"refresh: {self.events} of {self.scope} events within "
                     f"{kb.REFRESH_WITHIN.total_seconds() / 3600:.0f} h, {self.markets} markets")
@@ -325,9 +334,10 @@ def series_row(s: kb.Series, league: str | None, combo: Iterable[str]) -> dict[s
 
 
 def event_row(ticker: str, game: kb.Game, times: tuple[datetime | None, datetime | None],
-              combo: kb.Combo | None) -> dict[str, Any]:
+              combo: kb.Combo | None, exclusive: bool | None = None) -> dict[str, Any]:
     close, expiry = times
-    return {"event_ticker": ticker, "series_ticker": kb.series_of(ticker), "game_ticker": game.game_ticker,
+    return {"mutually_exclusive": exclusive,
+            "event_ticker": ticker, "series_ticker": kb.series_of(ticker), "game_ticker": game.game_ticker,
             "game_title": game.title, "milestone_start": game.starts_at.isoformat(),
             "close_time": None if close is None else close.isoformat(),
             "expected_expiration_time": None if expiry is None else expiry.isoformat(),
@@ -400,7 +410,9 @@ class _Flusher:
 
 def _pull(client: KalshiClient, run: BoardRun, writer: Writer, state: BoardState, at: datetime,
           tickers: list[str], window: Mapping[str, kb.Game], series: Mapping[str, kb.Series],
-          combos: Mapping[str, kb.Combo], new_markets: dict[int, int], new_events: dict[str, int]) -> None:
+          combos: Mapping[str, kb.Combo], new_markets: dict[int, int], new_events: dict[str, int],
+          flags: Mapping[str, bool] | None = None) -> None:
+    flags = flags or {}
     fl = _Flusher(run, writer, state, at, new_markets, new_events)
     for group, batch in kb.market_batches(client, tickers, dict(series)):
         if batch.overflow:
@@ -424,7 +436,8 @@ def _pull(client: KalshiClient, run: BoardRun, writer: Writer, state: BoardState
                 else:
                     run.not_open[status] = run.not_open.get(status, 0) + 1
                     run.not_open_series[s] = run.not_open_series.get(s, 0) + 1
-        ev_rows = [event_row(t, window[t], batch.times[t], combos.get(t)) for t in group if t in batch.times]
+        ev_rows = [event_row(t, window[t], batch.times[t], combos.get(t), flags.get(t))
+                   for t in group if t in batch.times]
         run.events += len(ev_rows)
         run.markets += len(batch.rows)
         run.no_checked += batch.checked
@@ -471,6 +484,12 @@ def _full(client: KalshiClient | None, now: Callable[[], datetime], state: Board
         known = state.series if state.series_day == day else {}
         series = kb.series_info(c, wanted, sport_hint, at, known)
         run.series_fetched = len(set(series) - set(known))
+        # mutually_exclusive (db/073): once per Chicago day, with the series.
+        same_day = state.flags_day == day
+        flag_series = wanted - (state.flags_series if same_day else set())
+        flags = dict(state.flags) if same_day else {}
+        flags.update(kb.event_flags(c, flag_series))
+        run.flag_series, run.flag_events = len(flag_series), sum(1 for t in window if t in flags)
         combos = kb.collections(c, keep=set(window)).by_event
         labels: dict[str, set[str | None]] = {}
         for t, g in window.items():
@@ -492,7 +511,8 @@ def _full(client: KalshiClient | None, now: Callable[[], datetime], state: Board
             run.window_by_series[s] = run.window_by_series.get(s, 0) + 1
         new_markets: dict[int, int] = {}
         new_events: dict[str, int] = {}
-        _pull(c, run, w, state, at, kb.order_events(window), window, series, combos, new_markets, new_events)
+        _pull(c, run, w, state, at, kb.order_events(window), window, series, combos, new_markets, new_events,
+              flags)
         if window and not run.markets:
             raise BoardFailed(f"kalshi board: no open market returned for {len(window)} window events "
                               "(has the /markets filter changed?)")
@@ -509,6 +529,9 @@ def _full(client: KalshiClient | None, now: Callable[[], datetime], state: Board
             state.series = dict(series)
             if state.series_day != day:
                 state.series_day = day
+            state.flags = {t: f for t, f in flags.items() if t in window}
+            state.flags_series = (state.flags_series if same_day else set()) | flag_series
+            state.flags_day = day
     except kb.KalshiError as exc:
         raise BoardFailed(f"kalshi board: {exc}") from exc
     finally:

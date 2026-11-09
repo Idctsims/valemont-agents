@@ -5936,3 +5936,145 @@ def kalshi_board_prune(*, is_test: bool = False, conn: psycopg.Connection | None
     with _brief_conn(conn) as c, c.transaction():
         out = c.execute(KALSHI_BOARD_PRUNE_SQL, {"is_test": is_test}).fetchone()[0]
     return {str(k): int(v) for k, v in (out or {}).items()}
+
+# ---------------------------------------------------------------- consensus
+# The consensus engine (db/073; consensus/, docs/consensus.md). The pricing
+# itself is SQL's (leg_consensus_for); the worker reads the games and markets
+# it can match, and writes the outside-line rows, the book lines and the
+# Odds API call log.
+
+ODDS_API_CALL_INSERT_SQL: Final = """
+    INSERT INTO odds_api_calls (endpoint, sport, event_id, markets, regions, status, cost, used, remaining, bytes,
+                                is_test)
+    VALUES (%(endpoint)s, %(sport)s, %(event_id)s, %(markets)s, %(regions)s, %(status)s, %(cost)s, %(used)s,
+            %(remaining)s, %(bytes)s, %(is_test)s)
+"""
+ODDS_API_USAGE_SQL: Final = "SELECT odds_api_usage()"
+
+#: Board games linked to sports_events, starting in (now, until), of the
+#: leagues the consensus prices. One row per sports event (its games' tickers
+#: aggregated: a game's events share one).
+CONSENSUS_GAMES_SQL: Final = """
+    SELECT s.id, s.league, s.espn_id, s.starts_at, s.home, s.away,
+           s.participants -> 'home' ->> 'abbr', s.participants -> 'away' ->> 'abbr',
+           array_agg(DISTINCT e.game_ticker)
+      FROM kalshi_board_events e
+      JOIN sports_events s ON s.id = e.sports_event_id
+     WHERE NOT e.is_test AND NOT s.is_test AND s.kind = 'game'
+       AND s.starts_at > now() AND s.starts_at < %(until)s
+       AND s.league = ANY(%(leagues)s)
+     GROUP BY s.id
+"""
+#: The binary markets of the named series for those games.
+CONSENSUS_MARKETS_SQL: Final = """
+    SELECT b.market_ticker, b.event_ticker, e.series_ticker, e.sports_event_id, b.subject, b.line
+      FROM kalshi_board b
+      JOIN kalshi_board_events e ON e.event_ticker = b.event_ticker
+     WHERE NOT b.is_test AND b.payout = 'binary'
+       AND e.sports_event_id = ANY(%(games)s) AND e.series_ticker = ANY(%(series)s)
+"""
+LEG_CONSENSUS_UPSERT_SQL: Final = "SELECT leg_consensus_upsert(%(rows)s, %(at)s, %(is_test)s)"
+LEG_CONSENSUS_SWEEP_SQL: Final = "SELECT leg_consensus_sweep(%(games)s, %(keep)s, %(is_test)s)"
+#: The stored rows of the named games (ticker -> tier).
+LEG_CONSENSUS_STORED_SQL: Final = """
+    SELECT c.market_ticker, c.tier
+      FROM leg_consensus c
+      JOIN kalshi_board b ON b.market_ticker = c.market_ticker
+      JOIN kalshi_board_events e ON e.event_ticker = b.event_ticker
+     WHERE NOT b.is_test AND e.game_ticker = ANY(%(games)s)
+"""
+BOOK_LINES_APPEND_SQL: Final = "SELECT book_lines_append(%(rows)s, %(is_test)s)"
+BOOK_LINES_PRUNE_SQL: Final = "SELECT book_lines_prune(%(is_test)s)"
+#: The whole board's tiers by sport, for the run note: legs, claimed edges,
+#: and kalshi-tier legs whose normalized mid shows a positive edge (an
+#: artifact, never claimed; owner, Nov 9).
+CONSENSUS_TIER_COUNTS_SQL: Final = """
+    SELECT x.sport, x.tier, count(*),
+           count(*) FILTER (WHERE x.edge_claimed),
+           count(*) FILTER (WHERE x.tier = 'kalshi' AND greatest(coalesce(x.edge_yes, -1), coalesce(x.edge_no, -1)) > 0)
+      FROM leg_consensus_for(NULL) x
+     WHERE NOT x.is_test AND x.starts_at > now()
+     GROUP BY 1, 2
+"""
+
+
+def odds_api_call_record(row: Mapping[str, Any], *, is_test: bool = False,
+                         conn: psycopg.Connection | None = None) -> None:
+    with _brief_conn(conn) as c, c.transaction():
+        c.execute(ODDS_API_CALL_INSERT_SQL, dict(row) | {"is_test": is_test})
+
+
+def odds_api_usage(*, conn: psycopg.Connection | None = None) -> dict[str, Any]:
+    with _brief_conn(conn) as c:
+        return dict(c.execute(ODDS_API_USAGE_SQL).fetchone()[0] or {})
+
+
+def consensus_games(until: datetime, leagues: Sequence[str], *,
+                    conn: psycopg.Connection | None = None) -> list[tuple[Any, ...]]:
+    with _brief_conn(conn) as c:
+        return list(c.execute(CONSENSUS_GAMES_SQL, {"until": until, "leagues": list(leagues)}).fetchall())
+
+
+def consensus_markets(games: Sequence[int], series: Sequence[str], *,
+                      conn: psycopg.Connection | None = None) -> list[tuple[Any, ...]]:
+    if not games or not series:
+        return []
+    with _brief_conn(conn) as c:
+        return list(c.execute(CONSENSUS_MARKETS_SQL, {"games": list(games), "series": list(series)}).fetchall())
+
+
+def leg_consensus_upsert(rows: Sequence[Mapping[str, Any]], at: datetime, *, is_test: bool = False,
+                         conn: psycopg.Connection | None = None) -> int:
+    if not rows:
+        return 0
+    return _board_count(LEG_CONSENSUS_UPSERT_SQL, {"rows": Jsonb(list(rows)), "at": at, "is_test": is_test}, conn)
+
+
+def leg_consensus_sweep(games: Sequence[str], keep: Sequence[str], *, is_test: bool = False,
+                        conn: psycopg.Connection | None = None) -> int:
+    if not games:
+        return 0
+    return _board_count(LEG_CONSENSUS_SWEEP_SQL, {"games": list(games), "keep": list(keep), "is_test": is_test},
+                        conn)
+
+
+def leg_consensus_stored(games: Sequence[str], *, conn: psycopg.Connection | None = None) -> dict[str, str]:
+    if not games:
+        return {}
+    with _brief_conn(conn) as c:
+        return {t: tier for t, tier in c.execute(LEG_CONSENSUS_STORED_SQL, {"games": list(games)}).fetchall()}
+
+
+def book_lines_append(rows: Sequence[Mapping[str, Any]], *, is_test: bool = False,
+                      conn: psycopg.Connection | None = None) -> int:
+    if not rows:
+        return 0
+    return _board_count(BOOK_LINES_APPEND_SQL, {"rows": Jsonb(list(rows)), "is_test": is_test}, conn)
+
+
+def book_lines_prune(*, is_test: bool = False, conn: psycopg.Connection | None = None) -> int:
+    return _board_count(BOOK_LINES_PRUNE_SQL, {"is_test": is_test}, conn)
+
+
+def consensus_tier_counts(*, conn: psycopg.Connection | None = None) -> list[tuple[str, str, int, int, int]]:
+    with _brief_conn(conn) as c:
+        return [(s, t, int(n), int(cl), int(pos)) for s, t, n, cl, pos in
+                c.execute(CONSENSUS_TIER_COUNTS_SQL).fetchall()]
+
+
+#: Every team name the leagues' sports_events rows carry (the Odds API name
+#: check: an unknown name is an ODDS_NAMES gap).
+CONSENSUS_TEAM_NAMES_SQL: Final = """
+    SELECT league, array_agg(DISTINCT n)
+      FROM (SELECT league, home AS n FROM sports_events WHERE league = ANY(%(leagues)s) AND home IS NOT NULL
+            UNION
+            SELECT league, away FROM sports_events WHERE league = ANY(%(leagues)s) AND away IS NOT NULL) x
+     GROUP BY league
+"""
+
+
+def consensus_team_names(leagues: Sequence[str], *, conn: psycopg.Connection | None = None) -> dict[str, frozenset[str]]:
+    from sports.kalshi_map import fold
+    with _brief_conn(conn) as c:
+        return {lg: frozenset(fold(n) for n in names)
+                for lg, names in c.execute(CONSENSUS_TEAM_NAMES_SQL, {"leagues": list(leagues)}).fetchall()}

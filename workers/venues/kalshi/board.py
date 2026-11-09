@@ -397,6 +397,31 @@ def series_info(client: KalshiClient, wanted: set[str], fallback_sport: dict[str
     return out
 
 
+def event_flags(client: KalshiClient, series: Iterable[str]) -> dict[str, bool]:
+    """Kalshi's `mutually_exclusive` for every open event of each series
+    (db/073; owner, Nov 9): ``GET /events?series_ticker=&status=open``, every
+    page. The flag lives only on the event object (``/markets`` does not
+    carry it). Read once per Chicago day with the series (sports/
+    kalshi_board.py); an event missing from the answer stays unknown (NULL)."""
+    out: dict[str, bool] = {}
+    for s in sorted(set(series)):
+        cursor: str | None = None
+        for _ in range(MAX_PAGES):
+            body = client.get("/events", series_ticker=s, status="open", limit=PAGE, cursor=cursor)
+            for ev in req(body, "events", list, s, "$"):
+                t = req(ev, "event_ticker", str, s, "$.events[]")
+                flag = opt(ev, "mutually_exclusive", bool, t, "$")
+                if flag is not None:
+                    out[t] = flag
+            cursor = opt(body, "cursor", str, s, "$") or None
+            del body
+            if not cursor:
+                break
+        else:
+            raise KalshiShapeError(s, "$.cursor", f"/events still paging after {MAX_PAGES} pages")
+    return out
+
+
 def parse_collections(body: Any, keep: set[str] | None = None) -> tuple[Collections, str | None]:
     """One /multivariate_event_collections page. `keep` limits by_event to
     the window's events (the rest are dropped as read)."""

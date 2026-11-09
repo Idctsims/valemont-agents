@@ -168,6 +168,11 @@
                              call, soonest first, <= 300 calls and 300 s;
                              08:00-23:00 Chicago (idle otherwise, so never
                              stale).
+    consensus        18 h    10:15 and 16:15 Chicago, never at boot: the
+                             Odds API (credit-guarded) and ESPN lines matched
+                             exactly to the board's binary markets; books /
+                             espn rows, book_lines, the collapse
+                             (consensus/job.py, docs/consensus.md).
 
 Alerts go through core/push.py with deep link /settings/health.
 """
@@ -204,6 +209,7 @@ from screening import jobs as screening_jobs
 from screening import rec_jobs as screening_recs
 from sports import jobs as sports_jobs
 from sports import kalshi_board
+from consensus import job as consensus_job
 from sports import kalshi_map
 
 log = logging.getLogger("valemont.system")
@@ -836,6 +842,11 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
         SystemJob(kalshi_board.REFRESH_JOB, kalshi_board.REFRESH_INTERVAL_S,
                   IntervalTrigger(seconds=kalshi_board.REFRESH_INTERVAL_S),
                   kalshi_board.refresh_job, misfire_grace=600, start_delay_s=600),
+        # The consensus engine (db/073; consensus/job.py): 10:15 and 16:15
+        # Chicago. Never at boot: a redeploy must not spend Odds API credits.
+        SystemJob(consensus_job.JOB, consensus_job.INTERVAL_S,
+                  CronTrigger(hour="10,16", minute=15, timezone=OWNER_TZ),
+                  consensus_job.consensus_job, misfire_grace=1800, run_at_boot=False),
     ]
     if env.get("HEALTH_DRILL", "").strip().lower() == "true":
         log.warning("HEALTH_DRILL=true: scheduling health_drill, which always fails")

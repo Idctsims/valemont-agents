@@ -517,7 +517,7 @@ class Registry(unittest.TestCase):
                           "arsenal_pool", "arsenal_pool_collect", "arsenal_drop", "arsenal_verify",
                           "arsenal_outcome", "arsenal_arm_verify", "arsenal_arm_sweep",
                            "arsenal_title_hook", "arsenal_title_hook_sweep", "sports_schedule", "sports_live",
-                           "kalshi_map", "kalshi_board", "kalshi_board_refresh"})
+                           "kalshi_map", "kalshi_board", "kalshi_board_refresh", "consensus"})
         # db/054 (Chat 5): the pool Sundays 03:30, the drop daily 05:30 (both
         # Chicago, both at boot), collect every 10 min; verify runs per queued
         # item, never on its own.
@@ -573,6 +573,12 @@ class Registry(unittest.TestCase):
         self.assertEqual((built["feed_profile"].trigger.fields[5].expressions[0].first,
                           str(built["feed_profile"].trigger.timezone)), (4, "America/Chicago"))
         self.assertFalse(built["feed_prune"].run_at_boot)
+        # db/073: a redeploy must never spend Odds API credits.
+        self.assertFalse(built["consensus"].run_at_boot)
+        trig = str(built["consensus"].trigger)
+        self.assertIn("hour='10,16'", trig)
+        self.assertIn("minute='15'", trig)
+        self.assertEqual(str(built["consensus"].trigger.timezone), "America/Chicago")
         self.assertEqual(str(built["feed_prune"].trigger.timezone), "America/Chicago")
         self.assertEqual(built["heartbeat"].expected_interval_s, 60)
         self.assertEqual(built["job_queue"].expected_interval_s, 10)
@@ -613,12 +619,12 @@ class SystemOnlyBoot(SystemTestCase):
                                "system:arsenal_arm_sweep", "system:arsenal_title_hook_sweep",
                                "system:sports_schedule", "system:sports_live",
                                "system:kalshi_map", "system:kalshi_board",
-                               "system:kalshi_board_refresh"})
+                               "system:kalshi_board_refresh", "system:consensus"})
         # screening_match, feed_tech_summarize, feed_summarize, feed_score, feed_why and feed_repo_why
         # are registered (job_health rows, watched) but never scheduled: feed_ingest runs them.
         # arsenal_verify, arsenal_outcome and arsenal_arm_verify the same way: the job_queue handler runs them.
-        # 34 with db/065's sports_schedule and sports_live (Chat 7 Phase 1); 35 with db/066's kalshi_map; 37 with db/071's kalshi_board and kalshi_board_refresh.
-        self.assertEqual(self.ledger.names().count("job_register"), 37)
+        # 34 with db/065's sports_schedule and sports_live (Chat 7 Phase 1); 35 with db/066's kalshi_map; 37 with db/071's kalshi_board and kalshi_board_refresh; 38 with db/073's consensus.
+        self.assertEqual(self.ledger.names().count("job_register"), 38)
         for chained in ("screening_match", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
                         "feed_repo_why", "arsenal_verify", "arsenal_outcome", "arsenal_arm_verify",
                         "arsenal_title_hook"):
@@ -675,7 +681,7 @@ class SystemOnlyBoot(SystemTestCase):
                           "arsenal_pool", "arsenal_pool_collect", "arsenal_drop", "arsenal_verify",
                           "arsenal_outcome", "arsenal_arm_verify", "arsenal_arm_sweep",
                            "arsenal_title_hook", "arsenal_title_hook_sweep", "sports_schedule", "sports_live",
-                           "kalshi_map", "kalshi_board", "kalshi_board_refresh"})
+                           "kalshi_map", "kalshi_board", "kalshi_board_refresh", "consensus"})
 
 
 if __name__ == "__main__":
