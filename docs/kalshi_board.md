@@ -69,10 +69,13 @@ with the series named (`no_markets=3 (KXCOPADELREYADVANCE 3)`) and never fails
 the run on its own. The rule exists to catch a broken fetch path (Nov 6's
 comma batch, 200 and empty), which empties MANY events at once. So the run
 fails (after the rest is written) only when **(a)** zero-market events exceed
-**2%** of the window's events (`NO_MARKETS_MAX_SHARE`), or **(b)** a series in
-the owner's five leagues (cfb, nfl, nba, f1, pga, by `league_of`: the
-milestone label, else the ticker prefix) has **every** one of its window
-events at zero markets.
+**2%** of the window's events (`NO_MARKETS_MAX_SHARE`), or **(b)** a **game
+series** of the owner's five leagues has **every** one of its window events at
+zero markets. A game series is the `sports_leagues` registry's
+`kalshi_series` for cfb, nfl, nba, f1 and pga (`KXNCAAFGAME`, `KXNFLGAME`,
+`KXNBAGAME`, `KXF1RACE`, `KXPGATOUR`), read through `ledger.sports_leagues()`
+only when a real run has zero-market events. Props and other series of those
+leagues fall under the 2% share only (owner, Nov 9, PR #103).
 
 Why: the 15:30 UTC Nov 9 pull failed on four Copa del Rey series (3 events
 each) whose BTTS, SPREAD and TOTAL markets opened at 19:06 and 20:06 UTC;
