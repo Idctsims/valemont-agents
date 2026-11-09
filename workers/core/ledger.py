@@ -1241,19 +1241,27 @@ class JobHealth:
     #: job_stale() on the database clock: the reference (see there) is older
     #: than twice the expected interval.
     stale: bool
+    #: The same, counted from no earlier than the worker's boot (owner, Nov 9:
+    #: the boot grace). It decides whether a NEW stale alert may go out;
+    #: `stale` still decides recovery. None = no boot given: `stale` decides.
+    stale_since_boot: bool | None = None
 
 
 def job_stale(now: datetime, expected_interval_s: int, last_ok_at: datetime | None, updated_at: datetime | None,
-              interval_changed_at: datetime | None) -> bool:
+              interval_changed_at: datetime | None, *, since: datetime | None = None) -> bool:
     """Stale: the reference moment is older than twice the expected interval.
     The reference is the last good run (or, if never ok, the last update),
     or the moment the interval last CHANGED when that is later (db/060;
     owner, 2026-11-02): a job moved from weekly to 6-hourly is not stale
     until 12 h after the change, not 12 h after its last weekly run (the false
-    "arsenal_pool needs attention" of 2026-11-02 21:18 UTC). Pure."""
+    "arsenal_pool needs attention" of 2026-11-02 21:18 UTC). `since` (the
+    worker's boot) is one more later reference: max(last_ok_at, boot_at)
+    (owner, Nov 9; the false "sports_live needs attention" on every
+    redeploy). Pure."""
     ref = last_ok_at or updated_at
-    if interval_changed_at is not None and (ref is None or interval_changed_at > ref):
-        ref = interval_changed_at
+    for later in (interval_changed_at, since):
+        if later is not None and (ref is None or later > ref):
+            ref = later
     return ref is not None and now - ref > timedelta(seconds=2 * expected_interval_s)
 
 
@@ -1342,12 +1350,16 @@ def job_failed(job: str, error: str) -> None:
         )
 
 
-def job_health_rows(*, conn: psycopg.Connection | None = None) -> list[JobHealth]:
+def job_health_rows(*, conn: psycopg.Connection | None = None, boot_at: datetime | None = None) -> list[JobHealth]:
     """Every live job; `stale` by job_stale() on the DATABASE clock (now() is
-    read in the same query, so worker clock skew never moves it)."""
+    read in the same query, so worker clock skew never moves it). With
+    `boot_at` (the worker's, ~30 ms off the database's), also
+    `stale_since_boot`."""
     with _brief_conn(conn) as c:
         rows = c.execute(JOB_HEALTH_ROWS_SQL).fetchall()
-    return [JobHealth(r[0], r[1], r[2], r[3], r[4], r[5], job_stale(r[6], r[1], r[2], r[7], r[8])) for r in rows]
+    return [JobHealth(r[0], r[1], r[2], r[3], r[4], r[5], job_stale(r[6], r[1], r[2], r[7], r[8]),
+                      None if boot_at is None else job_stale(r[6], r[1], r[2], r[7], r[8], since=boot_at))
+            for r in rows]
 
 
 def set_job_alert_state(job: str, state: AlertState) -> None:

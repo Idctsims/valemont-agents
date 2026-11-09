@@ -272,7 +272,7 @@ class JobsSide(unittest.TestCase):
         fakes = {
             "job_started": rec("job_started"), "job_succeeded": rec("job_succeeded"),
             "job_failed": rec("job_failed"), "set_job_alert_state": rec("set_job_alert_state"),
-            "job_health_rows": lambda: list(self.health),
+            "job_health_rows": lambda **kw: list(self.health),
             "queue_fail_exhausted": lambda: 0,
             "queue_claim": lambda: self.queue.pop(0) if self.queue else None,
             "queue_done": rec("queue_done"), "queue_retry": rec("queue_retry"),
