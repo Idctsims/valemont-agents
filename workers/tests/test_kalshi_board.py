@@ -16,7 +16,7 @@ import urllib.parse
 from datetime import datetime, timedelta, timezone
 from unittest import mock
 from decimal import Decimal
-from typing import Any
+from typing import Any, Callable
 
 from sports import kalshi_board as job
 from venues.kalshi import board as kb
@@ -482,8 +482,8 @@ class FullJob(unittest.TestCase):
         self.assertIn("KXNBAGAME-26NOV06BOSCHA-BOS", w.sent("markets"))  # the rest was written
         self.assertEqual([k for k, _ in w.calls][-3:], ["touch", "link", "prune"])
         dry = job.full_job(client=client(patched), now=lambda: NOW, state=job.BoardState(), dry_run=True)  # type: ignore[arg-type]
-        self.assertEqual(set(dry.empty_series), {"KXNBAREB"})
-        self.assertIn("EMPTY series KXNBAREB", dry.job_note)
+        self.assertEqual(dry.no_markets, {"KXNBAREB": 2})
+        self.assertIn("no_markets=2 (KXNBAREB 2)", dry.job_note)
 
     def test_an_excluded_series_is_never_read_and_is_counted(self) -> None:
         self.assertIn("KXNFLPASSYDSPRECISE", job.EXCLUDED_SERIES)  # by name, owner Nov 7
@@ -534,49 +534,114 @@ class FullJob(unittest.TestCase):
         run.overflowed["KXNFLX"] = 14
         self.assertIn("overflowed=1 (KXNFLX 14 events)", run.job_note)
 
-    def test_a_series_not_yet_open_is_counted_not_failed(self) -> None:
-        # Nov 7, 21:30 UTC: milestones listed KXATPMATCH before its markets
-        # opened (open_time 21:35). Kalshi lists them as unopened: no failure.
+    def not_open_fake(self, statuses: Callable[[str], list[str]],
+                      series: str = "KXNBAREB") -> tuple[FakeKalshi, Callable, list[str]]:
+        """`series` lists no open market; asked with NO status filter, each
+        event answers markets in `statuses(event)` (owner, Nov 9)."""
         fake = FakeKalshi()
-        asked_unopened: list[str] = []
+        asked: list[str] = []
 
-        def waiting(url: str):
+        def answer(url: str):
             q = dict(urllib.parse.parse_qsl(url.partition("?")[2]))
             if url.split("?")[0].endswith("/markets") and kb.series_of(
-                    q.get("event_ticker") or q.get("series_ticker", "")) == "KXNBAREB":
+                    q.get("event_ticker") or q.get("series_ticker", "")) == series:
                 fake.urls.append(url)
-                if q.get("status") == "unopened":
-                    asked_unopened.append(q["event_ticker"])
-                    return 200, {"markets": [{"ticker": q["event_ticker"] + "-X", "status": "initialized"}],
-                                 "cursor": ""}
+                if "status" not in q:
+                    asked.append(q["event_ticker"])
+                    return 200, {"markets": [{"ticker": f"{q['event_ticker']}-{i}", "status": s}
+                                             for i, s in enumerate(statuses(q["event_ticker"]))], "cursor": ""}
                 return 200, {"markets": [], "cursor": ""}
             return fake(url)
 
+        return fake, answer, asked
+
+    def test_a_closed_only_event_counts_as_not_open_never_a_failure(self) -> None:
+        # Owner, Nov 9: markets in any non-open status count as not_open by
+        # status, with the series named in the note; never a failure.
+        _, answer, asked = self.not_open_fake(lambda e: ["closed", "closed"])
         w, st = RecordingWriter(), job.BoardState()
-        run = job.full_job(client=client(waiting), now=lambda: NOW, state=st, writer=w)  # type: ignore[arg-type]
-        self.assertEqual(run.empty_series, {})
-        self.assertEqual(run.not_yet_open, len(asked_unopened))
-        self.assertGreater(run.not_yet_open, 0)
-        self.assertTrue(all(kb.series_of(t) == "KXNBAREB" for t in asked_unopened))
-        self.assertIn(f"empty_series=0, not_yet_open={run.not_yet_open}", run.job_note)
-        self.assertFalse(any(kb.series_of(t) == "KXNBAREB" for t in st.window))  # nothing to refresh yet
+        run = job.full_job(client=client(answer), now=lambda: NOW, state=st, writer=w)  # type: ignore[arg-type]
+        self.assertGreater(len(asked), 0)
+        self.assertTrue(all(kb.series_of(t) == "KXNBAREB" for t in asked))
+        self.assertEqual(run.no_markets, {})
+        self.assertEqual(run.not_open, {"closed": len(asked)})
+        self.assertEqual(run.not_open_series, {"KXNBAREB": len(asked)})
+        self.assertIn(f"no_markets=0, not_open={len(asked)} (closed {len(asked)}; KXNBAREB)", run.job_note)
+        self.assertLess(run.job_note.index("not_open="), 200)  # inside job_health's 500 characters
+        self.assertFalse(any(kb.series_of(t) == "KXNBAREB" for t in st.window))  # nothing to refresh
         self.assertIn("KXNBAGAME-26NOV06BOSCHA-BOS", w.sent("markets"))
 
-    def test_an_empty_series_with_nothing_unopened_still_fails(self) -> None:
-        # The existing rule stands when Kalshi lists no unopened market either.
-        fake = FakeKalshi()
+    def test_not_open_counts_each_status_seen(self) -> None:
+        # Nov 7's case (markets listed before open_time) and a mixed event.
+        _, answer, asked = self.not_open_fake(
+            lambda e: ["initialized"] if e.endswith(("A", "E", "I", "O", "U")) else ["settled", "closed"])
+        run = job.full_job(client=client(answer), now=lambda: NOW, state=job.BoardState(),  # type: ignore[arg-type]
+                           writer=RecordingWriter())
+        self.assertEqual(sum(run.not_open.values()), len(asked))
+        self.assertTrue(set(run.not_open) <= {"initialized", "closed+settled"})
+        self.assertEqual(run.no_markets, {})
 
-        def gone(url: str):
-            q = dict(urllib.parse.parse_qsl(url.partition("?")[2]))
-            if url.split("?")[0].endswith("/markets") and kb.series_of(
-                    q.get("event_ticker") or q.get("series_ticker", "")) == "KXNBAREB":
-                fake.urls.append(url)
-                return 200, {"markets": [], "cursor": ""}
-            return fake(url)
+    # ---- zero-market events: the broken-fetch rule (owner, Nov 9)
 
-        with self.assertRaisesRegex(job.BoardFailed, r"KXNBAREB \(\d+ events\)"):
-            job.full_job(client=client(gone), now=lambda: NOW, state=job.BoardState(), writer=RecordingWriter())  # type: ignore[arg-type]
-        self.assertTrue(any("status=unopened" in u for u in fake.urls))  # it did ask
+    @staticmethod
+    def window_run(no_markets: dict[str, int], window: dict[str, int]) -> job.BoardRun:
+        run = job.BoardRun(kind="full")
+        run.no_markets, run.window_by_series = dict(no_markets), dict(window)
+        return run
+
+    def test_three_zero_market_copa_events_in_a_normal_window_are_ok(self) -> None:
+        # Nov 9: KXCOPADELREYADVANCE listed 3 events with no market of any
+        # status, in a window of hundreds of events (13,233 markets, 1,571 events).
+        run = self.window_run({"KXCOPADELREYADVANCE": 3},
+                              {"KXCOPADELREYADVANCE": 3, "KXNBAGAME": 120, "KXNBAREB": 120, "KXNHLGAME": 160,
+                               "KXNFLGAME": 197})
+        self.assertEqual(job.broken_fetch(run, {}), [])
+        self.assertIn("no_markets=3 (KXCOPADELREYADVANCE 3)", run.job_note)
+        self.assertLess(run.job_note.index("no_markets="), 200)  # inside job_health's 500 characters
+
+    def test_zero_market_events_past_2_percent_fail(self) -> None:
+        window = {"KXCOPADELREYADVANCE": 13, "KXNHLGAME": 587}  # 600 events; nhl is not an owner league
+        self.assertEqual(job.broken_fetch(self.window_run({"KXCOPADELREYADVANCE": 12}, window), {}), [])  # 2.0%
+        why = job.broken_fetch(self.window_run({"KXCOPADELREYADVANCE": 13}, window), {})  # 2.17%
+        self.assertEqual(len(why), 1)
+        self.assertIn("13 of 600 window events have no market of any status (> 2%)", why[0])
+
+    def test_an_owner_league_series_all_zero_fails_one_event_short_does_not(self) -> None:
+        window = {"KXNBAGAME": 10, "KXNHLGAME": 990}
+        why = job.broken_fetch(self.window_run({"KXNBAGAME": 10}, window), {})
+        self.assertEqual(len(why), 1)
+        self.assertIn("owner-league series has no market of any status: KXNBAGAME (10 events)", why[0])
+        self.assertEqual(job.broken_fetch(self.window_run({"KXNBAGAME": 9}, window), {}), [])
+        # A non-owner league all zero, under 2%: counted, never a failure.
+        self.assertEqual(job.broken_fetch(self.window_run({"KXNHLGOAL": 5}, {"KXNHLGOAL": 5, "KXNBAGAME": 995}), {}),
+                         [])
+        # The league comes from the milestone label when the prefix says nothing.
+        self.assertTrue(job.broken_fetch(self.window_run({"KXODD": 2}, {"KXODD": 2, "KXNHLGAME": 998}),
+                                         {"KXODD": {"NFL"}}))
+
+    def test_an_nba_game_series_all_zero_fails_the_pull_after_the_rest_is_written(self) -> None:
+        fake, answer, asked = self.not_open_fake(lambda e: [], series="KXNBAGAME")
+        w = RecordingWriter()
+        with mock.patch.object(job, "NO_MARKETS_MAX_SHARE", 0.99), \
+                self.assertRaisesRegex(job.BoardFailed, r"owner-league series .*KXNBAGAME \(2 events\)"):
+            job.full_job(client=client(answer), now=lambda: NOW, state=job.BoardState(), writer=w)  # type: ignore[arg-type]
+        self.assertEqual(len(asked), 2)  # asked with no status filter
+        self.assertFalse(any("status=unopened" in u for u in fake.urls))
+        self.assertIn("KXNCAAFSPREAD", " ".join(w.sent("markets")))  # the rest was written
+
+    def test_a_zero_market_event_under_the_share_passes_the_pull(self) -> None:
+        # The fixture window is 13 events, so the share is patched; nhl is
+        # not an owner league.
+        _, answer, asked = self.not_open_fake(lambda e: [], series="KXNHLGOAL")
+        with mock.patch.object(job, "NO_MARKETS_MAX_SHARE", 0.10):
+            run = job.full_job(client=client(answer), now=lambda: NOW, state=job.BoardState(),  # type: ignore[arg-type]
+                               writer=RecordingWriter())
+        self.assertEqual(run.no_markets, {"KXNHLGOAL": 1})
+        self.assertIn("no_markets=1 (KXNHLGOAL 1), not_open=0", run.job_note)
+        # At the real 2%, 1 of 13 is past the share and fails.
+        with self.assertRaisesRegex(job.BoardFailed, r"1 of 13 window events"):
+            job.full_job(client=client(answer), now=lambda: NOW, state=job.BoardState(),  # type: ignore[arg-type]
+                         writer=RecordingWriter())
 
     def test_a_changed_shape_fails_the_run(self) -> None:
         bad = load("collections")
@@ -943,17 +1008,20 @@ class TitleFixes(unittest.TestCase):
 
 
 class Notes(unittest.TestCase):
-    def test_the_full_note_reads_empty_series_and_the_top_10_misses(self) -> None:
+    def test_the_full_note_reads_no_markets_not_open_and_the_top_10_misses(self) -> None:
         run = job.BoardRun(kind="full", markets=5, calls=100, limited=3)
         run.misses.update({f"KXS{i:02d}": 20 - i for i in range(12)})
         note = run.job_note
-        self.assertIn("empty_series=0", note)
-        self.assertLess(note.index("empty_series=0"), 120)  # inside job_health's 500 characters
+        self.assertIn("no_markets=0, not_open=0", note)
+        self.assertLess(note.index("no_markets=0"), 120)  # inside job_health's 500 characters
         self.assertIn("KXS09 11", note)
         self.assertNotIn("KXS10", note)
         self.assertIn("3 429s (3.0%)", note)
-        run.empty_series["KXNBAREB"] = 4
-        self.assertIn("empty_series=1", run.job_note)
+        run.no_markets["KXNBAREB"] = 4
+        run.not_open.update({"initialized": 3, "closed+settled": 1})
+        run.not_open_series["KXATPMATCH"] = 4
+        self.assertIn("no_markets=4 (KXNBAREB 4), not_open=4 (initialized 3, closed+settled 1; KXATPMATCH)",
+                      run.job_note)
 
 
 class Leagues(unittest.TestCase):

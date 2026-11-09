@@ -717,13 +717,25 @@ def market_batches(client: KalshiClient, event_tickers: Sequence[str], series: d
         yield group, batch
 
 
-def has_unopened(client: KalshiClient, event: str) -> bool:
-    """Whether Kalshi lists a market of `event` that has not opened yet
-    (``status=unopened``, one row). Asked only for an event of a window series
-    that returned no open market (owner, Nov 7: the 21:30 UTC pull read
-    KXATPMATCH and KXATPDOUBLES minutes before their open_time, 21:35)."""
-    body = client.get("/markets", event_ticker=event, status="unopened", limit=1)
-    return bool(req(body, "markets", list, f"markets[{event}]", "$"))
+#: One page is enough to say which statuses an event's markets are in.
+STATUS_PAGE = 200
+
+
+def market_statuses(client: KalshiClient, event: str) -> str | None:
+    """The statuses Kalshi lists for `event`'s markets, with NO status filter
+    (owner, Nov 9), joined in sorted order (``"initialized"``,
+    ``"closed+settled"``), or None when the event has no market of any status.
+    Asked only for an event of a window series that returned no open market.
+
+    Why no filter: ``status=unopened`` returned nothing for the Copa del Rey
+    events the 15:30 UTC Nov 9 pull failed on, minutes to hours before their
+    markets opened (19:06 and 20:06 UTC); the filter cannot be trusted to
+    say "not open yet"."""
+    p = f"markets[{event}]"
+    body = client.get("/markets", event_ticker=event, limit=STATUS_PAGE)
+    rows = req(body, "markets", list, p, "$")
+    seen = {req(r, "status", str, p, f"$.markets[{i}]") for i, r in enumerate(rows)}
+    return "+".join(sorted(seen)) or None
 
 
 def event_markets(client: KalshiClient, series: dict[str, Series], event: str) -> Batch:
