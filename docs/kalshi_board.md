@@ -55,6 +55,31 @@ UTC Nov 7 pull read KXATPMATCH (7 events) and KXATPDOUBLES (3) minutes
 before their markets' `open_time` (21:35–21:36 UTC); milestones list a match
 before its markets open.
 
+**Not open is not empty, in any status (owner, Nov 9; supersedes the
+`status=unopened` ask above).** Each event of an empty window series is asked
+once with NO status filter (`/markets?event_ticker=E&limit=200`). An event
+whose markets Kalshi lists in any non-open status (initialized, closed,
+paused, settled, whatever it returns) counts as `not_open=<n>` by status in
+the note, with the series named (`not_open=3 (initialized 3; KXFOO)`; a mixed
+event reads `closed+settled`), and never fails the run.
+
+An event with **zero markets of any status** is Kalshi listing the event
+before its markets exist, not a broken feed: it counts as `no_markets=<n>`
+with the series named (`no_markets=3 (KXCOPADELREYADVANCE 3)`) and never fails
+the run on its own. The rule exists to catch a broken fetch path (Nov 6's
+comma batch, 200 and empty), which empties MANY events at once. So the run
+fails (after the rest is written) only when **(a)** zero-market events exceed
+**2%** of the window's events (`NO_MARKETS_MAX_SHARE`), or **(b)** a series in
+the owner's five leagues (cfb, nfl, nba, f1, pga, by `league_of`: the
+milestone label, else the ticker prefix) has **every** one of its window
+events at zero markets.
+
+Why: the 15:30 UTC Nov 9 pull failed on four Copa del Rey series (3 events
+each) whose BTTS, SPREAD and TOTAL markets opened at 19:06 and 20:06 UTC;
+`status=unopened` returned nothing for them, then and after. Read at 20:17
+UTC: those 9 events `active`; the 3 `KXCOPADELREYADVANCE` events had zero
+markets of any status.
+
 **Excluded series, by name (owner, Nov 7):** `KXNFLPASSYDSPRECISE` ("Pass
 Yards Precise") is never read. It is a per-yard duplicate of `KXNFLPASSYDS`:
 1,204 open markets a game, one at every yard for each QB (16,856 in 14

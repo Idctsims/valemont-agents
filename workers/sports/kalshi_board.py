@@ -154,11 +154,37 @@ class BoardRun:
     seconds: float = 0.0
     idle: str | None = None
     dry_run: bool = False
-    #: Window series that returned no open market: series -> its events asked for.
-    empty_series: dict[str, int] = field(default_factory=dict)
-    #: Events of an otherwise empty window series whose markets Kalshi lists
-    #: as not yet open (status=unopened): counted, never a failure.
-    not_yet_open: int = 0
+    #: Window events with NO market of any status, by series (owner, Nov 9:
+    #: Kalshi lists an event before its markets exist). Counted; the run
+    #: fails only past NO_MARKETS_MAX_SHARE or on an owner-league series
+    #: whose every window event is here.
+    no_markets: dict[str, int] = field(default_factory=dict)
+    #: Window events per series (after exclusion), for the rule above.
+    window_by_series: dict[str, int] = field(default_factory=dict)
+    #: Events of a window series with no open market whose markets Kalshi
+    #: lists in another status: status ("initialized", "closed+settled") ->
+    #: events, and series -> events. Counted, never a failure (owner, Nov 9).
+    not_open: dict[str, int] = field(default_factory=dict)
+    not_open_series: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def no_markets_note(self) -> str:
+        n = sum(self.no_markets.values())
+        if not n:
+            return "no_markets=0"
+        names = sorted(self.no_markets)
+        return (f"no_markets={n} (" + ", ".join(f"{s} {self.no_markets[s]}" for s in names[:6])
+                + (f" +{len(names) - 6} more" if len(names) > 6 else "") + ")")
+
+    @property
+    def not_open_note(self) -> str:
+        n = sum(self.not_open.values())
+        if not n:
+            return "not_open=0"
+        by = ", ".join(f"{k} {v}" for k, v in sorted(self.not_open.items(), key=lambda kv: (-kv[1], kv[0])))
+        names = sorted(self.not_open_series)
+        return (f"not_open={n} ({by}; " + ", ".join(names[:6])
+                + (f" +{len(names) - 6} more" if len(names) > 6 else "") + ")")
     #: EXCLUDED_SERIES met in the window: series -> its window events (never read).
     excluded: dict[str, int] = field(default_factory=dict)
     #: Series whose /markets query hit the page cap: series -> its events (skipped).
@@ -190,7 +216,7 @@ class BoardRun:
         if self.kind == "full":
             # Early in the note, so job_health's 500-character cut keeps them:
             # counts read, never an absence inferred (owner, Nov 7).
-            head += (f"; empty_series={len(self.empty_series)}, not_yet_open={self.not_yet_open}; "
+            head += (f"; {self.no_markets_note}, {self.not_open_note}; "
                      f"excluded={len(self.excluded)}"
                      + (" (" + ", ".join(f"{s} {n} events" for s, n in sorted(self.excluded.items())) + ")"
                         if self.excluded else "")
@@ -223,8 +249,6 @@ class BoardRun:
                  f"parse misses {sum(self.misses.values())}"
                  + (" (" + ", ".join(f"{k} {v}" for k, v in self.misses.most_common(10)) + ")" if self.misses else ""),
                  f"NO complement mismatches {self.no_mismatch}/{self.no_checked}",
-                 ("EMPTY series " + ", ".join(f"{s} ({n} events)" for s, n in sorted(self.empty_series.items())[:8])
-                  if self.empty_series else ""),
                  rate]
         return "; ".join(p for p in parts if p)
 
@@ -378,17 +402,21 @@ def _pull(client: KalshiClient, run: BoardRun, writer: Writer, state: BoardState
             run.overflowed[kb.series_of(group[0])] = len(group)
             continue
         if not batch.rows:
-            # A window series with events but no open market (owner, Nov 6):
-            # the filter or the listing changed, and the run fails naming it
-            # after the rest is written. Unless (owner, Nov 7) Kalshi lists the
-            # event's markets as not yet open: milestones list a match before
-            # its markets open (KXATPMATCH, 21:35 UTC Nov 7). Those events are
-            # counted as not_yet_open, never a failure; one with neither open
-            # nor unopened markets still fails the run.
-            waiting = sum(1 for t in group if kb.has_unopened(client, t))
-            run.not_yet_open += waiting
-            if waiting < len(group):
-                run.empty_series[kb.series_of(group[0])] = len(group) - waiting
+            # A window series with events but no open market. Each event is
+            # asked once with NO status filter (owner, Nov 9): one with markets
+            # in any other status (unopened, closed, paused, settled, whatever
+            # Kalshi returns) counts as not_open by status; one with zero
+            # markets of any status counts as no_markets. Neither fails the run
+            # on its own: _full applies the broken-fetch rule after the rest
+            # is written.
+            s = kb.series_of(group[0])
+            for t in group:
+                status = kb.market_statuses(client, t)
+                if status is None:
+                    run.no_markets[s] = run.no_markets.get(s, 0) + 1
+                else:
+                    run.not_open[status] = run.not_open.get(status, 0) + 1
+                    run.not_open_series[s] = run.not_open_series.get(s, 0) + 1
         ev_rows = [event_row(t, window[t], batch.times[t], combos.get(t)) for t in group if t in batch.times]
         run.events += len(ev_rows)
         run.markets += len(batch.rows)
@@ -452,6 +480,9 @@ def _full(client: KalshiClient | None, now: Callable[[], datetime], state: Board
             for r in changed:
                 state.series_rows[r["series_ticker"]] = digest(r)
 
+        for t in window:
+            s = kb.series_of(t)
+            run.window_by_series[s] = run.window_by_series.get(s, 0) + 1
         new_markets: dict[int, int] = {}
         new_events: dict[str, int] = {}
         _pull(c, run, w, state, at, kb.order_events(window), window, series, combos, new_markets, new_events)
@@ -479,16 +510,42 @@ def _full(client: KalshiClient | None, now: Callable[[], datetime], state: Board
     # Both fail AFTER the rest was written and the state (the refresh's
     # window) was set: the refresh keys on "the board was written", not on
     # "the last pull was ok" (owner, Nov 7).
-    if (run.empty_series or run.overflowed) and not dry_run:
+    broken = broken_fetch(run, labels)
+    if (broken or run.overflowed) and not dry_run:
         why = []
         if run.overflowed:
             why.append(f"{len(run.overflowed)} series overflowed the page cap and were skipped: "
                        + ", ".join(f"{s} ({n} events)" for s, n in sorted(run.overflowed.items())))
-        if run.empty_series:
-            why.append(f"{len(run.empty_series)} window series returned no open market: "
-                       + ", ".join(f"{s} ({n} events)" for s, n in sorted(run.empty_series.items())))
+        why.extend(broken)
         raise BoardFailed(f"kalshi board: {'; '.join(why)} (the rest was written: {run.job_note})")
     return run
+
+
+#: The broken-fetch rule (owner, Nov 9). A zero-market event is Kalshi listing
+#: an event before its markets exist; a broken fetch path (Nov 6's comma batch,
+#: 200 and empty) empties MANY events at once. So the run fails only when
+#: zero-market events exceed this share of the window's events, or when a
+#: series in the owner's five leagues has every window event at zero markets.
+NO_MARKETS_MAX_SHARE = 0.02
+OWNER_LEAGUES: frozenset[str] = frozenset({"cfb", "nfl", "nba", "f1", "pga"})
+
+
+def broken_fetch(run: BoardRun, labels: Mapping[str, Iterable[str | None]]) -> list[str]:
+    """Why the zero-market events look like a broken fetch, or [] when they
+    look like events listed before their markets exist."""
+    why: list[str] = []
+    total, window = sum(run.no_markets.values()), sum(run.window_by_series.values())
+    if window and total > NO_MARKETS_MAX_SHARE * window:
+        why.append(f"{total} of {window} window events have no market of any status "
+                   f"(> {NO_MARKETS_MAX_SHARE:.0%}): "
+                   + ", ".join(f"{s} ({n} events)" for s, n in sorted(run.no_markets.items())))
+    whole = sorted(s for s, n in run.no_markets.items()
+                   if n == run.window_by_series.get(s)
+                   and league_of(s, sorted(labels.get(s, ()), key=str)) in OWNER_LEAGUES)
+    if whole:
+        why.append("every window event of an owner-league series has no market of any status: "
+                   + ", ".join(f"{s} ({run.no_markets[s]} events)" for s in whole))
+    return why
 
 
 def refresh_job(*, http: kb.Http | None = None,
