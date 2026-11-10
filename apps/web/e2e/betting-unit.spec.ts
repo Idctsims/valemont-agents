@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { expect, test } from "@playwright/test";
 
 import {
@@ -129,5 +132,40 @@ test.describe("consensus (db/073, db/074)", () => {
       .toBe("Odds API credits: 20 / 500 used this month · 480 left on the account");
     expect(creditsLine({ used: null, spent: 0, allowance: 500, remaining: null, calls: 0 }))
       .toBe("Odds API credits: 0 / 500 used this month");
+  });
+});
+
+// The packed q's one decoder against the SQL encoder (db/074): every case is
+// kalshi_board_game's output with the fields leg_consensus_for says it
+// encodes (e2e/fixtures/consensus-packed.json: production, read-only, plus the
+// scratch copy for the flags production had none of).
+test.describe("the packed q round-trips the SQL encoder", () => {
+  type Case = { q: string; a: number | null; b: number | null; f: number | null;
+                want: { t: string; n: number | null; p: number; sd: string; e: number; ec: boolean;
+                        staleK: boolean; staleO: boolean } };
+  const fixture = JSON.parse(readFileSync(path.join(__dirname, "fixtures", "consensus-packed.json"), "utf8")) as
+    { cases: Case[] };
+
+  test("every tier, side and flag the encoder produced", () => {
+    expect(fixture.cases.length).toBeGreaterThanOrEqual(40);
+    const seen = new Set<string>();
+    for (const c of fixture.cases) {
+      const q = parseConsensus({ q: c.q, a: c.a ?? undefined, b: c.b ?? undefined, f: c.f ?? undefined });
+      expect(q, c.q).not.toBeNull();
+      const w = c.want;
+      expect([q!.t, q!.n ?? null, q!.sd, q!.ec, q!.staleK, q!.staleO], c.q)
+        .toEqual([w.t, w.n, w.sd, w.ec, w.staleK, w.staleO]);
+      expect(q!.p, c.q).toBeCloseTo(w.p, 6);
+      expect(q!.e, c.q).toBeCloseTo(w.e, 6);
+      if (w.sd === "y") {
+        expect([q!.a, q!.f, q!.fApprox], c.q).toEqual([c.a ?? undefined, c.f ?? undefined, undefined]);
+      } else if (c.b !== null) {
+        expect(q!.a, c.q).toBeCloseTo(1 - c.b, 6);
+        expect(q!.fApprox).toBe(true);
+      }
+      seen.add(`${w.t}${w.sd}${+w.ec}${+w.staleK}${+w.staleO}`);
+    }
+    // Claimed on both sides, and each stale flag, are in the fixture.
+    for (const k of ["by100", "bn100", "ey001", "ky010"]) expect(seen, k).toContain(k);
   });
 });

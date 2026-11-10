@@ -8,7 +8,9 @@ nothing here bets (CLAUDE.md §1). Migration db/073; code `workers/consensus/`,
 
 **Edge is not profit** (CLAUDE.md §8). `edge_claimed` (> 0) is display only:
 the edge-leg margin (2¢ net of fee) is set in Phase 4's pre-registration, not
-here (owner, Nov 9).
+here (owner, Nov 9). **Phase 4 note (owner, Nov 9): the generator re-quotes
+every candidate leg and recomputes its edge on the fresh price BEFORE
+selecting, not only at commit.**
 
 ## 1. The method (owner, Nov 9; frozen in Phase 4's pre-registration)
 
@@ -22,7 +24,7 @@ here (owner, Nov 9).
 | Blend | `p = 0.7 × p_outside + 0.3 × p_kalshi` (books or espn); `p = p_kalshi` (kalshi). |
 | Edge | `edge(side) = p(side) − (ask(side) + taker_fee(ask(side)))`. NO is bought at `1 − yes_bid` with `p(NO) = 1 − p`. Never against the mid, never before fees (`venues/kalshi/edge.py`'s gate). |
 | Fee | `ceil_6dp(0.07 × multiplier × P × (1 − P))` (`fees.py`; SQL `kalshi_taker_fee`, equal on every cent, `tests_live/test_consensus_sql.py`). |
-| `edge_claimed` | books or espn tier AND the better side's edge > 0. **A kalshi-tier leg never claims edge**: a price cannot have edge against itself; a positive kalshi-tier edge is a normalization artifact, reported (the run note's "kalshi-tier positive") and never claimed. |
+| `edge_claimed` | books or espn tier AND the better side's edge > 0 AND **both prices fresh** (db/074): the Kalshi price read within 20 min (`kalshi_board_events.fetched_at`, the event's last read: the full pull and the refresh both touch it) and the outside price within 12 h (`leg_consensus.source_at`, advanced by every confirming pull). **A kalshi-tier leg never claims edge**: a price cannot have edge against itself; a positive kalshi-tier edge is a normalization artifact, reported (the run note's "kalshi-tier positive") and never claimed. **A stale leg shows its edge, tagged stale, and claims nothing.** |
 
 The blend, the fee and the edges live in ONE place, SQL
 `leg_consensus_for(games[])` (calling `consensus_leg`), which the view
@@ -39,6 +41,18 @@ refresh with no write (the "Kalshi-only recompute" needs no job).
 | `KX*SPREAD …-HOU5` ("wins by over 4.5") | spread, Houston at −4.5 |
 | `KX*TOTAL` line L | total, Over L |
 | `KXNFLREC` / `KXNFLRECYDS` / `KXNFLRSHYDS` "X+" (line X − 0.5) | the player's Over at X − 0.5 |
+
+**The page's `q`** (db/074; owner-approved): one packed string a binary
+market, `<tier><letter><p><edge>`, e.g. `b9c515-93`: tier `b<n>` | `e` | `k`;
+letter `a` + flags (8 the better side is NO, 1 claimed, 2 Kalshi stale, 4
+outside stale); p in thousandths (3 digits); the side's edge in thousandths
+of a dollar. No JSON array met the ≤ 115 KB target for an expanded NBA game
+(DEN at HOU, 960 markets: arrays 52.5 / 35.5 / 30.6 KB of q; the string
+16.1 KB; the game 110,561 bytes after the paste). ONE decoder,
+`parseConsensus` (`apps/web/src/lib/betting/board.ts`), round-trip tested
+against the SQL encoder's own output (`e2e/fixtures/consensus-packed.json`,
+44 cases: production read-only plus the scratch copy). The YES fee is the
+market's own `f`; the NO fee is derived (p(NO) − ask − edge) to 0.1¢.
 
 The side of a team market is its ticker's last segment (digits dropped)
 against the game's two ESPN codes through `sports_team_aliases`. Odds API
@@ -89,12 +103,19 @@ not spend credits).
 
 **The guard** (`core/odds_credits.py`, core's): refuse a paid call when the
 last reported remaining < 50 or this month's spend plus the call would pass
-450; push once a month at 400 (`odds_credits_400`); the month's first refusal
+450, the spend being **the account's own count, the latest x-requests-used**
+(`odds_api_usage().used`, db/074), not the call log's sum (which misses Step
+0's 11); push once a month at 400 (`odds_credits_400`); the month's first refusal
 pushes (`odds_credits_refused`) and fails its run, later refusals are noted.
 The month is `odds_api_usage()`'s calendar month (UTC); the account's reset
 date may differ. `ODDS_API_KEY` is in the root `.env` and Railway only, never
 Vercel, never printed; the key rides in the query string, so no URL is ever
 logged or recorded (`odds_api_calls.endpoint` is the path template).
+
+**The board refresh's priority** (owner, Nov 9): inside its 300-call cap
+and 3 h window, events with a books or espn row first, then the soonest
+start (`consensus/priority.py`, process memory the consensus job fills; a
+restart orders by start alone until the next consensus run).
 
 **Coverage memory is process memory**: a restart between 10:15 and 16:15
 can repay one bulk call (≤ 6 credits) plus props. A books row of a game the
@@ -127,9 +148,10 @@ every leg at commit (owner, Nov 7).
 
 ## 7. Open
 
-- The expanded game's payload: `q` added ~102 KB to DEN at HOU (957 markets:
-  195 KB with it, 86 KB without). A compact form is a db/074 decision.
 - `odds_api_calls` starts at the first real run: Step 0's 11 credits are not
-  in it (the account read 489 after Step 0, 480 after the first run).
+  in it; the guard reads the account's own count (db/074), so it does not
+  matter to the guard.
+- At 10:15 Chicago the full pull is 45 min old: only games inside the
+  refresh's 3 h window can claim edge then (the 20-min rule, by design).
 - ESPN is fetched by the consensus job itself (8 scoreboard calls a run), not
   read from the sports jobs' responses.
