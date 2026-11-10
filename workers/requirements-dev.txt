@@ -1,0 +1,4 @@
+# Dev-only (never the worker image: Railway installs requirements.txt).
+# penaltyblog: the de-vig test oracle (tests/test_consensus.py,
+# tests/fixtures/devig_oracle.json).
+penaltyblog==1.13.1

@@ -18,6 +18,7 @@ from unittest import mock
 from decimal import Decimal
 from typing import Any, Callable
 
+from consensus import priority
 from sports import kalshi_board as job
 from venues.kalshi import board as kb
 from venues.kalshi.client import KalshiClient
@@ -91,6 +92,13 @@ class FakeKalshi:
             s = q["series_ticker"]
             f = FIXTURES / f"markets_{s}.json"
             return 200, {"markets": json.loads(f.read_bytes())["markets"] if f.exists() else [], "cursor": ""}
+        if path == "/events":
+            # mutually_exclusive (db/073): a GAME series' events are exclusive.
+            s = q["series_ticker"]
+            f = FIXTURES / f"markets_{s}.json"
+            evs = sorted({m["event_ticker"] for m in json.loads(f.read_bytes())["markets"]}) if f.exists() else []
+            return 200, {"events": [{"event_ticker": e, "series_ticker": s, "mutually_exclusive": s.endswith("GAME")}
+                                    for e in evs], "cursor": ""}
         return 404, None
 
 
@@ -116,6 +124,7 @@ class RecordingWriter(job.Writer):
 
     def events(self, rows, at):
         self.calls.append(("events", [r["event_ticker"] for r in rows]))
+        self.event_rows = getattr(self, "event_rows", []) + list(rows)
         return len(rows)
 
     def markets(self, rows, at):
@@ -689,6 +698,38 @@ class FullJob(unittest.TestCase):
                             writer=RecordingWriter())
         self.assertEqual(run3.series_fetched, run3.series)
 
+    def test_mutually_exclusive_is_read_once_a_chicago_day_and_written(self) -> None:
+        """db/073: Kalshi's event flag, from /events with the series, once a
+        Chicago day; every event row carries it; an event /events did not
+        list stays None (unknown, never coerced)."""
+        fake = FakeKalshi()
+        run1, w, st = self.run_full(fake=fake)
+        asked = [dict(urllib.parse.parse_qsl(u.partition("?")[2]))["series_ticker"] for u in fake.urls
+                 if u.split("/trade-api/v2", 1)[1].split("?")[0] == "/events"]
+        self.assertEqual(len(asked), len(set(asked)))
+        self.assertEqual(run1.flag_series, len(asked))
+        flags = {r["event_ticker"]: r["mutually_exclusive"] for r in w.event_rows}
+        self.assertTrue(any(t.startswith("KXNBAGAME-") for t in flags))
+        for t, f in flags.items():
+            self.assertIs(f, kb.series_of(t).endswith("GAME"), t)
+        self.assertGreater(run1.flag_events, 0)
+        self.assertIn("flags ", run1.job_note)
+        later = FakeKalshi()
+        run2 = job.full_job(client=client(later), now=lambda: NOW + timedelta(hours=3), state=st,
+                            writer=RecordingWriter())
+        self.assertEqual(run2.flag_series, 0)
+        self.assertFalse(any("/events" in u.split("?")[0] for u in later.urls))
+        self.assertEqual(run2.flag_events, run1.flag_events)
+        tomorrow = FakeKalshi()
+        run3 = job.full_job(client=client(tomorrow), now=lambda: NOW + timedelta(days=1), state=st,
+                            writer=RecordingWriter())
+        self.assertEqual(run3.flag_series, run3.series)
+        # An event /events does not list: unknown, never False.
+        missing = FakeKalshi(overrides={"/events": {"events": [], "cursor": ""}})
+        _, w4, _ = self.run_full(fake=missing)
+        self.assertTrue(w4.event_rows)
+        self.assertTrue(all(r["mutually_exclusive"] is None for r in w4.event_rows))
+
     def test_a_dry_run_writes_nothing_and_keeps_no_state(self) -> None:
         st = job.BoardState()
         run = job.full_job(client=client(FakeKalshi()), now=lambda: NOW, state=st, dry_run=True)
@@ -729,6 +770,8 @@ class Refresh(unittest.TestCase):
     soonest first, <= 300 calls and <= 300 s, adaptive pacing."""
 
     def setUp(self) -> None:
+        priority.set_events(())
+        self.addCleanup(priority.set_events, ())
         self.state = job.BoardState()
         job.full_job(client=client(FakeKalshi()), now=lambda: NOW, state=self.state, writer=RecordingWriter())
 
@@ -775,6 +818,23 @@ class Refresh(unittest.TestCase):
         self.assertIn(f"refresh: {run.events} of {run.scope} events within 3 h", run.job_note)
         nothing = self.refresh(datetime(2026, 11, 6, 14, 0, tzinfo=UTC))[0]  # 08:00 Chicago: games 10 h out
         self.assertIn("nothing starts within 3 h", nothing.job_note)
+
+    def test_events_with_an_outside_price_go_first_inside_the_same_cap(self) -> None:
+        """db/074 (owner, Nov 9): events with a books or espn row first, then
+        the soonest start; the 300-call cap and the 3 h window unchanged."""
+        lo, hi = AT.timestamp(), (AT + timedelta(hours=3)).timestamp()
+        in_scope = sorted((t for t, s in self.state.window.items() if lo <= s < hi),
+                          key=lambda t: (self.state.window[t], t))
+        self.assertGreater(len(in_scope), 3)
+        latest = in_scope[-2:]  # the two that start last
+        priority.set_events(latest + ["KXNOTINWINDOW-26NOV06XXXYYY"])
+        with mock.patch.object(job, "REFRESH_MAX_CALLS", 3):
+            run, _, fake, _ = self.refresh()
+        asked = [q["event_ticker"] for q in self.market_queries(fake)]
+        self.assertEqual(asked[:2], sorted(latest, key=lambda t: (self.state.window[t], t)))
+        self.assertEqual(asked[2], in_scope[0])  # then the soonest
+        self.assertEqual((run.calls, run.scope), (3, len(in_scope)))
+        self.assertEqual((job.REFRESH_MAX_CALLS, kb.REFRESH_WITHIN), (300, timedelta(hours=3)))
 
     def test_the_call_cap_stops_logs_the_skip_and_never_sweeps_an_unread_event(self) -> None:
         with mock.patch.object(job, "REFRESH_MAX_CALLS", 3):

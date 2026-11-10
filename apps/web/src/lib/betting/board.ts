@@ -29,7 +29,87 @@ export type BoardGame = {
 /** kalshi_board_game: one event of an expanded game, with its markets.
  *  s: a scalar market (a ladder or escalator: YES pays a fraction of $1 that
  *  grows with the stat; its price is not a probability, never a parlay leg). */
-export type BoardMarket = { k: Kind; lb?: string; b?: number; a?: number; f?: number; v?: string; s?: boolean };
+export type BoardMarket = {
+  k: Kind; lb?: string; b?: number; a?: number; f?: number; v?: string; s?: boolean;
+  /** The packed consensus (db/074): "<tier><letter><p><edge>", e.g. "b9c515-93". */
+  q?: string;
+};
+
+/** A binary market's consensus (db/074 leg_consensus_for, packed on
+ *  kalshi_board_game; parseConsensus). t: tier b(ooks) | e(spn) | k(alshi
+ *  only); n: books at the exact line; p: P(YES); sd: the better side; e: its
+ *  net edge (p - ask - taker fee); a, f: its ask and fee (YES: the market's
+ *  own; NO: 1 - bid and the fee derived to 0.1 cent, fApprox); ec: the edge
+ *  is claimed (books or espn, edge > 0, both prices fresh); staleK: the
+ *  Kalshi price is older than 20 min; staleO: the book price older than 12 h.
+ *  A kalshi-tier or stale leg never claims edge (owner, Nov 9). */
+export type Consensus = {
+  t: "b" | "e" | "k"; n?: number; p: number; sd: "y" | "n"; e: number; a?: number; f?: number;
+  fApprox?: boolean; ec: boolean; staleK: boolean; staleO: boolean;
+};
+
+const PACKED = /^([bek])(\d*)([a-p])(\d{3})(-?\d+)$/;
+
+/** The packed q into its fields, with the side's ask and fee from the market. */
+export function parseConsensus(m: Pick<BoardMarket, "q" | "a" | "b" | "f">): Consensus | null {
+  const hit = m.q ? PACKED.exec(m.q) : null;
+  if (!hit) return null;
+  const code = hit[3].charCodeAt(0) - 97;
+  const p = Number(hit[4]) / 1000;
+  const e = Number(hit[5]) / 1000;
+  const sd = code & 8 ? "n" : "y";
+  const t = hit[1] as Consensus["t"];
+  const base = { t, n: t === "b" ? Number(hit[2]) : t === "e" ? 1 : undefined, p, sd, e,
+                 ec: (code & 1) === 1, staleK: (code & 2) === 2, staleO: (code & 4) === 4 } as const;
+  if (sd === "y") return { ...base, a: m.a, f: m.f };
+  const a = m.b === undefined || m.b === null ? undefined : Math.round((1 - m.b) * 10000) / 10000;
+  const f = a === undefined ? undefined : Math.round(((1 - p) - a - e) * 1000) / 1000;
+  return { ...base, a, f: f !== undefined && f >= 0 ? f : undefined, fApprox: true };
+}
+
+/** "stale: Kalshi price" / "stale: book price" / both, or null. */
+export function staleLabel(q: Pick<Consensus, "staleK" | "staleO">): string | null {
+  if (q.staleK && q.staleO) return "stale prices";
+  if (q.staleK) return "stale Kalshi price";
+  if (q.staleO) return "stale book price";
+  return null;
+}
+
+/** "Books · 9", "ESPN · 1 book", "Kalshi only". */
+export function tierLabel(q: Pick<Consensus, "t" | "n">): string {
+  if (q.t === "b") return `Books · ${q.n ?? 0}`;
+  if (q.t === "e") return "ESPN · 1 book";
+  return "Kalshi only";
+}
+
+/** A probability as a percent with one decimal: 0.5153 -> "51.5%". */
+export function pct(v: number | null | undefined): string {
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  return `${(Math.round(v * 1000) / 10).toFixed(1)}%`;
+}
+
+/** A net edge in cents, signed: 0.04796 -> "+4.8¢", -0.0925 -> "−9.3¢". */
+export function edgeCents(v: number | null | undefined): string {
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  const c = Math.round(v * 1000) / 10;
+  if (c === 0) return "0.0¢";
+  return `${c > 0 ? "+" : "−"}${Math.abs(c).toFixed(1)}¢`;
+}
+
+/** up only for a claimed, positive edge; anything else is neutral (never
+ *  the danger colour: an edge at or under zero is not a loss). */
+export function edgeTone(q: Pick<Consensus, "e" | "ec">): "up" | "flat" {
+  return q.ec && (q.e ?? 0) > 0 ? "up" : "flat";
+}
+
+/** The Odds API's month (db/073 odds_api_usage). */
+export type Credits = { used: number | null; spent: number; allowance: number; remaining: number | null; calls: number };
+
+/** The account's own count (x-requests-used, db/074) when known, else the log's sum. */
+export function creditsLine(c: Credits): string {
+  return `Odds API credits: ${c.used ?? c.spent} / ${c.allowance} used this month`
+    + (c.remaining !== null && c.remaining !== undefined ? ` · ${c.remaining} left on the account` : "");
+}
 /** sm: how many of this event's markets one Kalshi combo may use (absent =
  *  no stated per-event cap; never read as 0 or 1). c, y and sm come from the
  *  event's binary markets only (db/072): an all-scalar event has no combo chip. */

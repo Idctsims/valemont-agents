@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { BoardEvent, BoardGame, Kind, SportChip } from "./board";
+import type { BoardEvent, BoardGame, Credits, Kind, SportChip } from "./board";
 
 // Reads only, through the owner's session (RLS on db/071's tables), via its
 // narrow functions: never the tables themselves. One sport at a time with its
@@ -34,4 +34,15 @@ export async function loadGame(
   });
   if (error) throw new Error(`Couldn't read that game's markets: ${error.message}`);
   return (data ?? []) as BoardEvent[];
+}
+
+/** The Odds API's month (db/073 odds_api_usage): spent / 500 on /betting. */
+export async function loadCredits(supabase: SupabaseClient): Promise<Credits> {
+  const { data, error } = await supabase.rpc("odds_api_usage");
+  if (error) throw new Error(`Couldn't read the Odds API credits: ${error.message}`);
+  const d = (data ?? {}) as Partial<Credits>;
+  return { used: d.used === null || d.used === undefined ? null : Number(d.used),
+           spent: Number(d.spent ?? 0), allowance: Number(d.allowance ?? 500),
+           remaining: d.remaining === null || d.remaining === undefined ? null : Number(d.remaining),
+           calls: Number(d.calls ?? 0) };
 }
