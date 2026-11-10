@@ -87,12 +87,13 @@ test.describe("owner", () => {
     await expect(ml.getByTestId("event-asof")).toContainText("as of");
   });
 
-  // db/073: the home market's books row (p_books 0.66 from 3 books) blends
+  // db/073-074: the home market's books row (p_books 0.66 from 3 books) blends
   // 0.7 / 0.3 with Kalshi's normalized mid 0.62: p 64.8%; YES at 63¢ + 1.63¢
-  // leaves +0.17¢, claimed (up). The away market is Kalshi only: NO is the
-  // better side, -2.6¢, never claimed. The ladder carries no consensus.
+  // leaves +0.17¢, claimed (up; both prices fresh: the helper writes them
+  // now). The away market is Kalshi only: NO is the better side, -2.6¢ with
+  // its fee derived (1.6¢), never claimed. The ladder carries no consensus.
   test("each binary market shows its consensus row; the credits line is on the page", async () => {
-    await expect(page.getByTestId("betting-credits")).toContainText("/ 500 this month");
+    await expect(page.getByTestId("betting-credits")).toContainText("/ 500 used this month");
     const markets = card().getByTestId("board-market");
     const home = markets.filter({ hasText: "Test Home" }).getByTestId("market-consensus");
     await expect(home).toHaveAttribute("data-tier", "b");
@@ -109,6 +110,9 @@ test.describe("owner", () => {
     await expect(away.getByTestId("consensus-tier")).toHaveText("Kalshi only");
     await expect(away.getByTestId("consensus-ask")).toHaveText("NO 63¢");
     await expect(away.getByTestId("consensus-edge")).toHaveText("edge −2.6¢");
+    await expect(away.getByTestId("consensus-fee")).toHaveText("fee 1.6¢");
+    await expect(home).toHaveAttribute("data-stale", "0");
+    await expect(away.getByTestId("consensus-stale")).toHaveCount(0);
     await expect(away.getByTestId("consensus-edge")).not.toHaveClass(/text-hit|text-danger/);
     await expect(card().getByTestId("market-consensus")).toHaveCount(5);
     const ladder = card().locator('[data-testid="board-event"][data-event$="LAD"]');

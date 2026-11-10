@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   asOfLabel, boardHref, cents, comboLabel, countsLine, feeCents, orderEvents, parseFilters, pickSport, startLabel,
-  type BoardEvent, creditsLine, edgeCents, edgeTone, pct, tierLabel,
+  type BoardEvent, creditsLine, edgeCents, edgeTone, parseConsensus, pct, staleLabel, tierLabel,
 } from "../src/lib/betting/board";
 
 // The Kalshi board's pure logic (Chat 8 Phase 1; db/071). No page, no server.
@@ -75,11 +75,37 @@ test("events: game lines first, then props, then other", () => {
   expect(out.map((e) => e.e)).toEqual(["0", "1", "2", "3"]);
 });
 
-test.describe("consensus (db/073)", () => {
+test.describe("consensus (db/073, db/074)", () => {
   test("the tier chip names its source", () => {
     expect(tierLabel({ t: "b", n: 9 })).toBe("Books · 9");
     expect(tierLabel({ t: "e", n: 1 })).toBe("ESPN · 1 book");
     expect(tierLabel({ t: "k" })).toBe("Kalshi only");
+  });
+
+  test("the packed q: YES side, claimed, fresh", () => {
+    const q = parseConsensus({ q: "b3b6482", a: 0.63, b: 0.61, f: 0.016317 });
+    expect(q).toEqual({ t: "b", n: 3, p: 0.648, sd: "y", e: 0.002, a: 0.63, f: 0.016317,
+                        ec: true, staleK: false, staleO: false });
+  });
+
+  test("the packed q: NO side, its ask from the bid and its fee derived", () => {
+    // Kalshi only, NO better (8), p 0.38: NO at 1 - 0.37 = 0.63, edge -0.026.
+    const q = parseConsensus({ q: "ki380-26", a: 0.39, b: 0.37, f: 0.016653 })!;
+    expect([q.t, q.n, q.sd, q.a, q.e, q.ec]).toEqual(["k", undefined, "n", 0.63, -0.026, false]);
+    expect(q.f).toBeCloseTo(0.016, 6);
+    expect(q.fApprox).toBe(true);
+  });
+
+  test("stale flags: tagged, never claimed", () => {
+    const k = parseConsensus({ q: "b9c515-93", a: 0.5, b: 0.49, f: 0.0175 })!;   // 2: Kalshi stale
+    expect([k.staleK, k.staleO, k.ec, k.sd]).toEqual([true, false, false, "y"]);
+    expect(staleLabel(k)).toBe("stale Kalshi price");
+    const o = parseConsensus({ q: "ee500-10", a: 0.5, b: 0.49, f: 0.0175 })!;    // 4: book stale
+    expect(staleLabel(o)).toBe("stale book price");
+    expect(staleLabel(parseConsensus({ q: "eg500-10" })!)).toBe("stale prices");
+    expect(staleLabel(parseConsensus({ q: "ka500-10" })!)).toBeNull();
+    expect(parseConsensus({ q: "zz" })).toBeNull();
+    expect(parseConsensus({})).toBeNull();
   });
 
   test("p and edge read as people say them", () => {
@@ -91,17 +117,17 @@ test.describe("consensus (db/073)", () => {
     expect(edgeCents(null)).toBe("—");
   });
 
-  test("only a claimed positive edge is up; a kalshi-tier positive stays neutral", () => {
+  test("only a claimed positive edge is up; a kalshi-tier or stale positive stays neutral", () => {
     expect(edgeTone({ e: 0.048, ec: true })).toBe("up");
-    expect(edgeTone({ e: 0.0025 })).toBe("flat");
+    expect(edgeTone({ e: 0.0025, ec: false })).toBe("flat");
     expect(edgeTone({ e: -0.09, ec: true })).toBe("flat");
-    expect(edgeTone({ e: 0 })).toBe("flat");
+    expect(edgeTone({ e: 0, ec: false })).toBe("flat");
   });
 
-  test("the credits line: used of 500, and what the account has left", () => {
-    expect(creditsLine({ spent: 9, allowance: 500, remaining: 480, calls: 5 }))
-      .toBe("Odds API credits: 9 / 500 this month · 480 left on the account");
-    expect(creditsLine({ spent: 0, allowance: 500, remaining: null, calls: 0 }))
-      .toBe("Odds API credits: 0 / 500 this month");
+  test("the credits line: the account's own count of 500, and what is left", () => {
+    expect(creditsLine({ used: 20, spent: 9, allowance: 500, remaining: 480, calls: 5 }))
+      .toBe("Odds API credits: 20 / 500 used this month · 480 left on the account");
+    expect(creditsLine({ used: null, spent: 0, allowance: 500, remaining: null, calls: 0 }))
+      .toBe("Odds API credits: 0 / 500 used this month");
   });
 });

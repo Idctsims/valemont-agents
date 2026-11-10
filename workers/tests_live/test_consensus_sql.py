@@ -11,6 +11,7 @@ unpasted.
 from __future__ import annotations
 
 import random
+import re
 import unittest
 from datetime import timedelta
 from decimal import Decimal
@@ -156,12 +157,40 @@ class Writes(ConsensusSqlCase):
                                           "p_books_mult": 0.70, "p_espn": None, "inputs": {"m": "power"},
                                           "source_at": board.NOW.isoformat()}], board.NOW, is_test=True, conn=conn)
             ev = conn.execute("SELECT x FROM kalshi_board_game(%s, NULL, false, true) x", (game,)).fetchone()[0]
-            qs = {m["lb"]: m.get("q") for m in ev["m"]}
-            self.assertEqual(qs["AAA"]["t"], "b")
-            self.assertTrue(qs["AAA"]["ec"])
-            self.assertEqual(qs["BBB"]["t"], "k")
-            self.assertNotIn("ec", qs["BBB"])
-            self.assertNotIn("n", qs["BBB"])
+            qs = {m["lb"]: re.fullmatch(r"([bek])(\d*)([a-p])(\d{3})(-?\d+)", m["q"]) for m in ev["m"]}
+            self.assertEqual((qs["AAA"][1], qs["AAA"][2]), ("b", "2"))
+            self.assertEqual((ord(qs["AAA"][3]) - 97) & 1, 1)       # claimed: fresh both sides
+            self.assertEqual(qs["BBB"][1], "k")
+            self.assertEqual((ord(qs["BBB"][3]) - 97) & 7, 0)       # kalshi tier: never claimed, fresh
+            # The packed payload stays small: one short string a market.
+            self.assertLessEqual(max(len(m["q"]) for m in ev["m"]), 12)
+
+    def test_a_stale_price_claims_nothing(self) -> None:
+        """db/074 (owner, Nov 9): the Kalshi price within 20 min AND the outside
+        within 12 h, or the edge is shown, tagged stale, and never claimed."""
+        with _rolled_back() as conn:
+            event, game, mk = self.two_team(conn, ("0.6100", "0.3500"), ("0.6300", "0.3700"))
+            ledger.leg_consensus_upsert([{"market_ticker": mk[0], "tier": "books", "n_books": 2, "p_books": 0.70,
+                                          "p_books_mult": 0.70, "p_espn": None, "inputs": {"m": "power"},
+                                          "source_at": board.NOW.isoformat()}], board.NOW, is_test=True, conn=conn)
+            self.assertTrue(self.rows(conn, game)[mk[0]]["edge_claimed"])
+            conn.execute("UPDATE kalshi_board_events SET fetched_at = now() - interval '21 minutes' "
+                         "WHERE event_ticker = %s", (event,))
+            r = self.rows(conn, game)[mk[0]]
+            self.assertEqual((r["edge_claimed"], r["stale_kalshi"], r["stale_outside"]), (False, True, False))
+            self.assertGreater(r["edge_yes"], 0)
+            conn.execute("UPDATE kalshi_board_events SET fetched_at = now() WHERE event_ticker = %s", (event,))
+            conn.execute("UPDATE leg_consensus SET source_at = now() - interval '13 hours' WHERE market_ticker = %s",
+                         (mk[0],))
+            r = self.rows(conn, game)[mk[0]]
+            self.assertEqual((r["edge_claimed"], r["stale_kalshi"], r["stale_outside"]), (False, False, True))
+            # A confirmation by a newer pull makes it fresh again (source_at advances).
+            self.assertEqual(ledger.leg_consensus_upsert([{"market_ticker": mk[0], "tier": "books", "n_books": 2,
+                                                           "p_books": 0.70, "p_books_mult": 0.70, "p_espn": None,
+                                                           "inputs": {"m": "power"},
+                                                           "source_at": board.NOW.isoformat()}],
+                                                         board.NOW, is_test=True, conn=conn), 1)
+            self.assertTrue(self.rows(conn, game)[mk[0]]["edge_claimed"])
 
 
 class BookLines(ConsensusSqlCase):
@@ -209,11 +238,15 @@ class Readers(ConsensusSqlCase):
             self.assertEqual(ledger.consensus_markets([-1], ["KXNBAGAME"], conn=conn), [])
             names = ledger.consensus_team_names(["nfl"], conn=conn)
             self.assertIn("minnesota vikings", names.get("nfl", frozenset()))
-            for sport, tier, n, claimed, pos in ledger.consensus_tier_counts(conn=conn):
+            for sport, tier, n, claimed, pos, stale in ledger.consensus_tier_counts(conn=conn):
                 self.assertIn(tier, ("books", "espn", "kalshi"))
-                self.assertLessEqual(claimed, n)
+                self.assertLessEqual(claimed + stale, n)
                 if tier == "kalshi":
-                    self.assertEqual(claimed, 0)
+                    self.assertEqual((claimed, stale), (0, 0))
+                else:
+                    self.assertEqual(pos, 0)
+            used = ledger.odds_api_usage(conn=conn)
+            self.assertIn("used", used)
 
     def test_ctx_consensus_keys_and_no_test_rows(self) -> None:
         with _rolled_back() as conn:

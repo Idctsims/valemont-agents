@@ -18,6 +18,7 @@ from unittest import mock
 from decimal import Decimal
 from typing import Any, Callable
 
+from consensus import priority
 from sports import kalshi_board as job
 from venues.kalshi import board as kb
 from venues.kalshi.client import KalshiClient
@@ -769,6 +770,8 @@ class Refresh(unittest.TestCase):
     soonest first, <= 300 calls and <= 300 s, adaptive pacing."""
 
     def setUp(self) -> None:
+        priority.set_events(())
+        self.addCleanup(priority.set_events, ())
         self.state = job.BoardState()
         job.full_job(client=client(FakeKalshi()), now=lambda: NOW, state=self.state, writer=RecordingWriter())
 
@@ -815,6 +818,23 @@ class Refresh(unittest.TestCase):
         self.assertIn(f"refresh: {run.events} of {run.scope} events within 3 h", run.job_note)
         nothing = self.refresh(datetime(2026, 11, 6, 14, 0, tzinfo=UTC))[0]  # 08:00 Chicago: games 10 h out
         self.assertIn("nothing starts within 3 h", nothing.job_note)
+
+    def test_events_with_an_outside_price_go_first_inside_the_same_cap(self) -> None:
+        """db/074 (owner, Nov 9): events with a books or espn row first, then
+        the soonest start; the 300-call cap and the 3 h window unchanged."""
+        lo, hi = AT.timestamp(), (AT + timedelta(hours=3)).timestamp()
+        in_scope = sorted((t for t, s in self.state.window.items() if lo <= s < hi),
+                          key=lambda t: (self.state.window[t], t))
+        self.assertGreater(len(in_scope), 3)
+        latest = in_scope[-2:]  # the two that start last
+        priority.set_events(latest + ["KXNOTINWINDOW-26NOV06XXXYYY"])
+        with mock.patch.object(job, "REFRESH_MAX_CALLS", 3):
+            run, _, fake, _ = self.refresh()
+        asked = [q["event_ticker"] for q in self.market_queries(fake)]
+        self.assertEqual(asked[:2], sorted(latest, key=lambda t: (self.state.window[t], t)))
+        self.assertEqual(asked[2], in_scope[0])  # then the soonest
+        self.assertEqual((run.calls, run.scope), (3, len(in_scope)))
+        self.assertEqual((job.REFRESH_MAX_CALLS, kb.REFRESH_WITHIN), (300, timedelta(hours=3)))
 
     def test_the_call_cap_stops_logs_the_skip_and_never_sweeps_an_unread_event(self) -> None:
         with mock.patch.object(job, "REFRESH_MAX_CALLS", 3):

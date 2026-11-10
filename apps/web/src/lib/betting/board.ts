@@ -30,18 +30,50 @@ export type BoardGame = {
  *  s: a scalar market (a ladder or escalator: YES pays a fraction of $1 that
  *  grows with the stat; its price is not a probability, never a parlay leg). */
 export type BoardMarket = {
-  k: Kind; lb?: string; b?: number; a?: number; f?: number; v?: string; s?: boolean; q?: Consensus;
+  k: Kind; lb?: string; b?: number; a?: number; f?: number; v?: string; s?: boolean;
+  /** The packed consensus (db/074): "<tier><letter><p><edge>", e.g. "b9c515-93". */
+  q?: string;
 };
 
-/** A binary market's consensus (db/073 leg_consensus_for, on kalshi_board_game).
- *  t: tier b(ooks) | e(spn) | k(alshi only); n: books at the exact line;
- *  p: the consensus probability of YES; sd: the better side; e: that side's
- *  net edge (p - ask - taker fee); a, f: that side's ask and fee; ec: the
- *  edge is claimed (books or espn tier and e > 0). A kalshi-tier leg never
- *  claims edge, whatever e reads (owner, Nov 9). */
+/** A binary market's consensus (db/074 leg_consensus_for, packed on
+ *  kalshi_board_game; parseConsensus). t: tier b(ooks) | e(spn) | k(alshi
+ *  only); n: books at the exact line; p: P(YES); sd: the better side; e: its
+ *  net edge (p - ask - taker fee); a, f: its ask and fee (YES: the market's
+ *  own; NO: 1 - bid and the fee derived to 0.1 cent, fApprox); ec: the edge
+ *  is claimed (books or espn, edge > 0, both prices fresh); staleK: the
+ *  Kalshi price is older than 20 min; staleO: the book price older than 12 h.
+ *  A kalshi-tier or stale leg never claims edge (owner, Nov 9). */
 export type Consensus = {
-  t: "b" | "e" | "k"; n?: number; p?: number; sd?: "y" | "n"; e?: number; a?: number; f?: number; ec?: boolean;
+  t: "b" | "e" | "k"; n?: number; p: number; sd: "y" | "n"; e: number; a?: number; f?: number;
+  fApprox?: boolean; ec: boolean; staleK: boolean; staleO: boolean;
 };
+
+const PACKED = /^([bek])(\d*)([a-p])(\d{3})(-?\d+)$/;
+
+/** The packed q into its fields, with the side's ask and fee from the market. */
+export function parseConsensus(m: Pick<BoardMarket, "q" | "a" | "b" | "f">): Consensus | null {
+  const hit = m.q ? PACKED.exec(m.q) : null;
+  if (!hit) return null;
+  const code = hit[3].charCodeAt(0) - 97;
+  const p = Number(hit[4]) / 1000;
+  const e = Number(hit[5]) / 1000;
+  const sd = code & 8 ? "n" : "y";
+  const t = hit[1] as Consensus["t"];
+  const base = { t, n: t === "b" ? Number(hit[2]) : t === "e" ? 1 : undefined, p, sd, e,
+                 ec: (code & 1) === 1, staleK: (code & 2) === 2, staleO: (code & 4) === 4 } as const;
+  if (sd === "y") return { ...base, a: m.a, f: m.f };
+  const a = m.b === undefined || m.b === null ? undefined : Math.round((1 - m.b) * 10000) / 10000;
+  const f = a === undefined ? undefined : Math.round(((1 - p) - a - e) * 1000) / 1000;
+  return { ...base, a, f: f !== undefined && f >= 0 ? f : undefined, fApprox: true };
+}
+
+/** "stale: Kalshi price" / "stale: book price" / both, or null. */
+export function staleLabel(q: Pick<Consensus, "staleK" | "staleO">): string | null {
+  if (q.staleK && q.staleO) return "stale prices";
+  if (q.staleK) return "stale Kalshi price";
+  if (q.staleO) return "stale book price";
+  return null;
+}
 
 /** "Books · 9", "ESPN · 1 book", "Kalshi only". */
 export function tierLabel(q: Pick<Consensus, "t" | "n">): string {
@@ -71,10 +103,11 @@ export function edgeTone(q: Pick<Consensus, "e" | "ec">): "up" | "flat" {
 }
 
 /** The Odds API's month (db/073 odds_api_usage). */
-export type Credits = { spent: number; allowance: number; remaining: number | null; calls: number };
+export type Credits = { used: number | null; spent: number; allowance: number; remaining: number | null; calls: number };
 
+/** The account's own count (x-requests-used, db/074) when known, else the log's sum. */
 export function creditsLine(c: Credits): string {
-  return `Odds API credits: ${c.spent} / ${c.allowance} this month`
+  return `Odds API credits: ${c.used ?? c.spent} / ${c.allowance} used this month`
     + (c.remaining !== null && c.remaining !== undefined ? ` · ${c.remaining} left on the account` : "");
 }
 /** sm: how many of this event's markets one Kalshi combo may use (absent =

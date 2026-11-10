@@ -290,6 +290,19 @@ class Credits(unittest.TestCase):
         with self.assertRaisesRegex(CreditRefused, "remaining 49"):
             g2.check(3)
 
+    def test_the_spend_is_the_account_s_own_count(self) -> None:
+        """db/074 (owner, Nov 9): the latest x-requests-used, not the log's
+        sum (which misses Step 0's 11 credits)."""
+        g = CreditGuard.load(lambda: {"used": 20, "spent": 9, "remaining": 480})
+        self.assertEqual(g.spent, 20)
+        g.note(call(3, 477))
+        self.assertEqual(g.spent, 23)  # a call with no used header: start + cost
+        g.note(odds.Call("/sports/:sport/odds", "x", None, "h2h", "us", 200, 3, 26, 474, 1))
+        self.assertEqual(g.spent, 26)  # the header wins
+        self.assertEqual(CreditGuard.load(lambda: {"spent": 9, "remaining": 480}).spent, 9)  # before db/074
+        with self.assertRaisesRegex(CreditRefused, "spend 448"):
+            CreditGuard.load(lambda: {"used": 448, "spent": 0, "remaining": 52}).check(3)
+
     def test_pushes_once_a_month_at_400_and_on_the_first_refusal(self) -> None:
         sent: list[str] = []
         with mock.patch.object(ledger, "notification_sent_this_month", side_effect=lambda k: k in sent), \
@@ -416,7 +429,7 @@ class FakeStore(job.Store):
         return 0
 
     def tier_counts(self):
-        return [("Basketball", "books", 2, 0, 0)]
+        return [("Basketball", "books", 2, 0, 0, 0)]
 
 
 class FakeOdds:

@@ -41,7 +41,8 @@ export async function loadCredits(supabase: SupabaseClient): Promise<Credits> {
   const { data, error } = await supabase.rpc("odds_api_usage");
   if (error) throw new Error(`Couldn't read the Odds API credits: ${error.message}`);
   const d = (data ?? {}) as Partial<Credits>;
-  return { spent: Number(d.spent ?? 0), allowance: Number(d.allowance ?? 500),
+  return { used: d.used === null || d.used === undefined ? null : Number(d.used),
+           spent: Number(d.spent ?? 0), allowance: Number(d.allowance ?? 500),
            remaining: d.remaining === null || d.remaining === undefined ? null : Number(d.remaining),
            calls: Number(d.calls ?? 0) };
 }

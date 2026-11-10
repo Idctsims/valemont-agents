@@ -44,7 +44,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
-from consensus import espn_odds, match
+from consensus import espn_odds, match, priority
 from consensus.match import BookPrices, Game, Market
 from core import ledger, odds_credits
 from core.odds_credits import CreditGuard, CreditRefused
@@ -106,6 +106,7 @@ class Run:
     tiers: dict[str, dict[str, int]] = field(default_factory=dict)
     claimed: int = 0
     kalshi_positive: int = 0
+    stale_positive: int = 0
     seconds: float = 0.0
 
     @property
@@ -117,7 +118,8 @@ class Run:
         oa = ", ".join(f"{s} {m}/{n}" for s, (m, n) in sorted(self.odds_events.items()))
         return "; ".join(p for p in [
             f"{self.kind}: legs books {t['books']}, espn {t['espn']}, kalshi {t['kalshi']} "
-            f"(claimed {self.claimed}; kalshi-tier positive {self.kalshi_positive})",
+            f"(claimed {self.claimed}; stale, not claimed {self.stale_positive}; "
+            f"kalshi-tier positive {self.kalshi_positive})",
             f"credits {self.credits_run} this run, month {self.credits_month}, remaining {self.remaining}"
             + (f", REFUSED ({self.refused})" if self.refused else ""),
             f"odds events matched {oa or 'none'}" + (f", MISSES {len(self.misses)}" if self.misses else "")
@@ -172,7 +174,7 @@ class Store:
     def prune(self) -> int:
         return ledger.book_lines_prune()
 
-    def tier_counts(self) -> list[tuple[str, str, int, int, int]]:
+    def tier_counts(self) -> list[tuple[str, str, int, int, int, int]]:
         return ledger.consensus_tier_counts()
 
 
@@ -237,6 +239,9 @@ def consensus_job(*, now: Callable[[], datetime] = lambda: datetime.now(timezone
                 rows.append(row)
                 run.rows[row["tier"]] = run.rows.get(row["tier"], 0) + 1
         run.written = st.upsert(rows, at)
+        # The board refresh re-prices these events first (consensus/priority.py).
+        by_ticker = {m.market_ticker: m.event_ticker for m in markets}
+        priority.set_events({by_ticker[r["market_ticker"]] for r in rows})
         # The sweep: every game evaluated; a books row of a game with no Odds
         # API prices in this process today is kept, not swept.
         all_tickers = sorted({t for ts in tickers.values() for t in ts})
@@ -254,10 +259,11 @@ def consensus_job(*, now: Callable[[], datetime] = lambda: datetime.now(timezone
                                       snap[1] if snap else at, espn_at)
         run.lines_written = st.lines(lines)
         run.lines_pruned = st.prune()
-        for sport, tier, n, claimed, pos in st.tier_counts():
+        for sport, tier, n, claimed, pos, stale in st.tier_counts():
             run.tiers.setdefault(sport, {})[tier] = n
             run.claimed += claimed
             run.kalshi_positive += pos
+            run.stale_positive += stale
     finally:
         for c in closers:
             c()

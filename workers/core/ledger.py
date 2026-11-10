@@ -5991,7 +5991,10 @@ BOOK_LINES_PRUNE_SQL: Final = "SELECT book_lines_prune(%(is_test)s)"
 CONSENSUS_TIER_COUNTS_SQL: Final = """
     SELECT x.sport, x.tier, count(*),
            count(*) FILTER (WHERE x.edge_claimed),
-           count(*) FILTER (WHERE x.tier = 'kalshi' AND greatest(coalesce(x.edge_yes, -1), coalesce(x.edge_no, -1)) > 0)
+           count(*) FILTER (WHERE x.tier = 'kalshi' AND greatest(coalesce(x.edge_yes, -1), coalesce(x.edge_no, -1)) > 0),
+           -- An outside leg showing a positive edge on a stale price (db/074): shown, never claimed.
+           count(*) FILTER (WHERE x.tier <> 'kalshi' AND (x.stale_kalshi OR x.stale_outside)
+                              AND greatest(coalesce(x.edge_yes, -1), coalesce(x.edge_no, -1)) > 0)
       FROM leg_consensus_for(NULL) x
      WHERE NOT x.is_test AND x.starts_at > now()
      GROUP BY 1, 2
@@ -6056,9 +6059,10 @@ def book_lines_prune(*, is_test: bool = False, conn: psycopg.Connection | None =
     return _board_count(BOOK_LINES_PRUNE_SQL, {"is_test": is_test}, conn)
 
 
-def consensus_tier_counts(*, conn: psycopg.Connection | None = None) -> list[tuple[str, str, int, int, int]]:
+def consensus_tier_counts(*, conn: psycopg.Connection | None = None) -> list[tuple[str, str, int, int, int, int]]:
+    """(sport, tier, legs, claimed, kalshi-tier positive, stale positive)."""
     with _brief_conn(conn) as c:
-        return [(s, t, int(n), int(cl), int(pos)) for s, t, n, cl, pos in
+        return [(s, t, int(n), int(cl), int(pos), int(st)) for s, t, n, cl, pos, st in
                 c.execute(CONSENSUS_TIER_COUNTS_SQL).fetchall()]
 
 

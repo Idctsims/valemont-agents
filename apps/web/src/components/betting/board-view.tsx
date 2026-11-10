@@ -4,8 +4,8 @@ import { useState, useTransition } from "react";
 
 import { expandGame } from "@/app/(app)/betting/actions";
 import {
-  asOfLabel, cents, comboLabel, countsLine, edgeCents, edgeTone, feeCents, orderEvents, pct, startLabel,
-  tierLabel,
+  asOfLabel, cents, comboLabel, countsLine, edgeCents, edgeTone, feeCents, orderEvents, parseConsensus, pct,
+  staleLabel, startLabel, tierLabel,
   type BoardEvent, type BoardGame, type BoardMarket, type Consensus, type Kind,
 } from "@/lib/betting/board";
 
@@ -39,6 +39,7 @@ function ScalesChip() {
 }
 
 function MarketRow({ m }: { m: BoardMarket }) {
+  const consensus = parseConsensus(m);
   return (
     <li data-testid="board-market" data-kind={m.k} data-payout={m.s ? "scalar" : "binary"}
         className="flex flex-wrap items-baseline justify-between gap-x-4 py-2">
@@ -53,18 +54,20 @@ function MarketRow({ m }: { m: BoardMarket }) {
         </span>
         <span data-testid="market-fee" className="block text-xs text-text-muted">fee {feeCents(m.f)}</span>
       </span>
-      {m.q && <ConsensusRow q={m.q} />}
+      {consensus && <ConsensusRow q={consensus} />}
     </li>
   );
 }
 
-// The consensus row (db/073): tier chip, the consensus probability, the
-// better side's ask and fee, and its net edge. A claimed positive edge is in
-// the up colour; anything else is neutral, never danger.
+// The consensus row (db/073, db/074): tier chip, the consensus probability,
+// the better side's ask and fee, and its net edge. A claimed positive edge is
+// in the up colour; anything else is neutral, never danger. A stale price is
+// tagged and claims nothing.
 function ConsensusRow({ q }: { q: Consensus }) {
   const side = q.sd === "n" ? "NO" : "YES";
+  const stale = staleLabel(q);
   return (
-    <span data-testid="market-consensus" data-tier={q.t} data-claimed={q.ec ? "1" : "0"}
+    <span data-testid="market-consensus" data-tier={q.t} data-claimed={q.ec ? "1" : "0"} data-stale={stale ? "1" : "0"}
           className="flex w-full basis-full flex-wrap items-center gap-x-3 gap-y-1 pt-1 font-mono text-xs tabular-nums text-text-muted">
       <span data-testid="consensus-tier"
             className="label-mono inline-flex h-6 items-center whitespace-nowrap rounded-pill border border-border px-2">
@@ -72,10 +75,16 @@ function ConsensusRow({ q }: { q: Consensus }) {
       </span>
       <span data-testid="consensus-p">p {pct(q.p)}</span>
       <span data-testid="consensus-ask">{side} {cents(q.a)}</span>
-      <span data-testid="consensus-fee">fee {feeCents(q.f)}</span>
+      <span data-testid="consensus-fee">fee {q.fApprox ? cents(q.f) : feeCents(q.f)}</span>
       <span data-testid="consensus-edge" className={edgeTone(q) === "up" ? "text-hit" : "text-text-muted"}>
         edge {edgeCents(q.e)}
       </span>
+      {stale && (
+        <span data-testid="consensus-stale"
+              className="label-mono inline-flex h-6 items-center whitespace-nowrap rounded-pill border border-border px-2">
+          {stale}
+        </span>
+      )}
     </span>
   );
 }

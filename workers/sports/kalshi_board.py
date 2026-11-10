@@ -11,7 +11,8 @@
                           otherwise, so the health monitor still sees it on
                           time): re-prices the events starting within 3 h,
                           not yet started, from the full pull's in-memory
-                          window: one event per call, soonest first, at most
+                          window: one event per call, events with an outside
+                          price first (db/074), then soonest, at most
                           300 calls and 300 s a run, paced to keep 429s
                           under 2% (owner, Nov 7).
 
@@ -40,6 +41,7 @@ from typing import Any, Callable, Iterable, Mapping
 from zoneinfo import ZoneInfo
 
 from core import ledger, memory
+from consensus import priority
 from venues.kalshi import board as kb
 from venues.kalshi.client import KalshiClient
 
@@ -587,7 +589,8 @@ def refresh_job(*, http: kb.Http | None = None,
                 sleep: Callable[[float], None] = time.sleep) -> BoardRun:
     """The kalshi_board_refresh system job (rebuilt, owner, Nov 7): re-price
     the events starting within 3 h and not yet started, ONE event per call,
-    soonest first, under REFRESH_MAX_CALLS and REFRESH_MAX_S. A run never
+    events with an outside price (consensus/priority.py) first, then soonest,
+    under REFRESH_MAX_CALLS and REFRESH_MAX_S. A run never
     overlaps itself (the scheduler's max_instances=1 and coalesce) or a full
     pull (PULL_LOCK: it idles while one runs)."""
     at = now()
@@ -598,7 +601,11 @@ def refresh_job(*, http: kb.Http | None = None,
     if not state.window:
         return BoardRun(kind="refresh", idle="no window yet (the full pull has not run in this process)")
     lo, hi = at.timestamp(), (at + kb.REFRESH_WITHIN).timestamp()
-    soon = sorted((t for t, s in state.window.items() if lo <= s < hi), key=lambda t: (state.window[t], t))
+    # Events with an outside price first (consensus/priority.py; owner, Nov 9),
+    # then the soonest start; the cap and the window are unchanged.
+    prio = priority.events()
+    soon = sorted((t for t, s in state.window.items() if lo <= s < hi),
+                  key=lambda t: (t not in prio, state.window[t], t))
     if not soon:
         return BoardRun(kind="refresh", idle=f"nothing starts within {kb.REFRESH_WITHIN.total_seconds() / 3600:.0f} h")
     if not PULL_LOCK.acquire(blocking=False):

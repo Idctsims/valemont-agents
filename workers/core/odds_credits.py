@@ -2,8 +2,12 @@
 adapter or job can spend around it (CLAUDE.md §3).
 
     refuse a paid call  when the last reported remaining < 50, or this
-                        month's spend (odds_api_calls, db/073) plus the
-                        call's cost would pass 450
+                        month's spend plus the call's cost would pass 450.
+                        The spend is the ACCOUNT's own count: the latest
+                        x-requests-used header (odds_api_usage().used,
+                        db/074; owner, Nov 9), not the odds_api_calls sum,
+                        which misses Step 0's 11 credits. The table stays
+                        the call log.
     push once a month   at a spend of 400 ("odds_credits_400")
     fail loud once      the first refusal of a month pushes
                         ("odds_credits_refused") and fails its run; later
@@ -43,6 +47,7 @@ class CreditGuard:
     """One run's view: the month's spend and remaining as the database had
     them at the start, plus this run's own calls."""
 
+    #: The account's used count at the start (the latest x-requests-used).
     spent_at_start: int
     remaining_at_start: int | None
     calls: list[Call] = field(default_factory=list)
@@ -51,10 +56,18 @@ class CreditGuard:
     @classmethod
     def load(cls, usage: Callable[[], dict[str, Any]] | None = None) -> "CreditGuard":
         u = (usage or ledger.odds_api_usage)()
-        return cls(int(u.get("spent") or 0), None if u.get("remaining") is None else int(u["remaining"]))
+        used = u.get("used")
+        # Before db/074 (no `used`): the call log's sum, the only count there was.
+        start = int(used) if used is not None else int(u.get("spent") or 0)
+        return cls(start, None if u.get("remaining") is None else int(u["remaining"]))
 
     @property
     def spent(self) -> int:
+        """The account's used count: this run's latest header, else the start's
+        plus this run's costs (a call that reported no header)."""
+        for c in reversed(self.calls):
+            if c.used is not None:
+                return c.used + sum(x.cost or 0 for x in self.calls[self.calls.index(c) + 1:])
         return self.spent_at_start + sum(c.cost or 0 for c in self.calls)
 
     @property
