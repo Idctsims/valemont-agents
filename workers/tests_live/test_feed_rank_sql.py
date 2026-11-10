@@ -172,16 +172,29 @@ class Reactions(RankSqlCase):
 
 class WorkerQueries(RankSqlCase):
     def test_mean_vector_is_averaged_in_the_database(self) -> None:
+        # The exact query text, restricted to this test's own stories in the
+        # database. Counting the whole real 7-day window raced the production
+        # ingest, which commits stories while the test runs (2,276 vs 2,275,
+        # Nov 9; the #98 pattern).
+        def mean(ids: list[int]) -> tuple[tuple[float, ...] | None, int]:
+            ledger._binary_vectors(conn)
+            text, n = conn.execute(f"{ledger.FEED_MEAN_SQL} AND st.id = ANY (%(ids)s)",
+                                   {"pillar": "home", "days": 7, "ids": ids}, binary=True).fetchone()
+            return ledger._vec_parse(text), int(n)
+
         with _rolled_back() as conn:
-            _, before = ledger.feed_mean_vector("home", 7, conn=conn)
             src = self.source(conn)
-            self.story(conn, src, vec=unit(3))
-            self.story(conn, src, vec=unit(4))
-            vec, after = ledger.feed_mean_vector("home", 7, conn=conn)
-            self.assertEqual(after, before + 2)
+            ids = [self.story(conn, src, vec=unit(3)), self.story(conn, src, vec=unit(4))]
+            vec, n = mean(ids)
+            self.assertEqual(n, 2)
             self.assertEqual(len(vec), 384)
-            self.story(conn, self.source(conn, is_test=True), vec=unit(5))  # a test story never counts
-            self.assertEqual(ledger.feed_mean_vector("home", 7, conn=conn)[1], after)
+            self.assertAlmostEqual(vec[3], 0.5, places=3)  # averaged in the database
+            self.assertAlmostEqual(vec[4], 0.5, places=3)
+            ids.append(self.story(conn, self.source(conn, is_test=True), vec=unit(5)))  # a test story never counts
+            self.assertEqual(mean(ids)[1], 2)
+            # The worker's own call still runs on the real window (its count is
+            # not compared: the ingest moves it).
+            self.assertEqual(len(ledger.feed_mean_vector("home", 7, conn=conn)[0]), 384)
 
     def test_signals_are_real_reacted_stories_with_their_latest_reaction(self) -> None:
         with _rolled_back() as conn:
