@@ -27,7 +27,10 @@ The fetch path (owner, Nov 6), never the raw open-markets list (MASTER_PLAN
 
 Every field read is shape-checked (venues/kalshi/events.py req/opt): a
 missing or mistyped one raises KalshiShapeError naming the series and the
-path, so every run is also the contract test of these four shapes. A fee type
+path, so every run is also the contract test of these four shapes. One
+MARKET that breaks the contract is the exception (owner, Nov 10): it is
+skipped and named (``Batch.contract_misses``), the rest is written, and the
+pull fails at the end naming it, like a series over the page cap. A fee type
 or multiplier FeeRegime does not model fails the run with the series named;
 no series is ever skipped silently.
 
@@ -51,6 +54,7 @@ parse miss for its series.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 import urllib.error
@@ -64,6 +68,8 @@ from typing import Any, Callable, Iterable, Iterator, Sequence
 from venues.kalshi.client import USER_AGENT, KalshiClient, KalshiError, KalshiUnreachable, dec, ts
 from venues.kalshi.events import KalshiShapeError, opt, req
 from venues.kalshi.fees import FeeRegime, UnsupportedFeeType
+
+log = logging.getLogger("valemont.kalshi_board")
 
 WINDOW = timedelta(hours=36)
 #: The light refresh re-prices events starting within this, not yet started
@@ -600,6 +606,9 @@ class Batch:
     misses: Counter = field(default_factory=Counter)
     no_mismatch: int = 0
     checked: int = 0
+    #: Markets that broke the parser contract: skipped, never written (owner,
+    #: Nov 10): their tickers (or the JSON path when the ticker is unreadable).
+    contract_misses: list[str] = field(default_factory=list)
 
 
 def parse_market(raw: Any, series: Series, path: str) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -608,7 +617,9 @@ def parse_market(raw: Any, series: Series, path: str) -> tuple[dict[str, Any], d
     s = series.ticker
     ticker = req(raw, "ticker", str, s, path)
     event = req(raw, "event_ticker", str, s, path)
-    if not ticker.startswith(event + "-"):
+    # A single-market event's market may carry the event's own ticker
+    # (KXPGAPLAYOFF-AUCPBCS26, Nov 10; owner: accepted).
+    if ticker != event and not ticker.startswith(event + "-"):
         raise KalshiShapeError(s, f"{path}.ticker", f"{ticker[:60]!r} is not under {event[:60]!r}")
     title = req(raw, "title", str, s, path)
     sub = opt(raw, "yes_sub_title", str, s, path)
@@ -674,9 +685,17 @@ def parse_markets_page(body: Any, series: dict[str, Series], batch: Batch, label
         s = series.get(series_of(event))
         if s is None:
             raise KalshiShapeError(label, f"{p}.event_ticker", f"{event[:60]!r}: series not on the board")
-        if req(raw, "status", str, s.ticker, p) not in ("active", "open"):
+        try:
+            if req(raw, "status", str, s.ticker, p) not in ("active", "open"):
+                continue
+            row, ex = parse_market(raw, s, p)
+        except KalshiShapeError as exc:
+            # One market that breaks the contract never kills the pull (owner,
+            # Nov 10): it is skipped and named; the pull fails at the end.
+            t = raw.get("ticker")
+            batch.contract_misses.append(t[:80] if isinstance(t, str) and t else p)
+            log.warning("kalshi board: contract miss, skipped: %s", exc)
             continue
-        row, ex = parse_market(raw, s, p)
         batch.rows.append(row)
         if ex["complement"] is not None:
             batch.checked += 1
@@ -732,6 +751,7 @@ def market_batches(client: KalshiClient, event_tickers: Sequence[str], series: d
                     batch.rows.extend(one.rows)
                     batch.times.update(one.times)
                     batch.misses.update(one.misses)
+                    batch.contract_misses.extend(one.contract_misses)
                     batch.checked += one.checked
                     batch.no_mismatch += one.no_mismatch
             else:

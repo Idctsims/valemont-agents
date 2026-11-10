@@ -389,18 +389,46 @@ class Contract(unittest.TestCase):
 
     def test_markets(self) -> None:
         s = {"KXNBAREB": series_obj("KXNBAREB")}
-        for field in ("ticker", "event_ticker", "title", "close_time", "status"):
+        for field in ("ticker", "title", "close_time"):
             with self.subTest(field):
                 raw = dict(markets("KXNBAREB")[0])
                 del raw[field]
                 with self.assertRaises(KalshiShapeError):
-                    kb.parse_markets_page({"markets": [raw]}, s, kb.Batch(), "t")
+                    kb.parse_market(raw, s["KXNBAREB"], "$.markets[0]")
+        raw = dict(markets("KXNBAREB")[0])
+        del raw["status"]
+        batch = kb.Batch()
+        kb.parse_markets_page({"markets": [raw]}, s, batch, "t")  # read by the page: a contract miss
+        self.assertEqual((batch.rows, batch.contract_misses), ([], [raw["ticker"]]))
+        raw = dict(markets("KXNBAREB")[0])
+        del raw["event_ticker"]
+        with self.assertRaises(KalshiShapeError):  # the page cannot say whose market it is
+            kb.parse_markets_page({"markets": [raw]}, s, kb.Batch(), "t")
         raw = dict(markets("KXNBAREB")[0], yes_ask_dollars=0.42)
         with self.assertRaisesRegex(KalshiShapeError, "yes_ask_dollars"):
-            kb.parse_markets_page({"markets": [raw]}, s, kb.Batch(), "t")
+            kb.parse_market(raw, s["KXNBAREB"], "$.markets[0]")
         raw = dict(markets("KXNBAREB")[0], event_ticker="KXUNKNOWN-1")
         with self.assertRaisesRegex(KalshiShapeError, "not on the board"):
             kb.parse_markets_page({"markets": [raw]}, s, kb.Batch(), "t")
+
+    def test_a_market_that_breaks_the_contract_is_skipped_and_named(self) -> None:
+        # Owner, Nov 10: one bad market never kills the pull.
+        s = {"KXNBAREB": series_obj("KXNBAREB")}
+        good, bad = markets("KXNBAREB")[1], dict(markets("KXNBAREB")[0], yes_ask_dollars=0.42)
+        nameless = dict(markets("KXNBAREB")[0])
+        del nameless["ticker"]
+        batch = kb.Batch()
+        kb.parse_markets_page({"markets": [bad, good, nameless]}, s, batch, "t")
+        self.assertEqual([r["market_ticker"] for r in batch.rows], [good["ticker"]])
+        self.assertEqual(batch.contract_misses, [bad["ticker"], "$.markets[2]"])
+
+    def test_a_single_market_event_may_carry_the_event_ticker(self) -> None:
+        # KXPGAPLAYOFF-AUCPBCS26, Nov 10: the market's ticker is its event's.
+        raw = markets("KXNBAREB")[0]
+        row, _ = parse("KXNBAREB", ticker=raw["event_ticker"])
+        self.assertEqual(row["market_ticker"], raw["event_ticker"])
+        with self.assertRaisesRegex(KalshiShapeError, "is not under"):
+            parse("KXNBAREB", ticker=raw["event_ticker"] + "X")  # a prefix without the dash still is not
 
     def test_window_and_primary(self) -> None:
         games, _ = kb.parse_milestones(load("milestones"), NOW, NOW + kb.WINDOW)
@@ -545,9 +573,51 @@ class FullJob(unittest.TestCase):
         self.assertIsNone(run.idle)
         self.assertGreater(run.markets, 0)
 
+    def bad_market_fake(self) -> tuple[Callable, str]:
+        """FakeKalshi with one KXNBAREB market that breaks the contract."""
+        fake, bad = FakeKalshi(), markets("KXNBAREB")[0]["ticker"]
+
+        def serve(url: str):
+            status, body = fake(url)
+            if url.split("?")[0].endswith("/markets") and isinstance(body, dict):
+                for m in body.get("markets") or []:
+                    if m.get("ticker") == bad:
+                        m["yes_ask_dollars"] = 0.42  # a number, not the string the contract says
+            return status, body
+        return serve, bad
+
+    def test_a_market_that_breaks_the_contract_is_skipped_the_rest_written_then_the_run_fails(self) -> None:
+        serve, bad = self.bad_market_fake()
+        w, st = RecordingWriter(), job.BoardState()
+        with self.assertRaisesRegex(job.BoardFailed,
+                                    rf"1 markets broke the parser contract and were skipped: {bad}"
+                                    rf".*the rest was written: .*contract_misses=1 \({bad}\)"):
+            job.full_job(client=client(serve), now=lambda: NOW, state=st, writer=w)  # type: ignore[arg-type]
+        sent = w.sent("markets")
+        self.assertNotIn(bad, sent)
+        self.assertIn("KXNBAGAME-26NOV06BOSCHA-BOS", sent)  # the rest was written
+        self.assertIn(markets("KXNBAREB")[1]["ticker"], sent)  # its own series too
+        self.assertEqual([k for k, _ in w.calls][-3:], ["touch", "link", "prune"])
+        self.assertTrue(st.window)  # the board was written: the refresh has its window
+        dry = job.full_job(client=client(serve), now=lambda: NOW, state=job.BoardState(), dry_run=True)  # type: ignore[arg-type]
+        self.assertEqual(dry.contract_misses, [bad])
+        self.assertLess(dry.job_note.index("contract_misses=1"), 300)  # inside job_health's 500 characters
+        self.assertEqual(dry.not_open, {})  # a skipped market is not a not-open event
+
+    def test_the_refresh_skips_and_names_a_contract_miss_and_goes_on(self) -> None:
+        _, _, st = self.run_full()
+        serve, bad = self.bad_market_fake()
+        clock = FakeClock()
+        w = RecordingWriter()
+        run = job.refresh_job(http=http_of(serve, clock), now=lambda: AT, state=st, writer=w,
+                              clock=clock, sleep=clock.sleep)
+        self.assertEqual(run.contract_misses, [bad])
+        self.assertIn(f"contract_misses=1 ({bad})", run.job_note)
+        self.assertGreater(run.markets, 0)
+
     def test_the_note_reads_excluded_and_overflowed(self) -> None:
         run = job.BoardRun(kind="full")
-        self.assertIn("excluded=0, overflowed=0", run.job_note)
+        self.assertIn("excluded=0, overflowed=0, contract_misses=0", run.job_note)
         run.overflowed["KXNFLX"] = 14
         self.assertIn("overflowed=1 (KXNFLX 14 events)", run.job_note)
 

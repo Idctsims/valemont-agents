@@ -199,6 +199,15 @@ class BoardRun:
     excluded: dict[str, int] = field(default_factory=dict)
     #: Series whose /markets query hit the page cap: series -> its events (skipped).
     overflowed: dict[str, int] = field(default_factory=dict)
+    #: Markets that broke the parser contract: skipped, the rest written, the
+    #: full pull fails at the end naming them (owner, Nov 10).
+    contract_misses: list[str] = field(default_factory=list)
+
+    @property
+    def contract_note(self) -> str:
+        n = self.contract_misses
+        return (f"contract_misses={len(n)}"
+                + (" (" + ", ".join(n[:6]) + (f" +{len(n) - 6} more" if len(n) > 6 else "") + ")" if n else ""))
     #: The refresh: events in scope (start within REFRESH_WITHIN, not started),
     #: those left unread when a cap was hit, which cap, the first skipped
     #: start, and the pace it ended on (s between calls).
@@ -230,7 +239,7 @@ class BoardRun:
                      f"excluded={len(self.excluded)}"
                      + (" (" + ", ".join(f"{s} {n} events" for s, n in sorted(self.excluded.items())) + ")"
                         if self.excluded else "")
-                     + f", {overflowed}")
+                     + f", {overflowed}, {self.contract_note}")
             head += f"; flags {self.flag_events} events ({self.flag_series} series read)"
         else:
             head = (f"refresh: {self.events} of {self.scope} events within "
@@ -240,6 +249,8 @@ class BoardRun:
                          f"{self.skipped_from:%H:%M} UTC)" if self.skipped_from else f" ({self.cap} cap)")
             if self.overflowed:
                 head += f"; {overflowed}"
+            if self.contract_misses:
+                head += f"; {self.contract_note}"
         rate = (f"{self.calls} Kalshi calls, {self.limited} 429s ({self.limited_pct:.1f}%)"
                 + (f", pace {self.pace:.2f} s" if self.pace is not None else "")
                 + f", ~{self.kalshi_bytes // 1024} KB from Kalshi, {self.seconds:.0f} s")
@@ -422,7 +433,8 @@ def _pull(client: KalshiClient, run: BoardRun, writer: Writer, state: BoardState
             # fails at the end naming it (owner, Nov 7).
             run.overflowed[kb.series_of(group[0])] = len(group)
             continue
-        if not batch.rows:
+        run.contract_misses.extend(batch.contract_misses)
+        if not batch.rows and not batch.contract_misses:
             # A window series with events but no open market. Each event is
             # asked once with NO status filter (owner, Nov 9): one with markets
             # in any other status (unopened, closed, paused, settled, whatever
@@ -543,11 +555,15 @@ def _full(client: KalshiClient | None, now: Callable[[], datetime], state: Board
     # window) was set: the refresh keys on "the board was written", not on
     # "the last pull was ok" (owner, Nov 7).
     broken = broken_fetch(run, w.game_series()) if run.no_markets and not dry_run else []
-    if (broken or run.overflowed) and not dry_run:
+    if (broken or run.overflowed or run.contract_misses) and not dry_run:
         why = []
         if run.overflowed:
             why.append(f"{len(run.overflowed)} series overflowed the page cap and were skipped: "
                        + ", ".join(f"{s} ({n} events)" for s, n in sorted(run.overflowed.items())))
+        if run.contract_misses:
+            why.append(f"{len(run.contract_misses)} markets broke the parser contract and were skipped: "
+                       + ", ".join(run.contract_misses[:20])
+                       + (f" +{len(run.contract_misses) - 20} more" if len(run.contract_misses) > 20 else ""))
         why.extend(broken)
         raise BoardFailed(f"kalshi board: {'; '.join(why)} (the rest was written: {run.job_note})")
     return run
@@ -666,6 +682,7 @@ def _refresh(http: kb.Http | None, at: datetime, soon: list[str], state: BoardSt
             run.no_checked += batch.checked
             run.no_mismatch += batch.no_mismatch
             run.misses.update(batch.misses)
+            run.contract_misses.extend(batch.contract_misses)
             for r in batch.rows:
                 k, d = hash(r["market_ticker"]), digest(r)
                 seen.append(r["market_ticker"])
