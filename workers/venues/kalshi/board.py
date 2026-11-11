@@ -609,6 +609,46 @@ class Batch:
     #: Markets that broke the parser contract: skipped, never written (owner,
     #: Nov 10): their tickers (or the JSON path when the ticker is unreadable).
     contract_misses: list[str] = field(default_factory=list)
+    #: db/076 (Step 0, Nov 11): market ticker -> custom_strike's team id, and
+    #: team id -> the game's code, learned from GAME markets (the id on a
+    #: prop is the id on its team's GAME market, whose ticker ends in the
+    #: code). The job resolves `team` from these; the ids are never stored.
+    team_ids: dict[str, str] = field(default_factory=dict)
+    team_codes: dict[str, str] = field(default_factory=dict)
+
+    def take(self, other: "Batch") -> None:
+        """Merge another (per-event) batch into this one."""
+        self.rows.extend(other.rows)
+        self.times.update(other.times)
+        self.misses.update(other.misses)
+        self.contract_misses.extend(other.contract_misses)
+        self.checked += other.checked
+        self.no_mismatch += other.no_mismatch
+        self.team_ids.update(other.team_ids)
+        self.team_codes.update(other.team_codes)
+
+
+#: A team code as db/076 stores it (kalshi_board_team_shape).
+TEAM_CODE = re.compile(r"^[A-Z0-9]{1,6}$")
+
+
+def team_terms(strike: dict[str, Any] | None, series: str, ticker: str,
+               event: str) -> tuple[str | None, str | None]:
+    """(custom_strike's team id or None, the code it maps to or None). A code
+    is learned only from a team market of a ``…GAME`` series that names no
+    player: its ticker's last segment is the team's code (``…-BOS``)."""
+    if not strike:
+        return None, None
+    tid = next((v for k, v in strike.items() if isinstance(k, str) and k.endswith("_team")
+                and isinstance(v, str) and v), None)
+    if tid is None:
+        return None, None
+    player = any(isinstance(k, str) and k.endswith("_player") for k in strike)
+    base, _ = variant_of(series)
+    code = ticker[len(event) + 1:] if ticker.startswith(event + "-") else ""
+    if not player and base.endswith("GAME") and TEAM_CODE.match(code):
+        return tid, code
+    return tid, None
 
 
 def parse_market(raw: Any, series: Series, path: str) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -632,9 +672,10 @@ def parse_market(raw: Any, series: Series, path: str) -> tuple[dict[str, Any], d
         raise KalshiShapeError(s, f"{path}.floor_strike", f"is {type(line).__name__}")
     line_d = dec(line) if line is not None else None
     strike = opt(raw, "custom_strike", dict, s, path)
-    # Read for the kind (is_player) and the scalar terms only; never stored:
-    # it carries Kalshi's participant ids.
+    # Read for the kind (is_player), the scalar terms and the team (db/076)
+    # only; never stored: it carries Kalshi's participant ids.
     scalar = scalar_terms(strike, s, path)
+    team_id, team_code = team_terms(strike, s, ticker, event)
     del strike
     strike_type = opt(raw, "strike_type", str, s, path)
     close = req(raw, "close_time", str, s, path)
@@ -667,11 +708,14 @@ def parse_market(raw: Any, series: Series, path: str) -> tuple[dict[str, Any], d
         "yes_bid": None if yes_bid is None else str(yes_bid), "yes_ask": None if yes_ask is None else str(yes_ask),
         "volume": None if volume is None else str(volume), "open_interest": None if oi is None else str(oi),
         "taker_fee_at_ask": None if fee is None else str(fee),
+        # Resolved by the job from the batch's team maps (db/076).
+        "team": None,
     }
     complement = None
     if None not in (yes_bid, yes_ask, no_bid, no_ask):
         complement = no_ask == 1 - yes_bid and no_bid == 1 - yes_ask
-    extras = {"close_time": close_t, "expiry": expiry_t, "complement": complement, "miss": parsed.miss}
+    extras = {"close_time": close_t, "expiry": expiry_t, "complement": complement, "miss": parsed.miss,
+              "team_id": team_id, "team_code": team_code}
     return row, extras
 
 
@@ -697,6 +741,10 @@ def parse_markets_page(body: Any, series: dict[str, Series], batch: Batch, label
             log.warning("kalshi board: contract miss, skipped: %s", exc)
             continue
         batch.rows.append(row)
+        if ex["team_id"]:
+            batch.team_ids[row["market_ticker"]] = ex["team_id"]
+            if ex["team_code"]:
+                batch.team_codes[ex["team_id"]] = ex["team_code"]
         if ex["complement"] is not None:
             batch.checked += 1
             batch.no_mismatch += 0 if ex["complement"] else 1
@@ -741,19 +789,15 @@ def market_batches(client: KalshiClient, event_tickers: Sequence[str], series: d
     by_series: dict[str, list[str]] = {}
     for t in event_tickers:
         by_series.setdefault(series_of(t), []).append(t)
-    for s in sorted(by_series):
+    # GAME series first (db/076): their team markets teach the job each team
+    # id's code before the props that carry the same id are written.
+    for s in sorted(by_series, key=lambda x: (not variant_of(x)[0].endswith("GAME"), x)):
         group = by_series[s]
         try:
             if len(group) <= per_event_max:
                 batch = Batch()
                 for t in group:
-                    one = _fetch(client, series, {t}, f"markets[{t}]", event_ticker=t)
-                    batch.rows.extend(one.rows)
-                    batch.times.update(one.times)
-                    batch.misses.update(one.misses)
-                    batch.contract_misses.extend(one.contract_misses)
-                    batch.checked += one.checked
-                    batch.no_mismatch += one.no_mismatch
+                    batch.take(_fetch(client, series, {t}, f"markets[{t}]", event_ticker=t))
             else:
                 batch = _fetch(client, series, set(group), f"markets[{s}]", series_ticker=s)
         except PageCapExceeded:

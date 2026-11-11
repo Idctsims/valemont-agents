@@ -3,7 +3,7 @@
 // used to pull that page's slice out of the context snapshot. Shared by the
 // client (which builds it) and the route (which validates it).
 
-export const PILLARS = ["goals", "ventures", "capital", "brief", "tech", "screening"] as const;
+export const PILLARS = ["goals", "ventures", "capital", "brief", "tech", "screening", "combos"] as const;
 export type Pillar = (typeof PILLARS)[number];
 
 export type PageContext = {
@@ -35,6 +35,13 @@ export function pageSlice(payload: Record<string, unknown>, page: PageContext): 
   if (page.pillar === "ventures" && page.slug && pillar && typeof pillar === "object") {
     const active = (pillar as { active?: { slug?: string }[] }).active ?? [];
     return active.find((v) => v.slug === page.slug) ?? { slug: page.slug, note: "Not set up, or archived: no detail in the context." };
+  }
+  // A combo quote's sheet (db/077 ctx_combos): that quote, by id.
+  if (page.pillar === "combos" && page.slug && pillar && typeof pillar === "object") {
+    const recent = (pillar as { about?: string; recent?: { id?: number }[] }).recent ?? [];
+    const one = recent.find((c) => String(c.id) === page.slug);
+    return one ? { about: (pillar as { about?: string }).about, quote: one }
+               : { id: page.slug, note: "Not in the last 7 days' combo prices (pruned, or a test request)." };
   }
   return pillar ?? null;
 }

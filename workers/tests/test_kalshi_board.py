@@ -277,6 +277,73 @@ class Parsing(unittest.TestCase):
         self.assertEqual(batch.rows, [])
 
 
+class TeamResolution(unittest.TestCase):
+    """db/076 (Step 0, Nov 11): a prop's custom_strike team id is the id on
+    its team's GAME market, whose ticker ends in the team's code."""
+
+    GAME_ID, OTHER_ID = "6dd427f5-fa02-40ef-aa90-cfa73e0c539e", "96c447dd-2cdd-4c58-a151-ef0df87de981"
+
+    def raw(self, series: str, ticker: str, strike: dict[str, str], title: str = "Derrick White: 10+ points",
+            sub: str = "Derrick White: 10+") -> dict[str, Any]:
+        base = dict(markets("KXNBAREB")[0])
+        event = ticker.rsplit("-", 1)[0]
+        key = "basketball_player" if any(k.endswith("_player") for k in strike) else None
+        return dict(base, ticker=ticker, event_ticker=event, custom_strike=strike, title=title, yes_sub_title=sub,
+                    primary_participant_key=key)
+
+    def batch(self, *raws: dict[str, Any]) -> kb.Batch:
+        b = kb.Batch()
+        series = {kb.series_of(r["event_ticker"]): series_obj(kb.series_of(r["event_ticker"])) for r in raws}
+        kb.parse_markets_page({"markets": list(raws)}, series, b, "t")
+        return b
+
+    def test_game_markets_teach_codes_and_props_carry_ids(self) -> None:
+        b = self.batch(
+            self.raw("KXNBAGAME", "KXNBAGAME-26NOV11BOSTOR-BOS", {"basketball_team": self.GAME_ID},
+                     title="Boston at Toronto Winner?", sub="Boston"),
+            self.raw("KXNBAPTS", "KXNBAPTS-26NOV11BOSTOR-BOSDWHITE9-10",
+                     {"basketball_player": "fc551031", "basketball_team": self.GAME_ID}))
+        self.assertEqual(b.team_codes, {self.GAME_ID: "BOS"})
+        self.assertEqual(b.team_ids["KXNBAPTS-26NOV11BOSTOR-BOSDWHITE9-10"], self.GAME_ID)
+        state, run = job.BoardState(), job.BoardRun()
+        job.resolve_teams(b, state, run)
+        self.assertEqual({r["market_ticker"]: r["team"] for r in b.rows},
+                         {"KXNBAGAME-26NOV11BOSTOR-BOS": "BOS", "KXNBAPTS-26NOV11BOSTOR-BOSDWHITE9-10": "BOS"})
+        self.assertEqual((run.team_props, run.team_resolved), (1, 1))
+        self.assertNotIn(self.GAME_ID, json.dumps(b.rows))  # the ids are never stored
+
+    def test_a_player_market_never_teaches_a_code_and_an_unknown_id_stays_null(self) -> None:
+        # "NONE" would read as "NO": only a GAME team market teaches a code.
+        b = self.batch(self.raw("KXNFLFIRSTTD", "KXNFLFIRSTTD-26NOV15CARNO-NONE",
+                                {"football_player": "x", "football_team": self.OTHER_ID},
+                                title="No Touchdown", sub="No Touchdown"))
+        self.assertEqual(b.team_codes, {})
+        run = job.BoardRun()
+        job.resolve_teams(b, job.BoardState(), run)
+        self.assertIsNone(b.rows[0]["team"])
+        self.assertEqual((run.team_props, run.team_resolved), (1, 0))
+
+    def test_a_code_learned_once_serves_later_pulls_and_a_late_team_redigests(self) -> None:
+        state = job.BoardState()
+        prop = self.raw("KXNBAPTS", "KXNBAPTS-26NOV11BOSTOR-BOSDWHITE9-10",
+                        {"basketball_player": "fc551031", "basketball_team": self.GAME_ID})
+        first = self.batch(prop)
+        job.resolve_teams(first, state, job.BoardRun())
+        before = job.digest(first.rows[0])
+        state.team_codes[self.GAME_ID] = "BOS"
+        second = self.batch(prop)
+        job.resolve_teams(second, state, job.BoardRun())
+        self.assertEqual(second.rows[0]["team"], "BOS")
+        self.assertNotEqual(job.digest(second.rows[0]), before)
+
+    def test_game_series_are_fetched_first(self) -> None:
+        fake = FakeKalshi()
+        tickers = ["KXNBAPTS-26NOV11BOSTOR", "KXNBAGAME-26NOV11BOSTOR", "KXNBA2D-26NOV11BOSTOR"]
+        order = [kb.series_of(g[0]) for g, _ in kb.market_batches(client(fake), tickers, {
+            kb.series_of(t): series_obj(kb.series_of(t)) for t in tickers})]
+        self.assertEqual(order[0], "KXNBAGAME")
+
+
 class FeeAtAsk(unittest.TestCase):
     def test_taker_fee_at_the_ask_uses_the_regime(self) -> None:
         raw = markets("KXNBAREB")[0]
@@ -863,6 +930,16 @@ class Refresh(unittest.TestCase):
         self.assertIn("outside 08:00-23:00", self.refresh(late)[0].job_note)
         run = job.refresh_job(http=http_of(FakeKalshi()), now=lambda: NOW, state=job.BoardState())
         self.assertIn("no window yet", run.job_note)
+
+    def test_the_window_ends_at_23_00_chicago_exactly(self) -> None:
+        # Owner, Nov 11: 23:xx is outside (the 23:14 run of Nov 10 worked).
+        # Nov 11 is CST (UTC-6): 22:59 Chicago = 04:59 UTC, 23:00 = 05:00 UTC.
+        def note(h: int, m: int) -> str:
+            return self.refresh(datetime(2026, 11, 12, h, m, tzinfo=UTC))[0].job_note
+        self.assertNotIn("outside 08:00-23:00", note(4, 59))
+        for h, m in ((5, 0), (5, 14), (5, 59), (13, 59)):
+            self.assertIn("outside 08:00-23:00", note(h, m), (h, m))
+        self.assertNotIn("outside 08:00-23:00", note(14, 0))  # 08:00 Chicago
 
     def test_always_per_event_within_3_h_never_started_soonest_first(self) -> None:
         # One window event already under way (started an hour ago).

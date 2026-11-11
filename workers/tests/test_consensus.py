@@ -489,7 +489,19 @@ class Job(unittest.TestCase):
         run = self.run_job(st, FakeOdds({"/sports/basketball_nba/odds": [odds_event()]}), MORNING, job.DayState())
         self.assertEqual(run.stale_by_tier, {"books": 3, "espn": 24})
         self.assertIn("stale, not claimed 27 (books 3, espn 24); kalshi-tier positive 27", run.job_note)
-        self.assertLess(run.job_note.index("(books 3, espn 24)"), 150)  # inside job_health's 500 characters
+        self.assertLess(run.job_note.index("(books 3, espn 24)"), 180)  # inside job_health's 500 characters
+
+    def test_the_note_splits_claimed_by_tier(self) -> None:
+        # Owner, Nov 11: claimed books vs espn, summed across sports.
+        games, markets = self.nba()
+        st = FakeStore(games, markets)
+        st.tier_counts = lambda: [("Basketball", "books", 18, 2, 0, 0), ("Basketball", "espn", 128, 5, 0, 1),
+                                  ("Hockey", "espn", 28, 1, 0, 0), ("Basketball", "kalshi", 8663, 0, 4, 0)]
+        run = self.run_job(st, FakeOdds({"/sports/basketball_nba/odds": [odds_event()]}), MORNING, job.DayState())
+        self.assertEqual(run.claimed, 8)
+        self.assertEqual(run.claimed_by_tier, {"books": 2, "espn": 6})
+        self.assertIn("(claimed 8 (books 2, espn 6); stale, not claimed 1 (books 0, espn 1)", run.job_note)
+        self.assertLess(run.job_note.index("kalshi-tier positive"), 200)
 
     def test_afternoon_asks_free_first_and_pays_nothing_when_covered(self) -> None:
         games, markets = self.nba()

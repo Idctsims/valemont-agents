@@ -109,6 +109,8 @@ class Run:
     stale_positive: int = 0
     #: stale_positive by tier, books vs espn (owner, Nov 10).
     stale_by_tier: dict[str, int] = field(default_factory=dict)
+    #: claimed by tier, books vs espn (owner, Nov 11).
+    claimed_by_tier: dict[str, int] = field(default_factory=dict)
     seconds: float = 0.0
 
     @property
@@ -120,7 +122,8 @@ class Run:
         oa = ", ".join(f"{s} {m}/{n}" for s, (m, n) in sorted(self.odds_events.items()))
         return "; ".join(p for p in [
             f"{self.kind}: legs books {t['books']}, espn {t['espn']}, kalshi {t['kalshi']} "
-            f"(claimed {self.claimed}; stale, not claimed {self.stale_positive} "
+            f"(claimed {self.claimed} (books {self.claimed_by_tier.get('books', 0)}, "
+            f"espn {self.claimed_by_tier.get('espn', 0)}); stale, not claimed {self.stale_positive} "
             f"(books {self.stale_by_tier.get('books', 0)}, espn {self.stale_by_tier.get('espn', 0)}); "
             f"kalshi-tier positive {self.kalshi_positive})",
             f"credits {self.credits_run} this run, month {self.credits_month}, remaining {self.remaining}"
@@ -265,6 +268,8 @@ def consensus_job(*, now: Callable[[], datetime] = lambda: datetime.now(timezone
         for sport, tier, n, claimed, pos, stale in st.tier_counts():
             run.tiers.setdefault(sport, {})[tier] = n
             run.claimed += claimed
+            if claimed:
+                run.claimed_by_tier[tier] = run.claimed_by_tier.get(tier, 0) + claimed
             run.kalshi_positive += pos
             run.stale_positive += stale
             if stale:

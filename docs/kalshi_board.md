@@ -215,7 +215,8 @@ all four prices, Nov 6), and again on every run (the job note).
 - `kalshi_board`: 09:30 and 15:30 Chicago and 150 s after boot. Expected
   interval 18 h.
 - `kalshi_board_refresh`: every 15 min, working 08:00–23:00 Chicago (idle
-  otherwise, so it is never stale). **Rebuilt (owner, Nov 7)** after its
+  otherwise, so it is never stale). The window ends at 23:00 exactly; a run
+  at 23:xx is outside (owner, Nov 11: the 23:14 run of Nov 10 had worked). **Rebuilt (owner, Nov 7)** after its
   first Saturday: 453–631 s a run, 626–864 calls, ~10% 429s, 44–61 MB from
   Kalshi, while re-pricing 6 h by series. Now:
   - **Per event only** (`event_ticker=E`), never by series; scope: the last

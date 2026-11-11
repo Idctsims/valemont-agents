@@ -33,6 +33,8 @@ export type BoardMarket = {
   k: Kind; lb?: string; b?: number; a?: number; f?: number; v?: string; s?: boolean;
   /** The packed consensus (db/074): "<tier><letter><p><edge>", e.g. "b9c515-93". */
   q?: string;
+  /** db/077, Combo mode only: the ticker after the event's ("" when they are one). */
+  x?: string;
 };
 
 /** A binary market's consensus (db/074 leg_consensus_for, packed on
