@@ -246,6 +246,58 @@ def validate(requested: Sequence[Mapping[str, str]], rows: Mapping[str, LegIn], 
     return legs
 
 
+def _eff_line(leg: LegIn) -> float:
+    """A rung's line; a market with no line (a first goal, a first TD) is a 1+."""
+    return 0.5 if leg.line is None else float(leg.line)
+
+
+def _merge_implications(latents: dict[tuple[Any, ...], _Latent], t: cr.RhoTable, table: str | None) -> None:
+    """Same player, A always implies B (owner, Nov 11: goal => point, first
+    goal => goal and point, first TD => anytime TD): one latent, rho = 1, so
+    A and B price at exactly P(A). Only single-leg latents whose lines imply
+    (A's line >= B's) and that form a chain (every two comparable) merge; A
+    YES with B NO is refused, and so are prices that contradict the
+    implication. Anything else keeps its row (or none)."""
+    single = [lat for lat in latents.values()
+              if lat.role.is_player and lat.role.kind is not None and len(lat.cuts) == 1]
+
+    def implies(a: _Latent, b: _Latent) -> bool:
+        la, lb = a.cuts[0][3], b.cuts[0][3]
+        return (a.role.player == b.role.player and t.implies(table, a.role.kind, b.role.kind)  # type: ignore[arg-type]
+                and _eff_line(la) >= _eff_line(lb))
+
+    groups: list[set[int]] = []
+    for i, a in enumerate(single):
+        for j, b in enumerate(single):
+            if i != j and implies(a, b):
+                hit = [g for g in groups if i in g or j in g]
+                merged = set().union(*hit) | {i, j} if hit else {i, j}
+                groups = [g for g in groups if g not in hit] + [merged]
+    for g in groups:
+        members = [single[i] for i in g]
+        # A chain: sorted narrowest first, each implies every one after it.
+        members.sort(key=lambda m: sum(1 for o in members if o is not m and implies(m, o)), reverse=True)
+        if not all(implies(members[i], members[j]) for i in range(len(members)) for j in range(i + 1, len(members))):
+            continue
+        legs = [m.cuts[0][3] for m in members]
+        for i in range(len(legs)):
+            for j in range(i + 1, len(legs)):
+                if legs[i].side == "yes" and legs[j].side == "no":
+                    raise cr.Refused(f"{legs[i].label or legs[i].market_ticker} implies "
+                                     f"{legs[j].label or legs[j].market_ticker}: can't both hit")
+                if (legs[i].p_yes or 0.0) > (legs[j].p_yes or 0.0):
+                    raise cr.Refused(f"the prices disagree: {legs[i].label or legs[i].market_ticker} implies "
+                                     f"{legs[j].label or legs[j].market_ticker} but is priced higher")
+        yes = [m for m in members if m.cuts[0][3].side == "yes"]
+        role = (yes[0] if yes else members[-1]).role
+        merged = _Latent(("I",) + tuple(sorted(x.market_ticker for x in legs)), role)
+        # One uniform latent U: leg i hits above 1 - p_i (YES) or at or below it (NO).
+        merged.cuts = [(1.0 - float(x.p_yes or 0.0), float(x.p_yes or 0.0), x.side == "yes", x) for x in legs]
+        for m in members:
+            del latents[m.key]
+        latents[merged.key] = merged
+
+
 def price_block(game: str, legs: Sequence[LegIn], t: cr.RhoTable, *, draws: int = cr.MC_DRAWS,
                 draws_max: int = cr.MC_DRAWS_MAX) -> Block:
     """One game's legs: merge latents, build Sigma, the joint."""
@@ -275,12 +327,25 @@ def price_block(game: str, legs: Sequence[LegIn], t: cr.RhoTable, *, draws: int 
     for group in winners.values():
         if len({x.market_ticker for x in group}) > 1:
             raise cr.Refused("two outcomes of one result: " + " and ".join(x.label or x.market_ticker for x in group))
+    # One player scores first: two legs of one first-scorer event are two
+    # outcomes of one result (Kalshi does not flag these events exclusive).
+    firsts: dict[str, list[LegIn]] = {}
+    for lat in latents.values():
+        if lat.role.kind is not None and t.is_exclusive(table, lat.role.kind):
+            for c in lat.cuts:
+                firsts.setdefault(c[3].event_ticker, []).append(c[3])
+    for group in firsts.values():
+        if len({x.market_ticker for x in group}) > 1:
+            raise cr.Refused("two outcomes of one result (one scores first): "
+                             + " and ".join(x.label or x.market_ticker for x in group))
+    _merge_implications(latents, t, table)
     order = list(latents.values())
-    los, his, nested = [], [], []
+    los, his, nested, qs = [], [], [], []
     for lat in order:
-        lo, hi, _ = _interval(lat)
+        lo, hi, q = _interval(lat)
         los.append(lo)
         his.append(hi)
+        qs.append(q)
         if len(lat.cuts) > 1:
             nested.append(sorted(c[3].market_ticker for c in lat.cuts))
     k = len(order)
@@ -293,7 +358,9 @@ def price_block(game: str, legs: Sequence[LegIn], t: cr.RhoTable, *, draws: int 
             pairs.append({"a": i, "b": j, "rho": round(pr.rho, 4), "cls": pr.cls, "key": pr.key})
     sigma, shrink = cr.psd_shrink(sigma)
     keys = [f"{leg.market_ticker}:{leg.side}" for leg in legs]
-    j = cr.joint(los, his, sigma, keys, draws=draws, draws_max=draws_max)
+    # One latent: its interval's own probability, exactly (no round trip
+    # through Phi and its inverse): nested rungs and implications price at P(A).
+    j = cr.Joint(qs[0]) if k == 1 else cr.joint(los, his, sigma, keys, draws=draws, draws_max=draws_max)
     return Block(game, list(legs), j.p, j.se, j.method, j.draws, shrink, k, pairs, nested)
 
 

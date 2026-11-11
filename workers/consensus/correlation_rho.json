@@ -1,6 +1,6 @@
 {
  "about": "Same-game correlation table, Chat 8 Phase 3 (docs/correlation.md). rho is the correlation of two legs' latent normals, each oriented so higher = the YES of an over / a win; a NO leg flips the sign. Frozen by its sha256 (CRLF normalized to LF); Phase 4's pre-registration names the hash. workers/consensus/correlation_rho.json is a byte-identical copy (tests/test_correlation.py).",
- "version": "2026-11-11.2",
+ "version": "2026-11-11.3",
  "keys": "self|a|b one player's two kinds; mate|a|b teammates; opp|a|b opponents (a <= b); team|<kind>|<line> a player with his own club's win or cover, or the game total (over); a player with the OTHER club's line takes the team row with its sign flipped where the league has no draw (owner, Nov 11: no opponent rows), else unmodeled; game|<a>|<b> two game lines (a club line with the other club's: the sign flips where there is no draw).",
  "classes": {
   "measured_external": "measured by someone else, not reproduced by us",
@@ -151,6 +151,39 @@
    ]
   },
   "soccer": {}
+ },
+ "implies_about": "Same player, A always implies B (owner, Nov 11): A's count never exceeds B's, so a YES on A at line a implies B's YES at line b when a >= b (a market with no line, a first goal or first TD, is a 1+). Such legs share one latent (rho = 1, the nested rule): A and B price at exactly P(A); A YES with B NO is refused. Otherwise the pair takes its row, if any.",
+ "implies": {
+  "nhl": [
+   [
+    "goal",
+    "pts"
+   ],
+   [
+    "first_goal",
+    "goal"
+   ],
+   [
+    "first_goal",
+    "pts"
+   ]
+  ],
+  "nfl": [
+   [
+    "first_td",
+    "td"
+   ]
+  ]
+ },
+ "exclusive_kinds_about": "Kinds whose event has one winner among its markets (one player scores first): two legs of one such event are refused. Kalshi does not flag these events mutually exclusive (read Nov 11: KXNHLFIRSTGOAL, KXNFLFIRSTTD false).",
+ "exclusive_kinds": {
+  "nhl": [
+   "first_goal"
+  ],
+  "nfl": [
+   "first_td",
+   "team_first_td"
+  ]
  },
  "rows": {
   "nba": {
@@ -1395,11 +1428,6 @@
     "src": "owner_prior",
     "note": "game total over with any player's point"
    },
-   "self|goal|pts": {
-    "rho": 0.8,
-    "src": "owner_prior",
-    "note": "same player anytime goal with a point (owner, Nov 11)"
-   },
    "self|goal|shots": {
     "rho": 0.35,
     "src": "owner_prior",
@@ -1434,6 +1462,66 @@
     "rho": 0.3,
     "src": "owner_prior",
     "note": "game total over with any player's goal"
+   },
+   "mate|goal|goal": {
+    "rho": 0.05,
+    "src": "owner_prior",
+    "note": "teammates' goals"
+   },
+   "mate|goal|pts": {
+    "rho": 0.15,
+    "src": "owner_prior",
+    "note": "a teammate's goal with another's point"
+   },
+   "mate|ast|goal": {
+    "rho": 0.2,
+    "src": "owner_prior",
+    "note": "a teammate's assist with another's goal"
+   },
+   "mate|ast|pts": {
+    "rho": 0.15,
+    "src": "owner_prior",
+    "note": "a teammate's assist with another's point"
+   },
+   "mate|first_goal|goal": {
+    "rho": 0.05,
+    "src": "owner_prior",
+    "note": "a teammate's first goal with another's goal"
+   },
+   "mate|first_goal|pts": {
+    "rho": 0.1,
+    "src": "owner_prior",
+    "note": "a teammate's first goal with another's point"
+   },
+   "opp|goal|goal": {
+    "rho": 0.0,
+    "src": "owner_prior",
+    "note": "opponents: a modeled zero"
+   },
+   "opp|goal|pts": {
+    "rho": 0.0,
+    "src": "owner_prior",
+    "note": "opponents: a modeled zero"
+   },
+   "opp|ast|goal": {
+    "rho": 0.0,
+    "src": "owner_prior",
+    "note": "opponents: a modeled zero"
+   },
+   "opp|ast|pts": {
+    "rho": 0.0,
+    "src": "owner_prior",
+    "note": "opponents: a modeled zero"
+   },
+   "opp|first_goal|goal": {
+    "rho": 0.0,
+    "src": "owner_prior",
+    "note": "opponents: a modeled zero"
+   },
+   "opp|first_goal|pts": {
+    "rho": 0.0,
+    "src": "owner_prior",
+    "note": "opponents: a modeled zero"
    }
   },
   "soccer": {

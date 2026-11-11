@@ -304,6 +304,14 @@ class RhoTable:
         s = self.data["sums"].get(table or "", {})
         return b in s.get(a, ()) or a in s.get(b, ())
 
+    def implies(self, table: str | None, a: str, b: str) -> bool:
+        """Kind a always implies kind b for one player (owner, Nov 11)."""
+        return [a, b] in self.data.get("implies", {}).get(table or "", [])
+
+    def is_exclusive(self, table: str | None, kind: str) -> bool:
+        """An event of this kind has one winner among its markets (first scorer)."""
+        return kind in self.data.get("exclusive_kinds", {}).get(table or "", [])
+
     def row(self, table: str | None, key: str) -> tuple[float, str] | None:
         """(rho, source class) of an exact key, or None."""
         r = self.data["rows"].get(table or "", {}).get(key)

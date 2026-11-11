@@ -163,8 +163,17 @@ class Relations(unittest.TestCase):
 
     def test_the_nhl_priors(self) -> None:
         g, p = role(kind="goal", club="TB", player="TB|k"), role(kind="pts", club="TB", player="TB|k")
-        self.assertEqual(self.rho("nhl", g, p).rho, 0.80)  # a row, not refused (owner, Nov 11)
+        # Owner, Nov 11 (.3): goal and point are an implication, not a row.
+        self.assertIsNone(T.row("nhl", "self|goal|pts"))
+        self.assertEqual(self.rho("nhl", g, p).cls, cr.UNMODELED)  # rungs that do not imply: no row
         self.assertEqual(self.rho("nhl", g, role(line="win", club="TB")).rho, 0.25)
+        mate = role(kind="goal", club="TB", player="TB|m")
+        self.assertEqual(self.rho("nhl", g, mate).rho, 0.05)
+        self.assertEqual(self.rho("nhl", role(kind="ast", club="TB", player="TB|m"), g).rho, 0.20)
+        for a, b in (("goal", "goal"), ("goal", "pts"), ("ast", "goal"), ("ast", "pts"), ("first_goal", "goal"),
+                     ("first_goal", "pts")):
+            r = self.rho("nhl", role(kind=a, club="TB", player="TB|x"), role(kind=b, club="BUF", player="BUF|y"))
+            self.assertEqual((r.rho, r.cls), (0.0, "prior"), (a, b))
         self.assertEqual(self.rho("nhl", g, role(line="win", club="BUF")).rho, -0.25)
         self.assertEqual(self.rho("nhl", p, role(kind="pts", club="TB", player="TB|m")).rho, 0.10)
         r = self.rho("nhl", p, role(kind="pts", club="BUF", player="BUF|o"))
@@ -255,6 +264,68 @@ class NestedRungs(unittest.TestCase):
         # NOT (KC by over 4.5) and NOT (ATL by over 6.5): margin in (-6.5, 4.5].
         q = priced(replace(a, side="no"), replace(b, side="no"))
         self.assertAlmostEqual(q.fair_p, (1 - 0.25) - 0.40, places=12)
+
+
+def nhl(ticker: str, series: str, p: float, *, line: float | None = 0.5, side: str = "yes", subject: str = "Nikita K",
+        team: str = "TB", event: str | None = None) -> combo.LegIn:
+    return leg(ticker, side=side, p=p, series=series, league="nhl", sport="Hockey", subject=subject, line=line,
+               team=team, event=event)
+
+
+class Implications(unittest.TestCase):
+    """Owner, Nov 11 (.3): A always implies B for one player: joint = P(A)."""
+
+    G, P, F = "KXNHLGOAL", "KXNHLPTS", "KXNHLFIRSTGOAL"
+
+    def test_1_plus_goal_and_1_plus_point_price_at_the_goal(self) -> None:
+        q = priced(nhl("G1", self.G, 0.30), nhl("P1", self.P, 0.55))
+        self.assertEqual(q.fair_p, 0.30)
+        self.assertEqual(q.blocks[0].latents, 1)
+        self.assertEqual(q.blocks[0].nested, [["G1", "P1"]])
+
+    def test_goal_yes_with_point_no_is_refused_the_other_way_prices(self) -> None:
+        with self.assertRaisesRegex(cr.Refused, "implies .*can't both hit"):
+            priced(nhl("G1", self.G, 0.30), nhl("P1", self.P, 0.55, side="no"))
+        q = priced(nhl("G1", self.G, 0.30, side="no"), nhl("P1", self.P, 0.55))
+        self.assertAlmostEqual(q.fair_p, 0.55 - 0.30, places=12)
+
+    def test_a_first_goal_chain_prices_at_the_first_goal(self) -> None:
+        q = priced(nhl("F", self.F, 0.09, line=None, event="KXNHLFIRSTGOAL-G1"), nhl("G1", self.G, 0.30),
+                   nhl("P1", self.P, 0.55))
+        self.assertEqual(q.fair_p, 0.09)
+        self.assertEqual(q.blocks[0].latents, 1)
+
+    def test_rungs_that_do_not_imply_stay_apart(self) -> None:
+        # 1+ goal does not imply 2+ points: two latents, no row (unmodeled).
+        q = priced(nhl("G1", self.G, 0.30), nhl("P2", self.P, 0.25, line=1.5))
+        self.assertEqual(q.blocks[0].latents, 2)
+        self.assertEqual(q.unmodeled_pairs, 1)
+        # 2+ goals implies 1+ point.
+        self.assertEqual(priced(nhl("G2", self.G, 0.06, line=1.5), nhl("P1", self.P, 0.55)).fair_p, 0.06)
+
+    def test_prices_that_contradict_the_implication_are_refused(self) -> None:
+        with self.assertRaisesRegex(cr.Refused, "the prices disagree"):
+            priced(nhl("G1", self.G, 0.60), nhl("P1", self.P, 0.55))
+
+    def test_with_the_team_win_the_merged_leg_takes_the_narrow_legs_rows(self) -> None:
+        legs = [nhl("G1", self.G, 0.30), nhl("P1", self.P, 0.55),
+                win("TB", 0.55, league="nhl", series="KXNHLGAME")]
+        q = priced(*legs)
+        self.assertEqual(q.blocks[0].latents, 2)
+        self.assertEqual(q.blocks[0].pairs[0]["key"], "team|goal|win")
+        self.assertAlmostEqual(q.fair_p, priced(nhl("G1", self.G, 0.30), legs[2]).fair_p, places=12)
+
+    def test_nfl_first_td_implies_anytime_td(self) -> None:
+        q = priced(leg("FTD", series="KXNFLFIRSTTD", p=0.11, line=None, subject="Bijan R", team="ATL"),
+                   leg("TD1", series="KXNFLTD", p=0.48, line=0.5, subject="Bijan R", team="ATL"))
+        self.assertEqual(q.fair_p, 0.11)
+
+    def test_two_players_first_goals_are_refused(self) -> None:
+        # Kalshi flags KXNHLFIRSTGOAL events not exclusive (read Nov 11): the table's rule refuses.
+        ev = "KXNHLFIRSTGOAL-26NOV11TBBUF"
+        with self.assertRaisesRegex(cr.Refused, "one scores first"):
+            priced(nhl("F1", self.F, 0.09, line=None, event=ev),
+                   nhl("F2", self.F, 0.08, line=None, event=ev, subject="Brayden P"))
 
 
 class SignAndIndependence(unittest.TestCase):
