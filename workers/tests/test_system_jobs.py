@@ -517,7 +517,8 @@ class Registry(unittest.TestCase):
                           "arsenal_pool", "arsenal_pool_collect", "arsenal_drop", "arsenal_verify",
                           "arsenal_outcome", "arsenal_arm_verify", "arsenal_arm_sweep",
                            "arsenal_title_hook", "arsenal_title_hook_sweep", "sports_schedule", "sports_live",
-                           "kalshi_map", "kalshi_board", "kalshi_board_refresh", "consensus"})
+                           "kalshi_map", "kalshi_board", "kalshi_board_refresh", "consensus",
+                           "price_combo", "combo_prune"})
         # db/054 (Chat 5): the pool Sundays 03:30, the drop daily 05:30 (both
         # Chicago, both at boot), collect every 10 min; verify runs per queued
         # item, never on its own.
@@ -619,15 +620,16 @@ class SystemOnlyBoot(SystemTestCase):
                                "system:arsenal_arm_sweep", "system:arsenal_title_hook_sweep",
                                "system:sports_schedule", "system:sports_live",
                                "system:kalshi_map", "system:kalshi_board",
-                               "system:kalshi_board_refresh", "system:consensus"})
+                               "system:kalshi_board_refresh", "system:consensus",
+                               "system:combo_prune"})
         # screening_match, feed_tech_summarize, feed_summarize, feed_score, feed_why and feed_repo_why
         # are registered (job_health rows, watched) but never scheduled: feed_ingest runs them.
         # arsenal_verify, arsenal_outcome and arsenal_arm_verify the same way: the job_queue handler runs them.
-        # 34 with db/065's sports_schedule and sports_live (Chat 7 Phase 1); 35 with db/066's kalshi_map; 37 with db/071's kalshi_board and kalshi_board_refresh; 38 with db/073's consensus.
-        self.assertEqual(self.ledger.names().count("job_register"), 38)
+        # 34 with db/065's sports_schedule and sports_live (Chat 7 Phase 1); 35 with db/066's kalshi_map; 37 with db/071's kalshi_board and kalshi_board_refresh; 38 with db/073's consensus; 40 with db/076's price_combo and combo_prune.
+        self.assertEqual(self.ledger.names().count("job_register"), 40)
         for chained in ("screening_match", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
                         "feed_repo_why", "arsenal_verify", "arsenal_outcome", "arsenal_arm_verify",
-                        "arsenal_title_hook"):
+                        "arsenal_title_hook", "price_combo"):
             self.assertNotIn(f"system:{chained}", ids)
 
     def test_disabled_agents_plus_system_jobs_start_rather_than_refuse(self) -> None:
@@ -681,7 +683,8 @@ class SystemOnlyBoot(SystemTestCase):
                           "arsenal_pool", "arsenal_pool_collect", "arsenal_drop", "arsenal_verify",
                           "arsenal_outcome", "arsenal_arm_verify", "arsenal_arm_sweep",
                            "arsenal_title_hook", "arsenal_title_hook_sweep", "sports_schedule", "sports_live",
-                           "kalshi_map", "kalshi_board", "kalshi_board_refresh", "consensus"})
+                           "kalshi_map", "kalshi_board", "kalshi_board_refresh", "consensus",
+                           "price_combo", "combo_prune"})
 
 
 if __name__ == "__main__":

@@ -128,6 +128,25 @@ class BoardState:
     flags_day: str | None = None
     #: The refresh's pace (s between calls) where its last run ended.
     refresh_pace: float = kb.PACE_START
+    #: db/076: Kalshi team id -> the game's code, learned from GAME markets
+    #: (team ids are per team, so a code learned once serves every game).
+    team_codes: dict[str, str] = field(default_factory=dict)
+
+
+def resolve_teams(batch: kb.Batch, state: BoardState, run: "BoardRun") -> None:
+    """Set each row's `team` from the batch's team ids (db/076), before its
+    digest: a row whose team becomes known later digests differently and is
+    sent then. A team id with no known code stays NULL (the upsert never
+    clears a team it already holds)."""
+    state.team_codes.update(batch.team_codes)
+    for r in batch.rows:
+        tid = batch.team_ids.get(r["market_ticker"])
+        if tid is None:
+            continue
+        r["team"] = state.team_codes.get(tid)
+        if r["market_kind"] == "prop":
+            run.team_props += 1
+            run.team_resolved += r["team"] is not None
 
 
 STATE = BoardState()
@@ -177,6 +196,9 @@ class BoardRun:
     #: events, and series -> events. Counted, never a failure (owner, Nov 9).
     not_open: dict[str, int] = field(default_factory=dict)
     not_open_series: dict[str, int] = field(default_factory=dict)
+    #: db/076: props carrying a Kalshi team id, and those whose code is known.
+    team_props: int = 0
+    team_resolved: int = 0
 
     @property
     def no_markets_note(self) -> str:
@@ -242,6 +264,7 @@ class BoardRun:
                         if self.excluded else "")
                      + f", {overflowed}, {self.contract_note}")
             head += f"; flags {self.flag_events} events ({self.flag_series} series read)"
+            head += f"; teams {self.team_resolved}/{self.team_props} props"
         else:
             head = (f"refresh: {self.events} of {self.scope} events within "
                     f"{kb.REFRESH_WITHIN.total_seconds() / 3600:.0f} h, {self.markets} markets")
@@ -464,6 +487,7 @@ def _pull(client: KalshiClient, run: BoardRun, writer: Writer, state: BoardState
             if r["event_ticker"] in combos:
                 run.combo_markets += 1
         run.combo_events += sum(1 for r in ev_rows if r["combo_eligible"])
+        resolve_teams(batch, state, run)
         fl.add(group, ev_rows, batch.rows)
         del batch
     fl.flush()
@@ -683,6 +707,7 @@ def _refresh(http: kb.Http | None, at: datetime, soon: list[str], state: BoardSt
             run.no_mismatch += batch.no_mismatch
             run.misses.update(batch.misses)
             run.contract_misses.extend(batch.contract_misses)
+            resolve_teams(batch, state, run)
             for r in batch.rows:
                 k, d = hash(r["market_ticker"]), digest(r)
                 seen.append(r["market_ticker"])

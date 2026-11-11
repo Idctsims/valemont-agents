@@ -6082,3 +6082,84 @@ def consensus_team_names(leagues: Sequence[str], *, conn: psycopg.Connection | N
     with _brief_conn(conn) as c:
         return {lg: frozenset(fold(n) for n in names)
                 for lg, names in c.execute(CONSENSUS_TEAM_NAMES_SQL, {"leagues": list(leagues)}).fetchall()}
+
+
+# ---------------------------------------------------------------- combos
+# Same-game combo pricing (db/076; consensus/combo_job.py, docs/correlation.md).
+# The web inserts a combo_requests row (its trigger queues one price_combo
+# job); the worker reads the legs' board rows and consensus here, prices them
+# in Python (consensus/combo.py) and writes the quote and the settle in one
+# transaction. The guards in db/076 refuse anything else.
+
+PRICE_COMBO_KIND: Final = "price_combo"
+
+COMBO_REQUEST_SQL: Final = "SELECT id, legs, status, is_test FROM combo_requests WHERE id = %(id)s"
+#: The legs' board rows, their event's combo terms and their consensus
+#: (leg_consensus_for over the legs' games: the one pricing implementation).
+COMBO_LEGS_SQL: Final = """
+    WITH g AS (
+        SELECT array_agg(DISTINCT e.game_ticker) AS games
+          FROM kalshi_board b
+          JOIN kalshi_board_events e ON e.event_ticker = b.event_ticker
+         WHERE b.market_ticker = ANY(%(tickers)s)
+    )
+    SELECT b.market_ticker, b.event_ticker, e.game_ticker, e.series_ticker, s.sport, s.league, b.market_kind,
+           b.payout, b.subject, b.stat, b.line, b.label, b.team, coalesce(c.tier, 'kalshi'), c.p_consensus,
+           c.yes_ask, c.no_ask, c.fee_yes, c.fee_no, coalesce(c.stale_kalshi OR c.stale_outside, false),
+           e.mutually_exclusive, e.combo_eligible, e.combo_yes_only, e.combo_size_max, e.starts_at
+      FROM kalshi_board b
+      JOIN kalshi_board_events e ON e.event_ticker = b.event_ticker
+      JOIN kalshi_series_board s ON s.series_ticker = e.series_ticker
+      LEFT JOIN leg_consensus_for((SELECT games FROM g)) c ON c.market_ticker = b.market_ticker
+     WHERE b.market_ticker = ANY(%(tickers)s)
+"""
+COMBO_QUOTE_INSERT_SQL: Final = """
+    INSERT INTO combo_quotes (request_id, naive_p, fair_p, se, blocks, kalshi_naive_cost, combo_status,
+                              combo_reason, rho_version, unmodeled_pairs, prior_pairs, compute_ms)
+    VALUES (%(request_id)s, %(naive_p)s, %(fair_p)s, %(se)s, %(blocks)s, %(kalshi_naive_cost)s, %(combo_status)s,
+            %(combo_reason)s, %(rho_version)s, %(unmodeled_pairs)s, %(prior_pairs)s, %(compute_ms)s)
+"""
+COMBO_ANSWER_SQL: Final = "UPDATE combo_requests SET status = 'answered' WHERE id = %(id)s AND status = 'queued'"
+COMBO_SETTLE_SQL: Final = """
+    UPDATE combo_requests SET status = %(status)s, reason = %(reason)s WHERE id = %(id)s AND status = 'queued'
+"""
+COMBO_PRUNE_SQL: Final = "SELECT combo_prune()"
+
+
+@dataclass(frozen=True)
+class ComboRequest:
+    id: int
+    legs: list[dict[str, str]]
+    status: str
+    is_test: bool
+
+
+def combo_request(request_id: int, *, conn: psycopg.Connection | None = None) -> ComboRequest | None:
+    with _brief_conn(conn) as c:
+        row = c.execute(COMBO_REQUEST_SQL, {"id": request_id}).fetchone()
+    return None if row is None else ComboRequest(int(row[0]), list(row[1]), row[2], bool(row[3]))
+
+
+def combo_legs(tickers: Sequence[str], *, conn: psycopg.Connection | None = None) -> list[tuple[Any, ...]]:
+    with _brief_conn(conn) as c:
+        return list(c.execute(COMBO_LEGS_SQL, {"tickers": list(tickers)}).fetchall())
+
+
+def combo_answer(request_id: int, quote: Mapping[str, Any], *, conn: psycopg.Connection | None = None) -> None:
+    """The quote, then the request answered: one transaction (db/076's guard
+    refuses an answer without its quote)."""
+    with _brief_conn(conn) as c, c.transaction():
+        c.execute(COMBO_QUOTE_INSERT_SQL, dict(quote) | {"request_id": request_id, "blocks": Jsonb(quote["blocks"])})
+        if c.execute(COMBO_ANSWER_SQL, {"id": request_id}).rowcount != 1:
+            raise RuntimeError(f"combo_requests {request_id}: not queued at answer")
+
+
+def combo_settle(request_id: int, status: str, reason: str, *, conn: psycopg.Connection | None = None) -> bool:
+    """refused or failed, with the reason; False when it was not queued."""
+    with _brief_conn(conn) as c, c.transaction():
+        return c.execute(COMBO_SETTLE_SQL, {"id": request_id, "status": status, "reason": reason[:500]}).rowcount == 1
+
+
+def combo_prune(*, conn: psycopg.Connection | None = None) -> int:
+    with _brief_conn(conn) as c, c.transaction():
+        return int(c.execute(COMBO_PRUNE_SQL).fetchone()[0])

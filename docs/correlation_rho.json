@@ -1,0 +1,1422 @@
+{
+ "about": "Same-game correlation table, Chat 8 Phase 3 (docs/correlation.md). rho is the correlation of two legs' latent normals, each oriented so higher = the YES of an over / a win; a NO leg flips the sign. Frozen by its sha256 (CRLF normalized to LF); Phase 4's pre-registration names the hash. workers/consensus/correlation_rho.json is a byte-identical copy (tests/test_correlation.py).",
+ "version": "2026-11-11.1",
+ "keys": "self|a|b one player's two kinds; mate|a|b teammates; opp|a|b opponents (a <= b); team|<kind>|<line> a player with his own club's win or cover, or the game total (over); oppteam|<kind>|<line> a player with the other club's line (else the team row's sign flips where the league has no draw); game|<a>|<b> two game lines (a club line with the other club's: the sign flips where there is no draw).",
+ "classes": {
+  "measured_external": "measured by someone else, not reproduced by us",
+  "prior": "the owner's starting value, no measurement",
+  "borrowed": "a row used outside the place it was set: a cover from its moneyline row, cfb from nfl, mcbb from nba (applied at lookup, never stored as a row)"
+ },
+ "sources": {
+  "nba_hub": {
+   "class": "measured_external",
+   "repo": "DEMON-X13/nba-hub",
+   "file": "data/corr.json",
+   "commit": "3a3e298993753a7f21ab23998bd40a181f315576",
+   "method": "latent-normal (Gaussian copula) rho by maximum likelihood on binary outcomes at book lines, every pair of legs that shared a game; 5,276 games, seasons 2023-2026; shrunk toward 0 by jackknife error; projected to the nearest positive-definite table",
+   "flag": "external, unreproduced",
+   "license": "none stated: values cited, no file or code copied",
+   "adopted": "owner, Nov 11 (Phase 3 Step 0 decision 1)"
+  },
+  "jx_readme": {
+   "class": "measured_external",
+   "repo": "JXiong15/sports-parlay-generator",
+   "file": "README.md",
+   "claim": "QB passing yards vs the game total, +0.28, 'measured from 2013-2025 results'",
+   "method": "not shown",
+   "confidence": "low",
+   "flag": "external, unreproduced",
+   "adopted": "owner, Nov 11"
+  },
+  "owner_prior": {
+   "class": "prior",
+   "set_by": "owner, Nov 11 (Phase 3 Step 0)"
+  }
+ },
+ "tables": {
+  "nba": "nba",
+  "nfl": "nfl",
+  "nhl": "nhl",
+  "cfb": "nfl",
+  "mcbb": "nba",
+  "Soccer": "soccer"
+ },
+ "borrowed_tables": [
+  "cfb",
+  "mcbb"
+ ],
+ "no_draw": [
+  "nba",
+  "nfl",
+  "nhl",
+  "cfb",
+  "mcbb"
+ ],
+ "prefixes": {
+  "nba": "KXNBA",
+  "nfl": "KXNFL",
+  "nhl": "KXNHL",
+  "cfb": "KXNCAAF",
+  "mcbb": "KXNCAAMB"
+ },
+ "kinds": {
+  "nba": {
+   "PTS": "pts",
+   "REB": "reb",
+   "AST": "ast",
+   "3PT": "tpm",
+   "STL": "stl",
+   "BLK": "blk",
+   "PRA": "pra",
+   "2D": "dd",
+   "3D": "td",
+   "STOCK": "sb",
+   "PTSLEADER": "pts_leader"
+  },
+  "nfl": {
+   "PASSYDS": "pass_yds",
+   "RSHYDS": "rush_yds",
+   "RECYDS": "rec_yds",
+   "REC": "rec",
+   "TD": "td",
+   "RRYDS": "rr_yds",
+   "FFPTS": "ffpts",
+   "PASSTDS": "pass_tds",
+   "PASSATT": "pass_att",
+   "PASSCOMP": "pass_comp",
+   "PASSINT": "pass_int",
+   "RSHATT": "rush_att",
+   "LONGREC": "long_rec",
+   "LONGRSH": "long_rush",
+   "FIRSTTD": "first_td",
+   "TEAMFIRSTTD": "team_first_td",
+   "MOSTRECYDS": "most_rec_yds",
+   "MOSTRSHYDS": "most_rush_yds"
+  },
+  "nhl": {
+   "PTS": "pts",
+   "GOAL": "goal",
+   "AST": "ast",
+   "FIRSTGOAL": "first_goal"
+  },
+  "soccer": {}
+ },
+ "sums": {
+  "nba": {
+   "pra": [
+    "pts",
+    "reb",
+    "ast",
+    "pr",
+    "pa",
+    "ar"
+   ],
+   "pr": [
+    "pts",
+    "reb"
+   ],
+   "pa": [
+    "pts",
+    "ast"
+   ],
+   "ar": [
+    "ast",
+    "reb"
+   ],
+   "sb": [
+    "stl",
+    "blk"
+   ]
+  },
+  "nfl": {
+   "rr_yds": [
+    "rush_yds",
+    "rec_yds"
+   ],
+   "ffpts": [
+    "pass_yds",
+    "rush_yds",
+    "rec_yds",
+    "rec",
+    "td",
+    "pass_tds",
+    "pass_int",
+    "rr_yds"
+   ]
+  },
+  "nhl": {
+   "pts": [
+    "goal",
+    "ast"
+   ]
+  },
+  "soccer": {}
+ },
+ "rows": {
+  "nba": {
+   "game|cover|over": {
+    "rho": 0.001,
+    "src": "nba_hub"
+   },
+   "game|cover|win": {
+    "rho": 0.939,
+    "src": "nba_hub"
+   },
+   "game|over|win": {
+    "rho": 0,
+    "src": "nba_hub"
+   },
+   "mate|ar|ar": {
+    "rho": -0.011,
+    "src": "nba_hub"
+   },
+   "mate|ar|ast": {
+    "rho": -0.01,
+    "src": "nba_hub"
+   },
+   "mate|ar|blk": {
+    "rho": 0.009,
+    "src": "nba_hub"
+   },
+   "mate|ar|dd": {
+    "rho": -0.016,
+    "src": "nba_hub"
+   },
+   "mate|ar|pa": {
+    "rho": 0.014,
+    "src": "nba_hub"
+   },
+   "mate|ar|pr": {
+    "rho": 0.012,
+    "src": "nba_hub"
+   },
+   "mate|ar|pra": {
+    "rho": 0.007,
+    "src": "nba_hub"
+   },
+   "mate|ar|pts": {
+    "rho": 0.017,
+    "src": "nba_hub"
+   },
+   "mate|ar|reb": {
+    "rho": -0.01,
+    "src": "nba_hub"
+   },
+   "mate|ar|sb": {
+    "rho": 0.001,
+    "src": "nba_hub"
+   },
+   "mate|ar|stl": {
+    "rho": -0.005,
+    "src": "nba_hub"
+   },
+   "mate|ar|td": {
+    "rho": -0.02,
+    "src": "nba_hub"
+   },
+   "mate|ar|tpm": {
+    "rho": 0.018,
+    "src": "nba_hub"
+   },
+   "mate|ast|ast": {
+    "rho": -0.01,
+    "src": "nba_hub"
+   },
+   "mate|ast|blk": {
+    "rho": 0,
+    "src": "nba_hub"
+   },
+   "mate|ast|dd": {
+    "rho": -0.011,
+    "src": "nba_hub"
+   },
+   "mate|ast|pa": {
+    "rho": 0.03,
+    "src": "nba_hub"
+   },
+   "mate|ast|pr": {
+    "rho": 0.028,
+    "src": "nba_hub"
+   },
+   "mate|ast|pra": {
+    "rho": 0.023,
+    "src": "nba_hub"
+   },
+   "mate|ast|pts": {
+    "rho": 0.034,
+    "src": "nba_hub"
+   },
+   "mate|ast|reb": {
+    "rho": -0.005,
+    "src": "nba_hub"
+   },
+   "mate|ast|sb": {
+    "rho": 0.002,
+    "src": "nba_hub"
+   },
+   "mate|ast|stl": {
+    "rho": 0,
+    "src": "nba_hub"
+   },
+   "mate|ast|td": {
+    "rho": -0.024,
+    "src": "nba_hub"
+   },
+   "mate|ast|tpm": {
+    "rho": 0.039,
+    "src": "nba_hub"
+   },
+   "mate|blk|blk": {
+    "rho": 0.012,
+    "src": "nba_hub"
+   },
+   "mate|blk|dd": {
+    "rho": 0.006,
+    "src": "nba_hub"
+   },
+   "mate|blk|pa": {
+    "rho": -0.001,
+    "src": "nba_hub"
+   },
+   "mate|blk|pr": {
+    "rho": 0.003,
+    "src": "nba_hub"
+   },
+   "mate|blk|pra": {
+    "rho": 0.002,
+    "src": "nba_hub"
+   },
+   "mate|blk|pts": {
+    "rho": -0.001,
+    "src": "nba_hub"
+   },
+   "mate|blk|reb": {
+    "rho": 0.012,
+    "src": "nba_hub"
+   },
+   "mate|blk|sb": {
+    "rho": 0.003,
+    "src": "nba_hub"
+   },
+   "mate|blk|stl": {
+    "rho": -0.002,
+    "src": "nba_hub"
+   },
+   "mate|blk|td": {
+    "rho": -0.004,
+    "src": "nba_hub"
+   },
+   "mate|blk|tpm": {
+    "rho": -0.001,
+    "src": "nba_hub"
+   },
+   "mate|dd|dd": {
+    "rho": -0.004,
+    "src": "nba_hub"
+   },
+   "mate|dd|pa": {
+    "rho": 0.002,
+    "src": "nba_hub"
+   },
+   "mate|dd|pr": {
+    "rho": -0.002,
+    "src": "nba_hub"
+   },
+   "mate|dd|pra": {
+    "rho": -0.005,
+    "src": "nba_hub"
+   },
+   "mate|dd|pts": {
+    "rho": 0.005,
+    "src": "nba_hub"
+   },
+   "mate|dd|reb": {
+    "rho": -0.015,
+    "src": "nba_hub"
+   },
+   "mate|dd|sb": {
+    "rho": -0.006,
+    "src": "nba_hub"
+   },
+   "mate|dd|stl": {
+    "rho": -0.013,
+    "src": "nba_hub"
+   },
+   "mate|dd|td": {
+    "rho": -0.001,
+    "src": "nba_hub"
+   },
+   "mate|dd|tpm": {
+    "rho": 0.013,
+    "src": "nba_hub"
+   },
+   "mate|pa|pa": {
+    "rho": -0.001,
+    "src": "nba_hub"
+   },
+   "mate|pa|pr": {
+    "rho": -0.013,
+    "src": "nba_hub"
+   },
+   "mate|pa|pra": {
+    "rho": -0.004,
+    "src": "nba_hub"
+   },
+   "mate|pa|pts": {
+    "rho": -0.013,
+    "src": "nba_hub"
+   },
+   "mate|pa|reb": {
+    "rho": -0.005,
+    "src": "nba_hub"
+   },
+   "mate|pa|sb": {
+    "rho": 0,
+    "src": "nba_hub"
+   },
+   "mate|pa|stl": {
+    "rho": -0.001,
+    "src": "nba_hub"
+   },
+   "mate|pa|td": {
+    "rho": 0.024,
+    "src": "nba_hub"
+   },
+   "mate|pa|tpm": {
+    "rho": -0.008,
+    "src": "nba_hub"
+   },
+   "mate|pra|pra": {
+    "rho": -0.007,
+    "src": "nba_hub"
+   },
+   "mate|pra|pts": {
+    "rho": -0.013,
+    "src": "nba_hub"
+   },
+   "mate|pra|reb": {
+    "rho": -0.007,
+    "src": "nba_hub"
+   },
+   "mate|pra|sb": {
+    "rho": -0.001,
+    "src": "nba_hub"
+   },
+   "mate|pra|stl": {
+    "rho": -0.003,
+    "src": "nba_hub"
+   },
+   "mate|pra|td": {
+    "rho": 0.022,
+    "src": "nba_hub"
+   },
+   "mate|pra|tpm": {
+    "rho": -0.01,
+    "src": "nba_hub"
+   },
+   "mate|pr|pr": {
+    "rho": -0.021,
+    "src": "nba_hub"
+   },
+   "mate|pr|pra": {
+    "rho": -0.013,
+    "src": "nba_hub"
+   },
+   "mate|pr|pts": {
+    "rho": -0.023,
+    "src": "nba_hub"
+   },
+   "mate|pr|reb": {
+    "rho": -0.004,
+    "src": "nba_hub"
+   },
+   "mate|pr|sb": {
+    "rho": -0.001,
+    "src": "nba_hub"
+   },
+   "mate|pr|stl": {
+    "rho": -0.002,
+    "src": "nba_hub"
+   },
+   "mate|pr|td": {
+    "rho": 0.026,
+    "src": "nba_hub"
+   },
+   "mate|pr|tpm": {
+    "rho": -0.021,
+    "src": "nba_hub"
+   },
+   "mate|pts|pts": {
+    "rho": -0.024,
+    "src": "nba_hub"
+   },
+   "mate|pts|reb": {
+    "rho": -0.003,
+    "src": "nba_hub"
+   },
+   "mate|pts|sb": {
+    "rho": 0,
+    "src": "nba_hub"
+   },
+   "mate|pts|stl": {
+    "rho": -0.001,
+    "src": "nba_hub"
+   },
+   "mate|pts|td": {
+    "rho": 0.028,
+    "src": "nba_hub"
+   },
+   "mate|pts|tpm": {
+    "rho": -0.023,
+    "src": "nba_hub"
+   },
+   "mate|reb|reb": {
+    "rho": -0.009,
+    "src": "nba_hub"
+   },
+   "mate|reb|sb": {
+    "rho": -0.001,
+    "src": "nba_hub"
+   },
+   "mate|reb|stl": {
+    "rho": -0.007,
+    "src": "nba_hub"
+   },
+   "mate|reb|td": {
+    "rho": -0.012,
+    "src": "nba_hub"
+   },
+   "mate|reb|tpm": {
+    "rho": -0.007,
+    "src": "nba_hub"
+   },
+   "mate|sb|sb": {
+    "rho": 0.003,
+    "src": "nba_hub"
+   },
+   "mate|sb|stl": {
+    "rho": 0.002,
+    "src": "nba_hub"
+   },
+   "mate|sb|td": {
+    "rho": 0,
+    "src": "nba_hub"
+   },
+   "mate|sb|tpm": {
+    "rho": -0.003,
+    "src": "nba_hub"
+   },
+   "mate|stl|stl": {
+    "rho": 0.004,
+    "src": "nba_hub"
+   },
+   "mate|stl|td": {
+    "rho": 0.002,
+    "src": "nba_hub"
+   },
+   "mate|stl|tpm": {
+    "rho": 0,
+    "src": "nba_hub"
+   },
+   "mate|td|td": {
+    "rho": 0.03,
+    "src": "nba_hub"
+   },
+   "mate|td|tpm": {
+    "rho": 0.019,
+    "src": "nba_hub"
+   },
+   "mate|tpm|tpm": {
+    "rho": -0.006,
+    "src": "nba_hub"
+   },
+   "opp|ar|ar": {
+    "rho": -0.005,
+    "src": "nba_hub"
+   },
+   "opp|ar|ast": {
+    "rho": -0.009,
+    "src": "nba_hub"
+   },
+   "opp|ar|blk": {
+    "rho": 0.01,
+    "src": "nba_hub"
+   },
+   "opp|ar|dd": {
+    "rho": 0.004,
+    "src": "nba_hub"
+   },
+   "opp|ar|pa": {
+    "rho": -0.009,
+    "src": "nba_hub"
+   },
+   "opp|ar|pr": {
+    "rho": -0.005,
+    "src": "nba_hub"
+   },
+   "opp|ar|pra": {
+    "rho": -0.006,
+    "src": "nba_hub"
+   },
+   "opp|ar|pts": {
+    "rho": -0.007,
+    "src": "nba_hub"
+   },
+   "opp|ar|reb": {
+    "rho": 0.001,
+    "src": "nba_hub"
+   },
+   "opp|ar|sb": {
+    "rho": 0.007,
+    "src": "nba_hub"
+   },
+   "opp|ar|stl": {
+    "rho": 0.003,
+    "src": "nba_hub"
+   },
+   "opp|ar|td": {
+    "rho": 0,
+    "src": "nba_hub"
+   },
+   "opp|ar|tpm": {
+    "rho": -0.008,
+    "src": "nba_hub"
+   },
+   "opp|ast|ast": {
+    "rho": 0.004,
+    "src": "nba_hub"
+   },
+   "opp|ast|blk": {
+    "rho": -0.004,
+    "src": "nba_hub"
+   },
+   "opp|ast|dd": {
+    "rho": -0.001,
+    "src": "nba_hub"
+   },
+   "opp|ast|pa": {
+    "rho": 0.005,
+    "src": "nba_hub"
+   },
+   "opp|ast|pr": {
+    "rho": 0,
+    "src": "nba_hub"
+   },
+   "opp|ast|pra": {
+    "rho": 0.001,
+    "src": "nba_hub"
+   },
+   "opp|ast|pts": {
+    "rho": 0.004,
+    "src": "nba_hub"
+   },
+   "opp|ast|reb": {
+    "rho": -0.014,
+    "src": "nba_hub"
+   },
+   "opp|ast|sb": {
+    "rho": -0.006,
+    "src": "nba_hub"
+   },
+   "opp|ast|stl": {
+    "rho": -0.004,
+    "src": "nba_hub"
+   },
+   "opp|ast|td": {
+    "rho": 0.008,
+    "src": "nba_hub"
+   },
+   "opp|ast|tpm": {
+    "rho": 0.001,
+    "src": "nba_hub"
+   },
+   "opp|blk|blk": {
+    "rho": 0.01,
+    "src": "nba_hub"
+   },
+   "opp|blk|dd": {
+    "rho": 0.019,
+    "src": "nba_hub"
+   },
+   "opp|blk|pa": {
+    "rho": -0.001,
+    "src": "nba_hub"
+   },
+   "opp|blk|pr": {
+    "rho": 0.004,
+    "src": "nba_hub"
+   },
+   "opp|blk|pra": {
+    "rho": 0.004,
+    "src": "nba_hub"
+   },
+   "opp|blk|pts": {
+    "rho": 0,
+    "src": "nba_hub"
+   },
+   "opp|blk|reb": {
+    "rho": 0.018,
+    "src": "nba_hub"
+   },
+   "opp|blk|sb": {
+    "rho": 0.009,
+    "src": "nba_hub"
+   },
+   "opp|blk|stl": {
+    "rho": 0.005,
+    "src": "nba_hub"
+   },
+   "opp|blk|td": {
+    "rho": 0.008,
+    "src": "nba_hub"
+   },
+   "opp|blk|tpm": {
+    "rho": -0.004,
+    "src": "nba_hub"
+   },
+   "opp|dd|dd": {
+    "rho": 0,
+    "src": "nba_hub"
+   },
+   "opp|dd|pa": {
+    "rho": -0.001,
+    "src": "nba_hub"
+   },
+   "opp|dd|pr": {
+    "rho": 0.003,
+    "src": "nba_hub"
+   },
+   "opp|dd|pra": {
+    "rho": 0.001,
+    "src": "nba_hub"
+   },
+   "opp|dd|pts": {
+    "rho": 0.002,
+    "src": "nba_hub"
+   },
+   "opp|dd|reb": {
+    "rho": 0.01,
+    "src": "nba_hub"
+   },
+   "opp|dd|sb": {
+    "rho": 0.009,
+    "src": "nba_hub"
+   },
+   "opp|dd|stl": {
+    "rho": 0.003,
+    "src": "nba_hub"
+   },
+   "opp|dd|td": {
+    "rho": -0.016,
+    "src": "nba_hub"
+   },
+   "opp|dd|tpm": {
+    "rho": -0.002,
+    "src": "nba_hub"
+   },
+   "opp|pa|pa": {
+    "rho": 0.007,
+    "src": "nba_hub"
+   },
+   "opp|pa|pr": {
+    "rho": 0.002,
+    "src": "nba_hub"
+   },
+   "opp|pa|pra": {
+    "rho": 0.002,
+    "src": "nba_hub"
+   },
+   "opp|pa|pts": {
+    "rho": 0.007,
+    "src": "nba_hub"
+   },
+   "opp|pa|reb": {
+    "rho": -0.016,
+    "src": "nba_hub"
+   },
+   "opp|pa|sb": {
+    "rho": -0.007,
+    "src": "nba_hub"
+   },
+   "opp|pa|stl": {
+    "rho": -0.007,
+    "src": "nba_hub"
+   },
+   "opp|pa|td": {
+    "rho": -0.004,
+    "src": "nba_hub"
+   },
+   "opp|pa|tpm": {
+    "rho": 0.003,
+    "src": "nba_hub"
+   },
+   "opp|pra|pra": {
+    "rho": -0.001,
+    "src": "nba_hub"
+   },
+   "opp|pra|pts": {
+    "rho": 0.002,
+    "src": "nba_hub"
+   },
+   "opp|pra|reb": {
+    "rho": -0.01,
+    "src": "nba_hub"
+   },
+   "opp|pra|sb": {
+    "rho": -0.001,
+    "src": "nba_hub"
+   },
+   "opp|pra|stl": {
+    "rho": -0.004,
+    "src": "nba_hub"
+   },
+   "opp|pra|td": {
+    "rho": -0.007,
+    "src": "nba_hub"
+   },
+   "opp|pra|tpm": {
+    "rho": -0.001,
+    "src": "nba_hub"
+   },
+   "opp|pr|pr": {
+    "rho": 0,
+    "src": "nba_hub"
+   },
+   "opp|pr|pra": {
+    "rho": -0.001,
+    "src": "nba_hub"
+   },
+   "opp|pr|pts": {
+    "rho": 0.002,
+    "src": "nba_hub"
+   },
+   "opp|pr|reb": {
+    "rho": -0.007,
+    "src": "nba_hub"
+   },
+   "opp|pr|sb": {
+    "rho": -0.001,
+    "src": "nba_hub"
+   },
+   "opp|pr|stl": {
+    "rho": -0.003,
+    "src": "nba_hub"
+   },
+   "opp|pr|td": {
+    "rho": -0.008,
+    "src": "nba_hub"
+   },
+   "opp|pr|tpm": {
+    "rho": -0.001,
+    "src": "nba_hub"
+   },
+   "opp|pts|pts": {
+    "rho": 0.007,
+    "src": "nba_hub"
+   },
+   "opp|pts|reb": {
+    "rho": -0.013,
+    "src": "nba_hub"
+   },
+   "opp|pts|sb": {
+    "rho": -0.006,
+    "src": "nba_hub"
+   },
+   "opp|pts|stl": {
+    "rho": -0.006,
+    "src": "nba_hub"
+   },
+   "opp|pts|td": {
+    "rho": -0.005,
+    "src": "nba_hub"
+   },
+   "opp|pts|tpm": {
+    "rho": 0.003,
+    "src": "nba_hub"
+   },
+   "opp|reb|reb": {
+    "rho": 0.011,
+    "src": "nba_hub"
+   },
+   "opp|reb|sb": {
+    "rho": 0.014,
+    "src": "nba_hub"
+   },
+   "opp|reb|stl": {
+    "rho": 0.007,
+    "src": "nba_hub"
+   },
+   "opp|reb|td": {
+    "rho": -0.004,
+    "src": "nba_hub"
+   },
+   "opp|reb|tpm": {
+    "rho": -0.012,
+    "src": "nba_hub"
+   },
+   "opp|sb|sb": {
+    "rho": 0.009,
+    "src": "nba_hub"
+   },
+   "opp|sb|stl": {
+    "rho": 0.008,
+    "src": "nba_hub"
+   },
+   "opp|sb|td": {
+    "rho": 0.006,
+    "src": "nba_hub"
+   },
+   "opp|sb|tpm": {
+    "rho": -0.006,
+    "src": "nba_hub"
+   },
+   "opp|stl|stl": {
+    "rho": 0.008,
+    "src": "nba_hub"
+   },
+   "opp|stl|td": {
+    "rho": 0.001,
+    "src": "nba_hub"
+   },
+   "opp|stl|tpm": {
+    "rho": -0.004,
+    "src": "nba_hub"
+   },
+   "opp|td|td": {
+    "rho": -0.008,
+    "src": "nba_hub"
+   },
+   "opp|td|tpm": {
+    "rho": 0,
+    "src": "nba_hub"
+   },
+   "opp|tpm|tpm": {
+    "rho": -0.002,
+    "src": "nba_hub"
+   },
+   "self|ar|blk": {
+    "rho": 0.155,
+    "src": "nba_hub"
+   },
+   "self|ar|dd": {
+    "rho": 0.862,
+    "src": "nba_hub"
+   },
+   "self|ar|pa": {
+    "rho": 0.521,
+    "src": "nba_hub"
+   },
+   "self|ar|pr": {
+    "rho": 0.53,
+    "src": "nba_hub"
+   },
+   "self|ar|pts": {
+    "rho": 0.354,
+    "src": "nba_hub"
+   },
+   "self|ar|sb": {
+    "rho": 0.203,
+    "src": "nba_hub"
+   },
+   "self|ar|stl": {
+    "rho": 0.161,
+    "src": "nba_hub"
+   },
+   "self|ar|td": {
+    "rho": 0.871,
+    "src": "nba_hub"
+   },
+   "self|ar|tpm": {
+    "rho": 0.19,
+    "src": "nba_hub"
+   },
+   "self|ast|blk": {
+    "rho": 0.082,
+    "src": "nba_hub"
+   },
+   "self|ast|dd": {
+    "rho": 0.379,
+    "src": "nba_hub"
+   },
+   "self|ast|pr": {
+    "rho": 0.254,
+    "src": "nba_hub"
+   },
+   "self|ast|pts": {
+    "rho": 0.207,
+    "src": "nba_hub"
+   },
+   "self|ast|reb": {
+    "rho": 0.248,
+    "src": "nba_hub"
+   },
+   "self|ast|sb": {
+    "rho": 0.156,
+    "src": "nba_hub"
+   },
+   "self|ast|stl": {
+    "rho": 0.154,
+    "src": "nba_hub"
+   },
+   "self|ast|td": {
+    "rho": 0.799,
+    "src": "nba_hub"
+   },
+   "self|ast|tpm": {
+    "rho": 0.139,
+    "src": "nba_hub"
+   },
+   "self|blk|dd": {
+    "rho": 0.109,
+    "src": "nba_hub"
+   },
+   "self|blk|pa": {
+    "rho": 0.136,
+    "src": "nba_hub"
+   },
+   "self|blk|pr": {
+    "rho": 0.154,
+    "src": "nba_hub"
+   },
+   "self|blk|pra": {
+    "rho": 0.158,
+    "src": "nba_hub"
+   },
+   "self|blk|pts": {
+    "rho": 0.128,
+    "src": "nba_hub"
+   },
+   "self|blk|reb": {
+    "rho": 0.152,
+    "src": "nba_hub"
+   },
+   "self|blk|stl": {
+    "rho": 0.075,
+    "src": "nba_hub"
+   },
+   "self|blk|td": {
+    "rho": 0.095,
+    "src": "nba_hub"
+   },
+   "self|blk|tpm": {
+    "rho": 0.084,
+    "src": "nba_hub"
+   },
+   "self|dd|pa": {
+    "rho": 0.544,
+    "src": "nba_hub"
+   },
+   "self|dd|pr": {
+    "rho": 0.621,
+    "src": "nba_hub"
+   },
+   "self|dd|pra": {
+    "rho": 0.711,
+    "src": "nba_hub"
+   },
+   "self|dd|pts": {
+    "rho": 0.435,
+    "src": "nba_hub"
+   },
+   "self|dd|reb": {
+    "rho": 0.724,
+    "src": "nba_hub"
+   },
+   "self|dd|sb": {
+    "rho": 0.139,
+    "src": "nba_hub"
+   },
+   "self|dd|stl": {
+    "rho": 0.104,
+    "src": "nba_hub"
+   },
+   "self|dd|td": {
+    "rho": 0.697,
+    "src": "nba_hub"
+   },
+   "self|dd|tpm": {
+    "rho": 0.144,
+    "src": "nba_hub"
+   },
+   "self|pa|pr": {
+    "rho": 0.927,
+    "src": "nba_hub"
+   },
+   "self|pa|reb": {
+    "rho": 0.364,
+    "src": "nba_hub"
+   },
+   "self|pa|sb": {
+    "rho": 0.233,
+    "src": "nba_hub"
+   },
+   "self|pa|stl": {
+    "rho": 0.212,
+    "src": "nba_hub"
+   },
+   "self|pa|td": {
+    "rho": 0.388,
+    "src": "nba_hub"
+   },
+   "self|pa|tpm": {
+    "rho": 0.701,
+    "src": "nba_hub"
+   },
+   "self|pra|sb": {
+    "rho": 0.243,
+    "src": "nba_hub"
+   },
+   "self|pra|stl": {
+    "rho": 0.213,
+    "src": "nba_hub"
+   },
+   "self|pra|td": {
+    "rho": 0.503,
+    "src": "nba_hub"
+   },
+   "self|pra|tpm": {
+    "rho": 0.645,
+    "src": "nba_hub"
+   },
+   "self|pr|sb": {
+    "rho": 0.233,
+    "src": "nba_hub"
+   },
+   "self|pr|stl": {
+    "rho": 0.201,
+    "src": "nba_hub"
+   },
+   "self|pr|td": {
+    "rho": 0.341,
+    "src": "nba_hub"
+   },
+   "self|pr|tpm": {
+    "rho": 0.673,
+    "src": "nba_hub"
+   },
+   "self|pts|reb": {
+    "rho": 0.327,
+    "src": "nba_hub"
+   },
+   "self|pts|sb": {
+    "rho": 0.213,
+    "src": "nba_hub"
+   },
+   "self|pts|stl": {
+    "rho": 0.194,
+    "src": "nba_hub"
+   },
+   "self|pts|td": {
+    "rho": 0.192,
+    "src": "nba_hub"
+   },
+   "self|pts|tpm": {
+    "rho": 0.737,
+    "src": "nba_hub"
+   },
+   "self|reb|sb": {
+    "rho": 0.167,
+    "src": "nba_hub"
+   },
+   "self|reb|stl": {
+    "rho": 0.115,
+    "src": "nba_hub"
+   },
+   "self|reb|td": {
+    "rho": 0.608,
+    "src": "nba_hub"
+   },
+   "self|reb|tpm": {
+    "rho": 0.173,
+    "src": "nba_hub"
+   },
+   "self|sb|td": {
+    "rho": 0.118,
+    "src": "nba_hub"
+   },
+   "self|sb|tpm": {
+    "rho": 0.123,
+    "src": "nba_hub"
+   },
+   "self|stl|td": {
+    "rho": 0.094,
+    "src": "nba_hub"
+   },
+   "self|stl|tpm": {
+    "rho": 0.108,
+    "src": "nba_hub"
+   },
+   "self|td|tpm": {
+    "rho": 0.055,
+    "src": "nba_hub"
+   },
+   "team|ar|cover": {
+    "rho": 0.126,
+    "src": "nba_hub"
+   },
+   "team|ar|over": {
+    "rho": 0.014,
+    "src": "nba_hub"
+   },
+   "team|ar|win": {
+    "rho": 0.141,
+    "src": "nba_hub"
+   },
+   "team|ast|cover": {
+    "rho": 0.093,
+    "src": "nba_hub"
+   },
+   "team|ast|over": {
+    "rho": 0.112,
+    "src": "nba_hub"
+   },
+   "team|ast|win": {
+    "rho": 0.099,
+    "src": "nba_hub"
+   },
+   "team|blk|cover": {
+    "rho": 0.044,
+    "src": "nba_hub"
+   },
+   "team|blk|over": {
+    "rho": -0.03,
+    "src": "nba_hub"
+   },
+   "team|blk|win": {
+    "rho": 0.056,
+    "src": "nba_hub"
+   },
+   "team|dd|cover": {
+    "rho": 0.142,
+    "src": "nba_hub"
+   },
+   "team|dd|over": {
+    "rho": 0.041,
+    "src": "nba_hub"
+   },
+   "team|dd|win": {
+    "rho": 0.144,
+    "src": "nba_hub"
+   },
+   "team|pa|cover": {
+    "rho": 0.142,
+    "src": "nba_hub"
+   },
+   "team|pa|over": {
+    "rho": 0.148,
+    "src": "nba_hub"
+   },
+   "team|pa|win": {
+    "rho": 0.153,
+    "src": "nba_hub"
+   },
+   "team|pra|cover": {
+    "rho": 0.151,
+    "src": "nba_hub"
+   },
+   "team|pra|over": {
+    "rho": 0.107,
+    "src": "nba_hub"
+   },
+   "team|pra|win": {
+    "rho": 0.161,
+    "src": "nba_hub"
+   },
+   "team|pr|cover": {
+    "rho": 0.135,
+    "src": "nba_hub"
+   },
+   "team|pr|over": {
+    "rho": 0.089,
+    "src": "nba_hub"
+   },
+   "team|pr|win": {
+    "rho": 0.144,
+    "src": "nba_hub"
+   },
+   "team|pts|cover": {
+    "rho": 0.121,
+    "src": "nba_hub"
+   },
+   "team|pts|over": {
+    "rho": 0.13,
+    "src": "nba_hub"
+   },
+   "team|pts|win": {
+    "rho": 0.128,
+    "src": "nba_hub"
+   },
+   "team|reb|cover": {
+    "rho": 0.097,
+    "src": "nba_hub"
+   },
+   "team|reb|over": {
+    "rho": -0.069,
+    "src": "nba_hub"
+   },
+   "team|reb|win": {
+    "rho": 0.106,
+    "src": "nba_hub"
+   },
+   "team|sb|cover": {
+    "rho": 0.07,
+    "src": "nba_hub"
+   },
+   "team|sb|over": {
+    "rho": -0.022,
+    "src": "nba_hub"
+   },
+   "team|sb|win": {
+    "rho": 0.076,
+    "src": "nba_hub"
+   },
+   "team|stl|cover": {
+    "rho": 0.054,
+    "src": "nba_hub"
+   },
+   "team|stl|over": {
+    "rho": -0.009,
+    "src": "nba_hub"
+   },
+   "team|stl|win": {
+    "rho": 0.054,
+    "src": "nba_hub"
+   },
+   "team|td|cover": {
+    "rho": 0.167,
+    "src": "nba_hub"
+   },
+   "team|td|over": {
+    "rho": 0.073,
+    "src": "nba_hub"
+   },
+   "team|td|win": {
+    "rho": 0.171,
+    "src": "nba_hub"
+   },
+   "team|tpm|cover": {
+    "rho": 0.115,
+    "src": "nba_hub"
+   },
+   "team|tpm|over": {
+    "rho": 0.109,
+    "src": "nba_hub"
+   },
+   "team|tpm|win": {
+    "rho": 0.11,
+    "src": "nba_hub"
+   }
+  },
+  "nfl": {
+   "game|cover|win": {
+    "rho": 0.8,
+    "src": "owner_prior",
+    "note": "spread cover with own moneyline"
+   },
+   "team|rush_yds|win": {
+    "rho": 0.3,
+    "src": "owner_prior",
+    "note": "own win with own RB rush yards (any player's rush yards)"
+   },
+   "team|pass_yds|win": {
+    "rho": 0.15,
+    "src": "owner_prior",
+    "note": "own win with own QB pass yards"
+   },
+   "team|rec_yds|win": {
+    "rho": 0.1,
+    "src": "owner_prior",
+    "note": "own win with own WR rec yards (any player's rec yards)"
+   },
+   "oppteam|pass_yds|win": {
+    "rho": 0.1,
+    "src": "owner_prior",
+    "note": "own win with the opposing QB's pass yards"
+   },
+   "team|pass_yds|over": {
+    "rho": 0.28,
+    "src": "jx_readme",
+    "note": "QB pass yards with the game total over"
+   },
+   "team|rush_yds|over": {
+    "rho": 0.25,
+    "src": "owner_prior",
+    "note": "game total over with any player's yards"
+   },
+   "team|rec_yds|over": {
+    "rho": 0.25,
+    "src": "owner_prior",
+    "note": "game total over with any player's yards"
+   },
+   "team|rr_yds|over": {
+    "rho": 0.25,
+    "src": "owner_prior",
+    "note": "game total over with any player's yards"
+   },
+   "team|td|over": {
+    "rho": 0.25,
+    "src": "owner_prior",
+    "note": "game total over with any player's anytime TD"
+   },
+   "mate|pass_yds|rec_yds": {
+    "rho": 0.4,
+    "src": "owner_prior",
+    "note": "QB pass yards with own WR rec yards"
+   },
+   "mate|pass_yds|rush_yds": {
+    "rho": -0.1,
+    "src": "owner_prior",
+    "note": "QB pass yards with own RB rush yards"
+   },
+   "self|rec|rec_yds": {
+    "rho": 0.75,
+    "src": "owner_prior",
+    "note": "receptions with the same player's rec yards"
+   },
+   "self|rec_yds|td": {
+    "rho": 0.35,
+    "src": "owner_prior",
+    "note": "anytime TD with the same player's yards"
+   },
+   "self|rush_yds|td": {
+    "rho": 0.35,
+    "src": "owner_prior",
+    "note": "anytime TD with the same player's yards"
+   },
+   "mate|rec_yds|rec_yds": {
+    "rho": 0.0,
+    "src": "owner_prior",
+    "note": "two own WRs' rec yards: set, not unmodeled"
+   }
+  },
+  "nhl": {
+   "team|pts|win": {
+    "rho": 0.25,
+    "src": "owner_prior",
+    "note": "own win with own player's point"
+   },
+   "team|pts|over": {
+    "rho": 0.3,
+    "src": "owner_prior",
+    "note": "game total over with any player's point"
+   }
+  },
+  "soccer": {
+   "game|over|win": {
+    "rho": 0.1,
+    "src": "owner_prior",
+    "note": "own win with over 2.5"
+   },
+   "game|btts|over": {
+    "rho": 0.6,
+    "src": "owner_prior",
+    "note": "both teams to score with over 2.5"
+   },
+   "team|goal|win": {
+    "rho": 0.3,
+    "src": "owner_prior",
+    "note": "own win with own player to score"
+   }
+  }
+ }
+}
