@@ -1,5 +1,6 @@
--- 077_combo_rate_limit.sql: at most 20 combo requests in any 10 minutes
--- (owner, Nov 11; Chat 8 Phase 3; docs/correlation.md).
+-- 077_combo_limit_tickers.sql: at most 20 combo requests in any 10 minutes,
+-- and market tickers for Combo mode (owner, Nov 11; Chat 8 Phase 3;
+-- docs/correlation.md).
 --
 -- A request can hold the worker ~17 s (Monte Carlo at 1,000,000 draws), so
 -- the owner's inserts are capped at 20 per rolling 10 minutes. The 21st is
@@ -9,7 +10,9 @@
 --
 -- combo_requests_guard is db/076's, with the count added to the INSERT
 -- branch after the row is forced fresh (an advisory lock per owner, so two
--- inserts at once count each other). Nothing else changes.
+-- inserts at once count each other).
+--
+-- Section 2: kalshi_board_game(..., p_tickers) (below).
 --
 -- Paste-by-hand, top to bottom, no BEGIN/COMMIT (section 5). The self-test
 -- at the end exercises the guard (the limit, and db/076's insert rules still
@@ -17,6 +20,7 @@
 --
 -- Prerequisites: db/076.
 
+-- ===================================================================== 1
 CREATE OR REPLACE FUNCTION public.combo_requests_guard()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -108,7 +112,77 @@ BEGIN
 END;
 $$;
 
-INSERT INTO migration_log (name) VALUES ('077_combo_rate_limit')
+-- ===================================================================== 2
+-- kalshi_board_game gains p_tickers (default false: every caller unchanged).
+-- In Combo mode the page asks for each market's ticker suffix `x`, so a
+-- ticked leg names its market; off, the same fields as db/074's
+-- (the 115 KB target). The market ticker is the last ORDER BY key, so the
+-- order is total. Dropped and re-created: a second overload with a default
+-- would make every 4-argument call ambiguous.
+DROP FUNCTION IF EXISTS public.kalshi_board_game(text, text, boolean, boolean);
+CREATE FUNCTION public.kalshi_board_game(p_game text, p_kind text DEFAULT NULL,
+                                         p_combo_only boolean DEFAULT false,
+                                         p_tests boolean DEFAULT false,
+                                         p_tickers boolean DEFAULT false)
+RETURNS SETOF jsonb
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+    WITH x AS (
+        SELECT x.*, coalesce(x.edge_no, -9) > coalesce(x.edge_yes, -9) AS isno
+          FROM public.leg_consensus_for(ARRAY[p_game]) x
+    ),
+    q AS (
+        SELECT x.market_ticker,
+               CASE WHEN x.p_consensus IS NOT NULL
+                         AND (CASE WHEN x.isno THEN x.edge_no ELSE x.edge_yes END) IS NOT NULL THEN
+                   (CASE x.tier WHEN 'books' THEN 'b' || x.n_books WHEN 'espn' THEN 'e' ELSE 'k' END)
+                   || chr(97 + (CASE WHEN x.isno THEN 8 ELSE 0 END) + (CASE WHEN x.edge_claimed THEN 1 ELSE 0 END)
+                              + (CASE WHEN x.stale_kalshi THEN 2 ELSE 0 END)
+                              + (CASE WHEN x.stale_outside THEN 4 ELSE 0 END))
+                   || lpad(least(round(x.p_consensus * 1000), 999)::int::text, 3, '0')
+                   || round((CASE WHEN x.isno THEN x.edge_no ELSE x.edge_yes END) * 1000)::int
+               END AS packed
+          FROM x
+    ),
+    m AS (
+        SELECT b.market_ticker, e.event_ticker, s.title AS series_title, e.combo_eligible, e.combo_yes_only, e.combo_size_max,
+               e.fetched_at, b.payout,
+               b.market_kind, b.variant, b.label, b.subject, b.line, b.yes_bid, b.yes_ask, b.taker_fee_at_ask,
+               CASE b.market_kind WHEN 'game_line' THEN 0 WHEN 'prop' THEN 1 ELSE 2 END AS k_order,
+               q.packed AS cq
+          FROM public.kalshi_board b
+          JOIN public.kalshi_board_events e ON e.event_ticker = b.event_ticker
+          JOIN public.kalshi_series_board s ON s.series_ticker = e.series_ticker
+          LEFT JOIN q ON q.market_ticker = b.market_ticker
+         WHERE e.game_ticker = p_game AND (NOT b.is_test OR p_tests)
+           AND (p_kind IS NULL OR b.market_kind = p_kind)
+           AND (NOT p_combo_only OR (e.combo_eligible AND b.payout = 'binary'))
+    )
+    SELECT jsonb_strip_nulls(jsonb_build_object(
+               'e', m.event_ticker, 'sr', min(m.series_title),
+               'c', CASE WHEN bool_or(m.combo_eligible AND m.payout = 'binary') THEN true END,
+               'y', CASE WHEN bool_or(m.combo_yes_only AND m.payout = 'binary') THEN true END,
+               'sm', max(m.combo_size_max) FILTER (WHERE m.payout = 'binary'),
+               'asof', max(m.fetched_at),
+               'm', jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+                        'k', m.market_kind, 'lb', m.label, 'b', m.yes_bid, 'a', m.yes_ask,
+                        'f', m.taker_fee_at_ask, 'v', m.variant,
+                        's', CASE WHEN m.payout = 'scalar' THEN true END, 'q', m.cq,
+                        -- db/077: the ticker after the event's ("" when they are one), Combo mode only.
+                        'x', CASE WHEN p_tickers THEN substr(m.market_ticker, length(m.event_ticker) + 2) END))
+                    ORDER BY m.k_order, m.subject NULLS LAST, m.line NULLS FIRST, m.label, m.market_ticker)))
+      FROM m
+     GROUP BY m.event_ticker
+     ORDER BY min(m.k_order), min(m.series_title), m.event_ticker;
+$$;
+REVOKE ALL ON FUNCTION public.kalshi_board_game(text, text, boolean, boolean, boolean) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.kalshi_board_game(text, text, boolean, boolean, boolean)
+    TO authenticated, valemont_readonly;
+
+INSERT INTO migration_log (name) VALUES ('077_combo_limit_tickers')
 ON CONFLICT (name) DO NOTHING;
 
 -- Self-test, run on paste, rolled back ('selftest-rollback'). Requests
@@ -176,7 +250,27 @@ BEGIN
         EXCEPTION WHEN raise_exception THEN
             IF SQLERRM NOT LIKE 'combo_requests: a request never mixes%' THEN RAISE; END IF;
         END;
-        IF NOT EXISTS (SELECT 1 FROM public.migration_log WHERE name = '077_combo_rate_limit') THEN
+        -- The reader: tickers only when asked, each naming a real market of the game.
+        IF EXISTS (SELECT 1 FROM public.kalshi_board_game(v_game, NULL, false, true) ev,
+                          jsonb_array_elements(ev -> 'm') mk WHERE mk ? 'x') THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: tickers without p_tickers';
+        END IF;
+        IF (SELECT count(*) FROM public.kalshi_board_game(v_game, NULL, false, true, true) ev,
+                   jsonb_array_elements(ev -> 'm') mk
+             WHERE EXISTS (SELECT 1 FROM public.kalshi_board b
+                            WHERE b.market_ticker = CASE WHEN mk ->> 'x' = '' THEN ev ->> 'e'
+                                                         ELSE (ev ->> 'e') || '-' || (mk ->> 'x') END))
+           <> (SELECT count(*) FROM public.kalshi_board b JOIN public.kalshi_board_events e USING (event_ticker)
+                WHERE e.game_ticker = v_game) THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: the tickers do not name the game''s markets';
+        END IF;
+        IF has_function_privilege('anon', 'public.kalshi_board_game(text, text, boolean, boolean, boolean)', 'EXECUTE')
+           OR NOT has_function_privilege('authenticated', 'public.kalshi_board_game(text, text, boolean, boolean, boolean)', 'EXECUTE')
+           OR NOT has_function_privilege('valemont_readonly', 'public.kalshi_board_game(text, text, boolean, boolean, boolean)', 'EXECUTE')
+           OR to_regprocedure('public.kalshi_board_game(text, text, boolean, boolean)') IS NOT NULL THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: kalshi_board_game grants or the old signature';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM public.migration_log WHERE name = '077_combo_limit_tickers') THEN
             RAISE EXCEPTION 'SELFTEST FAILED: no migration_log row';
         END IF;
         IF (SELECT tgenabled FROM pg_trigger WHERE tgname = 'combo_requests_guard') <> 'O' THEN
@@ -193,6 +287,8 @@ END;
 $$;
 
 -- Verify after the paste (db_inspect; read-only):
--- (a) SELECT name, applied_at FROM migration_log WHERE name = '077_combo_rate_limit';
+-- (a) SELECT name, applied_at FROM migration_log WHERE name = '077_combo_limit_tickers';
 -- (b) md5 of combo_requests_guard's body against the scratch copy's (CRs removed);
 -- (c) SELECT tgenabled FROM pg_trigger WHERE tgname = 'combo_requests_guard';   -- O
+-- (d) md5 of kalshi_board_game's body against the scratch copy's; its grants;
+--     octet_length of one expanded NBA game, p_tickers off (<= 115 KB) and on.

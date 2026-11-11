@@ -117,7 +117,8 @@ class Objects(BoardSqlCase):
                         "has_function_privilege('valemont_readonly', %(f)s, 'EXECUTE')",
                         {"f": f"public.{fn}"}).fetchone(), (False, False, False))
             for fn in ("kalshi_board_sports(boolean)", "kalshi_board_games(text, text, boolean, boolean)",
-                       "kalshi_board_game(text, text, boolean, boolean)", "ctx_kalshi_board()"):
+                       "kalshi_board_game(text, text, boolean, boolean, boolean)",  # db/077: p_tickers
+                       "ctx_kalshi_board()"):
                 with self.subTest(fn=fn):
                     self.assertEqual(conn.execute(
                         "SELECT has_function_privilege('anon', %(f)s, 'EXECUTE'), "

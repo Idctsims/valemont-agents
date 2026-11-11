@@ -174,7 +174,7 @@ class RateLimit(ComboSqlCase):
     def setUpClass(cls) -> None:
         super().setUpClass()
         with _rolled_back() as conn:
-            if conn.execute("SELECT 1 FROM migration_log WHERE name = '077_combo_rate_limit'").fetchone() is None:
+            if conn.execute("SELECT 1 FROM migration_log WHERE name = '077_combo_limit_tickers'").fetchone() is None:
                 raise unittest.SkipTest("db/077 not pasted")
 
     def test_the_21st_request_in_10_minutes_is_refused_with_why(self) -> None:
