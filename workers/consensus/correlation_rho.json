@@ -1,6 +1,6 @@
 {
  "about": "Same-game correlation table, Chat 8 Phase 3 (docs/correlation.md). rho is the correlation of two legs' latent normals, each oriented so higher = the YES of an over / a win; a NO leg flips the sign. Frozen by its sha256 (CRLF normalized to LF); Phase 4's pre-registration names the hash. workers/consensus/correlation_rho.json is a byte-identical copy (tests/test_correlation.py).",
- "version": "2026-11-11.3",
+ "version": "2026-11-11.4",
  "keys": "self|a|b one player's two kinds; mate|a|b teammates; opp|a|b opponents (a <= b); team|<kind>|<line> a player with his own club's win or cover, or the game total (over); a player with the OTHER club's line takes the team row with its sign flipped where the league has no draw (owner, Nov 11: no opponent rows), else unmodeled; game|<a>|<b> two game lines (a club line with the other club's: the sign flips where there is no draw).",
  "classes": {
   "measured_external": "measured by someone else, not reproduced by us",
@@ -1522,6 +1522,46 @@
     "rho": 0.0,
     "src": "owner_prior",
     "note": "opponents: a modeled zero"
+   },
+   "mate|ast|first_goal": {
+    "rho": 0.1,
+    "src": "owner_prior",
+    "note": "a teammate's assist with another's first goal"
+   },
+   "opp|ast|first_goal": {
+    "rho": 0.0,
+    "src": "owner_prior",
+    "note": "opponents: a modeled zero"
+   },
+   "mate|ast|ast": {
+    "rho": 0.2,
+    "src": "owner_prior",
+    "note": "teammates' assists"
+   },
+   "opp|ast|ast": {
+    "rho": 0.0,
+    "src": "owner_prior",
+    "note": "opponents: a modeled zero"
+   },
+   "team|first_goal|over": {
+    "rho": 0.05,
+    "src": "owner_prior",
+    "note": "game total over with any player's first goal"
+   },
+   "team|ast|over": {
+    "rho": 0.25,
+    "src": "owner_prior",
+    "note": "game total over with any player's assist"
+   },
+   "team|first_goal|cover": {
+    "rho": 0.2,
+    "src": "owner_prior",
+    "note": "own team spread cover with own player's first goal (opponent: sign flip)"
+   },
+   "self|first_goal|goal": {
+    "rho": 0.3,
+    "src": "owner_prior",
+    "note": "same player first goal with 2+ goals (1+ goals is an implication)"
    }
   },
   "soccer": {

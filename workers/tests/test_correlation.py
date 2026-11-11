@@ -315,6 +315,22 @@ class Implications(unittest.TestCase):
         self.assertEqual(q.blocks[0].pairs[0]["key"], "team|goal|win")
         self.assertAlmostEqual(q.fair_p, priced(nhl("G1", self.G, 0.30), legs[2]).fair_p, places=12)
 
+    def test_the_final_nhl_rows(self) -> None:
+        # Owner, Nov 11 (.4): first goal with 2+ goals is a row; with 1+ an implication.
+        q = priced(nhl("F", self.F, 0.09, line=None, event="KXNHLFIRSTGOAL-G1"), nhl("G2", self.G, 0.06, line=1.5))
+        self.assertEqual(q.blocks[0].latents, 2)
+        self.assertEqual((q.blocks[0].pairs[0]["key"], q.blocks[0].pairs[0]["rho"]), ("self|first_goal|goal", 0.3))
+        table, borrowed = T.table_for("nhl", "Hockey")
+        fg = cr.Role(kind="first_goal", club="TB", player="TB|k")
+        own = cr.pair_rho(T, table, borrowed, True, fg, cr.Role(line="cover", club="TB"))
+        other = cr.pair_rho(T, table, borrowed, True, fg, cr.Role(line="cover", club="BUF"))
+        self.assertEqual((own.rho, other.rho, own.cls), (0.20, -0.20, "prior"))
+        self.assertEqual(T.row("nhl", "mate|ast|ast"), (0.20, "prior"))
+        self.assertEqual(T.row("nhl", "opp|ast|first_goal"), (0.0, "prior"))
+        self.assertEqual(T.row("nhl", "team|ast|over"), (0.25, "prior"))
+        self.assertEqual(T.row("nhl", "team|first_goal|over"), (0.05, "prior"))
+        self.assertEqual(T.data["version"], "2026-11-11.4")
+
     def test_nfl_first_td_implies_anytime_td(self) -> None:
         q = priced(leg("FTD", series="KXNFLFIRSTTD", p=0.11, line=None, subject="Bijan R", team="ATL"),
                    leg("TD1", series="KXNFLTD", p=0.48, line=0.5, subject="Bijan R", team="ATL"))
