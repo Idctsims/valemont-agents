@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { BoardEvent, BoardGame, Credits, Kind, SportChip } from "./board";
+import type { ComboState, Quote } from "./combo";
 
 // Reads only, through the owner's session (RLS on db/071's tables), via its
 // narrow functions: never the tables themselves. One sport at a time with its
@@ -27,10 +28,12 @@ export async function loadGames(
 
 export async function loadGame(
   supabase: SupabaseClient,
-  opts: { game: string; kind: Kind | null; combo: boolean; withTests: boolean },
+  opts: { game: string; kind: Kind | null; combo: boolean; withTests: boolean; tickers?: boolean },
 ): Promise<BoardEvent[]> {
+  // p_tickers (db/077) only in Combo mode: off, the call is db/074's.
   const { data, error } = await supabase.rpc("kalshi_board_game", {
     p_game: opts.game, p_kind: opts.kind, p_combo_only: opts.combo, p_tests: opts.withTests,
+    ...(opts.tickers ? { p_tickers: true } : {}),
   });
   if (error) throw new Error(`Couldn't read that game's markets: ${error.message}`);
   return (data ?? []) as BoardEvent[];
@@ -45,4 +48,45 @@ export async function loadCredits(supabase: SupabaseClient): Promise<Credits> {
            spent: Number(d.spent ?? 0), allowance: Number(d.allowance ?? 500),
            remaining: d.remaining === null || d.remaining === undefined ? null : Number(d.remaining),
            calls: Number(d.calls ?? 0) };
+}
+
+// ---- Combo pricing (db/076): the owner inserts a request (its trigger queues
+// the worker's price_combo job) and reads it back with its quote.
+
+/** The new request's id. A refusal (db/077's rate limit, a malformed leg) is the guard's message. */
+export async function createComboRequest(
+  supabase: SupabaseClient, legs: { market_ticker: string; side: "yes" | "no" }[],
+): Promise<{ id: number } | { refused: string }> {
+  const { data, error } = await supabase.from("combo_requests").insert({ legs }).select("id").single();
+  if (error) {
+    if (/combo_requests:/.test(error.message)) return { refused: error.message };
+    throw new Error(`Couldn't ask for a price: ${error.message}`);
+  }
+  return { id: Number((data as { id: number }).id) };
+}
+
+export async function loadComboRequest(supabase: SupabaseClient, id: number): Promise<ComboState | null> {
+  const { data, error } = await supabase
+    .from("combo_requests")
+    .select("status, reason, created_at, answered_at, combo_quotes(naive_p, fair_p, se, blocks, kalshi_naive_cost, "
+      + "combo_status, combo_reason, prior_pairs, unmodeled_pairs, rho_version, compute_ms)")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(`Couldn't read the price: ${error.message}`);
+  if (!data) return null;
+  const r = data as unknown as {
+    status: ComboState["status"]; reason: string | null; created_at: string; answered_at: string | null;
+    combo_quotes: Quote | Quote[] | null;
+  };
+  const q = Array.isArray(r.combo_quotes) ? r.combo_quotes[0] : r.combo_quotes;
+  if (r.status === "answered" && q) {
+    return { status: "answered", createdAt: r.created_at, answeredAt: r.answered_at ?? r.created_at,
+             quote: { ...q, naive_p: Number(q.naive_p), fair_p: Number(q.fair_p),
+                      se: q.se === null ? null : Number(q.se),
+                      kalshi_naive_cost: q.kalshi_naive_cost === null ? null : Number(q.kalshi_naive_cost) } };
+  }
+  if (r.status === "refused" || r.status === "failed") {
+    return { status: r.status, reason: r.reason ?? "", createdAt: r.created_at };
+  }
+  return { status: "queued", createdAt: r.created_at };
 }

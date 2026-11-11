@@ -12,11 +12,13 @@
 -- branch after the row is forced fresh (an advisory lock per owner, so two
 -- inserts at once count each other).
 --
--- Section 2: kalshi_board_game(..., p_tickers) (below).
+-- Section 2: kalshi_board_game(..., p_tickers): each market's ticker for
+-- Combo mode. Section 3: ctx_combos, the owner's recent combo prices for
+-- Wags (provider `combos`, sort 51, not a brief section).
 --
 -- Paste-by-hand, top to bottom, no BEGIN/COMMIT (section 5). The self-test
 -- at the end exercises the guard (the limit, and db/076's insert rules still
--- in force) and rolls back.
+-- in force), the reader's tickers and ctx_combos, and rolls back.
 --
 -- Prerequisites: db/076.
 
@@ -182,6 +184,52 @@ REVOKE ALL ON FUNCTION public.kalshi_board_game(text, text, boolean, boolean, bo
 GRANT EXECUTE ON FUNCTION public.kalshi_board_game(text, text, boolean, boolean, boolean)
     TO authenticated, valemont_readonly;
 
+-- ===================================================================== 3
+-- ctx_combos: the owner's combo prices for Wags (provider `combos`, not a
+-- brief section). Real requests of the last 7 days, newest first, at most 10:
+-- the legs as quoted (label, side, p, tier), naive and fair p (with the SE),
+-- the Kalshi status, and how many pairs were priors/borrowed or unmodeled.
+-- Wags opened from a quote's sheet carries its id (page context `combos`).
+CREATE OR REPLACE FUNCTION public.ctx_combos()
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+    SELECT jsonb_build_object(
+        'about', 'The owner''s combo prices (Chat 8 Phase 3). naive_p multiplies the legs'' consensus '
+                 'probabilities; fair_p is the Gaussian-copula joint with same-game correlation from a frozen '
+                 'rho table (rho_version), the product across games (games are independent). se is the Monte '
+                 'Carlo standard error (3+ legs in one game). prior_pairs counts pairs priced from a prior or a '
+                 'borrowed row, not a measurement; unmodeled_pairs were priced at 0. kalshi_naive_cost multiplies '
+                 'each leg''s ask plus fee. A fair p is not profit and not advice; nothing is ever bet automatically.',
+        'recent', coalesce((
+            SELECT jsonb_agg(x.j ORDER BY x.id DESC)
+              FROM (SELECT r.id, jsonb_strip_nulls(jsonb_build_object(
+                           'id', r.id, 'status', r.status, 'reason', r.reason, 'asked_at', r.created_at,
+                           'legs', CASE WHEN q.request_id IS NULL THEN r.legs
+                                        ELSE jsonb_path_query_array(q.blocks, '$[*].legs[*]') END,
+                           'naive_p', round(q.naive_p::numeric, 6), 'fair_p', round(q.fair_p::numeric, 6),
+                           'se', round(q.se::numeric, 6),
+                           'fair_over_naive', CASE WHEN q.naive_p > 0 THEN round((q.fair_p / q.naive_p)::numeric, 4) END,
+                           'kalshi_naive_cost', q.kalshi_naive_cost, 'combo_status', q.combo_status,
+                           'combo_reason', q.combo_reason, 'prior_pairs', q.prior_pairs,
+                           'unmodeled_pairs', q.unmodeled_pairs, 'rho_version', left(q.rho_version, 12))) AS j
+                      FROM public.combo_requests r
+                      LEFT JOIN public.combo_quotes q ON q.request_id = r.id
+                     WHERE NOT r.is_test AND r.created_at > now() - interval '7 days'
+                     ORDER BY r.id DESC
+                     LIMIT 10) x), '[]'::jsonb));
+$$;
+
+INSERT INTO context_providers (key, label, fn, brief_section, sort)
+VALUES ('combos', 'Combos', 'public.ctx_combos()'::regprocedure, false, 51)
+ON CONFLICT (key) DO NOTHING;
+
+REVOKE ALL ON FUNCTION public.ctx_combos() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.ctx_combos() TO authenticated, valemont_readonly;
+
 INSERT INTO migration_log (name) VALUES ('077_combo_limit_tickers')
 ON CONFLICT (name) DO NOTHING;
 
@@ -196,6 +244,7 @@ DECLARE
     v_legs    jsonb;
     v_have    int;
     v_id      bigint;
+    v_real    bigint;
     i         int;
 BEGIN
     BEGIN
@@ -234,6 +283,23 @@ BEGIN
         IF (SELECT status FROM public.combo_requests WHERE id = v_id) <> 'queued'
            OR NOT (SELECT is_test FROM public.combo_requests WHERE id = v_id) THEN
             RAISE EXCEPTION 'SELFTEST FAILED: a request after the window is not a fresh queued test request';
+        END IF;
+        -- ctx_combos: a real request appears (legs as asked while queued), a test one never.
+        INSERT INTO public.combo_requests (legs) VALUES (
+            '[{"market_ticker": "KXSELFTEST077-A", "side": "yes"}, {"market_ticker": "KXSELFTEST077-B", "side": "no"}]')
+            RETURNING id INTO v_real;
+        IF NOT EXISTS (SELECT 1 FROM jsonb_array_elements(public.ctx_combos() -> 'recent') r
+                        WHERE (r ->> 'id')::bigint = v_real AND r ->> 'status' = 'queued'
+                          AND r -> 'legs' -> 1 ->> 'side' = 'no')
+           OR EXISTS (SELECT 1 FROM jsonb_array_elements(public.ctx_combos() -> 'recent') r
+                       WHERE (r ->> 'id')::bigint = v_id) THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: ctx_combos (got %)', public.ctx_combos();
+        END IF;
+        IF (SELECT brief_section OR NOT enabled FROM public.context_providers WHERE key = 'combos') IS DISTINCT FROM false
+           OR has_function_privilege('anon', 'public.ctx_combos()', 'EXECUTE')
+           OR NOT has_function_privilege('authenticated', 'public.ctx_combos()', 'EXECUTE')
+           OR NOT has_function_privilege('valemont_readonly', 'public.ctx_combos()', 'EXECUTE') THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: the combos provider or its grants';
         END IF;
         -- db/076's insert rules are still in force.
         BEGIN
