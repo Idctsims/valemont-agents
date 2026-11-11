@@ -409,11 +409,14 @@ def pair_rho(t: RhoTable, table: str | None, borrowed: bool, no_draw: bool, a: R
 
         if p.club == g.club:
             r = club_row("team")
+        elif no_draw:
+            # Decision 3, and the owner's Nov 11 correction (no opponent rows):
+            # the other club's line is own NO, so the own-club row's sign flips.
+            # One QB against either moneyline is then consistent.
+            own = club_row("team")
+            r = (-own[0], own[1], own[2]) if own else None
         else:
-            r = club_row("oppteam")
-            if r is None and no_draw:  # decision 3: the other club's line is own NO
-                own = club_row("team")
-                r = (-own[0], own[1], own[2]) if own else None
+            r = None
         return PairRho(r[0], r[1], r[2]) if r else PairRho(0.0, UNMODELED, None)
 
     # ---- two game lines

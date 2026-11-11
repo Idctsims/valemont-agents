@@ -84,6 +84,10 @@ test.describe("owner", () => {
     await expect(quote.getByTestId("combo-status")).toContainText("Build manually: not combo-eligible");
     await expect(quote.getByTestId("combo-unmodeled")).toBeVisible();
     await expect(quote.getByTestId("combo-leg-tier")).toHaveCount(2);
+    // Each leg's Kalshi price age (owner, Nov 11); the test board was just written, so none is stale.
+    await expect(quote.getByTestId("combo-leg-age")).toHaveCount(2);
+    await expect(quote.getByTestId("combo-leg-age").first()).toHaveText(/^price .*old$/);
+    await expect(quote.getByTestId("combo-prices-stale")).toHaveCount(0);
   });
 
   test("both teams' moneylines are refused with the reason", async () => {

@@ -147,9 +147,32 @@ class Relations(unittest.TestCase):
                           sport="Soccer")
         self.assertEqual((soccer.rho, soccer.cls), (0.0, cr.UNMODELED))
 
-    def test_an_explicit_opponent_row_wins_over_the_flip(self) -> None:
-        r = self.rho("nfl", role(kind="pass_yds", club="BUF", player="BUF|qb"), role(line="win", club="NYJ"))
-        self.assertEqual((r.rho, r.cls), (0.10, "prior"))
+    def test_one_qb_against_either_moneyline_is_consistent(self) -> None:
+        # Owner, Nov 11: no opponent rows; the own-team row's sign flips.
+        qb = role(kind="pass_yds", club="BUF", player="BUF|qb")
+        own = self.rho("nfl", qb, role(line="win", club="BUF"))
+        other = self.rho("nfl", qb, role(line="win", club="NYJ"))
+        self.assertEqual((own.rho, own.cls), (0.15, "prior"))
+        self.assertEqual((other.rho, other.cls), (-0.15, "prior"))
+        self.assertFalse(any(k.startswith("oppteam|") for t in T.data["rows"].values() for k in t))
+        # And priced: the QB over with NYJ YES equals the QB over with BUF NO.
+        a = leg("PY", p=0.55, series="KXNFLPASSYDS", team="BUF")
+        with_nyj = priced(a, win("NYJ", 0.40, exclusive=None)).fair_p
+        with_buf_no = priced(a, win("BUF", 0.60, side="no", exclusive=None)).fair_p
+        self.assertAlmostEqual(with_nyj, with_buf_no, places=12)
+
+    def test_the_nhl_priors(self) -> None:
+        g, p = role(kind="goal", club="TB", player="TB|k"), role(kind="pts", club="TB", player="TB|k")
+        self.assertEqual(self.rho("nhl", g, p).rho, 0.80)  # a row, not refused (owner, Nov 11)
+        self.assertEqual(self.rho("nhl", g, role(line="win", club="TB")).rho, 0.25)
+        self.assertEqual(self.rho("nhl", g, role(line="win", club="BUF")).rho, -0.25)
+        self.assertEqual(self.rho("nhl", p, role(kind="pts", club="TB", player="TB|m")).rho, 0.10)
+        r = self.rho("nhl", p, role(kind="pts", club="BUF", player="BUF|o"))
+        self.assertEqual((r.rho, r.cls), (0.0, "prior"))
+        self.assertEqual(self.rho("nhl", g, role(line="over")).rho, 0.30)
+        self.assertEqual(T.row("nhl", "self|goal|shots"), (0.35, "prior"))
+        self.assertEqual(T.row("nhl", "team|shots|over"), (0.15, "prior"))
+        self.assertEqual(T.kind_of("nhl", "nhl", "KXNHLANYGOAL"), "goal")
 
     def test_a_cover_uses_its_measured_row_else_the_moneyline_borrowed(self) -> None:
         nba = self.rho("nba", role(kind="pts", club="BOS", player="BOS|x"), role(line="cover", club="BOS"))
@@ -164,7 +187,7 @@ class Relations(unittest.TestCase):
         self.assertEqual((r.rho, r.cls), (-0.939, "borrowed"))
 
     def test_a_stat_beside_a_sum_that_holds_it_is_refused_in_every_sport(self) -> None:
-        cases = [("nba", "pts", "pra"), ("nba", "stl", "sb"), ("nfl", "rush_yds", "rr_yds"), ("nhl", "goal", "pts")]
+        cases = [("nba", "pts", "pra"), ("nba", "stl", "sb"), ("nfl", "rush_yds", "rr_yds"), ("nhl", "ast", "pts")]
         for lg, a, b in cases:
             with self.assertRaisesRegex(cr.Refused, "not jointly gaussian; pick one"):
                 self.rho(lg, role(kind=a, club="X", player="X|p"), role(kind=b, club="X", player="X|p"))
@@ -269,6 +292,21 @@ class SignAndIndependence(unittest.TestCase):
         self.assertEqual(q.blocks[0].method, "monte_carlo")
         self.assertIsNotNone(q.se)
         self.assertEqual(priced(*legs, draws=20_000, draws_max=20_000).fair_p, q.fair_p)
+
+
+class StalePrices(unittest.TestCase):
+    def test_a_stale_leg_still_prices_and_flags_the_quote_with_each_legs_age(self) -> None:
+        # Owner, Nov 11: any leg's Kalshi price over 20 min old flags the quote; it still prices.
+        fresh = replace(leg("PY-250", p=0.55, series="KXNFLPASSYDS"), kalshi_at=NOW - timedelta(minutes=5))
+        old = replace(win("KC", 0.62), stale_kalshi=True, kalshi_at=NOW - timedelta(minutes=41))
+        q = priced(fresh, old)
+        self.assertTrue(q.prices_stale)
+        self.assertGreater(q.fair_p, 0)
+        legs = {x["t"]: x for x in combo.block_json(q.blocks[0], NOW)["legs"]}
+        self.assertEqual((legs["PY-250"]["age_s"], legs["PY-250"]["stale_k"]), (300, False))
+        self.assertEqual((legs[old.market_ticker]["age_s"], legs[old.market_ticker]["stale_k"]), (2460, True))
+        self.assertFalse(priced(fresh, replace(old, stale_kalshi=False)).prices_stale)
+        self.assertIsNone(combo.block_json(q.blocks[0])["legs"][0]["age_s"])  # no time given
 
 
 class ComboStatus(unittest.TestCase):

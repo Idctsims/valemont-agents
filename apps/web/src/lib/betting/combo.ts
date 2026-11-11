@@ -84,7 +84,11 @@ export function requestLegs(legs: readonly unknown[]): { market_ticker: string; 
 }
 
 /** db/076's combo_quotes row, as the sheet reads it. */
-export type QuoteLeg = { t: string; side: Side; label?: string; p: number; tier: string; stale?: boolean; cost?: number | null };
+export type QuoteLeg = {
+  t: string; side: Side; label?: string; p: number; tier: string; stale?: boolean; cost?: number | null;
+  /** The Kalshi price is over 20 min old (owner, Nov 11), and its age in seconds at the quote. */
+  stale_k?: boolean; age_s?: number | null;
+};
 export type QuoteBlock = {
   game: string; p: number; se: number | null; method: "exact" | "bivariate" | "monte_carlo"; draws: number;
   shrink: number; latents: number; nested: string[][];
@@ -146,6 +150,20 @@ export function quotedLegs(q: { blocks: readonly { legs: readonly QuoteLeg[] }[]
   const out = new Map<string, QuoteLeg>();
   for (const b of q.blocks) for (const l of b.legs) out.set(l.t, l);
   return out;
+}
+
+/** Any leg's Kalshi price over 20 min old: the quote's "prices stale" flag (it still prices). */
+export function pricesStale(q: { blocks: readonly { legs: readonly QuoteLeg[] }[] }): boolean {
+  return q.blocks.some((b) => b.legs.some((l) => l.stale_k === true));
+}
+
+/** A Kalshi price's age at the quote: "price 4 min old", "price 1 h 12 min old". */
+export function ageLabel(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined || Number.isNaN(seconds)) return "price age unknown";
+  const m = Math.floor(seconds / 60);
+  if (m < 1) return "price under 1 min old";
+  if (m < 60) return `price ${m} min old`;
+  return `price ${Math.floor(m / 60)} h ${m % 60} min old`;
 }
 
 /** "Books", "ESPN", "Kalshi only" for a quoted leg's tier. */

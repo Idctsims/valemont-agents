@@ -68,6 +68,11 @@ class LegIn:
     combo_yes_only: bool
     combo_size_max: int | None
     starts_at: datetime | None
+    #: The Kalshi price is over 20 min old (leg_consensus_for's rule), and
+    #: when it was read (the event's last fetch). The quote still prices; the
+    #: sheet says "prices stale" (owner, Nov 11).
+    stale_kalshi: bool = False
+    kalshi_at: datetime | None = None
 
     @property
     def p(self) -> float:
@@ -203,6 +208,10 @@ class Quote:
         return sum(b.unmodeled for b in self.blocks)
 
     @property
+    def prices_stale(self) -> bool:
+        return any(leg.stale_kalshi for b in self.blocks for leg in b.legs)
+
+    @property
     def prior_pairs(self) -> int:
         return sum(b.priors for b in self.blocks)
 
@@ -328,12 +337,17 @@ def price(legs: Sequence[LegIn], t: cr.RhoTable, *, draws: int = cr.MC_DRAWS,
     return Quote(naive, fair, se, blocks, cost, status, reason)
 
 
-def block_json(b: Block) -> dict[str, Any]:
-    """A block as combo_quotes.blocks stores it (the sheet reads this)."""
+def block_json(b: Block, at: datetime | None = None) -> dict[str, Any]:
+    """A block as combo_quotes.blocks stores it (the sheet reads this). Each
+    leg's age_s is its Kalshi price's age at `at` (the quote's time) and
+    stale_k the 20-minute rule; stale is that or a stale outside price."""
     return {
         "game": b.game, "p": round(b.p, 8), "se": None if b.se is None else round(b.se, 8), "method": b.method,
         "draws": b.draws, "shrink": round(b.shrink, 6), "latents": b.latents, "nested": b.nested,
         "pairs": b.pairs,
         "legs": [{"t": x.market_ticker, "side": x.side, "label": x.label, "p": round(x.p, 6), "tier": x.tier,
-                  "stale": x.stale, "cost": None if x.cost is None else round(x.cost, 6)} for x in b.legs],
+                  "stale": x.stale, "stale_k": x.stale_kalshi,
+                  "age_s": (None if x.kalshi_at is None or at is None
+                            else max(0, int((at - x.kalshi_at).total_seconds()))),
+                  "cost": None if x.cost is None else round(x.cost, 6)} for x in b.legs],
     }

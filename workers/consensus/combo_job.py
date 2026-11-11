@@ -41,6 +41,9 @@ class ComboRun:
     ms: int = 0
     unmodeled: int = 0
     priors: int = 0
+    #: Legs whose Kalshi price is over 20 min old: the quote still prices,
+    #: flagged "prices stale" (owner, Nov 11; Phase 4 re-quotes).
+    stale: int = 0
     reason: str | None = None
 
     @property
@@ -50,7 +53,7 @@ class ComboRun:
         se = f" ± {self.se:.6f}" if self.se is not None else ""
         return (f"combo {self.request_id} answered: {self.legs} legs in {self.games} games, naive {self.naive:.6f}, "
                 f"fair {self.fair:.6f}{se} ({self.method}); unmodeled pairs {self.unmodeled}, prior/borrowed "
-                f"{self.priors}; {self.ms} ms")
+                f"{self.priors}; prices stale {self.stale}; {self.ms} ms")
 
 
 def _f(x: Any) -> float | None:
@@ -60,20 +63,21 @@ def _f(x: Any) -> float | None:
 def leg_rows(rows: list[tuple[Any, ...]]) -> dict[str, combo.LegIn]:
     out: dict[str, combo.LegIn] = {}
     for (t, ev, game, series, sport, league, kind, payout, subject, stat, line, label, team, tier, p, ask, no_ask,
-         fee_yes, fee_no, stale, excl, eligible, yes_only, size_max, starts) in rows:
+         fee_yes, fee_no, stale, excl, eligible, yes_only, size_max, starts, stale_k, kalshi_at) in rows:
         out[t] = combo.LegIn(
             market_ticker=t, side="yes", event_ticker=ev, game_ticker=game, series_ticker=series, sport=sport,
             league=league, market_kind=kind, payout=payout, subject=subject, stat=stat, line=_f(line), label=label,
             team=team, tier=tier, p_yes=_f(p), yes_ask=_f(ask), no_ask=_f(no_ask), fee_yes=_f(fee_yes),
             fee_no=_f(fee_no), stale=bool(stale), mutually_exclusive=excl, combo_eligible=bool(eligible),
-            combo_yes_only=bool(yes_only), combo_size_max=size_max, starts_at=starts)
+            combo_yes_only=bool(yes_only), combo_size_max=size_max, starts_at=starts,
+            stale_kalshi=bool(stale_k), kalshi_at=kalshi_at)
     return out
 
 
-def quote_row(q: combo.Quote, table: cr.RhoTable, ms: int) -> dict[str, Any]:
+def quote_row(q: combo.Quote, table: cr.RhoTable, ms: int, at: datetime) -> dict[str, Any]:
     return {
         "naive_p": q.naive_p, "fair_p": min(1.0, max(0.0, q.fair_p)), "se": q.se,
-        "blocks": [combo.block_json(b) for b in q.blocks],
+        "blocks": [combo.block_json(b, at) for b in q.blocks],
         "kalshi_naive_cost": None if q.kalshi_naive_cost is None else round(q.kalshi_naive_cost, 8),
         "combo_status": q.combo_status, "combo_reason": q.combo_reason, "rho_version": table.sha256,
         "unmodeled_pairs": q.unmodeled_pairs, "prior_pairs": q.prior_pairs, "compute_ms": ms,
@@ -105,11 +109,12 @@ def price_job(payload: Mapping[str, Any], *, now: Callable[[], datetime] = lambd
         ledger.combo_settle(request_id, "failed", f"the pricer failed: {describe(exc)}", conn=conn)
         raise
     run.ms = int((time.perf_counter() - t0) * 1000)
-    ledger.combo_answer(request_id, quote_row(q, t, run.ms), conn=conn)
+    ledger.combo_answer(request_id, quote_row(q, t, run.ms, now()), conn=conn)
     run.outcome, run.legs, run.games = "answered", len(legs), len(q.blocks)
     run.naive, run.fair, run.se = q.naive_p, q.fair_p, q.se
     run.method = "+".join(sorted({b.method for b in q.blocks}))
     run.unmodeled, run.priors = q.unmodeled_pairs, q.prior_pairs
+    run.stale = sum(1 for leg in legs if leg.stale_kalshi)
     log.info("%s", run.job_note)
     return run
 

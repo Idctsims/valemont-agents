@@ -122,6 +122,10 @@ class Pricing(ComboSqlCase):
             self.assertEqual((status, reason), ("fits", None))
             self.assertEqual(len(blocks), 1)
             self.assertEqual({x["t"] for x in blocks[0]["legs"]}, {t["qb"], t["aaa"]})
+            # Each leg's Kalshi price age (the events were just written: fresh, never stale).
+            for x in blocks[0]["legs"]:
+                self.assertFalse(x["stale_k"])
+                self.assertLess(x["age_s"], 20 * 60)
             # A retry finds it answered and does nothing.
             self.assertEqual(combo_job.price_job({"request_id": rid}, table=table, conn=conn).outcome, "skipped")
 

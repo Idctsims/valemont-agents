@@ -1,7 +1,7 @@
 {
  "about": "Same-game correlation table, Chat 8 Phase 3 (docs/correlation.md). rho is the correlation of two legs' latent normals, each oriented so higher = the YES of an over / a win; a NO leg flips the sign. Frozen by its sha256 (CRLF normalized to LF); Phase 4's pre-registration names the hash. workers/consensus/correlation_rho.json is a byte-identical copy (tests/test_correlation.py).",
- "version": "2026-11-11.1",
- "keys": "self|a|b one player's two kinds; mate|a|b teammates; opp|a|b opponents (a <= b); team|<kind>|<line> a player with his own club's win or cover, or the game total (over); oppteam|<kind>|<line> a player with the other club's line (else the team row's sign flips where the league has no draw); game|<a>|<b> two game lines (a club line with the other club's: the sign flips where there is no draw).",
+ "version": "2026-11-11.2",
+ "keys": "self|a|b one player's two kinds; mate|a|b teammates; opp|a|b opponents (a <= b); team|<kind>|<line> a player with his own club's win or cover, or the game total (over); a player with the OTHER club's line takes the team row with its sign flipped where the league has no draw (owner, Nov 11: no opponent rows), else unmodeled; game|<a>|<b> two game lines (a club line with the other club's: the sign flips where there is no draw).",
  "classes": {
   "measured_external": "measured by someone else, not reproduced by us",
   "prior": "the owner's starting value, no measurement",
@@ -96,6 +96,7 @@
   "nhl": {
    "PTS": "pts",
    "GOAL": "goal",
+   "ANYGOAL": "goal",
    "AST": "ast",
    "FIRSTGOAL": "first_goal"
   },
@@ -146,7 +147,6 @@
   },
   "nhl": {
    "pts": [
-    "goal",
     "ast"
    ]
   },
@@ -1328,11 +1328,6 @@
     "src": "owner_prior",
     "note": "own win with own WR rec yards (any player's rec yards)"
    },
-   "oppteam|pass_yds|win": {
-    "rho": 0.1,
-    "src": "owner_prior",
-    "note": "own win with the opposing QB's pass yards"
-   },
    "team|pass_yds|over": {
     "rho": 0.28,
     "src": "jx_readme",
@@ -1399,6 +1394,46 @@
     "rho": 0.3,
     "src": "owner_prior",
     "note": "game total over with any player's point"
+   },
+   "self|goal|pts": {
+    "rho": 0.8,
+    "src": "owner_prior",
+    "note": "same player anytime goal with a point (owner, Nov 11)"
+   },
+   "self|goal|shots": {
+    "rho": 0.35,
+    "src": "owner_prior",
+    "note": "same player shots on goal with a goal (no Kalshi NHL shots series yet)"
+   },
+   "self|pts|shots": {
+    "rho": 0.3,
+    "src": "owner_prior",
+    "note": "same player shots on goal with a point (no Kalshi NHL shots series yet)"
+   },
+   "team|goal|win": {
+    "rho": 0.25,
+    "src": "owner_prior",
+    "note": "own win with own player's goal"
+   },
+   "mate|pts|pts": {
+    "rho": 0.1,
+    "src": "owner_prior",
+    "note": "teammates' points"
+   },
+   "opp|pts|pts": {
+    "rho": 0.0,
+    "src": "owner_prior",
+    "note": "opponents' points: set, not unmodeled"
+   },
+   "team|shots|over": {
+    "rho": 0.15,
+    "src": "owner_prior",
+    "note": "game total over with any player's shots (no Kalshi NHL shots series yet)"
+   },
+   "team|goal|over": {
+    "rho": 0.3,
+    "src": "owner_prior",
+    "note": "game total over with any player's goal"
    }
   },
   "soccer": {

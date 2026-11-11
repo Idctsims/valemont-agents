@@ -6106,7 +6106,8 @@ COMBO_LEGS_SQL: Final = """
     SELECT b.market_ticker, b.event_ticker, e.game_ticker, e.series_ticker, s.sport, s.league, b.market_kind,
            b.payout, b.subject, b.stat, b.line, b.label, b.team, coalesce(c.tier, 'kalshi'), c.p_consensus,
            c.yes_ask, c.no_ask, c.fee_yes, c.fee_no, coalesce(c.stale_kalshi OR c.stale_outside, false),
-           e.mutually_exclusive, e.combo_eligible, e.combo_yes_only, e.combo_size_max, e.starts_at
+           e.mutually_exclusive, e.combo_eligible, e.combo_yes_only, e.combo_size_max, e.starts_at,
+           coalesce(c.stale_kalshi, true), c.kalshi_at
       FROM kalshi_board b
       JOIN kalshi_board_events e ON e.event_ticker = b.event_ticker
       JOIN kalshi_series_board s ON s.series_ticker = e.series_ticker

@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { comboStatus, priceCombo } from "@/app/(app)/betting/actions";
 import { useWags } from "@/components/wags/wags-provider";
 import {
-  MIN_LEGS, comboStatusLabel, costLabel, legTierLabel, pricingLabel, probLabel, quotedLegs, ratioLabel, seLabel,
+  MIN_LEGS, ageLabel, comboStatusLabel, costLabel, legTierLabel, pricesStale, pricingLabel, probLabel, quotedLegs,
+  ratioLabel, seLabel,
   type ComboLeg, type ComboState, type Quote,
 } from "@/lib/betting/combo";
 
@@ -58,6 +59,11 @@ function QuoteView({ id, quote, legs }: { id: number; quote: Quote; legs: readon
       </dl>
       <p data-testid="combo-status" className="mt-2 text-sm text-text">{comboStatusLabel(quote)}</p>
       <p className="mt-2 flex flex-wrap gap-2">
+        {pricesStale(quote) && (
+          <Chip testId="combo-prices-stale" title="A leg's Kalshi price is over 20 minutes old. Still priced; re-price before acting on it.">
+            prices stale
+          </Chip>
+        )}
         {quote.prior_pairs > 0 && (
           <Chip testId="combo-prior" title="At least one correlation here is a prior or borrowed from another market, not a measurement.">
             prior
@@ -78,7 +84,13 @@ function QuoteView({ id, quote, legs }: { id: number; quote: Quote; legs: readon
                 {l.side === "no" ? "NOT " : ""}{l.label}
               </span>
               <span className="font-mono tabular-nums text-text-muted">{q ? probLabel(q.p) : "—"}</span>
-              {q && <Chip testId="combo-leg-tier">{legTierLabel(q.tier)}{q.stale ? " · stale" : ""}</Chip>}
+              {q && <Chip testId="combo-leg-tier">{legTierLabel(q.tier)}</Chip>}
+              {q && (
+                <span data-testid="combo-leg-age" data-stale={q.stale_k ? "1" : "0"}
+                      className={`label-mono basis-full text-right ${q.stale_k ? "text-text" : "text-text-muted"}`}>
+                  {ageLabel(q.age_s)}{q.stale_k ? " · stale" : ""}
+                </span>
+              )}
             </li>
           );
         })}

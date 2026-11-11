@@ -58,7 +58,7 @@ learns id → code from GAME markets (fetched first in every pull) and writes
 players; the 12 misses are "No Touchdown"), NHL 1,062/1,068 (the 6 "no goal").
 The ticker prefix is NOT a fallback for props: `…CARNO-NONE` reads as "NO".
 
-## 3. The ρ table (`docs/correlation_rho.json`, version 2026-11-11.1)
+## 3. The ρ table (`docs/correlation_rho.json`, version 2026-11-11.2)
 
 Frozen by its sha256 (CRLF normalized), stored on every quote (`rho_version`).
 Every row carries its source and class:
@@ -66,21 +66,28 @@ Every row carries its source and class:
 | Class | Rows |
 |---|---|
 | `measured_external` | **NBA:** nba-hub's measured table (`DEMON-X13/nba-hub`, `data/corr.json`, commit `3a3e298`): latent-normal MLE on binary outcomes at book lines, 5,276 games 2023–2026, jackknife-shrunk, PD-projected; **external, unreproduced; values cited, no file copied** (owner decision 1). 288 rows (its 302 less our self-plus-sum refusals). **NFL QB pass yds ↔ game total over 0.28** (`JXiong15/sports-parlay-generator` README; method not shown; low confidence). |
-| `prior` | The owner's NFL, NHL and soccer starting values (Step 0 list). |
+| `prior` | The owner's NFL, NHL and soccer starting values (Step 0 list; NHL widened Nov 11: same-player goal ↔ point 0.80, shots ↔ goal 0.35, shots ↔ point 0.30, own win ↔ own goal 0.25, teammates' points 0.10, opponents' points 0.00, total ↔ shots 0.15, total ↔ goal 0.30). Kalshi lists no NHL shots market (Nov 11), so the three shots rows wait for one. |
 | `borrowed` | Applied at lookup, never a row: a cover without a measured row takes its moneyline's (decision 2); cfb uses the NFL rows, mcbb the NBA rows (decision 5). |
 
 Lookup (decisions 2, 3): a player and his own club's line → `team|<kind>|<line>`;
-the other club's line → `oppteam|…` if a row exists, else minus the own-club row
-where the league has no draw (NBA, NFL, NHL, CFB, MCBB), else unmodeled (soccer);
+the other club's line → minus the own-club row where the league has no draw
+(NBA, NFL, NHL, CFB, MCBB), else unmodeled (soccer). There are no opponent rows
+(owner, Nov 11: the NFL "own win ↔ opp QB pass yds 0.10" row was deleted), so one
+QB against either moneyline is consistent (+0.15 and −0.15);
 two club lines → `game|cover|win` (other club: sign flipped where no draw); a
 club line and the total → club-agnostic `game|…`. Anything else in the same
 game: ρ = 0, flagged "unmodeled pair". The sheet shows a "prior" chip when any
 pair's ρ is a prior or borrowed.
 
-**A known inconsistency in the NFL priors:** `team|pass_yds|win` 0.15 and
-`oppteam|pass_yds|win` 0.10 imply opposite signs for the same QB against the two
-moneylines (his own win, his opponent's). An explicit row wins over the flip, so
-both apply as written; a quote can never hold both moneylines (refused).
+**NHL goal ↔ point (owner, Nov 11):** a row (0.80), not the stat-plus-sum
+refusal: NHL `pts` holds only `ast` for that rule. Note the copula prices "1+
+goal and 1+ point" below the goal alone, though a goal implies a point (the
+reason the sum rule exists elsewhere).
+
+**Stale prices:** each quoted leg stores its Kalshi price's age (`age_s`, from
+the event's last read) and `stale_k` (over 20 min, consensus's rule); a quote
+with any stale leg still prices and shows "prices stale". Phase 4 re-quotes
+before selecting.
 
 **Replacement path:** our own forward measurement from settled committed
 parlays, under its own pre-registration (owner, Nov 11: later, not now).
@@ -111,9 +118,14 @@ Market pairs within a game, every rung a leg; main slices = full-game lines
 
 | | NBA (10 games) | NHL (6 games) |
 |---|---|---|
-| Main slices | 91.0% measured, 6.3% unmodeled (mostly "points leader"), 1.7% nested, 1.0% refused | 2.7% prior, 1.0% borrowed, 94.5% unmodeled, 0.8% nested, 1.0% refused |
-| Every binary leg | 39.6% measured, 58.6% unmodeled (period lines, team totals) | 96.1% unmodeled |
+| Main slices | 91.0% measured, 6.3% unmodeled (mostly "points leader"), 1.7% nested, 1.0% refused | v2: 11.9% prior, 2.5% borrowed, 84.4% unmodeled, 0.8% nested, 0.5% refused (v1: 94.5% unmodeled) |
+| Every binary leg | 39.6% measured, 58.6% unmodeled (period lines, team totals) | v2: 89.0% unmodeled |
+
+NHL's remaining unmodeled pairs are across players: teammate and opponent goal ↔
+point (14.3% of pairs), first goal ↔ goal (12.9%), goal ↔ goal (11.6%), assists
+↔ goal (10.6%), first goal ↔ point (8.0%), assists ↔ point (6.4%); no row covers
+them (the owner's rows are same-player, teammates' points and opponents' points).
 
 Sampled same-game quotes from the main slices (400 per league): NBA 2 legs:
-prior chip 0%, unmodeled chip 5.8%; 3 legs: 0% and 12.8%. NHL 2 legs: prior
-chip 3.2%, unmodeled 96.8%; 3 legs: 9.0% and 99.8%.
+prior chip 0%, unmodeled chip 5.8%; 3 legs: 0% and 12.8%. NHL (v2) 2 legs:
+prior chip 16.8%, unmodeled 83.2%; 3 legs: 28.8% and 98.5%.

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
-  MAX_LEGS, cleanReason, comboStatusLabel, costLabel, legTierLabel, loadLegs, marketTicker, pricingLabel, probLabel,
+  MAX_LEGS, ageLabel, cleanReason, comboStatusLabel, pricesStale, costLabel, legTierLabel, loadLegs, marketTicker, pricingLabel, probLabel,
   quotedLegs, ratioLabel, requestLegs, saveLegs, seLabel, sideOf, toggleLeg, type ComboLeg,
 } from "../src/lib/betting/combo";
 import { pageSlice } from "../src/lib/wags/page-context";
@@ -86,6 +86,16 @@ test.describe("the sheet's words", () => {
     expect(legTierLabel(m.get("A")!.tier)).toBe("Books");
     expect(legTierLabel("kalshi")).toBe("Kalshi only");
   });
+});
+
+test("each leg's price age, and the quote's stale flag (owner, Nov 11)", () => {
+  expect(ageLabel(30)).toBe("price under 1 min old");
+  expect(ageLabel(4 * 60 + 5)).toBe("price 4 min old");
+  expect(ageLabel(72 * 60)).toBe("price 1 h 12 min old");
+  expect(ageLabel(null)).toBe("price age unknown");
+  const leg = { t: "A", side: "yes" as const, p: 0.5, tier: "kalshi" };
+  expect(pricesStale({ blocks: [{ legs: [{ ...leg, stale_k: false }] }] })).toBe(false);
+  expect(pricesStale({ blocks: [{ legs: [leg] }, { legs: [{ ...leg, t: "B", stale_k: true }] }] })).toBe(true);
 });
 
 test("Wags opened from a quote gets that quote (ctx_combos, db/077)", () => {
