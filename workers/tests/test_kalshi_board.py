@@ -864,6 +864,16 @@ class Refresh(unittest.TestCase):
         run = job.refresh_job(http=http_of(FakeKalshi()), now=lambda: NOW, state=job.BoardState())
         self.assertIn("no window yet", run.job_note)
 
+    def test_the_window_ends_at_23_00_chicago_exactly(self) -> None:
+        # Owner, Nov 11: 23:xx is outside (the 23:14 run of Nov 10 worked).
+        # Nov 11 is CST (UTC-6): 22:59 Chicago = 04:59 UTC, 23:00 = 05:00 UTC.
+        def note(h: int, m: int) -> str:
+            return self.refresh(datetime(2026, 11, 12, h, m, tzinfo=UTC))[0].job_note
+        self.assertNotIn("outside 08:00-23:00", note(4, 59))
+        for h, m in ((5, 0), (5, 14), (5, 59), (13, 59)):
+            self.assertIn("outside 08:00-23:00", note(h, m), (h, m))
+        self.assertNotIn("outside 08:00-23:00", note(14, 0))  # 08:00 Chicago
+
     def test_always_per_event_within_3_h_never_started_soonest_first(self) -> None:
         # One window event already under way (started an hour ago).
         under_way = sorted(self.state.window)[0]

@@ -53,7 +53,8 @@ REFRESH_JOB = "kalshi_board_refresh"
 FULL_INTERVAL_S = 18 * 60 * 60
 REFRESH_INTERVAL_S = 15 * 60
 OWNER_TZ = ZoneInfo("America/Chicago")
-#: The refresh works from 08:00 up to and including the 23:00 run.
+#: The refresh works from 08:00 Chicago until 23:00 exactly: 23:xx is outside
+#: (owner, Nov 11; the 23:14 run of Nov 10 had slipped through).
 REFRESH_HOURS = (8, 23)
 MIN_INTERVAL_S = 0.25
 #: Market rows buffered before a write (ten events' markets at most past it).
@@ -611,8 +612,7 @@ def refresh_job(*, http: kb.Http | None = None,
     pull (PULL_LOCK: it idles while one runs)."""
     at = now()
     hour = _owner_hour(at)
-    if not (REFRESH_HOURS[0] <= hour <= REFRESH_HOURS[1]) or (hour == REFRESH_HOURS[1] and
-                                                             at.astimezone(OWNER_TZ).minute >= 15):
+    if not (REFRESH_HOURS[0] <= hour < REFRESH_HOURS[1]):
         return BoardRun(kind="refresh", idle="outside 08:00-23:00 Chicago")
     if not state.window:
         return BoardRun(kind="refresh", idle="no window yet (the full pull has not run in this process)")
