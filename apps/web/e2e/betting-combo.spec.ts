@@ -1,4 +1,4 @@
-import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Locator, type Page } from "@playwright/test";
 
 import { addTestKalshiBoard, hasOwner, signIn, useE2eMarker } from "./support/owner";
 
@@ -51,6 +51,14 @@ test.describe("owner", () => {
   const card = () => page.locator(`[data-testid="board-game"][data-game="${game}"]`);
   const market = (text: string) => card().getByTestId("board-market").filter({ hasText: text });
   const sheet = () => page.getByTestId("combo-sheet");
+  // Tap a board element after scrolling it just under the sticky header, as a
+  // person would. Playwright's own scroll-into-view ignores fixed overlays, and
+  // with the Combo sheet open it can leave the target under the sheet or the
+  // dock, which then takes the tap (owner rerun, Nov 12).
+  const tap = async (target: Locator) => {
+    await target.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 120));
+    await target.click();
+  };
 
   test("Combo mode ticks binary markets only", async () => {
     await page.goto("/betting?sport=Basketball");
@@ -91,10 +99,12 @@ test.describe("owner", () => {
   });
 
   test("both teams' moneylines are refused with the reason", async () => {
+    // The worker answers through the queue, and the refusal wait alone is 30 s.
+    test.setTimeout(60_000);
     // Test 2's reload collapsed the game: a game's open state is the page's
     // own (only the ticks and the mode persist). Re-open it before Clear.
     const head = card().locator("button[aria-expanded]").first();
-    if ((await head.getAttribute("aria-expanded")) !== "true") await head.click();
+    if ((await head.getAttribute("aria-expanded")) !== "true") await tap(head);
     await expect(head).toHaveAttribute("aria-expanded", "true");
     await expect(market("Test Home").getByTestId("tick-yes")).toHaveAttribute("aria-pressed", "true");
 
@@ -108,8 +118,8 @@ test.describe("owner", () => {
     await expect(market("Test Home").getByTestId("tick-yes")).toHaveAttribute("aria-pressed", "false");
     expect(await page.evaluate(() => localStorage.getItem("vm-combo-legs"))).toBeNull();
 
-    await market("Test Home").getByTestId("tick-yes").click();
-    await market("Test Away").getByTestId("tick-yes").click();
+    await tap(market("Test Home").getByTestId("tick-yes"));
+    await tap(market("Test Away").getByTestId("tick-yes"));
     await sheet().getByTestId("combo-price").click();
     await expect(sheet().getByTestId("combo-refused")).toContainText("two outcomes of one result", { timeout: 30_000 });
     await sheet().getByTestId("combo-clear").click();
