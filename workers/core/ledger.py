@@ -2536,27 +2536,35 @@ def feed_summary_backlog(min_age_h: int, max_attempts: int, *,
                              {"min_age_h": min_age_h, "max_attempts": max_attempts}).fetchone()[0])
 
 
+#: Real HOME and SPORTS stories sent to Haiku since local midnight (each
+#: counted once, whether or not its summary was accepted). Tech has its own
+#: count (owner, 2026-10-14: separate caps per pillar group). The FROM/WHERE
+#: is its own constant so tests_live counts its own stories through the same
+#: text (`AND st.id = ANY(...)`): the whole day moves under the summarizer.
+FEED_HOME_TODAY_FROM: Final = f"""
+      FROM stories st
+     WHERE NOT st.is_test AND NOT ('tech' = ANY (st.pillars))
+       AND st.summarized_at >= {_LOCAL_DAY_START}
+"""
+FEED_HOME_TODAY_SQL: Final = "SELECT count(*)" + FEED_HOME_TODAY_FROM
+
+
 def feed_summarized_today(*, conn: psycopg.Connection | None = None) -> int:
-    """Real HOME and SPORTS stories sent to Haiku since local midnight (each
-    counted once, whether or not its summary was accepted). Tech has its own
-    count (owner, 2026-10-14: separate caps per pillar group)."""
     with _brief_conn(conn) as c:
-        return int(c.execute(
-            f"SELECT count(*) FROM stories WHERE NOT is_test AND NOT ('tech' = ANY (pillars)) "
-            f"AND summarized_at >= {_LOCAL_DAY_START}"
-        ).fetchone()[0])
+        return int(c.execute(FEED_HOME_TODAY_SQL).fetchone()[0])
 
 
 #: Tech's own daily count (owner, 2026-10-14): COMMUNITY tech stories sent to
 #: Haiku since local midnight. Official ones are never held by a daily cap,
 #: so they are not counted.
-FEED_TECH_COMMUNITY_TODAY_SQL: Final = f"""
-    SELECT count(*) FROM stories st
+FEED_TECH_COMMUNITY_TODAY_FROM: Final = f"""
+      FROM stories st
       JOIN content_items i ON i.id = st.lead_item_id
       JOIN sources s ON s.id = i.source_id
      WHERE NOT st.is_test AND 'tech' = ANY (st.pillars) AND NOT s.official
        AND st.summarized_at >= {_LOCAL_DAY_START}
 """
+FEED_TECH_COMMUNITY_TODAY_SQL: Final = "SELECT count(*)" + FEED_TECH_COMMUNITY_TODAY_FROM
 
 
 def feed_tech_community_summarized_today(*, conn: psycopg.Connection | None = None) -> int:
