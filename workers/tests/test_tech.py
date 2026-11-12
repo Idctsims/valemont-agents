@@ -529,7 +529,8 @@ class SeparateCaps(TechJobCase):
         self.assertEqual(tech.COMMUNITY_DAILY_CAP, 300)
 
     def test_the_counts_are_apart(self) -> None:
-        self.assertIn("NOT ('tech' = ANY (pillars))", inspect.getsource(ledger.feed_summarized_today))
+        self.assertIn("NOT ('tech' = ANY (st.pillars))", ledger.FEED_HOME_TODAY_SQL)
+        self.assertIn("FEED_HOME_TODAY_SQL", inspect.getsource(ledger.feed_summarized_today))
         self.assertIn("NOT s.official", ledger.FEED_TECH_COMMUNITY_TODAY_SQL)
         self.assertIn("'tech' = ANY (st.pillars)", ledger.FEED_TECH_COMMUNITY_TODAY_SQL)
 
