@@ -91,8 +91,23 @@ test.describe("owner", () => {
   });
 
   test("both teams' moneylines are refused with the reason", async () => {
+    // Test 2's reload collapsed the game: a game's open state is the page's
+    // own (only the ticks and the mode persist). Re-open it before Clear.
+    const head = card().locator("button[aria-expanded]").first();
+    if ((await head.getAttribute("aria-expanded")) !== "true") await head.click();
+    await expect(head).toHaveAttribute("aria-expanded", "true");
+    await expect(market("Test Home").getByTestId("tick-yes")).toHaveAttribute("aria-pressed", "true");
+
+    // Owner rule (Nov 12): Clear empties the ticks and keeps Combo mode on and
+    // the game expanded, so the next ticks work without re-entering.
     await sheet().getByTestId("combo-clear").click();
     await expect(sheet()).toHaveCount(0);
+    await expect(page.getByTestId("combo-toggle")).toHaveAttribute("aria-pressed", "true");
+    await expect(head).toHaveAttribute("aria-expanded", "true");
+    await expect(card().getByTestId("combo-ticks")).toHaveCount(5);
+    await expect(market("Test Home").getByTestId("tick-yes")).toHaveAttribute("aria-pressed", "false");
+    expect(await page.evaluate(() => localStorage.getItem("vm-combo-legs"))).toBeNull();
+
     await market("Test Home").getByTestId("tick-yes").click();
     await market("Test Away").getByTestId("tick-yes").click();
     await sheet().getByTestId("combo-price").click();
