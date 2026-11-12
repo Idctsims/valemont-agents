@@ -44,6 +44,16 @@ test.describe("ticks", () => {
     expect(loadLegs(null)).toEqual([]);
   });
 
+  test("Clear empties the ticks and never touches the mode (owner, Nov 12)", () => {
+    const box = new Map<string, string>([["vm-combo-mode", "1"]]);
+    const s = { getItem: (k: string) => box.get(k) ?? null, setItem: (k: string, v: string) => void box.set(k, v),
+                removeItem: (k: string) => void box.delete(k) };
+    saveLegs(s, [leg("A"), leg("B", "no")]);
+    saveLegs(s, []); // the sheet's Clear
+    expect(loadLegs(s)).toEqual([]);
+    expect([...box.entries()]).toEqual([["vm-combo-mode", "1"]]);
+  });
+
   test("the request db/076 takes", () => {
     expect(requestLegs([{ t: "KXA-1", side: "yes" }, { t: "KXB-2", side: "no" }]))
       .toEqual([{ market_ticker: "KXA-1", side: "yes" }, { market_ticker: "KXB-2", side: "no" }]);
