@@ -752,6 +752,23 @@ there's one agent to debug, not four.
   pre-registration and forward-only validation; the 2025 and holdout data are
   spent.
 
+  **Owner amendment, 2026-11-13 (Chat 8 Phase 3.5, J3): 2025 NFL as
+  training data, fitting only.** 2025-season NFL Kalshi combos may be read
+  to fit the combo fill model, and 2025 NFL box scores to fit same-game
+  rho. Nothing from 2025 is cited as validation of anything, anywhere. The
+  rule above is otherwise unchanged: no strategy is re-fit on 2025 or the
+  holdouts. `docs/betting_science_audit.md` §8.
+
+  **Disclosed touch of the reserve (owner, 2026-11-13: a touch, not a
+  read).** On 2026-11-12 a keyless shape probe for the Phase 3.5 audit
+  printed the leg labels (`title`) of 4 reserve-dated combos: closes
+  2026-09-12, 2026-08-18, 2026-08-18 (sports) and 2026-11-12 (a crypto
+  cross-category combo). No price, result or settlement value was printed
+  for any of them. **From now on a probe filters by `close_time` before it
+  prints anything.** The crawler rule (J1): read `close_time`, discard a
+  reserve-dated row before any other field is parsed, log the count, write
+  nothing; a test proves it.
+
   **Disclosed ordering (recorded 2026-10-02):**
 
   - A4, A5 and A5a were committed at 04:55–04:57 UTC on 2026-10-01. That is
