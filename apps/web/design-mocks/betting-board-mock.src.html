@@ -1,0 +1,485 @@
+<title>Valemont Betting Board</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: a sportsbook slate. Paper ground, one deep green, hairlines. Game cards carry the logos,
+   the price as the big number and a team-colour probability bar; a game opens as its own page with
+   tabbed markets; the slip rides beside (desktop) or docks to the bottom edge (phone).
+   Type is the app's own: Instrument Serif for display, Geist for text, Geist Mono for labels and
+   compared numbers. */
+:root {
+  --bg: #f4f3ef; --band: #ebe9e2; --card: #fbfaf6; --panel: #eeede7; --line: #cccec6; --line-soft: #dedfd8;
+  --ink: #191a17; --muted: #676960; --green: #17462f; --green-ink: #17462f; --on-green: #ffffff;
+  --pick: #e3ece5; --tag: #e7e2cf; --tag-ink: #5c5330;
+  --d-light: block; --d-dark: none;
+  --display: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", ui-monospace, "Cascadia Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  color-scheme: dark;
+  --bg: #101310; --band: #0c0f0c; --card: #181c18; --panel: #1f241f; --line: #353b34; --line-soft: #2a302a;
+  --ink: #eef0e8; --muted: #9aa093; --green: #1f5a3d; --green-ink: #86cba3; --on-green: #ffffff;
+  --pick: #1c2f24; --tag: #3a361f; --tag-ink: #e3d79d;
+  --d-light: none; --d-dark: block;
+} }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101310; --band: #0c0f0c; --card: #181c18; --panel: #1f241f; --line: #353b34; --line-soft: #2a302a;
+  --ink: #eef0e8; --muted: #9aa093; --green: #1f5a3d; --green-ink: #86cba3; --on-green: #ffffff;
+  --pick: #1c2f24; --tag: #3a361f; --tag-ink: #e3d79d;
+  --d-light: none; --d-dark: block;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 14px/1.5 var(--sans); font-variant-numeric: tabular-nums; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: inherit; }
+a { color: inherit; text-decoration: none; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--green-ink); outline-offset: 2px; }
+.in { max-width: 1280px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.eyebrow { font: 400 11px/1.45 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.muted { color: var(--muted); }
+
+/* top bar */
+.top { border-bottom: 1px solid var(--line); }
+.top .in { display: flex; align-items: center; gap: 16px; padding-block: 14px; }
+.top .nav { margin-left: auto; }
+.top .seg { flex: none; } .top .seg button { font-size: 14px; padding: 0 12px; }
+@media (max-width: 560px) { .top .seg { margin-left: auto; } }
+.brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.mark { width: 38px; height: 38px; border: 1px solid var(--ink); display: grid; place-items: center; font: 400 24px/1 var(--display); flex: none; }
+.crumb { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crumb b { color: var(--ink); font-weight: 600; }
+.nav { display: flex; gap: 22px; font-size: 13px; color: var(--muted); }
+.nav .on { color: var(--ink); font-weight: 600; }
+@media (max-width: 560px) { .nav span:not(.on) { display: none; } }
+
+/* hero */
+.hero .in { padding-block: 28px 0; display: flex; flex-direction: column; gap: 22px; }
+.hero-row { display: flex; justify-content: space-between; align-items: center; gap: 12px 24px; flex-wrap: wrap; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 6px; padding: 3px; gap: 2px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.seg button { font: 500 11px/1 var(--mono); letter-spacing: .08em; padding: 0 13px; min-height: 34px; border-radius: 3px; color: var(--muted); white-space: nowrap; text-transform: uppercase; }
+.seg button small { font: inherit; opacity: .7; margin-left: 5px; }
+.seg button[aria-pressed="true"] { background: var(--green); color: var(--on-green); }
+.hero-main { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px 48px; align-items: end; }
+h1 { margin: 0; font: 400 clamp(3.25rem, 2rem + 5.5vw, 5.75rem)/.95 var(--display); letter-spacing: -.01em; text-wrap: balance; }
+h1 em { color: var(--green-ink); }
+.lede { font-size: 17px; line-height: 1.5; color: var(--muted); margin: 0 0 10px; max-width: 44ch; }
+.stamp { display: flex; flex-direction: column; gap: 3px; }
+@media (max-width: 760px) { .hero-main { grid-template-columns: 1fr; } }
+.band { display: grid; grid-template-columns: 1.1fr repeat(3, 1fr); border-block: 1px solid var(--line); }
+.band > div { padding: 18px 20px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.band > div:first-child { border-left: 0; padding-left: 0; justify-content: center; }
+.band strong { font: 600 14px var(--sans); }
+.band .fig { font: 500 22px/1.1 var(--mono); letter-spacing: -.02em; }
+.band .sub { font: 400 11px var(--mono); color: var(--muted); }
+@media (max-width: 760px) { .band { grid-template-columns: 1fr 1fr 1fr; } .band > div:first-child { grid-column: 1 / -1; border-bottom: 1px solid var(--line); padding: 14px 0; } .band > div:nth-child(2) { border-left: 0; padding-left: 0; } .band > div { padding: 14px 12px; } .band .fig { font-size: 18px; } }
+
+/* tickets */
+.tix { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding-bottom: 28px; }
+.tix-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.tix-head h2 { margin: 0; font: 400 24px/1.2 var(--display); }
+.tag { font: 500 10px/1 var(--mono); letter-spacing: .12em; padding: 4px 7px; border-radius: 3px; background: var(--tag); color: var(--tag-ink); white-space: nowrap; }
+.tk { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+.tk-top { padding: 14px 16px 12px; display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; }
+.tk-top b { display: block; font: 400 22px/1.1 var(--display); }
+.tk-top .hit { font: 500 28px/1 var(--mono); letter-spacing: -.04em; }
+.tk-top .hit small { font-size: 15px; }
+.tk-logos { display: flex; padding: 0 16px 12px; gap: 4px; flex-wrap: wrap; }
+.tk dl { margin: 0; display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line-soft); }
+.tk dl div { padding: 10px 16px; } .tk dl div + div { border-left: 1px solid var(--line-soft); }
+.tk dt { font-size: 10px; color: var(--muted); } .tk dd { margin: 0; font: 500 13px var(--mono); }
+@media (max-width: 760px) { .tix { grid-template-columns: 1fr; } }
+
+/* slate */
+.slate { background: var(--band); border-top: 1px solid var(--line); }
+.slate > .in { padding-block: 36px 56px; display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 28px; align-items: start; }
+.slate-head { display: flex; justify-content: space-between; align-items: end; gap: 12px 32px; flex-wrap: wrap; margin-bottom: 18px; }
+h2.big { margin: 0; font: 400 clamp(2rem, 1.6rem + 1.75vw, 3rem)/1.05 var(--display); }
+.tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--line); margin-bottom: 20px; overflow-x: auto; scrollbar-width: none; }
+.tabs button { padding: 0 2px 12px; font-size: 13px; font-weight: 500; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; min-height: 40px; white-space: nowrap; }
+.tabs button small { font: 400 10px var(--mono); margin-left: 5px; }
+.tabs button[aria-pressed="true"] { color: var(--ink); font-weight: 600; border-color: var(--green-ink); }
+.day { background: var(--green); color: var(--on-green); padding: 11px 16px; display: flex; justify-content: space-between; font-weight: 600; font-size: 14px; border-radius: 4px 4px 0 0; }
+.day span { font: 400 11px var(--mono); letter-spacing: .1em; opacity: .85; align-self: center; }
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding-top: 12px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+.meta { display: flex; justify-content: space-between; gap: 10px; padding: 9px 16px; border-bottom: 1px solid var(--line-soft); font-size: 11px; color: var(--muted); }
+.meta b { font-weight: 600; margin-right: 8px; }
+.sb { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; padding: 18px 16px 14px; align-items: start; }
+.team { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; text-align: center; }
+.team .nm { font-weight: 600; font-size: 14px; letter-spacing: -.01em; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team .ha { font-size: 10px; color: var(--muted); }
+.at { font-size: 10px; color: var(--muted); padding-top: 66px; }
+.logo { display: inline-block; width: 56px; height: 56px; flex: none; }
+.logo img { width: 100%; height: 100%; object-fit: contain; }
+.logo img.l { display: var(--d-light); } .logo img.d { display: var(--d-dark); }
+.logo.sm { width: 22px; height: 22px; } .logo.xs { width: 18px; height: 18px; } .logo.lg { width: 76px; height: 76px; }
+.ml { margin-top: 8px; width: 100%; max-width: 150px; min-height: 58px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; transition: background .12s, border-color .12s; }
+.ml .p { font: 500 28px/1 var(--mono); letter-spacing: -.05em; }
+.ml .p small { font-size: 17px; letter-spacing: 0; margin-left: 1px; }
+.ml .k { font: 400 9px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+.ml:hover, .odd:hover { border-color: var(--green-ink); }
+[aria-pressed="true"].ml, [aria-pressed="true"].odd { background: var(--green); border-color: var(--green); color: var(--on-green); }
+[aria-pressed="true"].ml .k, [aria-pressed="true"].odd .l { color: var(--on-green); opacity: .8; }
+.prob { padding: 0 16px 14px; }
+.prob-l { display: flex; justify-content: space-between; align-items: baseline; font-size: 10px; color: var(--muted); margin-bottom: 5px; }
+.prob-l b { font: 500 13px var(--mono); color: var(--ink); }
+.bar { display: flex; height: 8px; border-radius: 2px; overflow: hidden; gap: 2px; }
+.bar i { display: block; height: 100%; }
+.mk { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line-soft); }
+.cell { padding: 10px 16px; min-height: 54px; display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 0 solid var(--line-soft); min-width: 0; }
+.cell + .cell { border-left-width: 1px; }
+.cell:hover { background: var(--panel); }
+.cell .t { font-size: 10px; color: var(--muted); display: block; }
+.cell .v { font-size: 12px; font-weight: 600; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cell > span:first-child { min-width: 0; }
+.cell .c { font: 500 16px var(--mono); letter-spacing: -.03em; }
+.cell .c small { font-size: 11px; }
+.cell[aria-pressed="true"] { background: var(--pick); box-shadow: inset 0 -3px 0 var(--green-ink); }
+.foot { background: var(--panel); border-top: 1px solid var(--line-soft); padding: 10px 16px; min-height: 52px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.foot:hover { background: var(--pick); }
+.foot .t { font-size: 10px; color: var(--muted); display: block; } .foot .t b { color: var(--ink); font-weight: 600; }
+.foot .v { font-size: 13px; font-weight: 600; color: var(--green-ink); display: block; }
+.foot svg { width: 18px; height: 18px; color: var(--green-ink); flex: none; }
+
+/* game page */
+.back { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; font-size: 13px; font-weight: 600; color: var(--green-ink); margin-bottom: 8px; }
+.back svg { width: 16px; height: 16px; }
+.gh { margin-bottom: 18px; }
+.gh .sb { padding: 24px 16px 18px; }
+.gh .team .nm { font: 400 clamp(1.5rem, 1.1rem + 1.6vw, 2.1rem)/1.1 var(--display); letter-spacing: 0; white-space: normal; text-wrap: balance; }
+.gh .at { padding-top: 96px; }
+.gh .ml { max-width: 190px; min-height: 64px; }
+.gtabs { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--band); padding-top: 6px; }
+.box { background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
+.box-h { display: flex; justify-content: space-between; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--line-soft); }
+.box-h h3 { margin: 0; font: 400 21px/1.2 var(--display); }
+.box-h h3 small { font: 400 12px var(--sans); color: var(--muted); margin-left: 6px; }
+.box-b { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.sayline { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+.sayline b { color: var(--ink); font-weight: 600; }
+.rungs { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 6px; }
+.odd { min-width: 0; min-height: 48px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; transition: background .12s, border-color .12s; }
+.odd .l { font-size: 10px; color: var(--muted); line-height: 1.25; text-align: center; }
+.odd .p { font: 500 14px/1.25 var(--mono); letter-spacing: -.02em; }
+.odd.main { border-color: var(--green-ink); box-shadow: inset 0 0 0 1px var(--green-ink); }
+.more { align-self: flex-start; font-size: 12px; font-weight: 600; color: var(--green-ink); min-height: 32px; }
+.three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.three .odd { min-height: 56px; } .three .odd .l { font-size: 11px; }
+.tt { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; align-items: start; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.tt:first-child { border-top: 0; padding-top: 0; }
+.tt .logo { margin-top: 10px; width: 28px; height: 28px; }
+.pfilter { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; max-width: 100%; padding-bottom: 2px; }
+.chips button { flex: none; min-height: 36px; padding: 0 13px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+.chips button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.tm-h { display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line-soft); font-weight: 600; font-size: 13px; }
+.tm-h span:last-child { margin-left: auto; font: 400 10px var(--mono); letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
+.pl { display: grid; grid-template-columns: minmax(120px, 190px) minmax(0, 1fr); gap: 10px; align-items: center; padding: 9px 16px; border-bottom: 1px solid var(--line-soft); }
+.pl:last-child { border-bottom: 0; }
+.pl .who { font-weight: 600; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl .who small { display: block; font: 400 10px var(--mono); color: var(--muted); }
+.pl .rungs { grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); }
+.pl .odd { min-height: 44px; }
+@media (max-width: 520px) { .pl { grid-template-columns: 1fr; gap: 6px; } }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; padding: 12px 16px 16px; }
+.tiles .odd { flex-direction: row; justify-content: space-between; gap: 8px; padding: 6px 12px; }
+.tiles .odd .l { font-size: 12px; font-weight: 600; color: var(--ink); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tiles [aria-pressed="true"].odd .l { color: var(--on-green); opacity: 1; }
+.none { padding: 18px 16px; color: var(--muted); font-size: 13px; }
+
+/* slip */
+.slip { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); display: flex; flex-direction: column; }
+.slip-h { background: var(--green); color: var(--on-green); padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; font-weight: 600; }
+.slip-h .n { font: 400 11px var(--mono); letter-spacing: .1em; opacity: .9; }
+.slip-h svg { width: 16px; height: 16px; display: none; transition: transform .15s; }
+.slip-b { display: flex; flex-direction: column; }
+.legs { list-style: none; margin: 0; padding: 0; }
+.legs li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto 28px; gap: 10px; align-items: center; padding: 10px 8px 10px 16px; border-bottom: 1px solid var(--line-soft); }
+.legs .a { font-weight: 600; font-size: 13px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.legs .b { font-size: 10px; color: var(--muted); display: block; }
+.legs .c { font: 500 14px var(--mono); letter-spacing: -.02em; }
+.legs .x { width: 28px; height: 36px; color: var(--muted); font-size: 16px; text-align: center; border-radius: 6px; }
+.legs .x:hover { color: var(--ink); background: var(--panel); }
+.legs li.empty { display: block; padding: 22px 16px; color: var(--muted); font-size: 13px; }
+.sum { margin: 0; display: grid; grid-template-columns: 1fr 1fr; }
+.sum div { padding: 12px 16px; border-bottom: 1px solid var(--line-soft); } .sum div:nth-child(even) { border-left: 1px solid var(--line-soft); }
+.sum dt { font-size: 10px; color: var(--muted); } .sum dd { margin: 0; font: 500 18px var(--mono); letter-spacing: -.03em; }
+.sum dd.wait { font: 500 13px var(--sans); letter-spacing: 0; color: var(--muted); padding-top: 4px; }
+.slip-f { padding: 14px 16px 16px; background: var(--panel); display: flex; flex-direction: column; gap: 10px; }
+.cta { width: 100%; min-height: 46px; border-radius: 8px; background: var(--green); color: var(--on-green); font-weight: 600; text-align: center; }
+.cta[disabled] { opacity: .45; cursor: default; }
+.row2 { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); }
+.row2 button { color: var(--green-ink); font-weight: 600; min-height: 28px; }
+.said { font-size: 12px; margin: 0; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 6px; }
+
+@media (max-width: 1000px) {
+  .slate > .in { grid-template-columns: 1fr; padding-bottom: 96px; }
+  .slip { position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 20; border-radius: 14px 14px 0 0; border-width: 1px 0 0; max-height: 82%; box-shadow: 0 -8px 28px rgb(0 0 0 / .18); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .slip-h { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); min-height: 52px; }
+  .slip-h svg { display: block; }
+  .slip.up .slip-h svg { transform: rotate(180deg); }
+  .slip-b { overflow-y: auto; } .slip:not(.up) .slip-b { display: none; }
+}
+@media (max-width: 680px) { .cards { grid-template-columns: 1fr; } .logo.lg { width: 60px; height: 60px; } .gh .at { padding-top: 80px; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="top"><div class="in">
+  <div class="brand"><span class="mark">V</span><span class="crumb">Valemont &nbsp;/&nbsp; <b>Betting</b></span></div>
+  <nav class="nav" aria-label="Betting sections"><span class="on">Board</span><span>Tickets</span><span>Record</span></nav>
+  <div class="seg" role="group" aria-label="Show prices as"><button data-unit="x" aria-pressed="true" aria-label="Payout multiplier">×</button><button data-unit="pct" aria-pressed="false" aria-label="Implied percent">%</button></div>
+</div></header>
+
+<section class="hero" id="hero"><div class="in">
+  <div class="hero-row">
+    <span class="eyebrow">Kalshi board · Friday, November 13</span>
+    <div class="seg" role="group" aria-label="Sport">
+      <button aria-pressed="true">NBA<small>9</small></button><button aria-pressed="false">CFB<small>3</small></button><button aria-pressed="false">NFL</button><button aria-pressed="false">NHL</button><button aria-pressed="false">More</button>
+    </div>
+  </div>
+  <div class="hero-main">
+    <h1>Tonight's <em>nine</em> games.</h1>
+    <div>
+      <p class="lede">Every Kalshi price on tonight's slate next to what the sportsbooks say it should be. Tap a price to add it to your slip. Open a game for its players, other lines and quarters.</p>
+      <div class="stamp"><span class="eyebrow">Prices from this afternoon's board</span><span class="eyebrow">Paper only · nothing bets</span></div>
+    </div>
+  </div>
+  <div class="band">
+    <div><span class="eyebrow">Track record</span><strong>Starts with the first committed ticket</strong></div>
+    <div><span class="eyebrow">Safer</span><span class="fig">0–0</span><span class="sub">no tickets yet</span></div>
+    <div><span class="eyebrow">Mid</span><span class="fig">0–0</span><span class="sub">no tickets yet</span></div>
+    <div><span class="eyebrow">Lotto</span><span class="fig">0–0</span><span class="sub">no tickets yet</span></div>
+  </div>
+  <div class="tix-head"><h2>Today's tickets</h2><span class="tag">EXAMPLE NUMBERS</span></div>
+  <div class="tix" id="tix"></div>
+</div></section>
+
+<section class="slate"><div class="in">
+  <div id="main"></div>
+  <aside class="slip" id="slip" aria-label="Slip">
+    <button class="slip-h" id="slipToggle" aria-expanded="false"><span>Slip</span><span class="n" id="slipN"></span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m5 12 5-5 5 5"/></svg></button>
+    <div class="slip-b">
+      <ul class="legs" id="legs"></ul>
+      <dl class="sum">
+        <div><dt>Chance if the legs were independent</dt><dd id="naive">—</dd></div>
+        <div><dt>Pays on $1</dt><dd id="pays">—</dd></div>
+        <div><dt>Fair chance, same-game links in</dt><dd class="wait">Price it to see</dd></div>
+        <div><dt>Games</dt><dd class="wait" id="fits">—</dd></div>
+      </dl>
+      <div class="slip-f">
+        <button class="cta" id="price">Price it</button>
+        <p class="said" id="said" hidden>In the app this asks the worker for the correlated price. The answer lands here in about 11 seconds.</p>
+        <div class="row2"><span>A price, not a pick.</span><button id="clear">Clear slip</button></div>
+      </div>
+    </div>
+  </aside>
+</div></section>
+
+<script>
+const LOGOS = {/*__LOGOS__*/};
+// Every open market for tonight's nine NBA games, read from the production board (v_leg_consensus)
+// on Nov 13. Row: [series, subject, line, YES ask in cents, team, tier (b books, e espn, k kalshi),
+// consensus percent, books]. Protected props, exact totals and race-to markets are left out.
+const DATA = {/*__DATA__*/};
+// Team colours are for the probability bar only.
+const T = {
+  MIL: ["mil", "Milwaukee", "Bucks", "#00471b"], ORL: ["orl", "Orlando", "Magic", "#0077c0"], NYK: ["ny", "New York", "Knicks", "#f58426"], IND: ["ind", "Indiana", "Pacers", "#002d62"],
+  CLE: ["cle", "Cleveland", "Cavaliers", "#860038"], MIA: ["mia", "Miami", "Heat", "#f9a01b"], ATL: ["atl", "Atlanta", "Hawks", "#fdb927"], CHI: ["chi", "Chicago", "Bulls", "#ce1141"],
+  MEM: ["mem", "Memphis", "Grizzlies", "#5d76a9"], NOP: ["no", "New Orleans", "Pelicans", "#b4975a"], UTA: ["utah", "Utah", "Jazz", "#6d3fc4"], HOU: ["hou", "Houston", "Rockets", "#ce1141"],
+  GSW: ["gs", "Golden State", "Warriors", "#fdb927"], SAS: ["sa", "San Antonio", "Spurs", "#8a8d8f"], POR: ["por", "Portland", "Trail Blazers", "#e03a3e"], SAC: ["sac", "Sacramento", "Kings", "#5a2d81"],
+  OKC: ["okc", "Oklahoma City", "Thunder", "#007ac1"], LAC: ["lac", "LA", "Clippers", "#c8102e"],
+};
+const GAMES = [
+  ["MILORL", "6:00 PM CT", "MyMi", "MIL", "ORL"], ["NYKIND", "6:00 PM CT", "Prime Video", "NYK", "IND"], ["CLEMIA", "7:00 PM CT", "DAZN", "CLE", "MIA"],
+  ["ATLCHI", "7:00 PM CT", "", "ATL", "CHI"], ["MEMNOP", "7:00 PM CT", "GCSEN", "MEM", "NOP"], ["UTAHOU", "7:30 PM CT", "KJZZ", "UTA", "HOU"],
+  ["GSWSAS", "8:30 PM CT", "Prime Video", "GSW", "SAS"], ["PORSAC", "9:00 PM CT", "KUNP", "POR", "SAC"], ["OKCLAC", "9:30 PM CT", "KTLA", "OKC", "LAC"],
+].map(([id, time, tv, a, h]) => ({ id, time, tv, a, h, name: `${T[a][1]} at ${T[h][1]}`, rows: DATA[id] || [] }));
+// The tier tickets do not exist yet (Phase 4). Leg counts and figures are examples to show the shape.
+const TICKETS = [
+  { name: "Safer", legs: 4, hit: 44, pays: "2.0×", walk: 53, teams: ["SAS", "HOU", "POR", "NYK"] },
+  { name: "Mid", legs: 7, hit: 18, pays: "5.1×", walk: 21, teams: ["SAS", "HOU", "OKC", "ORL", "ATL", "NYK", "MEM"] },
+  { name: "Lotto", legs: 14, hit: 8, pays: "11×", walk: 10, teams: ["SAS", "GSW", "HOU", "OKC", "LAC", "POR", "ORL", "ATL", "NYK", "MIA"] },
+];
+const STATS = [["PTS", "Points", "points"], ["REB", "Rebounds", "rebounds"], ["AST", "Assists", "assists"], ["3PT", "Threes", "threes"], ["PRA", "Pts + Reb + Ast", "pts + reb + ast"], ["STL", "Steals", "steals"], ["BLK", "Blocks", "blocks"], ["STOCK", "Steals + Blocks", "steals + blocks"], ["2D", "Double-double", "double-double"], ["3D", "Triple-double", "triple-double"], ["PTSLEADER", "Top scorer", "top scorer"]];
+const PERIODS = [["1H", "1st half"], ["2H", "2nd half"], ["1Q", "1st quarter"], ["2Q", "2nd quarter"], ["3Q", "3rd quarter"], ["4Q", "4th quarter"]];
+
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+const logo = (code, cls = "") => { const k = T[code] ? T[code][0] : ""; return `<span class="logo ${cls}">${k ? `<img class="l" alt="" src="${LOGOS[k + "-l"]}"><img class="d" alt="" src="${LOGOS[k + "-d"]}">` : ""}</span>`; };
+// One price, two ways to read it: what $1 pays back (before Kalshi's fee) or the chance the price implies.
+let unit = "x";
+const num = p => unit === "x" ? (100 / p >= 10 ? (100 / p).toFixed(1) : (100 / p).toFixed(2)) : String(p);
+const sym = () => unit === "x" ? "×" : "%";
+const px = p => num(p) + sym();
+const cents = p => `${num(p)}<small>${sym()}</small>`;
+const ARROW = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5"/></svg>`;
+const of = (g, s) => g.rows.filter(r => r[0] === s);
+const perName = s => { const m = /^([12]H|[1-4]Q)/.exec(s); return m ? PERIODS.find(p => p[0] === m[1])[1] : ""; };
+// The books' line where one exists, else the rung nearest 50¢.
+const mainOf = rows => rows.find(r => r[5] !== "k") || rows.slice().sort((x, y) => Math.abs(x[3] - 50) - Math.abs(y[3] - 50))[0];
+
+function label(r) {
+  const [s, subj, line] = r, per = perName(s), tail = per ? `, ${per}` : "";
+  if (s === "GAME") return `${subj} to win`;
+  if (s === "WINMARGIN") return subj;
+  if (s.endsWith("TEAMTOTAL")) return `${subj} over ${line} points${tail}`;
+  if (s.endsWith("SPREAD")) return `${subj} −${line}${tail}`;
+  if (s.endsWith("TOTAL")) return `Over ${line}${tail}`;
+  if (per) return subj === "Tie" ? `Tied after the ${per}` : `${subj} wins the ${per}`;
+  const st = STATS.find(x => x[0] === s);
+  return line == null || s === "2D" || s === "3D" ? `${subj} ${st[2]}` : `${subj} ${Math.ceil(line)}+ ${st[2]}`;
+}
+const legs = new Map();
+const lid = (g, r) => [g.id, r[0], r[1] ?? "", r[2] ?? ""].join("|");
+const pick = (g, r) => `data-leg="${esc(lid(g, r))}" data-label="${esc(label(r))}" data-sub="${esc(g.name)}" data-price="${r[3]}" data-team="${r[4] || ""}" aria-pressed="false"`;
+const odd = (g, r, l, cls = "") => `<button class="odd ${cls}" ${pick(g, r)}><span class="l">${esc(l)}</span><span class="p">${px(r[3])}</span></button>`;
+
+const ui = { tab: "lines", stat: "PTS", side: "all", period: "1H", spread: {}, wide: new Set() };
+
+/* ---------- board ---------- */
+function scoreboard(g, big) {
+  const ml = of(g, "GAME"), row = c => ml.find(r => r[4] === c);
+  const team = (c, home) => { const r = row(c); return `<div class="team">${logo(c, big ? "lg" : "")}<span class="nm">${T[c][1]}${big ? " " + T[c][2] : ""}</span><span class="ha">${big ? "" : T[c][2] + " · "}${home ? "home" : "away"}</span>
+    ${r ? `<button class="ml" ${pick(g, r)}><span class="p">${cents(r[3])}</span><span class="k">to win</span></button>` : ""}</div>`; };
+  const pa = row(g.a)?.[6] ?? 50, ph = row(g.h)?.[6] ?? 50, n = row(g.h)?.[7] || 0;
+  return `<div class="sb">${team(g.a, false)}<span class="at" aria-hidden="true">at</span>${team(g.h, true)}</div>
+    <div class="prob" role="img" aria-label="Consensus: ${T[g.a][1]} ${pa} percent, ${T[g.h][1]} ${ph} percent">
+      <div class="prob-l"><b>${pa}%</b><span>${n ? `${n} books say` : "Kalshi mid"}</span><b>${ph}%</b></div>
+      <div class="bar"><i style="flex:${pa};background:${T[g.a][3]}"></i><i style="flex:${ph};background:${T[g.h][3]}"></i></div>
+    </div>`;
+}
+function card(g) {
+  const sp = mainOf(of(g, "SPREAD")), tot = mainOf(of(g, "TOTAL")), href = "#" + g.id.toLowerCase();
+  const cell = (t, r) => r ? `<button class="cell" ${pick(g, r)}><span><span class="t">${t}</span><span class="v">${esc(label(r))}</span></span><span class="c">${cents(r[3])}</span></button>` : `<span class="cell"><span class="t">${t}</span></span>`;
+  return `<article class="card" aria-label="${g.name}">
+    <header class="meta"><span><b>${g.time}</b>${g.tv}</span><span>NBA</span></header>
+    ${scoreboard(g, false)}
+    <div class="mk">${cell("Spread", sp)}${cell("Total", tot)}</div>
+    <a class="foot" href="${href}"><span><span class="t"><b>${g.rows.length}</b> markets</span><span class="v">Players, other lines, quarters</span></span>${ARROW}</a>
+  </article>`;
+}
+const board = () => `<div class="slate-head"><h2 class="big">NBA board</h2>
+    <span class="muted" style="max-width:46ch;font-size:13px">The big number is Kalshi's price to win: what $1 pays back (×) or the chance it implies (%), your choice at the top. The bar is the books' consensus. Spreads and totals show the books' line.</span></div>
+  <div class="tabs" role="group" aria-label="Filter"><button aria-pressed="true">All games<small>9</small></button><button aria-pressed="false">National TV<small>2</small></button><button aria-pressed="false">Claimed edges<small>0</small></button></div>
+  <div class="day">Friday, November 13 <span>9 GAMES</span></div>
+  <div class="cards">${GAMES.map(card).join("")}</div>`;
+
+/* ---------- game page ---------- */
+// A ladder shows the nine rungs around the main line until "All lines" is tapped.
+function ladder(g, rows, key, fmt) {
+  if (!rows.length) return `<div class="none">No open markets.</div>`;
+  const m = mainOf(rows), i = rows.indexOf(m), all = ui.wide.has(key) || rows.length <= 10;
+  const lo = Math.max(0, Math.min(i - 4, rows.length - 9)), shown = all ? rows : rows.slice(lo, lo + 9);
+  const say = m[5] !== "k" ? `<span><b>${fmt(m)}</b> is the books' line · ${m[7]} books say ${m[6]}%</span>` : `<span>No sportsbook line here. Kalshi's own prices.</span>`;
+  return `<div class="sayline">${say}<span>${rows.length} lines</span></div>
+    <div class="rungs">${shown.map(r => odd(g, r, fmt(r), r === m && m[5] !== "k" ? "main" : "")).join("")}</div>
+    ${rows.length > 10 ? `<button class="more" data-wide="${key}">${all ? "Show fewer" : `All ${rows.length} lines`}</button>` : ""}`;
+}
+const sideSeg = (g, key, cur) => `<div class="seg" role="group" aria-label="Team">${[g.h, g.a].map(c => `<button data-spread="${key}" data-v="${c}" aria-pressed="${cur === c}">${T[c][1]}</button>`).join("")}</div>`;
+function spreadBox(g, s, title) {
+  const rows = of(g, s); if (!rows.length) return "";
+  const fav = mainOf(rows)[4], cur = ui.spread[s] || fav;
+  return `<section class="box"><div class="box-h"><h3>${title}<small>wins by more than</small></h3>${sideSeg(g, s, cur)}</div>
+    <div class="box-b">${ladder(g, rows.filter(r => r[4] === cur), g.id + s + cur, r => `−${r[2]}`)}</div></section>`;
+}
+function totalBox(g, s, title) {
+  const rows = of(g, s); if (!rows.length) return "";
+  return `<section class="box"><div class="box-h"><h3>${title}<small>over</small></h3></div>
+    <div class="box-b">${ladder(g, rows, g.id + s, r => `${r[2]}`)}</div></section>`;
+}
+function teamTotalBox(g, s, title) {
+  const rows = of(g, s); if (!rows.length) return "";
+  return `<section class="box"><div class="box-h"><h3>${title}<small>over</small></h3></div><div class="box-b">` +
+    [g.h, g.a].map(c => `<div class="tt">${logo(c)}<div style="display:flex;flex-direction:column;gap:10px;min-width:0">${ladder(g, rows.filter(r => r[4] === c), g.id + s + c, r => `${r[2]}`)}</div></div>`).join("") + `</div></section>`;
+}
+function linesTab(g) {
+  const wm = of(g, "WINMARGIN");
+  return spreadBox(g, "SPREAD", "Spread") + totalBox(g, "TOTAL", "Total points") + teamTotalBox(g, "TEAMTOTAL", "Team totals") +
+    (wm.length ? `<section class="box"><div class="box-h"><h3>Winning margin</h3><span class="eyebrow">One of these hits</span></div>` +
+      [g.h, g.a].map(c => `<div class="tm-h">${logo(c, "sm")}<span>${T[c][1]} wins by</span></div><div class="tiles">${wm.filter(r => r[4] === c).sort((x, y) => parseInt(x[1].split("by ")[1]) - parseInt(y[1].split("by ")[1])).map(r => odd(g, r, r[1].split("by ")[1])).join("")}</div>`).join("") + `</section>` : "");
+}
+function playersTab(g) {
+  const have = STATS.filter(s => of(g, s[0]).length);
+  if (!have.length) return `<div class="box"><div class="none">No player markets are open for this game yet.</div></div>`;
+  if (!have.some(s => s[0] === ui.stat)) ui.stat = have[0][0];
+  const st = STATS.find(s => s[0] === ui.stat), rows = of(g, ui.stat), single = rows.every(r => r[2] == null || r[2] === 0.5);
+  const sides = [["all", "Both teams"], [g.h, T[g.h][1]], [g.a, T[g.a][1]]];
+  let out = `<div class="pfilter"><div class="chips" role="group" aria-label="Stat">${have.map(s => `<button data-stat="${s[0]}" aria-pressed="${s[0] === ui.stat}">${s[1]}</button>`).join("")}</div>
+    <div class="seg" role="group" aria-label="Team">${sides.map(([v, n]) => `<button data-side="${v}" aria-pressed="${ui.side === v}">${n}</button>`).join("")}</div></div>`;
+  for (const c of [g.h, g.a]) {
+    if (ui.side !== "all" && ui.side !== c) continue;
+    const byP = new Map(); rows.filter(r => r[4] === c).forEach(r => byP.set(r[1], [...(byP.get(r[1]) || []), r]));
+    // Order players by where the market puts them: the highest line still priced at 50¢ or more.
+    const rank = rs => single ? rs[0][3] : Math.max(0, ...rs.filter(r => r[3] >= 50).map(r => r[2])) * 100 + rs[0][3];
+    const ps = [...byP.entries()].sort((x, y) => rank(y[1]) - rank(x[1]));
+    if (!ps.length) continue;
+    out += `<section class="box"><div class="tm-h">${logo(c, "sm")}<span>${T[c][1]} ${T[c][2]}</span><span>${st[1]} · ${ps.length} players</span></div>` +
+      (single ? `<div class="tiles">${ps.map(([n, rs]) => odd(g, rs[0], n)).join("")}</div>`
+        : ps.map(([n, rs]) => `<div class="pl"><div class="who">${esc(n)}</div><div class="rungs">${rs.map(r => odd(g, r, `${Math.ceil(r[2])}+`)).join("")}</div></div>`).join("")) + `</section>`;
+  }
+  return out;
+}
+function periodsTab(g) {
+  const have = PERIODS.filter(p => g.rows.some(r => r[0].startsWith(p[0])));
+  if (!have.length) return `<div class="box"><div class="none">No half or quarter markets are open for this game yet.</div></div>`;
+  if (!have.some(p => p[0] === ui.period)) ui.period = have[0][0];
+  const p = ui.period, name = PERIODS.find(x => x[0] === p)[1], w = of(g, p);
+  const ord = [g.a, null, g.h].map(c => w.find(r => (r[4] || null) === c)).filter(Boolean);
+  return `<div class="pfilter"><div class="chips" role="group" aria-label="Period">${have.map(x => `<button data-period="${x[0]}" aria-pressed="${x[0] === p}">${x[1]}</button>`).join("")}</div></div>` +
+    (ord.length ? `<section class="box"><div class="box-h"><h3>Winner<small>${name}</small></h3></div><div class="box-b"><div class="three">${ord.map(r => odd(g, r, r[1])).join("")}</div></div></section>` : "") +
+    spreadBox(g, p + "SPREAD", "Spread") + totalBox(g, p + "TOTAL", "Total points") + teamTotalBox(g, p + "TEAMTOTAL", "Team totals");
+}
+function gamePage(g) {
+  const nP = g.rows.filter(r => STATS.some(s => s[0] === r[0])).length, nQ = g.rows.filter(r => perName(r[0])).length, nL = g.rows.length - nP - nQ - of(g, "GAME").length;
+  const tabs = [["lines", "Game lines", nL], ["players", "Players", nP], ["periods", "Halves and quarters", nQ]];
+  return `<a class="back" href="#board"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M16 10H4m5-5-5 5 5 5"/></svg>NBA board</a>
+    <article class="card gh" aria-label="${g.name}"><header class="meta"><span><b>${g.time}</b>${g.tv}</span><span>NBA · Friday, November 13</span></header>${scoreboard(g, true)}</article>
+    <div class="gtabs"><div class="tabs" role="group" aria-label="Markets">${tabs.map(([k, n, c]) => `<button data-tab="${k}" aria-pressed="${ui.tab === k}">${n}<small>${c}</small></button>`).join("")}</div></div>
+    ${ui.tab === "players" ? playersTab(g) : ui.tab === "periods" ? periodsTab(g) : linesTab(g)}`;
+}
+
+/* ---------- render ---------- */
+const current = () => GAMES.find(g => "#" + g.id.toLowerCase() === location.hash);
+function render() {
+  const g = current();
+  document.getElementById("hero").hidden = !!g;
+  document.getElementById("main").innerHTML = g ? gamePage(g) : board();
+  sync();
+}
+function sync() {
+  document.querySelectorAll("[data-leg]").forEach(b => b.setAttribute("aria-pressed", legs.has(b.dataset.leg)));
+  const n = legs.size, list = [...legs.entries()], naive = list.reduce((a, [, l]) => a * l.price / 100, 1), games = new Set(list.map(([id]) => id.split("|")[0])).size;
+  document.getElementById("legs").innerHTML = n ? list.map(([id, l]) => `<li>${logo(l.team, "sm")}<span><span class="a">${esc(l.label)}</span><span class="b">${esc(l.sub)}</span></span><span class="c">${px(l.price)}</span><button class="x" data-rm="${esc(id)}" aria-label="Remove ${esc(l.label)}">×</button></li>`).join("") : `<li class="empty">Tap any price to start a slip.</li>`;
+  document.getElementById("slipN").textContent = n ? `${n} LEG${n > 1 ? "S" : ""} · ${(1 / naive).toFixed(1)}×` : "EMPTY";
+  document.getElementById("naive").textContent = n > 1 ? `${(naive * 100).toFixed(1)}%` : "—";
+  document.getElementById("pays").textContent = n > 1 ? `${(1 / naive).toFixed(1)}×` : "—";
+  document.getElementById("fits").textContent = n ? (games === 1 ? "Same game" : `${games} games`) : "—";
+  document.getElementById("price").disabled = n < 2;
+  document.getElementById("said").hidden = true;
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  const d = b.dataset;
+  if (d.leg) { legs.has(d.leg) ? legs.delete(d.leg) : legs.set(d.leg, { label: d.label, sub: d.sub, price: +d.price, team: d.team }); sync(); }
+  else if (d.rm) { legs.delete(d.rm); sync(); }
+  else if (d.unit) { unit = d.unit; document.querySelectorAll("[data-unit]").forEach(x => x.setAttribute("aria-pressed", x.dataset.unit === unit)); renderTix(); render(); }
+  else if (d.tab) { ui.tab = d.tab; render(); }
+  else if (d.stat) { ui.stat = d.stat; render(); }
+  else if (d.side) { ui.side = d.side; render(); }
+  else if (d.period) { ui.period = d.period; render(); }
+  else if (d.spread) { ui.spread[d.spread] = d.v; render(); }
+  else if (d.wide) { ui.wide.has(d.wide) ? ui.wide.delete(d.wide) : ui.wide.add(d.wide); render(); }
+  else if (b.id === "clear") { legs.clear(); sync(); }
+  else if (b.id === "price") { document.getElementById("said").hidden = false; }
+  else if (b.id === "slipToggle") { const up = document.getElementById("slip").classList.toggle("up"); b.setAttribute("aria-expanded", up); }
+});
+window.addEventListener("hashchange", () => { ui.tab = "lines"; ui.side = "all"; render(); window.scrollTo(0, 0); });
+const renderTix = () => document.getElementById("tix").innerHTML = TICKETS.map(t => `<article class="tk"><div class="tk-top"><span><span class="eyebrow">${t.legs} legs</span><b>${t.name}</b></span><span class="hit">${t.hit}<small>%</small></span></div>
+  <div class="tk-logos">${t.teams.map(x => logo(x, "xs")).join("")}</div>
+  <dl><div><dt>Pays</dt><dd>${t.pays}</dd></div><div><dt>Walk away ${unit === "x" ? "below" : "above"}</dt><dd>${px(t.walk)}</dd></div></dl></article>`).join("");
+renderTix();
+// A starting slip from the real board, so the slip is not empty at first sight.
+{ const g = GAMES.find(x => x.id === "GSWSAS"), seed = [of(g, "GAME").find(r => r[4] === "SAS"), of(g, "PTS").find(r => r[1] === "Victor Wembanyama" && r[2] === 24.5), mainOf(of(g, "TOTAL"))];
+  seed.filter(Boolean).forEach(r => legs.set(lid(g, r), { label: label(r), sub: g.name, price: r[3], team: r[4] || "" })); }
+render();
+</script>

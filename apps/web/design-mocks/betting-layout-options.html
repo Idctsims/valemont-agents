@@ -1,0 +1,343 @@
+<title>Betting Layout Options</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&family=Instrument+Serif&display=swap">
+<style>
+/* Layout: a storyboard. Each option is a row of phone-width screens (they stack on a phone),
+   then one desktop wireframe. Tokens are the app's own (apps/web/src/styles/tokens.css), NIGHT first. */
+:root {
+  color-scheme: dark;
+  --bg: #13191f; --surface: #1c2228; --surface-2: #2b2f2e; --surface-3: #594c3d; --border: #3a3833;
+  --text: #f2ece1; --muted: #a89f90; --accent: #ca9c68; --on-accent: #13191f; --hit: #5fb97a; --paper-fg: #f0cf96;
+  --display: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --mono: "Geist Mono", ui-monospace, "Cascadia Mono", monospace;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  color-scheme: light;
+  --bg: #f7f3e8; --surface: #fffcf4; --surface-2: #efe7d3; --surface-3: #e2d6bc; --border: #e2d6bc;
+  --text: #3f2f1c; --muted: #6e5e4a; --accent: #4a3622; --on-accent: #fffcf4; --hit: #2c7344; --paper-fg: #4a3622;
+} }
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f7f3e8; --surface: #fffcf4; --surface-2: #efe7d3; --surface-3: #e2d6bc; --border: #e2d6bc;
+  --text: #3f2f1c; --muted: #6e5e4a; --accent: #4a3622; --on-accent: #fffcf4; --hit: #2c7344; --paper-fg: #4a3622;
+}
+body { background: var(--bg); color: var(--text); font: 400 15px/1.5 var(--sans);
+  padding-block: 24px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
+h1 { font: 400 clamp(2rem, 1.6rem + 1.75vw, 3rem)/1.08 var(--display); margin: 0; text-wrap: balance; }
+h2 { font: 400 clamp(1.5rem, 1.3rem + .9vw, 2rem)/1.2 var(--display); margin: 0; }
+h3 { font: 500 15px/1.4 var(--sans); margin: 0; }
+p { margin: 0; max-width: 68ch; }
+.lab { font: 400 11px/16px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.up { color: var(--hit); }
+a { color: var(--accent); }
+.head { display: flex; flex-direction: column; gap: 12px; }
+.jump { display: flex; flex-wrap: wrap; gap: 8px; }
+.jump a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border: 1px solid var(--border); border-radius: 999px; text-decoration: none; color: var(--text); }
+.option { display: flex; flex-direction: column; gap: 20px; border-top: 1px solid var(--border); padding-top: 28px; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px 28px; }
+.facts div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.board { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 24px; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.screen { background: var(--surface); border: 1px solid var(--border); border-radius: 28px; padding: 16px 14px 0; display: flex; flex-direction: column; gap: 12px; overflow: hidden; min-width: 0; }
+.tabs { display: flex; gap: 18px; border-bottom: 1px solid var(--border); }
+.tabs span { padding-bottom: 8px; color: var(--muted); }
+.tabs .on { color: var(--text); border-bottom: 2px solid var(--accent); margin-bottom: -1px; }
+.row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.row > :first-child { min-width: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border: 1px solid var(--border); border-radius: 999px; font: 400 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.chip.edge { border-color: var(--hit); color: var(--hit); }
+.price { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-width: 52px; min-height: 44px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 16px; font: 400 13px/1.2 var(--mono); font-variant-numeric: tabular-nums; }
+.price small { font-size: 10px; color: var(--muted); letter-spacing: .08em; }
+.price.main { border-color: var(--accent); }
+.price.sel { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.price.sel small { color: var(--on-accent); }
+.strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.card { background: var(--surface-2); border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; font-size: 13px; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.kv .big { font-size: 15px; color: var(--text); }
+.legs { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.legs li { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; }
+.legs em { grid-column: 1 / -1; font-style: normal; color: var(--muted); font-size: 12px; }
+.search { min-height: 44px; display: flex; align-items: center; padding: 0 14px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); }
+.field { min-height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border: 1px dashed var(--border); border-radius: 16px; color: var(--muted); font-size: 13px; }
+.bar { margin: 4px -14px 0; padding: 10px 14px; background: var(--surface-2); border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.btn { display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 14px; }
+.sec { border-top: 1px solid var(--border); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.paper { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; background: var(--surface-3); color: var(--paper-fg); font: 400 10px/1 var(--mono); letter-spacing: .14em; }
+.wire { display: grid; gap: 8px; border: 1px solid var(--border); border-radius: 16px; padding: 12px; background: var(--surface); }
+.wire > div { border: 1px dashed var(--border); border-radius: 12px; padding: 10px; min-width: 0; font-size: 13px; }
+.wire.a { grid-template-columns: 150px minmax(0, 1fr) minmax(0, 340px); }
+.wire.b { grid-template-columns: 150px minmax(0, 300px) minmax(0, 1fr) minmax(0, 300px); }
+@media (max-width: 760px) { .wire.a, .wire.b { grid-template-columns: 1fr; } }
+table { border-collapse: collapse; font-size: 13px; width: 100%; }
+th, td { text-align: left; padding: 6px 12px 6px 0; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font: 400 11px/16px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.scroll { overflow-x: auto; }
+</style>
+
+<div class="wrap">
+  <header class="head">
+    <span class="lab">Chat 8 · Phase 3.5 · Workstream B · Step 0</span>
+    <h1>Two ways to lay out /betting</h1>
+    <p class="muted">Low-fidelity. Every team, player and number here is invented test data. The four ticket numbers (hit probability, expected Kalshi quote, walk-away price, cost of the ticket) are slots: the science workstream has not signed off any of them yet.</p>
+    <nav class="jump" aria-label="Options"><a href="#option-a">Option A · Tickets first</a><a href="#option-b">Option B · Tonight's games first</a><a href="#compare">Compare</a></nav>
+  </header>
+
+  <!-- ================================================================ A -->
+  <section class="option" id="option-a">
+    <span class="lab">Option A</span>
+    <h2>Tickets first: four tabs, the slip as a sheet</h2>
+    <p>The page opens on the day's parlays. The Board is where you go to build your own. This is the starting point from the brief, tightened.</p>
+    <div class="facts">
+      <div><span class="lab">Opens on</span><span>Today: the day's tickets by tier</span></div>
+      <div><span class="lab">Finding a market</span><span>Board tab: search, then game cards that expand in place</span></div>
+      <div><span class="lab">Slip</span><span>Collapsed bar, full-height sheet on the phone; right-hand panel on desktop</span></div>
+      <div><span class="lab">Payload</span><span>An expanded game stays one call, about 106 KB (124 KB with tickers today, so Periods and Other load on their own tap: about 70 KB first)</span></div>
+    </div>
+    <div class="board">
+      <div class="col"><span class="lab">1 · Today</span>
+        <div class="screen">
+          <div class="tabs"><span class="on">Today</span><span>Board</span><span>Slip · 0</span><span>Record</span></div>
+          <div class="row"><h3>Safer <span class="muted">· 3–5 legs</span></h3><span class="paper">PAPER</span></div>
+          <div class="card">
+            <div class="row"><strong>Safer 1 · 4 legs</strong><span class="lab">2 games</span></div>
+            <ul class="legs">
+              <li><span>Harbor City to win</span><span class="num">78%</span><em>Books and Kalshi agree within a point.</em></li>
+              <li><span>R. Okafor 15+ points</span><span class="num">81%</span><em>Averages 24; cleared 15 in 19 of 20.</em></li>
+              <li><span>Over 201.5 points</span><span class="num">84%</span><em>Both teams top-five pace.</em></li>
+              <li><span>Northgate +12.5</span><span class="num">80%</span><em>Second game; independent of the rest.</em></li>
+            </ul>
+            <dl class="kv">
+              <dt>Hit probability</dt><dd class="big">44.1%</dd>
+              <dt>Pays at the expected quote</dt><dd>2.0×</dd>
+              <dt>Expected Kalshi quote</dt><dd>49–52¢</dd>
+              <dt>Walk away above</dt><dd>53¢</dd>
+              <dt>Cost of this ticket</dt><dd>about 6¢ per $1 staked</dd>
+            </dl>
+            <div class="chips"><span class="chip">Kalshi combo · fits</span><span class="chip">prior</span></div>
+            <div class="field"><span>Kalshi's real quote</span><span class="num">__ ¢</span></div>
+          </div>
+          <div class="row"><h3>Mid <span class="muted">· 6–10 legs</span></h3><span class="lab">1 ticket</span></div>
+          <div class="card"><div class="row"><strong>Mid 1 · 7 legs</strong><span class="num">18.3% · 5.1×</span></div><span class="muted" style="font-size:13px">Tap to open: legs, reasons, walk-away 21¢.</span></div>
+          <div class="row"><h3>Lotto <span class="muted">· 11–20 legs</span></h3><span class="lab">1 ticket</span></div>
+          <div class="card"><div class="row"><strong>Lotto 1 · 14 legs</strong><span class="num">7.9% · 11×</span></div><span class="muted" style="font-size:13px">Expected to lose most days. Cost about 19¢ per $1.</span></div>
+          <div class="bar"><span class="muted" style="font-size:13px">Before Phase 4: "Parlays drop at 10:30 AM."</span></div>
+        </div>
+      </div>
+
+      <div class="col"><span class="lab">2 · Board, a game open</span>
+        <div class="screen">
+          <div class="tabs"><span>Today</span><span class="on">Board</span><span>Slip · 2</span><span>Record</span></div>
+          <div class="search">Search a player or team</div>
+          <div class="chips"><span class="chip on">Basketball 9</span><span class="chip">Football 2</span><span class="chip">Hockey 6</span><span class="chip edge">Claimed edges 1</span></div>
+          <div class="sec">
+            <div class="row"><span class="lab">NBA · 7:00 PM</span><span class="lab">as of 4 min</span></div>
+            <h3>Harbor City at Northgate</h3>
+            <div class="strip">
+              <span class="price sel"><small>HBC</small>62¢</span><span class="price"><small>NGT</small>40¢</span>
+              <span class="price main"><small>HBC −4.5</small>51¢</span><span class="price main"><small>O 221.5</small>50¢</span>
+            </div>
+          </div>
+          <div class="sec"><span class="lab">Lines</span>
+            <div class="row"><span>Spread · Harbor City by</span></div>
+            <div class="strip"><span class="price"><small>1.5+</small>58¢</span><span class="price main"><small>4.5+</small>51¢</span><span class="price"><small>7.5+</small>41¢</span><span class="price"><small>10.5+</small>33¢</span><span class="price"><small>13.5+</small>26¢</span></div>
+            <div class="row"><span>Total · over</span></div>
+            <div class="strip"><span class="price"><small>215.5</small>63¢</span><span class="price"><small>218.5</small>57¢</span><span class="price main"><small>221.5</small>50¢</span><span class="price"><small>224.5</small>43¢</span><span class="price"><small>227.5</small>36¢</span></div>
+          </div>
+          <div class="sec"><span class="lab">Players</span>
+            <h3>R. Okafor <span class="muted">· HBC</span></h3>
+            <div class="row"><span class="muted">Points</span></div>
+            <div class="strip"><span class="price sel"><small>15+</small>83¢</span><span class="price"><small>20+</small>66¢</span><span class="price main"><small>25+</small>47¢</span><span class="price"><small>30+</small>28¢</span><span class="price"><small>35+</small>14¢</span></div>
+            <div class="row"><span class="muted">Rebounds</span></div>
+            <div class="strip"><span class="price"><small>6+</small>71¢</span><span class="price main"><small>8+</small>49¢</span><span class="price"><small>10+</small>30¢</span></div>
+            <h3>T. Varga <span class="muted">· NGT</span></h3>
+            <div class="row"><span class="muted">Threes</span></div>
+            <div class="strip"><span class="price"><small>2+</small>74¢</span><span class="price main"><small>3+</small>52¢</span><span class="price"><small>4+</small>31¢</span></div>
+          </div>
+          <div class="sec"><div class="row"><span class="lab">Periods and other · 412</span><span class="lab">show</span></div></div>
+          <div class="bar"><span>Slip · 2 legs</span><span class="btn">Price it</span></div>
+        </div>
+        <span class="muted" style="font-size:13px">A chip is one tap for YES; press and hold for NO. Bid, fee and tier move to a detail line under the selected rung.</span>
+      </div>
+
+      <div class="col"><span class="lab">3 · Slip, priced (full-height sheet)</span>
+        <div class="screen">
+          <div class="row"><h3>Your combo · 3 legs</h3><span class="lab">close</span></div>
+          <ul class="legs">
+            <li><span>Harbor City to win</span><span class="num">62%</span><em>Books · price 4 min old</em></li>
+            <li><span>R. Okafor 15+ points</span><span class="num">82%</span><em>Kalshi only · price 4 min old</em></li>
+            <li><span>T. Varga 3+ threes</span><span class="num">51%</span><em>Kalshi only · price 6 min old</em></li>
+          </ul>
+          <dl class="kv">
+            <dt>Hit probability</dt><dd class="big">28.4% <span class="muted">± 0.1</span></dd>
+            <dt>If the legs were independent</dt><dd>25.9%</dd>
+            <dt>Expected Kalshi quote</dt><dd>31–34¢</dd>
+            <dt>Walk away above</dt><dd>33¢</dd>
+            <dt>Cost of this ticket</dt><dd>about 4¢ per contract</dd>
+          </dl>
+          <div class="chips"><span class="chip">Kalshi combo · fits</span><span class="chip">1 pair unmodeled</span></div>
+          <div class="field"><span>Kalshi's real quote</span><span class="num">__ ¢</span></div>
+          <span class="muted" style="font-size:12px">A fair price is not a profit or a pick. Nothing is ever bet automatically.</span>
+          <div class="bar"><span class="muted">Clear</span><span class="btn">Ask Wags</span></div>
+        </div>
+      </div>
+
+      <div class="col"><span class="lab">4 · Record</span>
+        <div class="screen">
+          <div class="tabs"><span>Today</span><span>Board</span><span>Slip</span><span class="on">Record</span></div>
+          <div class="chips"><span class="chip on">Safer</span><span class="chip">Mid</span><span class="chip">Lotto</span></div>
+          <div class="chips"><span class="chip on">NBA</span><span class="chip">NFL</span><span class="chip">NHL</span></div>
+          <div class="card"><span class="lab">Leg calibration</span><span class="muted" style="font-size:13px">Said 80%, hit __%. Empty until Phase 4 commits.</span></div>
+          <div class="card"><span class="lab">Quote vs fair</span><span class="muted" style="font-size:13px">What Kalshi charged over our fair price, per ticket.</span></div>
+          <div class="card"><span class="lab">Closing line value</span><span class="muted" style="font-size:13px">Not profit. One tier and one sport at a time, never blended.</span></div>
+          <div class="bar"><span class="muted" style="font-size:13px">No tickets committed yet.</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="col"><span class="lab">Desktop · two panes</span>
+      <div class="wire a"><div class="muted">Rail</div><div><strong>Today / Board / Record</strong><br><span class="muted">One wide column: ticket cards two across, or the board with a game open.</span></div><div><strong>Slip</strong><br><span class="muted">Always visible. Legs, then the four numbers once priced.</span></div></div>
+    </div>
+  </section>
+
+  <!-- ================================================================ B -->
+  <section class="option" id="option-b">
+    <span class="lab">Option B</span>
+    <h2>Tonight's games first: one list, each game its own page</h2>
+    <p>No tabs. The page is tonight's slate, with the day's tickets as three rows pinned on top. A game opens as its own page, so its markets load in sections and the back button works. The slip is a page too, reached from a bar that never leaves.</p>
+    <div class="facts">
+      <div><span class="lab">Opens on</span><span>Tonight: three ticket rows, then every game with its three main prices</span></div>
+      <div><span class="lab">Finding a market</span><span>Search on top; a game page with Lines, Players, Periods as sections</span></div>
+      <div><span class="lab">Slip</span><span>A bar on every screen; opens /betting/slip. Desktop: third column</span></div>
+      <div><span class="lab">Payload</span><span>Game page loads Lines first (about 8 KB), Players next (about 60 KB), Periods on tap. Needs a section argument on the reader (one small migration)</span></div>
+    </div>
+    <div class="board">
+      <div class="col"><span class="lab">1 · Tonight</span>
+        <div class="screen">
+          <div class="row"><h3>Betting</h3><span class="lab">Record ›</span></div>
+          <div class="search">Search a player or team</div>
+          <div class="sec"><div class="row"><span class="lab">Today's tickets</span><span class="paper">PAPER</span></div>
+            <div class="row"><span>Safer · 4 legs</span><span class="num">44% · 2.0× · walk 53¢</span></div>
+            <div class="row"><span>Mid · 7 legs</span><span class="num">18% · 5.1× · walk 21¢</span></div>
+            <div class="row"><span>Lotto · 14 legs</span><span class="num">7.9% · 11× · walk 10¢</span></div>
+          </div>
+          <div class="chips"><span class="chip on">Tonight 17</span><span class="chip">NBA 9</span><span class="chip">NHL 6</span><span class="chip">NFL 2</span><span class="chip">More</span></div>
+          <div class="sec"><div class="row"><span class="lab">NBA · 7:00 PM</span><span class="chip edge">edge</span></div>
+            <h3>Harbor City at Northgate</h3>
+            <div class="strip"><span class="price"><small>HBC</small>62¢</span><span class="price"><small>HBC −4.5</small>51¢</span><span class="price"><small>O 221.5</small>50¢</span></div>
+          </div>
+          <div class="sec"><div class="row"><span class="lab">NBA · 7:30 PM</span></div>
+            <h3>Ridgemont at Port Alder</h3>
+            <div class="strip"><span class="price"><small>PTA</small>71¢</span><span class="price"><small>PTA −7.5</small>49¢</span><span class="price"><small>O 214.5</small>52¢</span></div>
+          </div>
+          <div class="sec"><div class="row"><span class="lab">NHL · 8:00 PM</span></div>
+            <h3>Cold Bay at Ironwood</h3>
+            <div class="strip"><span class="price"><small>IRW</small>57¢</span><span class="price"><small>IRW −1.5</small>24¢</span><span class="price"><small>O 5.5</small>55¢</span></div>
+          </div>
+          <div class="bar"><span>Slip · 2 legs</span><span class="btn">Open</span></div>
+        </div>
+      </div>
+
+      <div class="col"><span class="lab">2 · Game page</span>
+        <div class="screen">
+          <div class="row"><span class="lab">‹ Tonight</span><span class="lab">as of 4 min</span></div>
+          <h3>Harbor City at Northgate <span class="muted">· 7:00 PM</span></h3>
+          <div class="chips"><span class="chip on">Lines</span><span class="chip">Players 14</span><span class="chip">Periods</span><span class="chip">Other</span></div>
+          <div class="sec"><div class="row"><span>Winner</span><span class="lab">Books · 9</span></div>
+            <div class="strip"><span class="price sel"><small>HBC</small>62¢</span><span class="price"><small>NGT</small>40¢</span></div>
+            <div class="row muted" style="font-size:12px"><span>We say 61.8% · costs 63.6¢ with fee</span><span class="num">−1.8¢</span></div>
+          </div>
+          <div class="sec"><div class="row"><span>Spread · Harbor City by</span></div>
+            <div class="strip"><span class="price"><small>1.5+</small>58¢</span><span class="price main"><small>4.5+</small>51¢</span><span class="price"><small>7.5+</small>41¢</span><span class="price"><small>10.5+</small>33¢</span></div>
+          </div>
+          <div class="sec"><div class="row"><span>Total · over</span></div>
+            <div class="strip"><span class="price"><small>218.5</small>57¢</span><span class="price main"><small>221.5</small>50¢</span><span class="price"><small>224.5</small>43¢</span><span class="price"><small>227.5</small>36¢</span></div>
+          </div>
+          <div class="sec"><span class="lab">Players · top of the board</span>
+            <div class="row"><span>R. Okafor · points</span></div>
+            <div class="strip"><span class="price sel"><small>15+</small>83¢</span><span class="price"><small>20+</small>66¢</span><span class="price main"><small>25+</small>47¢</span><span class="price"><small>30+</small>28¢</span></div>
+            <div class="row"><span class="muted">All 14 players ›</span></div>
+          </div>
+          <div class="bar"><span>Slip · 2 legs</span><span class="btn">Open</span></div>
+        </div>
+      </div>
+
+      <div class="col"><span class="lab">3 · Slip page</span>
+        <div class="screen">
+          <div class="row"><span class="lab">‹ Back</span><span class="lab">Clear</span></div>
+          <h3>Your combo · 3 legs</h3>
+          <div class="card">
+            <dl class="kv">
+              <dt>Hit probability</dt><dd class="big">28.4%</dd>
+              <dt>Expected Kalshi quote</dt><dd>31–34¢</dd>
+              <dt>Walk away above</dt><dd>33¢</dd>
+              <dt>Cost of this ticket</dt><dd>about 4¢ per contract</dd>
+            </dl>
+          </div>
+          <ul class="legs">
+            <li><span>Harbor City to win</span><span class="num">62%</span><em>Books · 4 min old · remove</em></li>
+            <li><span>R. Okafor 15+ points</span><span class="num">82%</span><em>Kalshi only · 4 min old · remove</em></li>
+            <li><span>T. Varga 3+ threes</span><span class="num">51%</span><em>Kalshi only · 6 min old · remove</em></li>
+          </ul>
+          <div class="chips"><span class="chip">Kalshi combo · fits</span><span class="chip">1 pair unmodeled</span></div>
+          <div class="field"><span>Kalshi's real quote</span><span class="num">__ ¢</span></div>
+          <div class="sec"><span class="lab">How this was priced</span><span class="muted" style="font-size:13px">Independent 25.9%; same-game links add 2.5 points. Fee charged once, on the combo.</span></div>
+          <div class="bar"><span class="muted">Ask Wags</span><span class="btn">Re-price</span></div>
+        </div>
+      </div>
+
+      <div class="col"><span class="lab">4 · A ticket, opened</span>
+        <div class="screen">
+          <div class="row"><span class="lab">‹ Tonight</span><span class="paper">PAPER</span></div>
+          <h3>Lotto · 14 legs · 9 games</h3>
+          <div class="card">
+            <dl class="kv">
+              <dt>Hit probability</dt><dd class="big">7.9%</dd>
+              <dt>Pays at the expected quote</dt><dd>11×</dd>
+              <dt>Expected Kalshi quote</dt><dd>9–10¢</dd>
+              <dt>Walk away above</dt><dd>10¢</dd>
+              <dt>Cost of this ticket</dt><dd>about 19¢ per $1 staked</dd>
+            </dl>
+            <span class="muted" style="font-size:12px">Expected to lose most days.</span>
+          </div>
+          <ul class="legs">
+            <li><span>Port Alder to win</span><span class="num">86%</span><em>Heavy favourite; tight market.</em></li>
+            <li><span>Ironwood +1.5</span><span class="num">84%</span><em>Puck line the favourite's way.</em></li>
+            <li><span>L. Maro 1+ threes</span><span class="num">88%</span><em>Made one in 31 of 34.</em></li>
+            <li><span class="muted">11 more legs ›</span><span></span></li>
+          </ul>
+          <div class="field"><span>Kalshi's real quote</span><span class="num">__ ¢</span></div>
+          <div class="bar"><span class="muted" style="font-size:13px">Record: Lotto · NBA ›</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="col"><span class="lab">Desktop · three columns</span>
+      <div class="wire b"><div class="muted">Rail</div><div><strong>Tonight</strong><br><span class="muted">Tickets, then the game list. Stays put.</span></div><div><strong>Game</strong><br><span class="muted">The selected game's sections.</span></div><div><strong>Slip</strong><br><span class="muted">Always visible.</span></div></div>
+    </div>
+  </section>
+
+  <!-- ================================================================ compare -->
+  <section class="option" id="compare">
+    <span class="lab">Compare</span>
+    <h2>What each one costs</h2>
+    <div class="scroll"><table>
+      <thead><tr><th></th><th>A · Tickets first</th><th>B · Tonight's games first</th></tr></thead>
+      <tbody>
+        <tr><td>Best when</td><td>You mostly take the day's tickets and sometimes build one.</td><td>You mostly browse games and build your own; tickets are a glance.</td></tr>
+        <tr><td>Taps to a player's rung</td><td>Board, sport, game, rung: 4</td><td>Game, rung: 2 (3 for a player off the first screen)</td></tr>
+        <tr><td>Expanded NBA game</td><td>One call, about 106 KB (budget 115); Periods and Other on their own tap brings the first load to about 70 KB</td><td>Lines about 8 KB, Players about 60 KB, Periods on tap</td></tr>
+        <tr><td>Database change</td><td>None required</td><td>A section argument on the game reader (one migration with a self-test)</td></tr>
+        <tr><td>Existing tests</td><td>Most data-testids survive; the market row changes shape</td><td>Game expansion becomes navigation: both betting specs are rewritten</td></tr>
+        <tr><td>Build size</td><td>Smaller</td><td>Larger: two new routes, the reader, the specs</td></tr>
+        <tr><td>Risk</td><td>Four tabs on a 390 px screen is tight; Record sits empty until Phase 4</td><td>The day's tickets get three lines, so their cost is one tap away</td></tr>
+      </tbody>
+    </table></div>
+    <p class="muted">Both keep: tokens only, 44 px targets, mono only for compared numbers, the up colour only on a claimed edge, nothing in danger red.</p>
+  </section>
+</div>
