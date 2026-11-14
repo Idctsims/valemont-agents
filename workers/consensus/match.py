@@ -251,6 +251,19 @@ class Priced:
     p_power: float
     p_mult: float
     prices: tuple[int, ...]
+    #: Shin's and the additive method's p, for the four-method test (None on
+    #: a view built without them: such a row can never claim edge).
+    p_shin: float | None = None
+    p_add: float | None = None
+
+    @classmethod
+    def of(cls, book: str, odds: Sequence[float], i: int, prices: tuple[int, ...]) -> "Priced":
+        return cls(book, devig.power(odds)[i], devig.multiplicative(odds)[i], prices,
+                   devig.shin(odds)[i], devig.additive(odds)[i])
+
+
+def _dec(a: int, b: int) -> list[float]:
+    return [devig.american_to_decimal(a), devig.american_to_decimal(b)]
 
 
 def _two_way(a: int, b: int) -> tuple[float, float]:
@@ -291,8 +304,7 @@ def book_views(m: Market, g: Game, bp: BookPrices, aliases: Mapping[tuple[str, s
                     continue
                 odds = [devig.american_to_decimal(sides[o]) for o in outcomes]
                 i = outcomes.index(side)
-                out.append(Priced(book, devig.power(odds)[i], devig.multiplicative(odds)[i],
-                                  tuple(sides[o] for o in outcomes)))
+                out.append(Priced.of(book, odds, i, tuple(sides[o] for o in outcomes)))
         else:
             if side == "draw" or m.line is None:
                 return out
@@ -302,23 +314,20 @@ def book_views(m: Market, g: Game, bp: BookPrices, aliases: Mapping[tuple[str, s
                 for hp, hprice, aprice in rows:
                     if hp == want:
                         a, b = (hprice, aprice) if side == "home" else (aprice, hprice)
-                        pp, pm = _two_way(a, b)
-                        out.append(Priced(book, pp, pm, (a, b)))
+                        out.append(Priced.of(book, _dec(a, b), 0, (a, b)))
                         break
     elif kind == "total" and m.line is not None:
         for book, rows in bp.total.items():
             for pt, over, under in rows:
                 if pt == m.line:
-                    pp, pm = _two_way(over, under)
-                    out.append(Priced(book, pp, pm, (over, under)))
+                    out.append(Priced.of(book, _dec(over, under), 0, (over, under)))
                     break
     elif kind == "prop" and m.line is not None and m.subject:
         who = player_key(m.subject, g.home, g.away)
         for book, rows in bp.props.get(PROP_SERIES[m.series], {}).get(who, {}).items():
             for pt, over, under in rows:
                 if pt == m.line and under is not None:
-                    pp, pm = _two_way(over, under)
-                    out.append(Priced(book, pp, pm, (over, under)))
+                    out.append(Priced.of(book, _dec(over, under), 0, (over, under)))
                     break
     return out
 
@@ -337,8 +346,7 @@ def espn_view(m: Market, g: Game, e: EspnOdds | None, aliases: Mapping[tuple[str
             outcomes = list(sides)
             odds = [devig.american_to_decimal(sides[o]) for o in outcomes]
             i = outcomes.index(side)
-            return Priced("espn_dk", devig.power(odds)[i], devig.multiplicative(odds)[i],
-                          tuple(int(sides[o]) for o in outcomes))  # type: ignore[arg-type]
+            return Priced.of("espn_dk", odds, i, tuple(int(sides[o]) for o in outcomes))  # type: ignore[arg-type]
         if kind == "spread" and m.line is not None and e.spread_home is not None:
             side = team_side(m, g, aliases)
             if side not in ("home", "away") or e.spread_home_price is None or e.spread_away_price is None:
@@ -347,12 +355,10 @@ def espn_view(m: Market, g: Game, e: EspnOdds | None, aliases: Mapping[tuple[str
                 return None
             a, b = ((e.spread_home_price, e.spread_away_price) if side == "home"
                     else (e.spread_away_price, e.spread_home_price))
-            pp, pm = _two_way(a, b)
-            return Priced("espn_dk", pp, pm, (a, b))
+            return Priced.of("espn_dk", _dec(a, b), 0, (a, b))
         if kind == "total" and m.line is not None and e.total == m.line \
                 and e.over_price is not None and e.under_price is not None:
-            pp, pm = _two_way(e.over_price, e.under_price)
-            return Priced("espn_dk", pp, pm, (e.over_price, e.under_price))
+            return Priced.of("espn_dk", _dec(e.over_price, e.under_price), 0, (e.over_price, e.under_price))
     except devig.DevigError:
         return None
     return None
@@ -362,12 +368,25 @@ def r6(x: float) -> float:
     return round(x, 6)
 
 
+def _span(views: Sequence[Priced]) -> dict[str, float | None]:
+    """p_books_lo / p_books_hi: the lowest and highest of the four methods'
+    medians across the books (db/078). The edge claim is tested at the least
+    favourable one. None when any view lacks a method: no claim."""
+    if any(v.p_shin is None or v.p_add is None for v in views):
+        return {"p_books_lo": None, "p_books_hi": None}
+    meds = [statistics.median(col) for col in (
+        [v.p_power for v in views], [v.p_mult for v in views],
+        [v.p_shin for v in views], [v.p_add for v in views])]  # type: ignore[type-var]
+    return {"p_books_lo": r6(min(meds)), "p_books_hi": r6(max(meds))}
+
+
 def consensus_row(m: Market, views: Sequence[Priced], espn: Priced | None) -> dict[str, Any] | None:
     """The leg_consensus row (db/073), or None: the market stays kalshi tier."""
     if len(views) >= MIN_BOOKS:
         return {"market_ticker": m.market_ticker, "tier": "books", "n_books": len(views),
                 "p_books": r6(statistics.median(v.p_power for v in views)),
                 "p_books_mult": r6(statistics.median(v.p_mult for v in views)),
+                **_span(views),
                 "p_espn": None if espn is None else r6(espn.p_power),
                 "inputs": {"m": "power", "b": {v.book: round(v.p_power, 4) for v in views}}}
     if espn is not None:
