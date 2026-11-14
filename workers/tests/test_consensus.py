@@ -52,6 +52,31 @@ class Devig(unittest.TestCase):
                 for g, w in zip(fn(odds_), ref, strict=True):
                     self.assertAlmostEqual(g, w, delta=1e-9)
 
+    def test_the_four_methods_on_the_audit_s_reference_prices(self) -> None:
+        # docs/betting_science_audit.md D5: (+180, -218) and a soccer three-way.
+        two = [devig.american_to_decimal(180), devig.american_to_decimal(-218)]
+        want = {"power": 0.3323, "multiplicative": 0.3425, "shin": 0.3358, "additive": 0.3358}
+        self.assertEqual([n for n, _ in devig.METHODS], list(want))
+        for name, fn in devig.METHODS:
+            p = fn(two)
+            self.assertAlmostEqual(p[0], want[name], delta=5e-5, msg=name)
+            self.assertAlmostEqual(sum(p), 1.0, places=9, msg=name)
+        three = {"power": 0.4630, "multiplicative": 0.4580, "shin": 0.4617, "additive": 0.4630}
+        for name, fn in devig.METHODS:
+            p = fn([2.10, 3.50, 3.60])
+            self.assertAlmostEqual(p[0], three[name], delta=5e-5, msg=name)
+            self.assertAlmostEqual(sum(p), 1.0, places=9, msg=name)
+
+    def test_shin_equals_additive_with_two_outcomes_and_additive_floors_at_zero(self) -> None:
+        for a, b in ((-110, -110), (-300, 240), (-1200, 700)):
+            odds_ = [devig.american_to_decimal(a), devig.american_to_decimal(b)]
+            for s, d in zip(devig.shin(odds_), devig.additive(odds_), strict=True):
+                self.assertAlmostEqual(s, d, places=9)
+        # A 1.5% longshot under a 6% overround: the additive method has nothing left for it.
+        p = devig.additive([1.02, 12.0, 67.0])
+        self.assertEqual(p[2], 0.0)
+        self.assertTrue(all(x >= 0.0 for x in p))
+
     def test_power_sums_to_one_and_shades_the_longshot_more(self) -> None:
         odds_ = [devig.american_to_decimal(-300), devig.american_to_decimal(240)]
         p, m = devig.power(odds_), devig.multiplicative(odds_)
@@ -224,6 +249,27 @@ class Tiers(unittest.TestCase):
         self.assertEqual((r["tier"], r["n_books"], r["p_books"], r["p_espn"]), ("books", 3, 0.52, 0.55))
         self.assertEqual(r["p_books_mult"], 0.521)
         self.assertEqual(r["inputs"]["m"], "power")
+
+    def test_the_books_row_carries_the_span_of_the_four_methods(self) -> None:
+        m = mkt("KXNBAGAME-X-TOR", "KXNBAGAME")
+        views = [match.Priced.of(b, [devig.american_to_decimal(x), devig.american_to_decimal(y)], 0, (x, y))
+                 for b, x, y in (("a", -300, 240), ("b", -280, 230), ("c", -310, 250))]
+        r = match.consensus_row(m, views, None)
+        meds = [sorted(fn([devig.american_to_decimal(x), devig.american_to_decimal(y)])[0]
+                       for x, y in ((-300, 240), (-280, 230), (-310, 250)))[1] for _, fn in devig.METHODS]
+        self.assertEqual(r["p_books_lo"], round(min(meds), 6))
+        self.assertEqual(r["p_books_hi"], round(max(meds), 6))
+        self.assertLess(r["p_books_lo"], r["p_books"])  # power keeps the most for a favourite
+        self.assertEqual(r["p_books_hi"], r["p_books"])
+        self.assertGreater(r["p_books_hi"] - r["p_books_lo"], 0.01)
+
+    def test_a_view_without_all_four_methods_has_no_span_and_an_espn_row_never_has_one(self) -> None:
+        m = mkt("KXNBAGAME-X-TOR", "KXNBAGAME")
+        r = match.consensus_row(m, [self.p("a", 0.50), self.p("b", 0.60)], None)
+        self.assertEqual((r["p_books_lo"], r["p_books_hi"]), (None, None))
+        e = match.consensus_row(m, [], match.Priced.of("espn_dk", [1.5, 2.8], 0, (-200, 180)))
+        self.assertEqual(e["tier"], "espn")
+        self.assertNotIn("p_books_lo", e)
 
     def test_one_book_falls_to_espn_or_to_kalshi(self) -> None:
         m = mkt("KXNBAGAME-X-TOR", "KXNBAGAME")
