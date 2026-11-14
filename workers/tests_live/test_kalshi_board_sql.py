@@ -377,6 +377,7 @@ class GameTabs079(BoardSqlCase):
             "combo_collections": []}], NOW, is_test=True, conn=conn)
         ledger.kalshi_board_markets_upsert([
             self.market(event, f"{event}-T1", "prop", 0, stat="threes", line="1.5", team="AAA", label="TL Player"),
+            self.market(event, f"{event}-X1", "prop", 0, stat=None, line=None, label="TL Player: unparsed"),
             self.market(event, f"{event}-ML", "game_line", 0, subject="TL Home", stat="winner", line=None,
                         label="TL Home"),
             self.market(half_event, f"{half_event}-AAA1", "game_line", 0, subject="AAA", stat="spread", line="1.5",
@@ -389,11 +390,12 @@ class GameTabs079(BoardSqlCase):
             with conn.cursor() as cur:
                 _act_as(cur, "authenticated", self.owner)
                 tabs = cur.execute("SELECT kalshi_board_game_tabs(%s, true)", (game,)).fetchone()[0]
-                self.assertEqual((tabs["lines"], tabs["players"], tabs["periods"]), (1, 3, 1))
+                self.assertEqual((tabs["lines"], tabs["players"], tabs["periods"], tabs["other"]), (1, 4, 1, 1))
                 self.assertEqual(tabs["stats"], [{"st": "points", "n": 2}, {"st": "threes", "n": 1}])
                 # Without the flag a test game has nothing on any tab.
                 bare = cur.execute("SELECT kalshi_board_game_tabs(%s)", (game,)).fetchone()[0]
-                self.assertEqual((bare["lines"], bare["players"], bare["periods"], bare["stats"]), (0, 0, 0, []))
+                self.assertEqual((bare["lines"], bare["players"], bare["periods"], bare["other"], bare["stats"]),
+                                 (0, 0, 0, 0, []))
                 self.assertEqual(cur.execute("SELECT count(*) FROM kalshi_board_game_tab(%s, 'players')",
                                              (game,)).fetchone()[0], 0)
 
@@ -402,7 +404,12 @@ class GameTabs079(BoardSqlCase):
                                                       (game, name, stat))]
 
                 players = tab("players")
-                self.assertEqual([(e["e"], len(e["m"])) for e in players], [(event, 3)])
+                self.assertEqual([(e["e"], len(e["m"])) for e in players], [(event, 4)])
+                # '' is "Other": exactly the players markets with no stat.
+                other = tab("players", "")
+                self.assertEqual([[(m["x"], "st" in m, m["lb"]) for m in e["m"]] for e in other],
+                                 [[("X1", False, "TL Player: unparsed")]])
+                self.assertEqual(tab("lines", ""), [])
                 points = tab("players", "points")[0]["m"]
                 self.assertEqual([(m["x"], m["sj"], m["st"], m["ln"]) for m in points],
                                  [("M0", "TL Player", "points", 9.5), ("M1", "TL Player", "points", 10.5)])

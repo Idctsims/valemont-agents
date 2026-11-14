@@ -23,9 +23,16 @@
 --   3. kalshi_board_game_tab(game, tab, tests, stat): one jsonb row per event
 --      of that tab (and of that stat, when given), each market with its
 --      ticker suffix, subject, line, stat, team, bid, ask, fee, variant,
---      scalar flag and packed consensus q.
---   4. kalshi_board_game_tabs(game, tests): the three tabs' market counts and
---      the Players tab's stats, most markets first.
+--      scalar flag and packed consensus q. stat '' (the empty string) asks
+--      for the markets that have NO stat: the page's "Other".
+--   4. kalshi_board_game_tabs(game, tests): the three tabs' market counts,
+--      the Players tab's stats (most markets first) and `other`, its count
+--      of markets with no stat. The page shows "Other" only when other > 0
+--      (owner, 2026-11-14; on that day's board the count was 0 of 14,748).
+--
+-- The page caches each tab and each stat after its first load and refreshes
+-- by hand (owner, 2026-11-14): every call runs leg_consensus_for over the
+-- whole game, about 1.1 s for the largest NBA game.
 
 -- ===================================================================== 1
 CREATE OR REPLACE FUNCTION public.kalshi_board_period(p_series text)
@@ -87,7 +94,9 @@ AS $$
           LEFT JOIN q ON q.market_ticker = b.market_ticker
          WHERE e.game_ticker = p_game AND (NOT b.is_test OR p_tests)
            AND public.kalshi_board_tab(e.series_ticker, b.market_kind) = p_tab
-           AND (p_stat IS NULL OR b.stat = p_stat)
+           -- p_stat '' asks for the markets with NO stat (the page's "Other"): no real stat is ''
+           -- (kalshi_board_stat_check wants 1 to 60 characters).
+           AND (p_stat IS NULL OR b.stat = p_stat OR (p_stat = '' AND b.stat IS NULL))
     )
     SELECT jsonb_strip_nulls(jsonb_build_object(
                'e', m.event_ticker, 'sr', min(m.series_ticker), 't', min(m.series_title),
@@ -121,6 +130,8 @@ AS $$
                'players', count(*) FILTER (WHERE public.kalshi_board_tab(e.series_ticker, b.market_kind) = 'players'),
                'periods', count(*) FILTER (WHERE public.kalshi_board_tab(e.series_ticker, b.market_kind) = 'periods'),
                'asof', max(e.fetched_at),
+               'other', count(*) FILTER (WHERE public.kalshi_board_tab(e.series_ticker, b.market_kind) = 'players'
+                                           AND b.stat IS NULL),
                'stats', coalesce((SELECT jsonb_agg(jsonb_build_object('st', z.stat, 'n', z.n) ORDER BY z.n DESC, z.stat)
                                     FROM (SELECT b2.stat, count(*) AS n
                                             FROM public.kalshi_board b2
@@ -222,6 +233,10 @@ BEGIN
             jsonb_build_object('market_ticker', v_pt || '-P1-2', 'event_ticker', v_pt, 'market_kind', 'prop',
                                'subject', 'Player One', 'stat', 'threes', 'line', 1.5, 'team', 'AAA',
                                'label', 'Player One', 'yes_bid', 0.60, 'yes_ask', 0.62),
+            -- A prop with no stat: reachable only through "Other".
+            jsonb_build_object('market_ticker', v_pt || '-X1', 'event_ticker', v_pt, 'market_kind', 'prop',
+                               'subject', 'Player One', 'team', 'AAA', 'label', 'Player One: something unparsed',
+                               'yes_bid', 0.10, 'yes_ask', 0.12),
             jsonb_build_object('market_ticker', v_ps || '-P1-20', 'event_ticker', v_ps, 'market_kind', 'prop',
                                'subject', 'Player One', 'stat', 'points', 'line', 19.5, 'team', 'AAA',
                                'label', 'Player One', 'yes_bid', 0.50, 'yes_ask', 0.52),
@@ -235,15 +250,19 @@ BEGIN
                                'subject', 'AAA', 'stat', 'spread', 'line', 1.5, 'team', 'AAA',
                                'label', 'AAA wins by over 1.5 points', 'yes_bid', 0.44, 'yes_ask', 0.46),
             jsonb_build_object('market_ticker', v_q3 || '-TIE', 'event_ticker', v_q3, 'market_kind', 'game_line',
-                               'subject', 'Tie', 'stat', 'winner', 'label', 'Tie', 'yes_bid', 0.05, 'yes_ask', 0.07)),
+                               'subject', 'Tie', 'label', 'Tie', 'yes_bid', 0.05, 'yes_ask', 0.07)),
             v_t0);
-        IF v_n <> 9 THEN RAISE EXCEPTION 'SELFTEST FAILED: market insert wrote %', v_n; END IF;
+        IF v_n <> 10 THEN RAISE EXCEPTION 'SELFTEST FAILED: market insert wrote %', v_n; END IF;
 
         -- ------------------------------------------------ 3. counts, and the Players tab's stats
         v_j := public.kalshi_board_game_tabs(v_gt);
-        IF (v_j->>'lines')::int <> 3 OR (v_j->>'players')::int <> 4 OR (v_j->>'periods')::int <> 2
+        IF (v_j->>'lines')::int <> 3 OR (v_j->>'players')::int <> 5 OR (v_j->>'periods')::int <> 2
            OR (v_j->>'asof')::timestamptz <> v_t0 THEN
             RAISE EXCEPTION 'SELFTEST FAILED: tab counts read %', v_j;
+        END IF;
+        -- One players market has no stat. The 3rd quarter's Tie has none either, and is not a players market.
+        IF (v_j->>'other')::int IS DISTINCT FROM 1 THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: other reads %', v_j->'other';
         END IF;
         -- Most markets first; no lines or periods stat (spread, winner) among them.
         IF (v_j->'stats')::text IS DISTINCT FROM '[{"n": 3, "st": "points"}, {"n": 1, "st": "threes"}]' THEN
@@ -289,7 +308,19 @@ BEGIN
            OR v_j->0->'m'->2->>'sj' IS DISTINCT FROM 'Player Two' THEN
             RAISE EXCEPTION 'SELFTEST FAILED: the points stat reads %', v_j;
         END IF;
+        -- '' is "Other": exactly the players markets with no stat, on no other tab, and never a stat's own.
+        SELECT jsonb_agg(x) INTO v_j FROM public.kalshi_board_game_tab(v_gt, 'players', false, '') x;
+        IF jsonb_array_length(v_j) IS DISTINCT FROM 1 OR v_j->0->>'e' IS DISTINCT FROM v_pt
+           OR jsonb_array_length(v_j->0->'m') IS DISTINCT FROM 1 OR v_j->0->'m'->0->>'x' IS DISTINCT FROM 'X1'
+           OR v_j->0->'m'->0 ? 'st'
+           OR v_j->0->'m'->0->>'lb' IS DISTINCT FROM 'Player One: something unparsed'
+           OR EXISTS (SELECT 1 FROM public.kalshi_board_game_tab(v_gt, 'lines', false, '')) THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: Other reads %', v_j;
+        END IF;
         SELECT x INTO v_j FROM public.kalshi_board_game_tab(v_gt, 'players', false, 'threes') x;
+        IF jsonb_array_length(v_j->'m') IS DISTINCT FROM 1 THEN
+            RAISE EXCEPTION 'SELFTEST FAILED: the threes stat holds a market with no stat: %', v_j;
+        END IF;
         v_m := v_j->'m'->0;
         -- A label equal to the subject is not sent twice.
         IF v_j->>'sr' IS DISTINCT FROM 'KXSTSEVNINE3PT' OR v_j ? 'pd' OR v_m->>'sj' IS DISTINCT FROM 'Player One'
@@ -332,6 +363,7 @@ BEGIN
         IF v_n <> 2 THEN RAISE EXCEPTION 'SELFTEST FAILED: the test markets wrote %', v_n; END IF;
         v_j := public.kalshi_board_game_tabs(v_tg);
         IF (v_j->>'lines')::int <> 0 OR (v_j->>'players')::int <> 0 OR (v_j->'stats')::text IS DISTINCT FROM '[]'
+           OR (v_j->>'other')::int IS DISTINCT FROM 0
            OR EXISTS (SELECT 1 FROM public.kalshi_board_game_tab(v_tg, 'lines'))
            OR EXISTS (SELECT 1 FROM public.kalshi_board_game_tab(v_tg, 'players')) THEN
             RAISE EXCEPTION 'SELFTEST FAILED: a test row is served without the flag: %', v_j;
