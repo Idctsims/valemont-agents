@@ -266,10 +266,10 @@ class Readers(ConsensusSqlCase):
                 self.assertLessEqual(claimed + stale, n)
                 if tier == "kalshi":
                     self.assertEqual((claimed, stale), (0, 0))
+                else:
+                    self.assertEqual(pos, 0)  # `pos` counts kalshi-tier positives only
                 if tier == "espn":
                     self.assertEqual(claimed, 0)  # db/078: one soft book never claims
-                else:
-                    self.assertEqual(pos, 0)
             used = ledger.odds_api_usage(conn=conn)
             self.assertIn("used", used)
 
