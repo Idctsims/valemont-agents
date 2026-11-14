@@ -132,6 +132,7 @@ class Writes(ConsensusSqlCase):
         with _rolled_back() as conn:
             _, game, mk = self.two_team(conn, ("0.6100", "0.3500"), ("0.6300", "0.3700"))
             rows = [{"market_ticker": mk[0], "tier": "books", "n_books": 3, "p_books": 0.70, "p_books_mult": 0.69,
+                     "p_books_lo": 0.69, "p_books_hi": 0.70,
                      "p_espn": None, "inputs": {"m": "power"}, "source_at": board.NOW.isoformat()},
                     {"market_ticker": mk[1], "tier": "espn", "n_books": 1, "p_books": None, "p_books_mult": None,
                      "p_espn": 0.30, "inputs": {"m": "power", "src": "espn"}, "source_at": board.NOW.isoformat()}]
@@ -142,6 +143,9 @@ class Writes(ConsensusSqlCase):
             self.assertEqual((r[mk[0]]["tier"], r[mk[0]]["n_books"]), ("books", 3))
             self.assertTrue(r[mk[0]]["edge_claimed"])  # 0.7 x 0.70 + 0.3 x 0.6327 = 0.678 > 0.63 + fee
             self.assertEqual(r[mk[1]]["tier"], "espn")
+            # db/078: the espn tier shows its edge and never claims it.
+            self.assertGreater(max(r[mk[1]]["edge_yes"], r[mk[1]]["edge_no"]), 0)
+            self.assertFalse(r[mk[1]]["edge_claimed"])
             self.assertEqual(ledger.leg_consensus_stored([game], conn=conn), {})  # real rows only
             self.assertEqual(ledger.leg_consensus_sweep([game], [mk[0]], is_test=True, conn=conn), 1)
             self.assertEqual(self.rows(conn, game)[mk[1]]["tier"], "kalshi")
@@ -150,11 +154,30 @@ class Writes(ConsensusSqlCase):
             n = conn.execute("SELECT count(*) FROM leg_consensus WHERE market_ticker = %s", (mk[0],)).fetchone()[0]
             self.assertEqual(n, 0)
 
+    def test_a_books_edge_must_survive_the_least_favourable_of_four_methods(self) -> None:
+        """db/078 (owner, 2026-11-13): claimed only when positive at p_books_lo
+        (YES) too; a books row with no span (an older worker) claims nothing."""
+        with _rolled_back() as conn:
+            _, game, mk = self.two_team(conn, ("0.6100", "0.3500"), ("0.6300", "0.3700"))
+            base = {"market_ticker": mk[0], "tier": "books", "n_books": 3, "p_books": 0.70, "p_books_mult": 0.69,
+                    "p_espn": None, "inputs": {"m": "power"}, "source_at": board.NOW.isoformat()}
+            for span, want in (({"p_books_lo": 0.69, "p_books_hi": 0.70}, True),
+                               ({"p_books_lo": 0.64, "p_books_hi": 0.70}, False),  # 0.7 x 0.64 + 0.3 x 0.6327 < cost
+                               ({}, False)):
+                self.assertEqual(ledger.leg_consensus_upsert([base | span], board.NOW, is_test=True, conn=conn), 1)
+                r = self.rows(conn, game)[mk[0]]
+                self.assertGreater(r["edge_yes"], 0, span)
+                self.assertEqual(r["edge_claimed"], want, span)
+            # The span sits around p_books, whole or absent.
+            for bad in ({"p_books_lo": 0.75, "p_books_hi": 0.80}, {"p_books_lo": 0.69}):
+                with self.assertRaises(psycopg.errors.CheckViolation), conn.transaction():
+                    ledger.leg_consensus_upsert([base | bad], board.NOW, is_test=True, conn=conn)
+
     def test_the_game_reader_carries_q(self) -> None:
         with _rolled_back() as conn:
             _, game, mk = self.two_team(conn, ("0.6100", "0.3500"), ("0.6300", "0.3700"))
             ledger.leg_consensus_upsert([{"market_ticker": mk[0], "tier": "books", "n_books": 2, "p_books": 0.70,
-                                          "p_books_mult": 0.70, "p_espn": None, "inputs": {"m": "power"},
+                                          "p_books_mult": 0.70, "p_books_lo": 0.70, "p_books_hi": 0.70, "p_espn": None, "inputs": {"m": "power"},
                                           "source_at": board.NOW.isoformat()}], board.NOW, is_test=True, conn=conn)
             ev = conn.execute("SELECT x FROM kalshi_board_game(%s, NULL, false, true) x", (game,)).fetchone()[0]
             qs = {m["lb"]: re.fullmatch(r"([bek])(\d*)([a-p])(\d{3})(-?\d+)", m["q"]) for m in ev["m"]}
@@ -171,7 +194,7 @@ class Writes(ConsensusSqlCase):
         with _rolled_back() as conn:
             event, game, mk = self.two_team(conn, ("0.6100", "0.3500"), ("0.6300", "0.3700"))
             ledger.leg_consensus_upsert([{"market_ticker": mk[0], "tier": "books", "n_books": 2, "p_books": 0.70,
-                                          "p_books_mult": 0.70, "p_espn": None, "inputs": {"m": "power"},
+                                          "p_books_mult": 0.70, "p_books_lo": 0.70, "p_books_hi": 0.70, "p_espn": None, "inputs": {"m": "power"},
                                           "source_at": board.NOW.isoformat()}], board.NOW, is_test=True, conn=conn)
             self.assertTrue(self.rows(conn, game)[mk[0]]["edge_claimed"])
             conn.execute("UPDATE kalshi_board_events SET fetched_at = now() - interval '21 minutes' "
@@ -186,7 +209,7 @@ class Writes(ConsensusSqlCase):
             self.assertEqual((r["edge_claimed"], r["stale_kalshi"], r["stale_outside"]), (False, False, True))
             # A confirmation by a newer pull makes it fresh again (source_at advances).
             self.assertEqual(ledger.leg_consensus_upsert([{"market_ticker": mk[0], "tier": "books", "n_books": 2,
-                                                           "p_books": 0.70, "p_books_mult": 0.70, "p_espn": None,
+                                                           "p_books": 0.70, "p_books_mult": 0.70, "p_books_lo": 0.70, "p_books_hi": 0.70, "p_espn": None,
                                                            "inputs": {"m": "power"},
                                                            "source_at": board.NOW.isoformat()}],
                                                          board.NOW, is_test=True, conn=conn), 1)
@@ -243,6 +266,8 @@ class Readers(ConsensusSqlCase):
                 self.assertLessEqual(claimed + stale, n)
                 if tier == "kalshi":
                     self.assertEqual((claimed, stale), (0, 0))
+                if tier == "espn":
+                    self.assertEqual(claimed, 0)  # db/078: one soft book never claims
                 else:
                     self.assertEqual(pos, 0)
             used = ledger.odds_api_usage(conn=conn)
@@ -252,7 +277,7 @@ class Readers(ConsensusSqlCase):
         with _rolled_back() as conn:
             _, game, mk = self.two_team(conn, ("0.6100", "0.3500"), ("0.6300", "0.3700"))
             ledger.leg_consensus_upsert([{"market_ticker": mk[0], "tier": "books", "n_books": 2, "p_books": 0.70,
-                                          "p_books_mult": 0.70, "p_espn": None, "inputs": {"m": "power"},
+                                          "p_books_mult": 0.70, "p_books_lo": 0.70, "p_books_hi": 0.70, "p_espn": None, "inputs": {"m": "power"},
                                           "source_at": board.NOW.isoformat()}], board.NOW, is_test=True, conn=conn)
             j = conn.execute("SELECT ctx_consensus()").fetchone()[0]
             self.assertEqual(set(j), {"about", "as_of", "counts", "best_edges_tonight", "credits"})
