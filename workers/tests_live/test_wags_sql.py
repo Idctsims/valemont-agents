@@ -147,6 +147,10 @@ class Snapshot(WagsTestCase):
 
     def test_record_dedupes_by_data_not_by_clock(self) -> None:
         with _rolled_back() as cur:
+            # Only the three pillars this test controls, switched inside its own rolled-back transaction.
+            # With every provider on, a snapshot read live scores and the board, took tens of seconds, and
+            # the two "same state" reads differed whenever a game moved in between (the #120 gate, Nov 14).
+            cur.execute("UPDATE context_providers SET enabled = false WHERE key NOT IN ('goals', 'ventures', 'capital')")
             _act_as(cur, "authenticated", self.owner)
             first = self.one(cur, "SELECT context_snapshot_record()")
             again = self.one(cur, "SELECT context_snapshot_record()")
