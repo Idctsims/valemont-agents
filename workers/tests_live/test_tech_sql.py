@@ -268,18 +268,28 @@ class CapsAndRetirement(TechSqlCase):
         conn.execute("UPDATE stories SET summarized_at = now(), summary_attempts = 1 WHERE id = %s", (sid,))
 
     def test_each_group_counts_only_its_own(self) -> None:
+        # The worker's own FROM/WHERE text, narrowed to this test's stories:
+        # the whole real day moves while the summarizer writes (the #98
+        # pattern; 885 vs 895 in Phase 3's gate, Nov 11).
+        def counts(conn: psycopg.Connection, ids: list[int]) -> tuple[int, int]:
+            mine = " AND st.id = ANY (%(ids)s)"
+            return tuple(int(conn.execute("SELECT count(*)" + frm + mine, {"ids": ids}).fetchone()[0])
+                         for frm in (ledger.FEED_HOME_TODAY_FROM, ledger.FEED_TECH_COMMUNITY_TODAY_FROM))
+
         with _rolled_back() as conn:
-            home0 = ledger.feed_summarized_today(conn=conn)
-            tech0 = ledger.feed_tech_community_summarized_today(conn=conn)
-            self.stamp(conn, self.tech_story(conn, official=True, done=False))
-            self.assertEqual((ledger.feed_summarized_today(conn=conn),
-                              ledger.feed_tech_community_summarized_today(conn=conn)), (home0, tech0))
-            self.stamp(conn, self.tech_story(conn, official=False, done=False))
-            self.assertEqual((ledger.feed_summarized_today(conn=conn),
-                              ledger.feed_tech_community_summarized_today(conn=conn)), (home0, tech0 + 1))
-            self.stamp(conn, self.story(conn, self.source(conn), done=False))
-            self.assertEqual((ledger.feed_summarized_today(conn=conn),
-                              ledger.feed_tech_community_summarized_today(conn=conn)), (home0 + 1, tech0 + 1))
+            # The worker's functions run the same text (a real count, any value).
+            self.assertGreaterEqual(ledger.feed_summarized_today(conn=conn), 0)
+            self.assertGreaterEqual(ledger.feed_tech_community_summarized_today(conn=conn), 0)
+            ids: list[int] = []
+            ids.append(self.tech_story(conn, official=True, done=False))
+            self.stamp(conn, ids[-1])
+            self.assertEqual(counts(conn, ids), (0, 0))
+            ids.append(self.tech_story(conn, official=False, done=False))
+            self.stamp(conn, ids[-1])
+            self.assertEqual(counts(conn, ids), (0, 1))
+            ids.append(self.story(conn, self.source(conn), done=False))
+            self.stamp(conn, ids[-1])
+            self.assertEqual(counts(conn, ids), (1, 1))
 
     def test_a_story_waiting_over_48_hours_retires_headline_only(self) -> None:
         with _rolled_back() as conn:
