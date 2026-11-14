@@ -170,6 +170,8 @@ h2.big { margin: 0; font: 400 clamp(2rem, 1.6rem + 1.75vw, 3rem)/1.05 var(--disp
 .tt:first-child { border-top: 0; padding-top: 0; }
 .tt .logo { margin-top: 10px; width: 28px; height: 28px; }
 .pfilter { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.pfilter > * { min-width: 0; max-width: 100%; }
+#main { min-width: 0; }
 .chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; max-width: 100%; padding-bottom: 2px; }
 .chips button { flex: none; min-height: 36px; padding: 0 13px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); font-size: 12px; font-weight: 500; color: var(--muted); white-space: nowrap; }
 .chips button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
