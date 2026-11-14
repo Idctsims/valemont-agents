@@ -345,5 +345,98 @@ class Payout072(BoardSqlCase):
                 self.assertEqual(cm.exception.diag.constraint_name, name)
 
 
+class GameTabs079(BoardSqlCase):
+    """db/079: the game page reads one tab at a time, and the Players tab one
+    stat at a time. Test rows only with the flag; anon runs neither reader."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        with _rolled_back() as conn:
+            if conn.execute("SELECT to_regprocedure('public.kalshi_board_game_tab(text, text, boolean, text)')"
+                            ).fetchone()[0] is None:
+                raise unittest.SkipTest("db/079 not pasted")
+
+    def three_tabs(self, conn: psycopg.Connection) -> tuple[str, str, str]:
+        """A test game with 2 points props and 1 threes prop (players), a
+        moneyline (lines) and a first-half spread (periods).
+        Returns (game, the props' event, the half's event)."""
+        series, event, game, _ = self.game(conn, n_markets=2, kind="prop")
+        # A period token follows a letter (KXNBA1HSPREAD); the tag may end in a digit.
+        half = f"{series}X1HSPREAD"
+        half_event = f"{half}-26NOV07AAABBB"
+        ledger.kalshi_board_series_upsert([{
+            "series_ticker": half, "title": "TL first half spread", "sport": "TL Sport", "league": None,
+            "category": "Sports", "tags": ["TL Sport"], "fee_type": "quadratic", "fee_multiplier": "1",
+            "fee_regime": {"fee_type": "quadratic"}, "combo_eligible": False, "collection_tickers": []}],
+            is_test=True, conn=conn)
+        ledger.kalshi_board_events_upsert([{
+            "event_ticker": half_event, "series_ticker": half, "game_ticker": game,
+            "game_title": "TL Away vs TL Home", "milestone_start": (NOW + timedelta(hours=3)).isoformat(),
+            "close_time": None, "expected_expiration_time": None, "combo_eligible": False, "combo_yes_only": False,
+            "combo_collections": []}], NOW, is_test=True, conn=conn)
+        ledger.kalshi_board_markets_upsert([
+            self.market(event, f"{event}-T1", "prop", 0, stat="threes", line="1.5", team="AAA", label="TL Player"),
+            self.market(event, f"{event}-ML", "game_line", 0, subject="TL Home", stat="winner", line=None,
+                        label="TL Home"),
+            self.market(half_event, f"{half_event}-AAA1", "game_line", 0, subject="AAA", stat="spread", line="1.5",
+                        team="AAA", label="AAA wins the half by over 1.5")], NOW, is_test=True, conn=conn)
+        return game, event, half_event
+
+    def test_counts_stats_and_one_stat_at_a_time(self) -> None:
+        with _rolled_back() as conn:
+            game, event, half_event = self.three_tabs(conn)
+            with conn.cursor() as cur:
+                _act_as(cur, "authenticated", self.owner)
+                tabs = cur.execute("SELECT kalshi_board_game_tabs(%s, true)", (game,)).fetchone()[0]
+                self.assertEqual((tabs["lines"], tabs["players"], tabs["periods"]), (1, 3, 1))
+                self.assertEqual(tabs["stats"], [{"st": "points", "n": 2}, {"st": "threes", "n": 1}])
+                # Without the flag a test game has nothing on any tab.
+                bare = cur.execute("SELECT kalshi_board_game_tabs(%s)", (game,)).fetchone()[0]
+                self.assertEqual((bare["lines"], bare["players"], bare["periods"], bare["stats"]), (0, 0, 0, []))
+                self.assertEqual(cur.execute("SELECT count(*) FROM kalshi_board_game_tab(%s, 'players')",
+                                             (game,)).fetchone()[0], 0)
+
+                def tab(name: str, stat: str | None = None) -> list[dict]:
+                    return [r[0] for r in cur.execute("SELECT kalshi_board_game_tab(%s, %s, true, %s)",
+                                                      (game, name, stat))]
+
+                players = tab("players")
+                self.assertEqual([(e["e"], len(e["m"])) for e in players], [(event, 3)])
+                points = tab("players", "points")[0]["m"]
+                self.assertEqual([(m["x"], m["sj"], m["st"], m["ln"]) for m in points],
+                                 [("M0", "TL Player", "points", 9.5), ("M1", "TL Player", "points", 10.5)])
+                # The label rides only where the subject does not already say it.
+                self.assertEqual(points[0]["lb"], "TL Player: 10+")
+                threes = tab("players", "threes")[0]["m"]
+                self.assertEqual([(m["x"], m["tm"], m["ln"], "lb" in m) for m in threes], [("T1", "AAA", 1.5, False)])
+                self.assertEqual(tab("players", "rebounds"), [])
+                lines = tab("lines")
+                self.assertEqual([(e["e"], [m["x"] for m in e["m"]], "pd" in e) for e in lines],
+                                 [(event, ["ML"], False)])
+                self.assertEqual(tab("lines", "points"), [])
+                periods = tab("periods")
+                self.assertEqual([(e["e"], e["pd"], e["m"][0]["a"], e["m"][0]["f"]) for e in periods],
+                                 [(half_event, "1H", 0.42, 0.017052)])
+                cur.execute("RESET ROLE")
+                _act_as(cur, "anon")
+                for call in ("SELECT kalshi_board_game_tabs(%s)", "SELECT kalshi_board_game_tab(%s, 'lines')"):
+                    with self.subTest(call):
+                        cur.execute("SAVEPOINT anon")
+                        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                            cur.execute(call, (game,))
+                        cur.execute("ROLLBACK TO SAVEPOINT anon")
+
+    def test_the_classifier(self) -> None:
+        with _rolled_back() as conn:
+            got = conn.execute(
+                "SELECT array_agg(kalshi_board_period(s) ORDER BY o), array_agg(kalshi_board_tab(s, k) ORDER BY o) "
+                "FROM unnest(%s::text[], %s::text[]) WITH ORDINALITY AS t(s, k, o)",
+                (["KXNBA1HSPREAD", "KXNHL2P", "KXNBA3PT", "KXNBA3PTPROT", "KXNBASPREAD", "KXNBAPTS", "KXNBA4Q"],
+                 ["game_line", "game_line", "prop", "prop", "game_line", "prop", "prop"])).fetchone()
+            self.assertEqual(got[0], ["1H", "2P", None, None, None, None, "4Q"])
+            self.assertEqual(got[1], ["periods", "periods", "players", "players", "lines", "players", "periods"])
+
+
 if __name__ == "__main__":
     unittest.main()
