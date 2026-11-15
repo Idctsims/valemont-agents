@@ -19,7 +19,14 @@ export async function signIn(page: Page, next = "/goals") {
   await page.getByLabel("Email").fill(email!);
   await page.getByLabel("Password").fill(password!);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page).toHaveURL((url) => url.pathname + url.search === next);
+  try {
+    await expect(page).toHaveURL((url) => url.pathname + url.search === next, { timeout: 15_000 });
+  } catch (e) {
+    // The failure's page snapshot (error-context.md) records every field's value: clear the
+    // password first, so a failed sign-in never writes it to disk (2026-11-15).
+    await page.getByLabel("Password").fill("").catch(() => undefined);
+    throw e;
+  }
 }
 
 export async function setTheme(page: Page, theme: "night" | "day") {
@@ -37,21 +44,33 @@ export async function setTheme(page: Page, theme: "night" | "day") {
   await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
 }
 
-/** The two public values from .env.local; nothing secret is read. */
+/** apps/web/.env.local's text, or "" when there is none (a worktree: never copied, CLAUDE.md §6). */
+function envLocal(): string {
+  try {
+    return readFileSync(resolve(__dirname, "..", "..", ".env.local"), "utf8");
+  } catch {
+    return "";
+  }
+}
+
+/** A value from .env.local, else from this process's environment (a worktree's run loads the main
+ *  checkout's .env.local into the shell first). Never printed. */
+function envValue(name: string): string {
+  return envLocal().match(new RegExp(`^${name}=(.*)$`, "m"))?.[1]?.trim() || process.env[name]?.trim() || "";
+}
+
+/** The two public values; nothing secret is read. */
 function publicEnv(): { url: string; key: string } {
-  const text = readFileSync(resolve(__dirname, "..", "..", ".env.local"), "utf8");
-  const get = (name: string) => text.match(new RegExp(`^${name}=(.*)$`, "m"))?.[1]?.trim() ?? "";
-  return { url: get("NEXT_PUBLIC_SUPABASE_URL"), key: get("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY") };
+  return { url: envValue("NEXT_PUBLIC_SUPABASE_URL"), key: envValue("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY") };
 }
 
 /**
- * The e2e marker (db/027) from .env.local. Server-only on the app side; a
+ * The e2e marker (db/027) from .env.local, else the environment. Server-only on the app side; a
  * spec reads it to send it, and never prints it. Missing: the capital specs
  * fail at once rather than write real entries.
  */
 export function e2eMarker(): string {
-  const text = readFileSync(resolve(__dirname, "..", "..", ".env.local"), "utf8");
-  const marker = text.match(/^E2E_TEST_MARKER=(\S+)$/m)?.[1];
+  const marker = envValue("E2E_TEST_MARKER").split(/\s/)[0] || undefined;
   if (!marker) throw new Error("E2E_TEST_MARKER is not in apps/web/.env.local: run pnpm gen:e2e-marker");
   return marker;
 }

@@ -16,7 +16,9 @@ export default defineConfig({
   reporter: [["list"], ["html", { open: "never", outputFolder: "playwright-report" }]],
   use: {
     baseURL: `http://localhost:${PORT}`,
-    trace: "retain-on-failure",
+    // A trace records every fill, the owner's password among them: none while owner credentials
+    // are in the environment (2026-11-15: a failed owner run's trace held it).
+    trace: process.env.E2E_OWNER_PASSWORD ? "off" : "retain-on-failure",
   },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"] } },
