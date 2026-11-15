@@ -153,6 +153,8 @@ test.describe("owner", () => {
     await expect(slip().getByTestId("slip-total")).toHaveText("1.81×");
     await expect(page.getByTestId("slip-head")).toHaveText("2 legs · 1.81×");
     await closeSlip();
+    // The reload above put the page back on Game lines: the rung is on the Players tab.
+    await tap(page.getByTestId("game-tab-players"));
     await expect(rung("PTS-P1-20")).toHaveAttribute("data-side", "no");
     // The NO leg through combo pricing: the worker answers, and the quote names it NOT.
     await openSlip();
