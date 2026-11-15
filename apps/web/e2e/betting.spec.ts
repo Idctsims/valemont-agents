@@ -4,17 +4,22 @@ import { addTestKalshiBoard, hasOwner, signIn, useE2eMarker } from "./support/ow
 
 // /betting (Chat 8 Phase 3.5, Workstream B, Step 1): the Board's cards, a
 // game as its own page with three tabs (db/079), the x / % switch, Today and
-// Record. Needs db/071-db/080.
+// Record. Needs db/071-db/082.
 //
 // Logged out: every /betting view is owner-only.
-// Signed in as the owner's REAL account, on TEST rows only (db/076
+// Signed in as the owner's REAL account, on TEST rows only (db/082
 // add_test_kalshi_board: series E2ETEST, the marker), one test game 3 h out:
-//   * Basketball shows its card (counts, combo count); it opens the game page;
+//   * Basketball shows its card (counts, combo count) with both moneyline
+//     prices (Kalshi's ask, away first: AWY 2.56×, HOM 1.59×) and its claimed
+//     edge; the Claimed edges filter keeps it; it opens the game page;
 //   * the header: both moneylines, the books' consensus bar (3 books, 64.8%);
-//     NOTHING claims: since db/078 a books row claims only with a four-method
-//     span, and the fixture writes none (an untested row), so no up colour;
+//     HOM CLAIMS (a span row, db/082's fixture: +0.17c shipped, +0.10c at the
+//     least favourable method), so its price is up and its claim is listed;
+//     AWY does not;
 //   * tab counts 2 / 4 / 0; Players loads its one stat (Points) in place, no
 //     page load; "Other" absent (other = 0); the scalar ladder is "Scales";
+//     Test Player 10+ passes the shipped method and FAILS the least
+//     favourable (a span row): not claimed, no up colour;
 //   * the x / % switch flips every price and sticks across a reload;
 //   * Refresh shows the source time; Today and Record say why they are empty.
 //
@@ -69,6 +74,25 @@ test.describe("owner", () => {
     await expect(card().getByTestId("game-counts")).toHaveText("2 lines · 3 props · 1 scalar");
     await expect(card()).toContainText("2 combo");
     await expect(card().getByTestId("board-game-open")).toContainText("6 markets");
+    // Both moneylines on the card, Kalshi's ask, away first as the title names them (db/082).
+    await expect(card().getByTestId("card-ml-pick")).toHaveCount(2);
+    await expect(card().getByTestId("card-ml-pick").first()).toHaveAttribute("data-ticker", `${game}-AWY`);
+    await expect(card().getByTestId("card-ml-price")).toHaveText(["2.56×", "1.59×"]);
+    await expect(card().getByTestId("card-claimed")).toHaveText("claimed edge");
+  });
+
+  test("the Claimed edges filter keeps the claimed test game", async () => {
+    await expect(page.getByTestId("filter-all")).toHaveAttribute("aria-current", "page");
+    await page.getByTestId("filter-claimed").click();
+    await expect(page).toHaveURL(/[?&]claimed=1/);
+    await expect(page.getByTestId("filter-claimed")).toHaveAttribute("aria-current", "page");
+    await expect(card()).toBeVisible();
+    for (const c of await page.getByTestId("board-game").all()) {
+      await expect(c.getByTestId("card-claimed")).toBeVisible();
+    }
+    await page.getByTestId("filter-all").click();
+    await expect(page).not.toHaveURL(/claimed=1/);
+    await expect(card()).toBeVisible();
   });
 
   test("a game opens as its own page: header, moneylines, consensus, tab counts", async () => {
@@ -83,12 +107,14 @@ test.describe("owner", () => {
     await expect(ml("AWY").getByTestId("market-price")).toHaveText("2.56×");
     await expect(page.getByTestId("game-consensus")).toContainText("3 books say");
     await expect(page.getByTestId("game-consensus")).toContainText("64.8%");
-    // Only a claimed edge is up (db/078). HOM's books row has no span: untested, so not claimed.
-    for (const t of ["HOM", "AWY"]) {
-      await expect(ml(t)).toHaveAttribute("data-claimed", "0");
-      await expect(ml(t).getByTestId("market-price")).not.toHaveClass(/text-hit/);
-    }
-    await expect(page.getByTestId("box-claims")).toHaveCount(0);
+    // Only a claimed edge is up (db/078). HOM's books row carries a span that claims (db/082's fixture).
+    await expect(ml("HOM")).toHaveAttribute("data-claimed", "1");
+    await expect(ml("HOM").getByTestId("market-price")).toHaveClass(/text-hit/);
+    await expect(ml("AWY")).toHaveAttribute("data-claimed", "0");
+    await expect(ml("AWY").getByTestId("market-price")).not.toHaveClass(/text-hit/);
+    const claim = page.locator(`[data-testid="box-claim"][data-ticker="${game}-HOM"]`);
+    await expect(claim).toHaveAttribute("data-side", "yes");
+    await expect(claim).toContainText("Claimed edge +0.2¢ on YES");
     await expect(page.getByTestId("game-tab-lines")).toContainText("2");
     await expect(page.getByTestId("game-tab-players")).toContainText("4");
     await expect(page.getByTestId("game-tab-periods")).toContainText("0");
@@ -111,6 +137,11 @@ test.describe("owner", () => {
     await expect(row.getByTestId("scales-chip")).toHaveText("Scales");
     await expect(row.locator(`[data-ticker="${game}PTS-P1-20"]`).getByTestId("market-label")).toHaveText("20+");
     await expect(row.locator(`[data-ticker="${game}PTS-P1-10P"]`)).toContainText("protected");
+    // 10+ passes the shipped method (+0.64c) and fails the least favourable (-2.16c): no claim, no up colour.
+    const ten = row.locator(`[data-testid="board-market"][data-ticker="${game}PTS-P1-10"]`);
+    await expect(ten).toHaveAttribute("data-claimed", "0");
+    await expect(ten.getByTestId("market-price")).not.toHaveClass(/text-hit/);
+    await expect(panel.getByTestId("box-claim")).toHaveCount(0);
     // Back to Game lines and again: from the cache, still the same page.
     await page.getByTestId("game-tab-lines").click();
     await page.getByTestId("game-tab-players").click();

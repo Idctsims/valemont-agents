@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
-import { boardHeadline, byDay } from "../src/lib/betting/board";
-import { loadLegs } from "../src/lib/betting/combo";
+import { boardHeadline, boardHref, byDay, cardPrices, claimedFilter, parseFilters } from "../src/lib/betting/board";
+import { flipLeg, legFrom, loadLegs, noRefusal, requestLegs, type ComboLeg } from "../src/lib/betting/combo";
 import {
   OTHER_STAT, boxTitle, eventTag, isLadder, isWinnerEvent, mainIndex, marketTicker, orderBoxes, periodLabel,
   periodsOf, playerRows, rungLabel, rungWindow, sidesOf, singleLine, statLabel, tabKey, winnerConsensus,
@@ -121,6 +121,115 @@ test.describe("the ticket's total, after fee", () => {
     const legs = loadLegs({ getItem: () => raw });
     expect(legs.map((l) => [l.t, l.a])).toEqual([["A-1", 0.42], ["B-1", undefined], ["C-1", undefined]]);
     expect("a" in legs[1]).toBe(false);
+  });
+});
+
+test.describe("x / % both ways on the ticket's total", () => {
+  test("a total read in x and in % is the same number: x = 1 / %, and back", () => {
+    for (const legs of [[0.63, 0.17], [0.5, 0.4], [0.9, 0.9, 0.9], [0.05, 0.5], [0.63, 0.85]]) {
+      const t = ticketTotal(legs)!;
+      const x = Number(totalText(t, "x").replace("×", ""));
+      const pct = Number(totalText(t, "pct").replace("%", "")) / 100;
+      // x -> %: 1 / x is the after-fee cost; % -> x: 1 / % is what $1 pays after fee.
+      expect(1 / x).toBeCloseTo(t.cost, 2);
+      expect(pct).toBeCloseTo(t.cost, 3);
+      // Each side is rounded for display, so back across the switch is equal within 2%.
+      expect(Math.abs(1 / pct - t.pays) / t.pays).toBeLessThan(0.02);
+      expect(Math.abs(x - t.pays) / t.pays).toBeLessThan(0.01);
+    }
+  });
+});
+
+test.describe("the slip's YES / NO flip (owner, Nov 15)", () => {
+  const base = { t: "E2ETEST-X-HOM", label: "Test Home to win", game: "Test Away vs Test Home" };
+
+  test("a tap keeps both sides' prices: YES at the ask, NO at 1 − the YES bid", () => {
+    const leg = legFrom(base, "yes", { a: 0.63, b: 0.61 }, false);
+    expect(leg).toEqual({ ...base, side: "yes", a: 0.63, py: 0.63, pn: 0.39 });
+    expect(legFrom(base, "no", { a: 0.63, b: 0.61 }, false).a).toBe(0.39);
+    expect(legFrom(base, "yes", { a: 0.63, b: 0.61 }, true).yo).toBe(true);
+    expect(legFrom(base, "yes", { a: 0.63 }, false)).toEqual({ ...base, side: "yes", a: 0.63, py: 0.63 });
+  });
+
+  test("flip: YES to NO at the NO price, and back to YES at the ask", () => {
+    const yes = legFrom(base, "yes", { a: 0.17, b: 0.15 }, false);
+    const no = flipLeg(yes, "no");
+    expect(no).toEqual({ leg: { ...yes, side: "no", a: 0.85 } });
+    const back = flipLeg((no as { leg: ComboLeg }).leg, "yes");
+    expect(back).toEqual({ leg: { ...yes, side: "yes", a: 0.17 } });
+    expect(flipLeg(yes, "yes")).toEqual({ leg: yes });
+    expect(priceText(0.85, "x")).toBe("1.18×");
+    expect(priceText(0.85, "pct")).toBe("85%");
+  });
+
+  test("the YES-only refusal: an event Kalshi takes on YES only never flips to NO", () => {
+    const yes = legFrom(base, "yes", { a: 0.63, b: 0.61 }, true);
+    const res = flipLeg(yes, "no");
+    expect(res).toEqual({ refused: "YES only: Kalshi takes this event's markets on YES in a combo" });
+    expect(noRefusal(yes)).toBe("YES only: Kalshi takes this event's markets on YES in a combo");
+    expect(noRefusal(legFrom(base, "yes", { a: 0.63, b: 0.61 }, false))).toBeNull();
+  });
+
+  test("no NO price (no bid, or a leg ticked before the flip existed): refused, never priced at 0 or 1", () => {
+    expect(flipLeg(legFrom(base, "yes", { a: 0.63 }, false), "no")).toEqual({
+      refused: "No NO price here: tap the market again to read it" });
+    expect(flipLeg({ ...base, side: "yes", a: 0.63 }, "no")).toEqual({
+      refused: "No NO price here: tap the market again to read it" });
+    expect(legFrom(base, "yes", { a: 0.63, b: 0 }, false).pn).toBeUndefined(); // 1 − 0 is not a price
+  });
+
+  test("a NO leg totals at its NO price, one fee on the combo's price", () => {
+    // HOM YES 0.63 and Test Player 20+ flipped to NO (1 − 0.15 = 0.85): 0.5355, fee 0.017412.
+    const t = ticketTotal([0.63, 0.85])!;
+    expect(t.price).toBeCloseTo(0.5355, 12);
+    expect(t.fee).toBe(0.017412);
+    expect(totalText(t, "x")).toBe("1.81×");
+    expect(totalText(t, "pct")).toBe("55.3%");
+  });
+
+  test("a NO leg goes to the pricer as side no", () => {
+    const no = (flipLeg(legFrom(base, "yes", { a: 0.17, b: 0.15 }, false), "no") as { leg: ComboLeg }).leg;
+    expect(requestLegs([legFrom({ ...base, t: "E2ETEST-X-AWY" }, "yes", { a: 0.39, b: 0.37 }, false), no]))
+      .toEqual([{ market_ticker: "E2ETEST-X-AWY", side: "yes" }, { market_ticker: "E2ETEST-X-HOM", side: "no" }]);
+  });
+
+  test("stored legs keep both sides' prices and the YES-only flag; junk is dropped, never the leg", () => {
+    const raw = JSON.stringify([
+      { t: "A-1", side: "no", label: "A", game: "G", a: 0.39, py: 0.63, pn: 0.39 },
+      { t: "B-1", side: "yes", label: "B", game: "G", a: 0.5, py: 0.5, pn: 1.2, yo: true },
+      { t: "C-1", side: "yes", label: "C", game: "G", yo: "yes" },
+    ]);
+    const legs = loadLegs({ getItem: () => raw });
+    expect(legs[0]).toEqual({ t: "A-1", side: "no", label: "A", game: "G", a: 0.39, py: 0.63, pn: 0.39 });
+    expect(legs[1]).toEqual({ t: "B-1", side: "yes", label: "B", game: "G", a: 0.5, py: 0.5, yo: true });
+    expect(legs[2]).toEqual({ t: "C-1", side: "yes", label: "C", game: "G" });
+  });
+});
+
+test.describe("the board's cards (db/082)", () => {
+  test("each card's moneyline prices: ticker, Kalshi's code, bid and ask, in the reader's order", () => {
+    expect(cardPrices({ g: "KXNBAGAME-26NOV15GSWHOU", w: [["GSW", 0.37, 0.39], ["HOU", 0.61, 0.63]] })).toEqual([
+      { t: "KXNBAGAME-26NOV15GSWHOU-GSW", code: "GSW", b: 0.37, a: 0.39 },
+      { t: "KXNBAGAME-26NOV15GSWHOU-HOU", code: "HOU", b: 0.61, a: 0.63 },
+    ]);
+    // A tie last, an unquoted side kept without a price, a single-market event's own ticker.
+    expect(cardPrices({ g: "G", w: [["A", 0.4, 0.42], ["B", null, null], ["TIE", 0.2, 0.22]] }).map((p) => [p.t, p.a]))
+      .toEqual([["G-A", 0.42], ["G-B", undefined], ["G-TIE", 0.22]]);
+    expect(cardPrices({ g: "G", w: [["", 0.5, 0.52]] })[0].t).toBe("G");
+    expect(cardPrices({ g: "G" })).toEqual([]);
+  });
+
+  test("the Claimed edges filter keeps only games with hc", () => {
+    const cards = [{ g: "a", hc: true }, { g: "b" }, { g: "c", hc: true }];
+    expect(claimedFilter(cards, true).map((c) => c.g)).toEqual(["a", "c"]);
+    expect(claimedFilter(cards, false).map((c) => c.g)).toEqual(["a", "b", "c"]);
+  });
+
+  test("the filter rides in the URL with the sport", () => {
+    expect(boardHref({ sport: "Basketball", kind: null, combo: false, claimed: true })).toBe("/betting?sport=Basketball&claimed=1");
+    expect(boardHref({ sport: "Basketball", kind: null, combo: false, claimed: false })).toBe("/betting?sport=Basketball");
+    expect(parseFilters({ sport: "Basketball", claimed: "1" }).claimed).toBe(true);
+    expect(parseFilters({ sport: "Basketball", claimed: "yes" }).claimed).toBeUndefined();
   });
 });
 

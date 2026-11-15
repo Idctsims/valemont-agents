@@ -17,6 +17,11 @@ import { addTestKalshiBoard, hasOwner, signIn, useE2eMarker } from "./support/ow
 //   * "Price it" shows "Pricing… N s", then the quote: naive, fair, the
 //     ratio, Phase 3's per-leg-fee cost, "Build manually" (the props event is
 //     not combo-eligible), each leg's tier and age, "unmodeled pair";
+//   * the YES / NO flip (owner, Nov 15): the moneyline's event takes YES only
+//     in a Kalshi combo, so its NO is disabled with the reason; Test Player
+//     20+ flips to NO at 1 − its bid (0.85, 1.18×), the total follows
+//     (0.63 × 0.85 = 0.5355, fee 0.017412: 1.81×), the tile shows NO, and
+//     the NO leg prices through the worker ("NOT …" in the quote);
 //   * both teams' moneylines: refused, "two outcomes of one result".
 //
 // Run (owner, CLAUDE.md §6, the Read-Host form):
@@ -124,6 +129,40 @@ test.describe("owner", () => {
     await expect(quote.getByTestId("combo-leg-age").first()).toHaveText(/^price .*old$/);
     await expect(quote.getByTestId("combo-prices-stale")).toHaveCount(0);
     // The total stays after fee beside the quote.
+    await expect(slip().getByTestId("slip-total")).toHaveText("8.79×");
+  });
+
+  test("the flip: the YES-only moneyline refuses NO; 20+ flips to NO and prices through the worker", async () => {
+    test.setTimeout(60_000);
+    await openSlip();
+    // The slip lists legs in the order tapped: HOM to win, then Test Player 20+.
+    const hom = slip().getByTestId("combo-leg").nth(0);
+    const pts = slip().getByTestId("combo-leg").nth(1);
+    await expect(hom).toContainText("to win");
+    await expect(pts).toContainText("Test Player 20+ points");
+    // YES only: NO is disabled, with the reason in words.
+    await expect(hom.getByTestId("slip-side-no")).toBeDisabled();
+    await expect(hom.getByTestId("slip-no-refused")).toContainText("YES only");
+    await expect(hom.getByTestId("slip-side-yes")).toHaveAttribute("aria-pressed", "true");
+    // 20+ flips to NO at its NO price, in the current unit; the total follows.
+    await expect(pts.getByTestId("slip-side-price")).toHaveText("1.18×");
+    await pts.getByTestId("slip-side-no").click();
+    await expect(pts).toHaveAttribute("data-side", "no");
+    await expect(pts.getByTestId("slip-side-no")).toHaveAttribute("aria-pressed", "true");
+    await expect(pts.getByTestId("slip-leg-price")).toHaveText("1.18×");
+    await expect(slip().getByTestId("slip-total")).toHaveText("1.81×");
+    await expect(page.getByTestId("slip-head")).toHaveText("2 legs · 1.81×");
+    await closeSlip();
+    await expect(rung("PTS-P1-20")).toHaveAttribute("data-side", "no");
+    // The NO leg through combo pricing: the worker answers, and the quote names it NOT.
+    await openSlip();
+    await slip().getByTestId("combo-price").click();
+    const quote = slip().getByTestId("combo-quote");
+    await expect(quote).toBeVisible({ timeout: 30_000 });
+    await expect(quote.getByTestId("combo-quoted-leg").filter({ hasText: "NOT Test Player 20+ points" })).toHaveCount(1);
+    await expect(quote.getByTestId("combo-naive")).toHaveText(/%$/);
+    // Back to YES: the first ticket again.
+    await pts.getByTestId("slip-side-yes").click();
     await expect(slip().getByTestId("slip-total")).toHaveText("8.79×");
   });
 

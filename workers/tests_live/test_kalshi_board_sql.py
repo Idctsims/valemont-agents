@@ -445,5 +445,101 @@ class GameTabs079(BoardSqlCase):
             self.assertEqual(got[1], ["periods", "periods", "players", "players", "lines", "players", "periods"])
 
 
+class BoardCards082(BoardSqlCase):
+    """db/082: a board card carries its moneyline prices (Kalshi's own) and
+    whether a span row of the game claims, by db/080's rule; nothing else is
+    priced. Test rows only with the flag; anon runs neither reader."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        with _rolled_back() as conn:
+            if conn.execute("SELECT to_regprocedure('public.kalshi_board_cards(text, boolean)')").fetchone()[0] is None:
+                raise unittest.SkipTest("db/082 not pasted")
+
+    def winner_game(self, conn: psycopg.Connection) -> tuple[str, str]:
+        """A test game whose own event holds both moneylines (mids 0.62 + 0.38), and a props event.
+        Returns (sport, game)."""
+        series = f"E2ETL{tag()}"
+        sport = f"TL Sport {tag()}"
+        game = f"{series}-26NOV07AWYHOM"
+        props = f"{game}PTS"
+        ledger.kalshi_board_series_upsert([{
+            "series_ticker": series, "title": "TL series", "sport": sport, "league": None, "category": "Sports",
+            "tags": [sport], "fee_type": "quadratic", "fee_multiplier": "1", "fee_regime": {"fee_type": "quadratic"},
+            "combo_eligible": True, "collection_tickers": ["TLCOLL-R"]}], is_test=True, conn=conn)
+        ledger.kalshi_board_events_upsert([
+            {"event_ticker": e, "series_ticker": series, "game_ticker": game, "game_title": "TL Away at TL Home",
+             "milestone_start": (NOW + timedelta(hours=3)).isoformat(), "close_time": None,
+             "expected_expiration_time": None, "combo_eligible": True, "combo_yes_only": e == game,
+             "combo_collections": ["TLCOLL-R"], "mutually_exclusive": e == game} for e in (game, props)],
+            NOW, is_test=True, conn=conn)
+        ledger.kalshi_board_markets_upsert([
+            self.market(game, f"{game}-HOM", "game_line", 0, subject="TL Home", stat="winner", line=None,
+                        label="TL Home", team="HOM", yes_bid="0.6100", yes_ask="0.6300", taker_fee_at_ask="0.016317"),
+            self.market(game, f"{game}-AWY", "game_line", 0, subject="TL Away", stat="winner", line=None,
+                        label="TL Away", team="AWY", yes_bid="0.3700", yes_ask="0.3900", taker_fee_at_ask="0.016653"),
+            self.market(props, f"{props}-P10", "prop", 0, yes_bid="0.5500", yes_ask="0.5800",
+                        taker_fee_at_ask="0.017052")], NOW, is_test=True, conn=conn)
+        return sport, game
+
+    @staticmethod
+    def books(ticker: str, p: float, lo: float | None = None, hi: float | None = None) -> dict:
+        row = {"market_ticker": ticker, "tier": "books", "n_books": 3, "p_books": p, "p_books_mult": p,
+               "inputs": {"m": "power"}, "source_at": NOW.isoformat()}
+        if lo is not None:
+            row.update(p_books_lo=lo, p_books_hi=hi)
+        return row
+
+    def test_the_card_its_prices_and_the_claim_flag(self) -> None:
+        with _rolled_back() as conn:
+            sport, game = self.winner_game(conn)
+            props = f"{game}PTS"
+
+            def card() -> dict:
+                rows = [r[0] for r in conn.execute("SELECT kalshi_board_cards(%s, true)", (sport,))]
+                self.assertEqual([r["g"] for r in rows], [game])
+                return rows[0]
+
+            c = card()
+            # Away first, as the title names them: [suffix, YES bid, YES ask]; YES-only from the game's own event.
+            self.assertEqual(c["w"], [["AWY", 0.37, 0.39], ["HOM", 0.61, 0.63]])
+            self.assertTrue(c["wy"])
+            self.assertEqual((c["l"], c["p"]), (2, 1))
+            self.assertNotIn("hc", c)
+            # A books row with no span: priced on the game page, never flags the card.
+            ledger.leg_consensus_upsert([self.books(f"{game}-HOM", 0.66)], NOW, is_test=True, conn=conn)
+            self.assertNotIn("hc", card())
+            # A span that claims (+0.17c shipped, +0.10c at the low bound): flagged.
+            ledger.leg_consensus_upsert([self.books(f"{game}-HOM", 0.66, 0.659, 0.665)], NOW, is_test=True, conn=conn)
+            self.assertTrue(card()["hc"])
+            # Spans that pass the shipped method and fail the least favourable: no claim, no flag.
+            ledger.leg_consensus_upsert([self.books(f"{game}-HOM", 0.66, 0.62, 0.665),
+                                         self.books(f"{props}-P10", 0.62, 0.58, 0.63)], NOW, is_test=True, conn=conn)
+            self.assertNotIn("hc", card())
+            # The claim agrees with leg_consensus_for on every span row, and only span rows are priced.
+            spans = dict(conn.execute("SELECT market_ticker, edge_claimed FROM leg_span_claims(%s)", ([game],)).fetchall())
+            full = dict(conn.execute("SELECT market_ticker, edge_claimed FROM leg_consensus_for(%s)",
+                                     ([game],)).fetchall())
+            self.assertEqual(sorted(spans), sorted([f"{game}-HOM", f"{props}-P10"]))
+            self.assertEqual(spans, {t: full[t] for t in spans})
+            # Without the flag a test game has no card.
+            self.assertEqual(conn.execute("SELECT count(*) FROM kalshi_board_cards(%s)", (sport,)).fetchone()[0], 0)
+
+    def test_grants(self) -> None:
+        with _rolled_back() as conn:
+            with conn.cursor() as cur:
+                _act_as(cur, "authenticated", self.owner)
+                cur.execute("SELECT count(*) FROM kalshi_board_cards('TL Sport none')")
+                cur.execute("RESET ROLE")
+                _act_as(cur, "anon")
+                for call in ("SELECT kalshi_board_cards('TL Sport none')", "SELECT count(*) FROM leg_span_claims(NULL)"):
+                    with self.subTest(call):
+                        cur.execute("SAVEPOINT anon")
+                        with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                            cur.execute(call)
+                        cur.execute("ROLLBACK TO SAVEPOINT anon")
+
+
 if __name__ == "__main__":
     unittest.main()

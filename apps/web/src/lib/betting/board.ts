@@ -26,6 +26,29 @@ export type BoardGame = {
   test?: boolean;
 };
 
+/** kalshi_board_cards (db/082): a game's card. w: its winner markets from the game's own event, each
+ *  [the ticker after the event's ("" = the event's own), YES bid, YES ask], away first as the title
+ *  names them, a tie last; wy: that event takes YES only in a combo; hc: a span row of the game claims
+ *  an edge (db/078's rule, priced on span rows only). */
+export type BoardCard = BoardGame & { w?: [string, number | null, number | null][]; wy?: boolean; hc?: boolean };
+
+export type CardPrice = { t: string; code: string; b?: number; a?: number };
+
+/** A card's moneyline prices, ready to show and to tap: each market's ticker and Kalshi's code for it. */
+export function cardPrices(c: Pick<BoardCard, "g" | "w">): CardPrice[] {
+  return (c.w ?? []).map(([x, b, a]) => ({
+    t: x === "" ? c.g : `${c.g}-${x}`,
+    code: x === "" ? "YES" : x,
+    ...(typeof b === "number" ? { b } : {}),
+    ...(typeof a === "number" ? { a } : {}),
+  }));
+}
+
+/** The board's game filter: every game, or only the games with a claimed edge. */
+export function claimedFilter<C extends Pick<BoardCard, "hc">>(cards: readonly C[], claimed: boolean): C[] {
+  return claimed ? cards.filter((c) => c.hc === true) : [...cards];
+}
+
 /** kalshi_board_game: one event of an expanded game, with its markets.
  *  s: a scalar market (a ladder or escalator: YES pays a fraction of $1 that
  *  grows with the stat; its price is not a probability, never a parlay leg). */
@@ -123,7 +146,8 @@ export function comboLabel(ev: Pick<BoardEvent, "y" | "sm">): string {
     .filter(Boolean).join(" · ");
 }
 
-export type Filters = { sport: string | null; kind: Kind | null; combo: boolean };
+/** claimed: only games with a claimed edge (the new board's filter; ?claimed=1). */
+export type Filters = { sport: string | null; kind: Kind | null; combo: boolean; claimed?: boolean };
 
 const KINDS: readonly Kind[] = ["game_line", "prop", "other"];
 
@@ -131,12 +155,14 @@ function first(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
 }
 
-/** The URL's filters (?sport=&kind=lines|props&combo=1), cleaned. */
-export function parseFilters(params: { sport?: string | string[]; kind?: string | string[]; combo?: string | string[] }): Filters {
+/** The URL's filters (?sport=&kind=lines|props&combo=1&claimed=1), cleaned. */
+export function parseFilters(params: {
+  sport?: string | string[]; kind?: string | string[]; combo?: string | string[]; claimed?: string | string[];
+}): Filters {
   const sport = first(params.sport)?.trim().slice(0, 40) || null;
   const k = first(params.kind);
   const kind: Kind | null = k === "lines" ? "game_line" : k === "props" ? "prop" : k === "other" ? "other" : null;
-  return { sport, kind, combo: first(params.combo) === "1" };
+  return { sport, kind, combo: first(params.combo) === "1", ...(first(params.claimed) === "1" ? { claimed: true } : {}) };
 }
 
 export function isKind(v: unknown): v is Kind {
@@ -149,6 +175,7 @@ export function boardHref(f: Filters, base = "/betting"): string {
   if (f.sport) q.set("sport", f.sport);
   if (f.kind) q.set("kind", f.kind === "game_line" ? "lines" : f.kind === "prop" ? "props" : "other");
   if (f.combo) q.set("combo", "1");
+  if (f.claimed) q.set("claimed", "1");
   const s = q.toString();
   return s ? `${base}?${s}` : base;
 }

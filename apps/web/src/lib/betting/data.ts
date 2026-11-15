@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { BoardEvent, BoardGame, Credits, Kind, SportChip } from "./board";
+import type { BoardCard, BoardEvent, BoardGame, Credits, Kind, SportChip } from "./board";
 import type { ComboState, Quote } from "./combo";
 import type { GameMeta, GameTabs, Tab, TabEvent } from "./game";
 
@@ -25,6 +25,14 @@ export async function loadGames(
   });
   if (error) throw new Error(`Couldn't read the games: ${error.message}`);
   return (data ?? []) as BoardGame[];
+}
+
+/** The new board's cards (db/082): kalshi_board_games' counts plus each game's moneyline prices and
+ *  whether it holds a claimed edge. One sport, every game; the Claimed edges filter is applied here. */
+export async function loadCards(supabase: SupabaseClient, sport: string, withTests: boolean): Promise<BoardCard[]> {
+  const { data, error } = await supabase.rpc("kalshi_board_cards", { p_sport: sport, p_tests: withTests });
+  if (error) throw new Error(`Couldn't read the games: ${error.message}`);
+  return (data ?? []) as BoardCard[];
 }
 
 export async function loadGame(

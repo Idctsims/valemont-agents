@@ -4,13 +4,15 @@ import { useState } from "react";
 
 import { useBetting } from "@/components/betting/betting-store";
 import { QuoteView, usePricing } from "@/components/betting/combo-quote";
-import { MIN_LEGS, pricingLabel } from "@/lib/betting/combo";
+import { MIN_LEGS, noRefusal, pricingLabel, type Side } from "@/lib/betting/combo";
 import { priceText, ticketTotal, totalText } from "@/lib/betting/price";
 
 // The slip (the approved mock): a persistent panel beside the board on
 // desktop; on the phone a bar docked above the tab bar that opens to a
 // full-height sheet. One element for both, so its state (and a price being
-// fetched) survives a resize. Legs show their price BEFORE fee, labelled; the
+// fetched) survives a resize. Each leg flips YES / NO in place (owner, Nov 15;
+// NO refused, with the reason, where the event takes YES only in a combo).
+// Legs show their price BEFORE fee, labelled; the
 // ticket's total is AFTER fee, Kalshi's one taker fee on the combo's price.
 // Combo pricing underneath is Phase 3's (db/076, db/077). Nothing here bets.
 
@@ -19,7 +21,7 @@ function feeCents(v: number): string {
 }
 
 export function Slip() {
-  const { legs, unit, remove, clear } = useBetting();
+  const { legs, unit, remove, clear, flip } = useBetting();
   const { phase, now, ask, busy } = usePricing(legs);
   const [open, setOpen] = useState(false);
   const n = legs.length;
@@ -46,24 +48,49 @@ export function Slip() {
           <>
             <p className="label-mono border-b border-border px-4 py-2 text-text-muted">Leg prices before fee</p>
             <ul data-testid="combo-legs" className="divide-y divide-border border-b border-border">
-              {legs.map((l) => (
-                <li key={l.t} data-testid="combo-leg" data-side={l.side}
-                    className="flex items-center gap-3 py-2 pl-4 pr-1">
-                  <span className="min-w-0 flex-1 text-sm text-text">
-                    {l.side === "no" && <span className="label-mono mr-2 text-accent">NO</span>}
-                    {l.label}
-                    <span className="block truncate text-xs text-text-muted">{l.game}</span>
-                  </span>
-                  <span data-testid="slip-leg-price" className="font-mono text-sm tabular-nums text-text">
-                    {priceText(l.a, unit)}
-                  </span>
-                  <button type="button" onClick={() => { remove(l.t); if (n === 1) setOpen(false); }} disabled={busy}
-                          aria-label={`Remove ${l.label}`}
-                          className="tap inline-flex items-center justify-center text-text-muted hover:text-text">
-                    ×
-                  </button>
-                </li>
-              ))}
+              {legs.map((l) => {
+                const why = noRefusal(l);
+                const sides: { s: Side; face: string; p: number | undefined; off: string | null }[] = [
+                  { s: "yes", face: "YES", p: l.py ?? (l.side === "yes" ? l.a : undefined), off: null },
+                  { s: "no", face: "NO", p: l.pn ?? (l.side === "no" ? l.a : undefined), off: l.side === "no" ? null : why },
+                ];
+                return (
+                  <li key={l.t} data-testid="combo-leg" data-side={l.side} className="flex flex-col gap-1.5 py-2 pl-4 pr-1">
+                    <div className="flex items-start gap-3">
+                      <span className="min-w-0 flex-1 text-sm text-text">
+                        {l.label}
+                        <span className="block truncate text-xs text-text-muted">{l.game}</span>
+                      </span>
+                      <button type="button" onClick={() => { remove(l.t); if (n === 1) setOpen(false); }} disabled={busy}
+                              aria-label={`Remove ${l.label}`}
+                              className="tap inline-flex items-center justify-center text-text-muted hover:text-text">
+                        ×
+                      </button>
+                    </div>
+                    <div role="group" aria-label={`Side for ${l.label}`} data-testid="slip-flip"
+                         className="inline-flex self-start rounded-inner border border-border p-0.5">
+                      {sides.map((o) => {
+                        const on = l.side === o.s;
+                        return (
+                          <button key={o.s} type="button" data-testid={`slip-side-${o.s}`} aria-pressed={on}
+                                  disabled={busy || (!on && o.off !== null)} title={o.off ?? undefined}
+                                  onClick={() => { if (!on) flip(l.t, o.s); }}
+                                  className={`tap inline-flex items-center gap-2 rounded-inner px-3 text-xs transition-colors disabled:opacity-50 ${
+                                    on ? "bg-accent text-on-accent" : "text-text-muted hover:text-text"}`}>
+                            <span className="label-mono">{o.face}</span>
+                            <span data-testid={on ? "slip-leg-price" : "slip-side-price"} className="font-mono text-sm tabular-nums">
+                              {priceText(o.p, unit)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {why && l.side === "yes" && (
+                      <p data-testid="slip-no-refused" className="pr-3 text-xs text-text-muted">{why}.</p>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </>
         )}

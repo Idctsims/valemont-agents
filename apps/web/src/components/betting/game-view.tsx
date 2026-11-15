@@ -6,7 +6,7 @@ import { useCallback, useMemo, useState, useTransition } from "react";
 import { loadTab } from "@/app/(app)/betting/actions";
 import { useBetting } from "@/components/betting/betting-store";
 import { asOfLabel, comboLabel, edgeCents, parseConsensus, pct, startLabel } from "@/lib/betting/board";
-import { sideOf } from "@/lib/betting/combo";
+import { legFrom, noRefusal, sideOf } from "@/lib/betting/combo";
 import {
   OTHER_STAT, TABS, TAB_LABEL, boxTitle, byLine, byTeam, isLadder, isWinnerEvent, latestAsOf, mainIndex,
   marketLabel, marketTicker, orderBoxes, periodLabel, periodsOf, playerRows, rungLabel, rungWindow, sidesOf,
@@ -20,7 +20,8 @@ import { priceText } from "@/lib/betting/price";
 // Halves and quarters. Each tab (and each Players stat) loads once through
 // loadTab (db/079) and is cached for the life of the page; Refresh re-reads
 // the one in view and shows its source time. Tapping a price puts its YES
-// side in the slip (before fee; the slip totals after fee). Only a claimed
+// side in the slip (before fee; the slip totals after fee; the slip flips it
+// to NO; a claimed NO adds from its line). Only a claimed
 // edge (books tier, fresh prices, db/078) uses the up colour.
 
 type Loaded = { events: TabEvent[]; at: number };
@@ -63,20 +64,23 @@ function Odd({ ctx, ev, m, face, big = false, row = false }: {
       </span>
     );
   }
-  const on = sideOf(legs, ticker) === "yes";
+  // A tap adds YES; tapping a market already in the slip (either side) takes it out.
+  const side = sideOf(legs, ticker);
+  const on = side !== null;
   const up = claimedYes(m);
   return (
     <button type="button" data-testid={big ? "ml-pick" : "board-market"} data-payout="binary" data-ticker={ticker}
-            data-claimed={up ? "1" : "0"} aria-pressed={on}
-            aria-label={`${label}: ${priceText(m.a, unit)}${on ? ", in the slip" : ""}`}
-            onClick={() => tick({ t: ticker, side: "yes", label, game: ctx.meta.title, sport: ctx.meta.sport ?? undefined,
-                                  a: typeof m.a === "number" ? m.a : undefined, tm: m.tm })}
+            data-claimed={up ? "1" : "0"} data-side={side ?? undefined} aria-pressed={on}
+            aria-label={`${label}: ${priceText(m.a, unit)}${side === "no" ? ", in the slip on NO" : on ? ", in the slip" : ""}`}
+            onClick={() => tick(legFrom({ t: ticker, label, game: ctx.meta.title, sport: ctx.meta.sport ?? undefined, tm: m.tm },
+                                        side ?? "yes", m, ev.y === true))}
             className={`flex min-w-0 rounded-tile border transition-colors ${
               row ? "min-h-12 items-center justify-between gap-2 px-3 py-1.5" : "min-h-12 flex-col items-center justify-center px-1.5 py-1"} ${
               big ? "min-h-16 w-full" : ""} ${
               on ? "border-accent bg-accent text-on-accent" : "border-border bg-bg text-text hover:border-accent"}`}>
       <span data-testid="market-label"
             className={`${row ? "truncate text-left text-sm" : "text-center text-xs"} ${on ? "" : "text-text-muted"} ${big ? "label-mono" : ""}`}>
+        {side === "no" && <span className="label-mono mr-1">NO</span>}
         {face}
         {m.v && <span className="block label-mono">{m.v}</span>}
       </span>
@@ -105,8 +109,10 @@ function SayLine({ ctx, main, count }: { ctx: Ctx; main: TabMarket | null; count
   );
 }
 
-/** Claimed edges in a box, in words; the up colour, and only for a claim (db/078). */
-function Claims({ ctx, ms }: { ctx: Ctx; ms: readonly TabMarket[] }) {
+/** Claimed edges in a box, in words; the up colour, and only for a claim (db/078). A claimed NO is
+ *  added to the slip from here in one tap (owner, Nov 15): the board's tap is always YES. */
+function Claims({ ctx, ev, ms }: { ctx: Ctx; ev: TabEvent; ms: readonly TabMarket[] }) {
+  const { legs, put, unit } = useBetting();
   const claims = ms.flatMap((m) => {
     const q = parseConsensus(m);
     return q && q.ec && q.e > 0 ? [{ m, q }] : [];
@@ -114,12 +120,28 @@ function Claims({ ctx, ms }: { ctx: Ctx; ms: readonly TabMarket[] }) {
   if (claims.length === 0) return null;
   return (
     <ul data-testid="box-claims" className="flex flex-col gap-1 text-xs">
-      {claims.map(({ m, q }) => (
-        <li key={m.x} className="text-hit">
-          Claimed edge {edgeCents(q.e)} on {q.sd === "n" ? "NO" : "YES"}: {rungLabel(m, ctx.tab)}
-          {q.sd === "n" && <span className="text-text-muted"> (the slip takes YES; NO is not tappable yet)</span>}
-        </li>
-      ))}
+      {claims.map(({ m, q }) => {
+        const ticker = marketTicker(ev, m);
+        const leg = legFrom({ t: ticker, label: legLabel(ctx, ev, m), game: ctx.meta.title, sport: ctx.meta.sport ?? undefined,
+                              tm: m.tm }, "no", m, ev.y === true);
+        const why = q.sd === "n" ? noRefusal(leg) : null;
+        const inSlip = sideOf(legs, ticker) === "no";
+        return (
+          <li key={m.x} data-testid="box-claim" data-side={q.sd === "n" ? "no" : "yes"} data-ticker={ticker}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-hit">
+            <span>Claimed edge {edgeCents(q.e)} on {q.sd === "n" ? "NO" : "YES"}: {rungLabel(m, ctx.tab)}</span>
+            {q.sd === "n" && (why ? (
+              <span className="text-text-muted">{why}.</span>
+            ) : (
+              <button type="button" data-testid="claim-add-no" aria-pressed={inSlip} disabled={inSlip}
+                      onClick={() => put(leg)}
+                      className="tap inline-flex items-center rounded-pill border border-hit px-3 text-xs text-hit disabled:opacity-50">
+                {inSlip ? "NO in the slip" : `Add NO · ${priceText(leg.a, unit)}`}
+              </button>
+            ))}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -211,7 +233,7 @@ function MarketBox({ ctx, ev, title }: { ctx: Ctx; ev: TabEvent; title: string }
             </div>
           </>
         )}
-        <Claims ctx={ctx} ms={ev.m} />
+        <Claims ctx={ctx} ev={ev} ms={ev.m} />
       </div>
     </section>
   );
@@ -342,7 +364,7 @@ function Scoreboard({ ctx, ev }: { ctx: Ctx; ev: TabEvent | undefined }) {
           </div>
         </div>
       )}
-      <div className="px-4 pb-4 empty:hidden"><Claims ctx={ctx} ms={ms} /></div>
+      <div className="px-4 pb-4 empty:hidden"><Claims ctx={ctx} ev={ev} ms={ms} /></div>
     </>
   );
 }

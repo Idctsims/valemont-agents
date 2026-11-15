@@ -18,7 +18,51 @@ export type ComboLeg = {
   a?: number;
   /** The leg's team code, when it has one. */
   tm?: string;
+  /** Both sides' prices when it was ticked: YES at the ask, NO at 1 − the YES bid (the slip's flip). */
+  py?: number;
+  pn?: number;
+  /** The event takes YES only in a Kalshi combo: the slip will not flip it to NO. */
+  yo?: boolean;
 };
+
+/** Why a leg cannot flip to NO here, or null when it can. */
+export function noRefusal(leg: Pick<ComboLeg, "yo" | "pn">): string | null {
+  if (leg.yo) return "YES only: Kalshi takes this event's markets on YES in a combo";
+  if (leg.pn === undefined) return "No NO price here: tap the market again to read it";
+  return null;
+}
+
+/** The leg on the other side, priced at that side's price; a refusal's words instead when it can't. */
+export function flipLeg(leg: ComboLeg, side: Side): { leg: ComboLeg } | { refused: string } {
+  if (leg.side === side) return { leg };
+  if (side === "no") {
+    const why = noRefusal(leg);
+    if (why) return { refused: why };
+    return { leg: { ...leg, side, a: leg.pn } };
+  }
+  if (leg.py === undefined) return { refused: "No YES price here: tap the market again to read it" };
+  return { leg: { ...leg, side, a: leg.py } };
+}
+
+/** A leg as tapped: the side's price from the market's YES bid and ask, and both sides kept for a flip. */
+export function legFrom(
+  base: Pick<ComboLeg, "t" | "label" | "game" | "sport" | "tm">, side: Side,
+  m: { a?: number | null; b?: number | null }, yesOnly: boolean,
+): ComboLeg {
+  const py = price(m.a);
+  const pn = m.b === null || m.b === undefined ? undefined : price(Math.round((1 - m.b) * 10000) / 10000);
+  const out: ComboLeg = { ...base, side };
+  const a = side === "yes" ? py : pn;
+  if (a !== undefined) out.a = a;
+  if (py !== undefined) out.py = py;
+  if (pn !== undefined) out.pn = pn;
+  if (yesOnly) out.yo = true;
+  return out;
+}
+
+function price(v: unknown): number | undefined {
+  return typeof v === "number" && Number.isFinite(v) && v > 0 && v < 1 ? v : undefined;
+}
 
 export const MAX_LEGS = 25;
 export const MIN_LEGS = 2;
@@ -61,9 +105,13 @@ export function loadLegs(storage: Pick<Storage, "getItem"> | null | undefined): 
     // A stored price that is not a price is dropped, never the leg (legs ticked before it existed have none).
     return Array.isArray(v)
       ? v.filter(isLeg).slice(0, MAX_LEGS).map((l) => {
-          const ok = typeof l.a === "number" && l.a > 0 && l.a < 1;
-          const { a, ...rest } = l;
-          return ok ? { ...rest, a } : rest;
+          const { a, py, pn, yo, ...rest } = l;
+          const out: ComboLeg = { ...rest };
+          if (price(a) !== undefined) out.a = a;
+          if (price(py) !== undefined) out.py = py;
+          if (price(pn) !== undefined) out.pn = pn;
+          if (yo === true) out.yo = true;
+          return out;
         })
       : [];
   } catch {

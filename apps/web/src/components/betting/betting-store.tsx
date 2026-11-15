@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from "react";
 
-import { loadLegs, saveLegs, toggleLeg, type ComboLeg } from "@/lib/betting/combo";
+import { flipLeg, loadLegs, saveLegs, toggleLeg, type ComboLeg, type Side } from "@/lib/betting/combo";
 import { UNIT_KEY, parseUnit, type PriceUnit } from "@/lib/betting/price";
 
 // The two choices /betting keeps in this browser (per-viewer conveniences, so
@@ -60,6 +60,10 @@ type Store = {
   setUnit: (u: PriceUnit) => void;
   legs: readonly ComboLeg[];
   tick: (leg: ComboLeg) => void;
+  /** Put a leg in the slip on this side (added, or flipped in place). */
+  put: (leg: ComboLeg) => void;
+  /** Flip a slip leg to a side; the refusal's words when it can't. */
+  flip: (ticker: string, side: Side) => string | null;
   remove: (ticker: string) => void;
   clear: () => void;
 };
@@ -82,6 +86,19 @@ export function BettingStore({ children }: { children: React.ReactNode }) {
     setUnit: (u) => write(UNIT_KEY, u),
     legs,
     tick: (leg) => setLegs(toggleLeg(legs, leg)),
+    put: (leg) => {
+      const i = legs.findIndex((l) => l.t === leg.t);
+      if (i >= 0 && legs[i].side === leg.side) return;
+      setLegs(toggleLeg(legs, leg));
+    },
+    flip: (t, side) => {
+      const i = legs.findIndex((l) => l.t === t);
+      if (i < 0) return "That leg is no longer in the slip";
+      const res = flipLeg(legs[i], side);
+      if ("refused" in res) return res.refused;
+      setLegs(legs.map((l, j) => (j === i ? res.leg : l)));
+      return null;
+    },
     remove: (t) => setLegs(legs.filter((l) => l.t !== t)),
     clear: () => setLegs([]),
   }), [unit, legs, setLegs]);
