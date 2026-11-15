@@ -17,7 +17,7 @@ oracle, tests/test_consensus.py) to 1e-9.
 from __future__ import annotations
 
 import math
-from typing import Sequence
+from typing import Callable, Sequence
 
 __all__ = ["american_to_decimal", "implied", "multiplicative", "power", "DevigError"]
 
@@ -94,3 +94,42 @@ def power(decimal_odds: Sequence[float]) -> list[float]:
         if abs(step) < 1e-17:
             break
     return [x ** k for x in q]
+
+
+def additive(decimal_odds: Sequence[float]) -> list[float]:
+    """The overround taken off every outcome equally. A longshot can land at
+    or below zero; it is floored at 0.0 (the method has no opinion there, and
+    the four-method test then claims nothing on it)."""
+    q = implied(decimal_odds)
+    cut = (sum(q) - 1.0) / len(q)
+    return [max(0.0, x - cut) for x in q]
+
+
+def shin(decimal_odds: Sequence[float]) -> list[float]:
+    """Shin (1992): the z (share of insider money) at which
+    p_i = (sqrt(z^2 + 4 (1 - z) q_i^2 / S) - z) / (2 (1 - z)) sums to 1, by
+    bisection. With two outcomes it equals the additive method."""
+    q = implied(decimal_odds)
+    s = sum(q)
+
+    def probs(z: float) -> list[float]:
+        return [(math.sqrt(z * z + 4.0 * (1.0 - z) * x * x / s) - z) / (2.0 * (1.0 - z)) for x in q]
+
+    if s <= 1.0:  # no overround to explain: nothing to remove
+        return [x / s for x in q]
+    lo, hi = 0.0, 1.0 - 1e-12  # sum(probs) falls from sqrt(S) > 1 at z = 0 toward < 1
+    for _ in range(MAX_ITER):
+        z = (lo + hi) / 2.0
+        if sum(probs(z)) > 1.0:
+            lo = z
+        else:
+            hi = z
+        if hi - lo < 1e-16:
+            break
+    return probs((lo + hi) / 2.0)
+
+
+#: The four methods an edge claim must survive (docs/consensus.md, "the
+#: four-method test"; owner, 2026-11-13).
+METHODS: tuple[tuple[str, Callable[[Sequence[float]], list[float]]], ...] = (
+    ("power", power), ("multiplicative", multiplicative), ("shin", shin), ("additive", additive))
