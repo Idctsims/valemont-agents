@@ -166,6 +166,7 @@
   /* Shape. */
   --radius-card: 1.75rem; /* 28px */
   --radius-inner: 1rem; /* 16px */
+  --radius-tile: 0.5rem; /* 8px: a price tile on /betting (the approved mock) */
   --radius-pill: 999px;
 
   /* 4-pt spacing: p-1 = 4px, p-4 = 16px. */
@@ -395,6 +396,29 @@
 /* A share bar's fill width, set per row from a 0..1 share (--vm-share). */
 @utility w-share {
   width: calc(var(--vm-share, 0) * 100%);
+}
+
+/* Betting (Chat 8 Phase 3.5, the approved mock's geometry): the board beside
+   the slip on desktop; a ladder's rungs; outcome tiles; a player and their
+   rungs; the header's away / at / home; a consensus bar's segment, which
+   grows by its own share (--vm-share). */
+@utility grid-betting {
+  grid-template-columns: minmax(0, 1fr) 21.25rem;
+}
+@utility grid-rungs {
+  grid-template-columns: repeat(auto-fill, minmax(3.875rem, 1fr));
+}
+@utility grid-tiles {
+  grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+}
+@utility grid-player {
+  grid-template-columns: minmax(7.5rem, 11.875rem) minmax(0, 1fr);
+}
+@utility grid-matchup {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+@utility grow-share {
+  flex: var(--vm-share, 1) 1 0%;
 }
 
 /* Hairline rule in wood, for the one place a divider carries meaning. */

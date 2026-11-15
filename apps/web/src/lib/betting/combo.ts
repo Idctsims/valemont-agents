@@ -14,6 +14,10 @@ export type ComboLeg = {
   label: string;
   game: string; // the game's title
   sport?: string;
+  /** The side's price when it was ticked, before fee (/betting's slip totals it after fee). */
+  a?: number;
+  /** The leg's team code, when it has one. */
+  tm?: string;
 };
 
 export const MAX_LEGS = 25;
@@ -54,7 +58,14 @@ export function loadLegs(storage: Pick<Storage, "getItem"> | null | undefined): 
     const raw = storage?.getItem(STORAGE_KEY);
     if (!raw) return [];
     const v: unknown = JSON.parse(raw);
-    return Array.isArray(v) ? v.filter(isLeg).slice(0, MAX_LEGS) : [];
+    // A stored price that is not a price is dropped, never the leg (legs ticked before it existed have none).
+    return Array.isArray(v)
+      ? v.filter(isLeg).slice(0, MAX_LEGS).map((l) => {
+          const ok = typeof l.a === "number" && l.a > 0 && l.a < 1;
+          const { a, ...rest } = l;
+          return ok ? { ...rest, a } : rest;
+        })
+      : [];
   } catch {
     return [];
   }

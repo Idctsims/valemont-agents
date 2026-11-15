@@ -6,7 +6,8 @@ import { requireOwner } from "@/lib/auth";
 import { Refusal, settle, type ActionResult } from "@/lib/action-result";
 import { isKind, type BoardEvent } from "@/lib/betting/board";
 import { cleanReason, requestLegs, type ComboState } from "@/lib/betting/combo";
-import { createComboRequest, loadComboRequest, loadGame } from "@/lib/betting/data";
+import { createComboRequest, loadComboRequest, loadGame, loadGameTab } from "@/lib/betting/data";
+import { isTab, type TabEvent } from "@/lib/betting/game";
 import { MARKER_HEADER, decideMarker } from "@/lib/capital/marker";
 import { createClient } from "@/lib/supabase/server";
 
@@ -32,6 +33,20 @@ export async function expandGame(
     });
     return { events };
   }, "Couldn't load that game's markets.");
+}
+
+/** One tab of a game's page (db/079), loaded once and cached by the page; the Players tab one stat
+ *  at a time (never the whole tab: 108-150 KB on an NBA game). */
+export async function loadTab(game: string, tab: string, stat: string | null): Promise<ActionResult<{ events: TabEvent[] }>> {
+  return settle(async () => {
+    await requireOwner();
+    if (typeof game !== "string" || !TICKER.test(game)) throw new Refusal("That game isn't on the board.");
+    if (!isTab(tab)) throw new Refusal("No such tab.");
+    if (tab === "players" && (typeof stat !== "string" || stat.length > 120)) throw new Refusal("Pick a stat.");
+    const withTests = decideMarker((await headers()).get(MARKER_HEADER), process.env).kind === "test";
+    const events = await loadGameTab(await createClient(), game, tab, tab === "players" ? stat : null, withTests);
+    return { events };
+  }, "Couldn't load those markets.");
 }
 
 /** Ask the worker for a combo price. The id to poll, or the refusal's words. */

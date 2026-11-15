@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { BoardEvent, BoardGame, Credits, Kind, SportChip } from "./board";
 import type { ComboState, Quote } from "./combo";
+import type { GameMeta, GameTabs, Tab, TabEvent } from "./game";
 
 // Reads only, through the owner's session (RLS on db/071's tables), via its
 // narrow functions: never the tables themselves. One sport at a time with its
@@ -37,6 +38,50 @@ export async function loadGame(
   });
   if (error) throw new Error(`Couldn't read that game's markets: ${error.message}`);
   return (data ?? []) as BoardEvent[];
+}
+
+// ---- The game page (db/079): the three tabs' counts, and one tab (one stat
+// of the Players tab) at a time. The header reads the game's own event row
+// (select-only for the owner, db/071), the one read here not through a function.
+
+/** The game's header: its title, start, sport and league, from its own event (else any of its events). */
+export async function loadGameMeta(supabase: SupabaseClient, game: string, withTests: boolean): Promise<GameMeta | null> {
+  let q = supabase.from("kalshi_board_events")
+    .select("event_ticker, series_ticker, game_title, starts_at, milestone_start, is_test")
+    .eq("game_ticker", game)
+    .limit(50);
+  if (!withTests) q = q.eq("is_test", false);
+  const { data, error } = await q;
+  if (error) throw new Error(`Couldn't read the game: ${error.message}`);
+  const rows = (data ?? []) as { event_ticker: string; series_ticker: string; game_title: string | null;
+                                 starts_at: string | null; milestone_start: string | null; is_test: boolean }[];
+  if (rows.length === 0) return null;
+  const ev = rows.find((r) => r.event_ticker === game) ?? rows[0];
+  const { data: s, error: e2 } = await supabase.from("kalshi_series_board")
+    .select("sport, league").eq("series_ticker", ev.series_ticker).maybeSingle();
+  if (e2) throw new Error(`Couldn't read the game's series: ${e2.message}`);
+  const series = (s ?? null) as { sport: string | null; league: string | null } | null;
+  return { g: game, title: ev.game_title ?? game, startsAt: ev.starts_at ?? ev.milestone_start,
+           sport: series?.sport ?? null, league: series?.league ?? null, test: ev.is_test };
+}
+
+export async function loadGameTabs(supabase: SupabaseClient, game: string, withTests: boolean): Promise<GameTabs> {
+  const { data, error } = await supabase.rpc("kalshi_board_game_tabs", { p_game: game, p_tests: withTests });
+  if (error) throw new Error(`Couldn't read the game's tabs: ${error.message}`);
+  const d = (data ?? {}) as Partial<GameTabs>;
+  return { lines: Number(d.lines ?? 0), players: Number(d.players ?? 0), periods: Number(d.periods ?? 0),
+           other: Number(d.other ?? 0), stats: Array.isArray(d.stats) ? d.stats : [], asof: d.asof ?? null };
+}
+
+/** One tab's events; on the Players tab one stat (OTHER_STAT, "", for markets with none). */
+export async function loadGameTab(
+  supabase: SupabaseClient, game: string, tab: Tab, stat: string | null, withTests: boolean,
+): Promise<TabEvent[]> {
+  const { data, error } = await supabase.rpc("kalshi_board_game_tab", {
+    p_game: game, p_tab: tab, p_tests: withTests, p_stat: tab === "players" ? stat : null,
+  });
+  if (error) throw new Error(`Couldn't read that tab: ${error.message}`);
+  return (data ?? []) as TabEvent[];
 }
 
 /** The Odds API's month (db/073 odds_api_usage): spent / 500 on /betting. */

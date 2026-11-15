@@ -2,19 +2,21 @@ import { expect, test, type BrowserContext, type Locator, type Page } from "@pla
 
 import { addTestKalshiBoard, hasOwner, signIn, useE2eMarker } from "./support/owner";
 
-// Combo mode on the Board tab (Chat 8 Phase 3; docs/correlation.md). Needs
-// db/076 and db/077 pasted AND the worker with the price_combo job deployed:
-// the real worker answers these TEST requests (their legs are test board rows,
-// db/076 add_test_kalshi_board with team, so the requests are is_test).
+// The slip on a game's page (Chat 8 Phase 3.5, Workstream B; combo pricing
+// unchanged underneath: db/076, db/077). Needs the worker with the
+// price_combo job deployed: the real worker answers these TEST requests (their
+// legs are test board rows, so the requests are is_test).
 //
 // Signed in as the owner's REAL account, on TEST rows only, one test game 3 h out:
-//   * the Combo toggle shows YES / NO ticks on binary markets only (the scalar
-//     ladder gets none);
-//   * two ticks fill the sheet; the ticks survive a reload;
+//   * tapping a price fills the slip (no Combo mode any more): HOM to win
+//     (0.63) and Test Player 20+ (0.17); the bar docks above the tab bar;
+//   * the total is AFTER fee, one taker fee on the combo's price:
+//     0.63 × 0.17 = 0.1071, fee 0.006695 (rounded up), so 8.79× or 11.4%;
+//     each leg's price is before fee, and says so;
+//   * the legs survive a reload;
 //   * "Price it" shows "Pricing… N s", then the quote: naive, fair, the
-//     ratio, the Kalshi naive cost, "Build manually" (the props event is not
-//     combo-eligible), each leg's tier, and "unmodeled pair" (the test series
-//     has no league, so no rho row: fair = naive);
+//     ratio, Phase 3's per-leg-fee cost, "Build manually" (the props event is
+//     not combo-eligible), each leg's tier and age, "unmodeled pair";
 //   * both teams' moneylines: refused, "two outcomes of one result".
 //
 // Run (owner, CLAUDE.md §6, the Read-Host form):
@@ -34,13 +36,13 @@ test.describe("owner", () => {
     context = await browser.newContext(testInfo.project.use);
     await useE2eMarker(context, testInfo.project.use.baseURL!);
     page = await context.newPage();
-    await signIn(page, "/betting?sport=Basketball");
-    await page.evaluate(() => { localStorage.removeItem("vm-combo-legs"); localStorage.removeItem("vm-combo-mode"); });
+    await signIn(page, `/betting/game/${game}`);
+    await page.evaluate(() => { localStorage.removeItem("vm-combo-legs"); localStorage.removeItem("vm-price-unit"); });
   });
 
   test.afterAll(async ({}, testInfo) => {
     if (testInfo.project.name !== "phone") return;
-    await page?.evaluate(() => { localStorage.removeItem("vm-combo-legs"); localStorage.removeItem("vm-combo-mode"); });
+    await page?.evaluate(() => { localStorage.removeItem("vm-combo-legs"); localStorage.removeItem("vm-price-unit"); });
     await context?.close();
   });
 
@@ -48,42 +50,68 @@ test.describe("owner", () => {
     test.skip(testInfo.project.name !== "phone", "phone project");
   });
 
-  const card = () => page.locator(`[data-testid="board-game"][data-game="${game}"]`);
-  const market = (text: string) => card().getByTestId("board-market").filter({ hasText: text });
-  const sheet = () => page.getByTestId("combo-sheet");
-  // Tap a board element after scrolling it just under the sticky header, as a
-  // person would. Playwright's own scroll-into-view ignores fixed overlays, and
-  // with the Combo sheet open it can leave the target under the sheet or the
-  // dock, which then takes the tap (owner rerun, Nov 12).
+  const slip = () => page.getByTestId("combo-sheet");
+  const ml = (team: string) => page.locator(`[data-testid="ml-pick"][data-ticker="${game}-${team}"]`);
+  const rung = (suffix: string) => page.locator(`[data-testid="board-market"][data-ticker="${game}${suffix}"]`);
+  // Tap a page element after scrolling it just under the sticky header, as a
+  // person would: Playwright's own scroll can leave it under the docked slip
+  // bar or the tab bar, which then takes the tap (owner rerun, Nov 12).
   const tap = async (target: Locator) => {
-    await target.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 120));
+    await target.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 160));
     await target.click();
   };
+  const openSlip = async () => {
+    const t = page.getByTestId("combo-sheet-toggle");
+    if ((await t.getAttribute("aria-expanded")) !== "true") await t.click();
+    await expect(t).toHaveAttribute("aria-expanded", "true");
+  };
+  const closeSlip = async () => {
+    const t = page.getByTestId("combo-sheet-toggle");
+    if ((await t.getAttribute("aria-expanded")) === "true") await t.click();
+  };
 
-  test("Combo mode ticks binary markets only", async () => {
-    await page.goto("/betting?sport=Basketball");
-    await page.getByTestId("combo-toggle").click();
-    await expect(page.getByTestId("combo-toggle")).toHaveAttribute("aria-pressed", "true");
-    await card().getByRole("button").first().click();
-    await expect(card().getByTestId("board-market")).toHaveCount(6);
-    await expect(card().getByTestId("combo-ticks")).toHaveCount(5);
-    await expect(card().locator('[data-payout="scalar"]').getByTestId("combo-ticks")).toHaveCount(0);
+  test("tapping prices fills the slip; the total is after fee", async () => {
+    await page.goto(`/betting/game/${game}`);
+    await expect(slip()).toBeHidden(); // an empty slip shows no bar on the phone
+    await tap(ml("HOM"));
+    await expect(ml("HOM")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("slip-head")).toHaveText("1 leg");
+    await tap(page.getByTestId("game-tab-players"));
+    await tap(rung("PTS-P1-20"));
+    await expect(rung("PTS-P1-20")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("slip-head")).toHaveText("2 legs · 8.79×");
+
+    await openSlip();
+    await expect(slip().getByTestId("combo-leg")).toHaveCount(2);
+    await expect(slip()).toContainText("Leg prices before fee");
+    await expect(slip().getByTestId("slip-leg-price")).toHaveText(["1.59×", "5.88×"]);
+    await expect(slip().getByTestId("slip-total")).toHaveText("8.79×");
+    await expect(slip()).toContainText("Pays on $1, after fee");
+    await expect(slip().getByTestId("slip-fee")).toHaveText("0.67¢");
+    await expect(slip().getByTestId("slip-price")).toHaveText("9.34×");
+    await expect(slip().getByTestId("slip-games")).toHaveText("Same game");
+
+    await closeSlip();
+    await page.getByTestId("unit-pct").click();
+    await openSlip();
+    await expect(slip().getByTestId("slip-total")).toHaveText("11.4%");
+    await expect(slip()).toContainText("Costs, after fee");
+    await expect(slip().getByTestId("slip-leg-price")).toHaveText(["63%", "17%"]);
+    await closeSlip();
+    await page.getByTestId("unit-x").click();
   });
 
-  test("two ticks fill the sheet and survive a reload", async () => {
-    await market("Test Home").getByTestId("tick-yes").click();
-    await market("Test Player: 20+").getByTestId("tick-yes").click();
-    await expect(sheet()).toContainText("Combo · 2 legs");
-    await expect(market("Test Home").getByTestId("tick-yes")).toHaveAttribute("aria-pressed", "true");
+  test("the legs survive a reload", async () => {
     await page.reload();
-    await expect(sheet()).toContainText("Combo · 2 legs");
-    await expect(sheet().getByTestId("combo-leg")).toHaveCount(2);
+    await expect(page.getByTestId("slip-head")).toHaveText("2 legs · 8.79×");
+    await expect(ml("HOM")).toHaveAttribute("aria-pressed", "true");
   });
 
   test("Price it: pricing, then the quote", async () => {
-    await sheet().getByTestId("combo-price").click();
-    await expect(sheet().getByTestId("combo-pricing")).toContainText(/Pricing… \d+ s/);
-    const quote = sheet().getByTestId("combo-quote");
+    await openSlip();
+    await slip().getByTestId("combo-price").click();
+    await expect(slip().getByTestId("combo-pricing")).toContainText(/Pricing… \d+ s/);
+    const quote = slip().getByTestId("combo-quote");
     await expect(quote).toBeVisible({ timeout: 30_000 });
     await expect(quote.getByTestId("combo-naive")).toHaveText(/%$/);
     await expect(quote.getByTestId("combo-fair")).toHaveText(/%/);
@@ -92,36 +120,27 @@ test.describe("owner", () => {
     await expect(quote.getByTestId("combo-status")).toContainText("Build manually: not combo-eligible");
     await expect(quote.getByTestId("combo-unmodeled")).toBeVisible();
     await expect(quote.getByTestId("combo-leg-tier")).toHaveCount(2);
-    // Each leg's Kalshi price age (owner, Nov 11); the test board was just written, so none is stale.
     await expect(quote.getByTestId("combo-leg-age")).toHaveCount(2);
     await expect(quote.getByTestId("combo-leg-age").first()).toHaveText(/^price .*old$/);
     await expect(quote.getByTestId("combo-prices-stale")).toHaveCount(0);
+    // The total stays after fee beside the quote.
+    await expect(slip().getByTestId("slip-total")).toHaveText("8.79×");
   });
 
   test("both teams' moneylines are refused with the reason", async () => {
     // The worker answers through the queue, and the refusal wait alone is 30 s.
     test.setTimeout(60_000);
-    // Test 2's reload collapsed the game: a game's open state is the page's
-    // own (only the ticks and the mode persist). Re-open it before Clear.
-    const head = card().locator("button[aria-expanded]").first();
-    if ((await head.getAttribute("aria-expanded")) !== "true") await tap(head);
-    await expect(head).toHaveAttribute("aria-expanded", "true");
-    await expect(market("Test Home").getByTestId("tick-yes")).toHaveAttribute("aria-pressed", "true");
-
-    // Owner rule (Nov 12): Clear empties the ticks and keeps Combo mode on and
-    // the game expanded, so the next ticks work without re-entering.
-    await sheet().getByTestId("combo-clear").click();
-    await expect(sheet()).toHaveCount(0);
-    await expect(page.getByTestId("combo-toggle")).toHaveAttribute("aria-pressed", "true");
-    await expect(head).toHaveAttribute("aria-expanded", "true");
-    await expect(card().getByTestId("combo-ticks")).toHaveCount(5);
-    await expect(market("Test Home").getByTestId("tick-yes")).toHaveAttribute("aria-pressed", "false");
+    await slip().getByTestId("combo-clear").click();
+    await expect(slip()).toBeHidden();
     expect(await page.evaluate(() => localStorage.getItem("vm-combo-legs"))).toBeNull();
+    await expect(ml("HOM")).toHaveAttribute("aria-pressed", "false");
 
-    await tap(market("Test Home").getByTestId("tick-yes"));
-    await tap(market("Test Away").getByTestId("tick-yes"));
-    await sheet().getByTestId("combo-price").click();
-    await expect(sheet().getByTestId("combo-refused")).toContainText("two outcomes of one result", { timeout: 30_000 });
-    await sheet().getByTestId("combo-clear").click();
+    await tap(ml("HOM"));
+    await tap(ml("AWY"));
+    await expect(page.getByTestId("slip-head")).toHaveText("2 legs · 3.87×");
+    await openSlip();
+    await slip().getByTestId("combo-price").click();
+    await expect(slip().getByTestId("combo-refused")).toContainText("two outcomes of one result", { timeout: 30_000 });
+    await slip().getByTestId("combo-clear").click();
   });
 });

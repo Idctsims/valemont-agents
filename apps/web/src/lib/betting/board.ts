@@ -143,14 +143,42 @@ export function isKind(v: unknown): v is Kind {
   return typeof v === "string" && (KINDS as readonly string[]).includes(v);
 }
 
-/** The board's URL for a set of filters (the chips are links). */
-export function boardHref(f: Filters): string {
+/** The board's URL for a set of filters (the chips are links). base: the old page at /betting/classic. */
+export function boardHref(f: Filters, base = "/betting"): string {
   const q = new URLSearchParams();
   if (f.sport) q.set("sport", f.sport);
   if (f.kind) q.set("kind", f.kind === "game_line" ? "lines" : f.kind === "prop" ? "props" : "other");
   if (f.combo) q.set("combo", "1");
   const s = q.toString();
-  return s ? `/betting?${s}` : "/betting";
+  return s ? `${base}?${s}` : base;
+}
+
+/** "Sunday, November 15" in the owner's time: the board's day bars. */
+export function dayLabel(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "America/Chicago" });
+}
+
+/** Games grouped by their Chicago day, in start order. */
+export function byDay<G extends Pick<BoardGame, "at">>(games: readonly G[]): { day: string; games: G[] }[] {
+  const out: { day: string; games: G[] }[] = [];
+  for (const g of [...games].sort((x, y) => x.at.localeCompare(y.at))) {
+    const day = dayLabel(g.at);
+    const last = out[out.length - 1];
+    if (last && last.day === day) last.games.push(g);
+    else out.push({ day, games: [g] });
+  }
+  return out;
+}
+
+const WORDS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+
+/** The board's headline: today's games when there are any ("Today's nine games."), else what is ahead. */
+export function boardHeadline(games: readonly Pick<BoardGame, "at">[], now: Date): { lead: string; n: string; tail: string } {
+  const today = dayLabel(now.toISOString());
+  const t = games.filter((g) => dayLabel(g.at) === today).length;
+  const word = (k: number) => WORDS[k] ?? String(k);
+  if (t > 0) return { lead: "Today's", n: word(t), tail: t === 1 ? "game." : "games." };
+  return { lead: "", n: word(games.length), tail: games.length === 1 ? "game ahead." : "games ahead." };
 }
 
 /** The sport shown: the URL's when it is on the board, else the busiest. */
