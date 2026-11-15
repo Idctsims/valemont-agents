@@ -40,6 +40,8 @@ export type TabEvent = {
 /** The game, from its events (the page's header). */
 export type GameMeta = {
   g: string; title: string; startsAt: string | null; sport: string | null; league: string | null; test: boolean;
+  /** The linked ESPN game's teams, db/083's card shape: [city, nickname, logo key, colour], away first unless hs. */
+  tm?: [string, string | null, string | null, string | null][]; hs?: boolean;
 };
 
 /** "Other" is asked for as the empty stat (db/079). */

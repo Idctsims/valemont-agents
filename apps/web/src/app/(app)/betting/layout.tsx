@@ -11,8 +11,11 @@ export default async function BettingLayout({ children }: { children: React.Reac
   await requireOwner();
   return (
     <BettingStore>
-      <BettingNav />
-      {children}
+      {/* The approved mock's palette for every betting page (tokens.css, :has(.betting-theme)). */}
+      <div className="betting-theme">
+        <BettingNav />
+        {children}
+      </div>
     </BettingStore>
   );
 }

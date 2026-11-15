@@ -5,7 +5,8 @@ import { useCallback, useMemo, useState, useTransition } from "react";
 
 import { loadTab } from "@/app/(app)/betting/actions";
 import { useBetting } from "@/components/betting/betting-store";
-import { asOfLabel, comboLabel, edgeCents, parseConsensus, pct, startLabel } from "@/lib/betting/board";
+import { ConsensusBar, Matchup, type PricePick } from "@/components/betting/matchup";
+import { asOfLabel, comboLabel, dayLabel, edgeCents, parseConsensus, pct } from "@/lib/betting/board";
 import { legFrom, noRefusal, sideOf } from "@/lib/betting/combo";
 import {
   OTHER_STAT, TABS, TAB_LABEL, boxTitle, byLine, byTeam, isLadder, isWinnerEvent, latestAsOf, mainIndex,
@@ -14,6 +15,12 @@ import {
   type GameMeta, type GameTabs, type Tab, type TabEvent, type TabMarket,
 } from "@/lib/betting/game";
 import { priceText } from "@/lib/betting/price";
+import { cardTeams } from "@/lib/betting/teams";
+
+/** "6:00 PM CT": the header's start (its day is on the right, as the mock's). */
+function timeCT(iso: string): string {
+  return `${new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/Chicago" })} CT`;
+}
 
 // A game's own page (Workstream B, the approved mock): its header with the
 // moneyline and the consensus bar, then three tabs: Game lines, Players,
@@ -77,7 +84,7 @@ function Odd({ ctx, ev, m, face, big = false, row = false }: {
             className={`flex min-w-0 rounded-tile border transition-colors ${
               row ? "min-h-12 items-center justify-between gap-2 px-3 py-1.5" : "min-h-12 flex-col items-center justify-center px-1.5 py-1"} ${
               big ? "min-h-16 w-full" : ""} ${
-              on ? "border-accent bg-accent text-on-accent" : "border-border bg-bg text-text hover:border-accent"}`}>
+              on ? "border-accent-ink bg-accent text-on-accent" : "border-border bg-bg text-text hover:border-accent-ink"}`}>
       <span data-testid="market-label"
             className={`${row ? "truncate text-left text-sm" : "text-center text-xs"} ${on ? "" : "text-text-muted"} ${big ? "label-mono" : ""}`}>
         {side === "no" && <span className="label-mono mr-1">NO</span>}
@@ -174,17 +181,17 @@ function Ladder({ ctx, ev, ms, keyId }: { ctx: Ctx; ev: TabEvent; ms: TabMarket[
       <SayLine ctx={ctx} main={mainIsBooks ? rows[main] : null} count={`${rows.length} lines`} />
       <div className="grid grid-rungs gap-1.5">
         {rows.slice(lo, hi).map((m) => (
-          <div key={m.x} className={rows.indexOf(m) === main && mainIsBooks ? "rounded-tile ring-2 ring-accent" : ""}>
+          <div key={m.x} className={rows.indexOf(m) === main && mainIsBooks ? "rounded-tile ring-2 ring-accent-ink" : ""}>
             <Odd ctx={ctx} ev={ev} m={m} face={rungLabel(m, ctx.tab)} />
           </div>
         ))}
       </div>
       {rows.length > hi - lo && !all && (
         <button type="button" data-testid="ladder-all" onClick={() => setAll(true)} aria-controls={keyId}
-                className="tap self-start text-sm text-accent">All {rows.length} lines</button>
+                className="tap self-start text-sm text-accent-ink">All {rows.length} lines</button>
       )}
       {all && rows.length > 10 && (
-        <button type="button" onClick={() => setAll(false)} className="tap self-start text-sm text-accent">Show fewer</button>
+        <button type="button" onClick={() => setAll(false)} className="tap self-start text-sm text-accent-ink">Show fewer</button>
       )}
     </div>
   );
@@ -204,13 +211,16 @@ function MarketBox({ ctx, ev, title }: { ctx: Ctx; ev: TabEvent; title: string }
     <section data-testid="board-event" data-event={ev.e} id={id}
              className="overflow-hidden rounded-inner border border-border bg-surface">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
-        <h3 className="font-display text-xl text-text">{title}</h3>
+        <h3 className="font-display text-xl text-text">
+          {title}
+          {ev.m.some((m) => m.st === "spread") && <small className="ml-1.5 font-sans text-xs text-text-muted">wins by more than</small>}
+        </h3>
         <span className="flex flex-wrap items-center gap-2">
           {ev.c && (
             <span data-testid="combo-chip" data-yes-only={ev.y ? "true" : undefined}
                   data-size-max={ev.sm ?? undefined}
                   title={ev.sm !== undefined ? `A Kalshi combo may use at most ${ev.sm} of this event's markets` : undefined}
-                  className="label-mono inline-flex h-6 items-center whitespace-nowrap rounded-pill border border-accent px-2 text-accent">
+                  className="label-mono inline-flex h-6 items-center whitespace-nowrap rounded-pill border border-accent-ink px-2 text-accent-ink">
               {comboLabel(ev)}
             </span>
           )}
@@ -318,52 +328,30 @@ function Chips({ label, testId, items, value, onPick }: {
   );
 }
 
+/** The game's header, as the approved mock draws it: each team's logo, name and price to win, and the
+ *  consensus bar in the teams' colours (db/083's teams; the shared Matchup). */
 function Scoreboard({ ctx, ev }: { ctx: Ctx; ev: TabEvent | undefined }) {
-  const sides = sidesOf(ctx.meta.title);
   if (!ev) {
-    return <p className="px-4 pb-5 text-sm text-text-muted">No moneyline open for this game.</p>;
+    return <p className="px-4 pb-5 pt-4 text-sm text-text-muted">No moneyline open for this game.</p>;
   }
-  // Away first, as the title reads; markets whose team the title names go in its order.
-  const order = sides ? [sides.a.code, sides.h.code] : [];
-  const ms = [...ev.m].sort((x, y) => {
-    const ix = order.indexOf(x.tm ?? ""), iy = order.indexOf(y.tm ?? "");
-    return (ix < 0 ? 9 : ix) - (iy < 0 ? 9 : iy);
-  });
+  // Kalshi's order: as the title names them (away first), anything it does not name (a tie) last.
+  const pos = (m: TabMarket) => {
+    const i = m.sj ? ctx.meta.title.indexOf(m.sj) : -1;
+    return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+  };
+  const ms = [...ev.m].sort((x, y) => pos(x) - pos(y) || x.x.localeCompare(y.x));
   const cons = winnerConsensus({ ...ev, m: ms });
-  const fills = ["bg-accent", "bg-surface-3", "bg-wood"];
+  const teams = cardTeams({ tm: ctx.meta.tm, hs: ctx.meta.hs, t: ctx.meta.title,
+                            w: ms.map((m) => [m.x, m.b ?? null, m.a ?? null, null]) })
+    ?? ms.slice(0, 2).map((m, i) => ({ city: m.sj ?? m.x, home: i === 1 }));
+  const picks: PricePick[] = ms.map((m) => ({
+    t: marketTicker(ev, m), label: legLabel(ctx, ev, m), game: ctx.meta.title, sport: ctx.meta.sport ?? undefined,
+    b: m.b, a: m.a, yesOnly: ev.y === true, tm: m.tm, claimed: claimedYes(m),
+  }));
   return (
     <>
-      <div className="grid grid-matchup items-end gap-3 px-4 pb-4 pt-2">
-        {ms.slice(0, 2).map((m, i) => (
-          <div key={m.x} className={`flex min-w-0 flex-col items-center gap-1 text-center ${i === 1 ? "col-start-3" : ""}`}>
-            <span className="font-display text-3xl text-text">{m.tm ?? m.sj}</span>
-            <span className="max-w-full truncate text-xs text-text-muted">{nameOf(ctx, m.tm) !== m.tm ? nameOf(ctx, m.tm) : (m.sj ?? "")}</span>
-            <Odd ctx={ctx} ev={ev} m={m} face="to win" big />
-          </div>
-        ))}
-        <span aria-hidden className="col-start-2 row-start-1 self-center pb-8 text-xs text-text-muted">at</span>
-      </div>
-      {ms.length > 2 && (
-        <div className="grid grid-tiles gap-1.5 px-4 pb-4">
-          {ms.slice(2).map((m) => <Odd key={m.x} ctx={ctx} ev={ev} m={m} face={m.sj ?? marketLabel(m)} row />)}
-        </div>
-      )}
-      {cons.p.some((p) => p !== null) && (
-        <div data-testid="game-consensus" role="img" className="px-4 pb-4"
-             aria-label={`Consensus: ${ms.map((m, i) => `${m.tm ?? m.sj} ${pct(cons.p[i])}`).join(", ")}`}>
-          <p className="mb-1.5 flex items-baseline justify-between text-xs text-text-muted">
-            <span className="font-mono text-sm text-text">{pct(cons.p[0])}</span>
-            <span>{cons.source}</span>
-            <span className="font-mono text-sm text-text">{pct(cons.p[1])}</span>
-          </p>
-          <div className="flex h-2 gap-0.5 overflow-hidden rounded-pill">
-            {ms.map((m, i) => (
-              <i key={m.x} className={`block h-full grow-share ${fills[i % fills.length]}`}
-                 style={{ "--vm-share": cons.p[i] ?? 0 } as React.CSSProperties} />
-            ))}
-          </div>
-        </div>
-      )}
+      <Matchup teams={teams} picks={picks} big />
+      {cons.p.some((p) => p !== null) && <ConsensusBar teams={teams} p={cons.p} source={cons.source} />}
       <div className="px-4 pb-4 empty:hidden"><Claims ctx={ctx} ev={ev} ms={ms} /></div>
     </>
   );
@@ -431,19 +419,20 @@ export function GameView({ meta, tabs, initial }: { meta: GameMeta; tabs: GameTa
   return (
     <div data-testid="game-page" data-game={meta.g}>
       <Link href={meta.sport ? `/betting?sport=${encodeURIComponent(meta.sport)}` : "/betting"} data-testid="game-back"
-            className="tap -ml-1 inline-flex items-center gap-1.5 px-1 text-sm text-accent">
+            className="tap -ml-1 inline-flex items-center gap-1.5 px-1 text-sm text-accent-ink">
         <span aria-hidden>←</span> {meta.sport ? `${meta.sport} board` : "Board"}
       </Link>
 
       <article className="mt-2 overflow-hidden rounded-inner border border-border bg-surface">
-        <p className="flex justify-between gap-3 border-b border-border px-4 py-2 text-xs text-text-muted">
+        <p className="flex justify-between gap-3 border-b border-border px-4 py-2.25 text-xs text-text-muted">
           <span>
-            {meta.startsAt && <span data-testid="game-start" className="mr-2 text-text">{startLabel(meta.startsAt)}</span>}
+            {meta.startsAt && <span data-testid="game-start" className="mr-2 font-semibold text-text">{timeCT(meta.startsAt)}</span>}
             {meta.test && <span className="label-mono rounded-pill border border-border px-1.5">test</span>}
           </span>
-          <span className="label-mono">{(meta.league ?? meta.sport ?? "").toUpperCase()}</span>
+          <span>{[(meta.league ?? meta.sport ?? "").toUpperCase(), meta.startsAt ? dayLabel(meta.startsAt) : null]
+            .filter(Boolean).join(" · ")}</span>
         </p>
-        <h1 className="px-4 pb-1 pt-4 text-center font-display text-2xl text-text text-balance">{meta.title}</h1>
+        <h1 className="sr-only">{meta.title}</h1>
         <Scoreboard ctx={ctx} ev={winner} />
       </article>
 
@@ -452,7 +441,7 @@ export function GameView({ meta, tabs, initial }: { meta: GameMeta; tabs: GameTa
           {TABS.map((t) => (
             <button key={t} type="button" data-testid={`game-tab-${t}`} aria-pressed={tab === t} onClick={() => pickTab(t)}
                     className={`tap -mb-px shrink-0 whitespace-nowrap border-b-2 pb-2 text-sm transition-colors ${
-                      tab === t ? "border-accent text-text" : "border-transparent text-text-muted hover:text-text"}`}>
+                      tab === t ? "border-accent-ink text-text" : "border-transparent text-text-muted hover:text-text"}`}>
               {TAB_LABEL[t]}<span className="ml-1.5 font-mono text-xs text-text-muted">{count[t]}</span>
             </button>
           ))}
@@ -464,7 +453,7 @@ export function GameView({ meta, tabs, initial }: { meta: GameMeta; tabs: GameTa
           {asof ? `Prices ${asOfLabel(asof)} · before fee` : busy ? "Loading…" : ""}
         </span>
         <button type="button" data-testid="tab-refresh" disabled={busy} onClick={() => load(tab, tab === "players" ? stat : null, true)}
-                className="tap inline-flex items-center rounded-pill border border-border px-3 text-sm text-text hover:border-accent disabled:opacity-50">
+                className="tap inline-flex items-center rounded-pill border border-border px-3 text-sm text-text hover:border-accent-ink disabled:opacity-50">
           {busy ? "Refreshing…" : "Refresh"}
         </button>
       </div>

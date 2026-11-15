@@ -28,7 +28,7 @@ export function BettingNav() {
         {SECTIONS.map((s) => (
           <Link key={s.key} href={s.href} data-testid={`betting-tab-${s.key}`} aria-current={on === s.key ? "page" : undefined}
                 className={`tap -mb-px inline-flex items-center border-b-2 text-base transition-colors ${
-                  on === s.key ? "border-accent text-text" : "border-transparent text-text-muted hover:text-text"}`}>
+                  on === s.key ? "border-accent-ink text-text" : "border-transparent text-text-muted hover:text-text"}`}>
             {s.label}
           </Link>
         ))}

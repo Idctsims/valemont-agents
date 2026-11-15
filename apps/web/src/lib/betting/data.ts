@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BoardCard, BoardEvent, BoardGame, Credits, Kind, SportChip } from "./board";
 import type { ComboState, Quote } from "./combo";
 import type { GameMeta, GameTabs, Tab, TabEvent } from "./game";
+import { teamTuples } from "./teams";
 
 // Reads only, through the owner's session (RLS on db/071's tables), via its
 // narrow functions: never the tables themselves. One sport at a time with its
@@ -55,22 +56,35 @@ export async function loadGame(
 /** The game's header: its title, start, sport and league, from its own event (else any of its events). */
 export async function loadGameMeta(supabase: SupabaseClient, game: string, withTests: boolean): Promise<GameMeta | null> {
   let q = supabase.from("kalshi_board_events")
-    .select("event_ticker, series_ticker, game_title, starts_at, milestone_start, is_test")
+    .select("event_ticker, series_ticker, game_title, starts_at, milestone_start, is_test, sports_event_id")
     .eq("game_ticker", game)
     .limit(50);
   if (!withTests) q = q.eq("is_test", false);
   const { data, error } = await q;
   if (error) throw new Error(`Couldn't read the game: ${error.message}`);
   const rows = (data ?? []) as { event_ticker: string; series_ticker: string; game_title: string | null;
-                                 starts_at: string | null; milestone_start: string | null; is_test: boolean }[];
+                                 starts_at: string | null; milestone_start: string | null; is_test: boolean;
+                                 sports_event_id: number | null }[];
   if (rows.length === 0) return null;
   const ev = rows.find((r) => r.event_ticker === game) ?? rows[0];
   const { data: s, error: e2 } = await supabase.from("kalshi_series_board")
     .select("sport, league").eq("series_ticker", ev.series_ticker).maybeSingle();
   if (e2) throw new Error(`Couldn't read the game's series: ${e2.message}`);
   const series = (s ?? null) as { sport: string | null; league: string | null } | null;
+  // The linked ESPN game's teams (names, logos, colours: the mock's header), when the game's own event has one.
+  const own = rows.find((r) => r.event_ticker === game);
+  let teams: ReturnType<typeof teamTuples> = null;
+  if (own?.sports_event_id) {
+    const { data: se, error: e3 } = await supabase.from("sports_events")
+      .select("participants, home, away, home_away_swapped, kind").eq("id", own.sports_event_id).maybeSingle();
+    if (e3) throw new Error(`Couldn't read the game's teams: ${e3.message}`);
+    const row = se as { participants: unknown; home: string | null; away: string | null; home_away_swapped: boolean | null;
+                        kind: string } | null;
+    if (row && row.kind === "game") teams = teamTuples(row);
+  }
   return { g: game, title: ev.game_title ?? game, startsAt: ev.starts_at ?? ev.milestone_start,
-           sport: series?.sport ?? null, league: series?.league ?? null, test: ev.is_test };
+           sport: series?.sport ?? null, league: series?.league ?? null, test: ev.is_test,
+           ...(teams ? { tm: teams.tm, ...(teams.hs ? { hs: true } : {}) } : {}) };
 }
 
 export async function loadGameTabs(supabase: SupabaseClient, game: string, withTests: boolean): Promise<GameTabs> {

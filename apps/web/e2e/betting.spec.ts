@@ -4,19 +4,21 @@ import { addTestKalshiBoard, hasOwner, signIn, useE2eMarker } from "./support/ow
 
 // /betting (Chat 8 Phase 3.5, Workstream B, Step 1): the Board's cards, a
 // game as its own page with three tabs (db/079), the x / % switch, Today and
-// Record. Needs db/071-db/082.
+// Record. Needs db/071-db/083.
 //
 // Logged out: every /betting view is owner-only.
 // Signed in as the owner's REAL account, on TEST rows only (db/082
 // add_test_kalshi_board: series E2ETEST, the marker), one test game 3 h out:
-//   * Basketball shows its card (counts, combo count) with both moneyline
-//     prices (Kalshi's ask, away first: AWY 2.56×, HOM 1.59×) and its claimed
+//   * Basketball shows its card as the mock draws it (db/083): the linked
+//     test ESPN game's teams, both moneyline prices (Kalshi's ask, away
+//     first: AWY 2.56×, HOM 1.59×), the consensus bar in the teams' colours,
+//     the spread at the books' line and the total nearest 50c, its claimed
 //     edge; the Claimed edges filter keeps it; it opens the game page;
 //   * the header: both moneylines, the books' consensus bar (3 books, 64.8%);
 //     HOM CLAIMS (a span row, db/082's fixture: +0.17c shipped, +0.10c at the
 //     least favourable method), so its price is up and its claim is listed;
 //     AWY does not;
-//   * tab counts 2 / 4 / 0; Players loads its one stat (Points) in place, no
+//   * tab counts 7 / 4 / 0 (moneyline 2, spread 3, total 2); Players loads its one stat (Points) in place, no
 //     page load; "Other" absent (other = 0); the scalar ladder is "Scales";
 //     Test Player 10+ passes the shipped method and FAILS the least
 //     favourable (a span row): not claimed, no up colour;
@@ -71,13 +73,25 @@ test.describe("owner", () => {
     await expect(page.getByTestId("betting-tab-board")).toHaveAttribute("aria-current", "page");
     await expect(page.locator('[data-testid="board-sport-chip"][data-sport="Basketball"]')).toHaveAttribute("aria-current", "page");
     await expect(page.getByTestId("betting-credits")).toContainText("/ 500 used this month");
-    await expect(card().getByTestId("game-counts")).toHaveText("2 lines · 3 props · 1 scalar");
-    await expect(card()).toContainText("2 combo");
-    await expect(card().getByTestId("board-game-open")).toContainText("6 markets");
-    // Both moneylines on the card, Kalshi's ask, away first as the title names them (db/082).
-    await expect(card().getByTestId("card-ml-pick")).toHaveCount(2);
-    await expect(card().getByTestId("card-ml-pick").first()).toHaveAttribute("data-ticker", `${game}-AWY`);
-    await expect(card().getByTestId("card-ml-price")).toHaveText(["2.56×", "1.59×"]);
+    // The mock's card (db/083): the linked ESPN game's teams, city large, nickname and away / home under it.
+    await expect(card().getByTestId("team-name")).toHaveText(["Testville", "Hometown"]);
+    await expect(card().getByTestId("matchup-team").first()).toContainText("Away · away");
+    await expect(card().getByTestId("matchup-team").last()).toContainText("Home · home");
+    // Both moneylines, Kalshi's ask as the big number, away first as the title names them.
+    await expect(card().getByTestId("ml-pick")).toHaveCount(2);
+    await expect(card().getByTestId("ml-pick").first()).toHaveAttribute("data-ticker", `${game}-AWY`);
+    await expect(card().getByTestId("market-price")).toHaveText(["2.56×", "1.59×"]);
+    // The books' consensus in the teams' colours: AWY its normalized mid (no outside row), HOM 0.648.
+    await expect(card().getByTestId("game-consensus")).toContainText("3 books say");
+    await expect(card().getByTestId("bar-away")).toHaveText("38.0%");
+    await expect(card().getByTestId("bar-home")).toHaveText("64.8%");
+    await expect(card().getByTestId("bar-team").first()).toHaveAttribute("style", /--vm-team: #2b6cb0/);
+    // The spread at the books' line (-6.5, not the -3.5 nearer 50c), the total nearest 50c.
+    await expect(card().locator('[data-testid="card-line"][data-kind="spread"]')).toContainText("Hometown −6.5");
+    await expect(card().locator('[data-testid="card-line"][data-kind="spread"]').getByTestId("card-line-price")).toHaveText("2.50×");
+    await expect(card().locator('[data-testid="card-line"][data-kind="total"]')).toContainText("Over 220.5");
+    await expect(card().locator('[data-testid="card-line"][data-kind="total"]').getByTestId("card-line-price")).toHaveText("2.08×");
+    await expect(card().getByTestId("board-game-open")).toContainText("11 markets");
     await expect(card().getByTestId("card-claimed")).toHaveText("claimed edge");
   });
 
@@ -115,7 +129,7 @@ test.describe("owner", () => {
     const claim = page.locator(`[data-testid="box-claim"][data-ticker="${game}-HOM"]`);
     await expect(claim).toHaveAttribute("data-side", "yes");
     await expect(claim).toContainText("Claimed edge +0.2¢ on YES");
-    await expect(page.getByTestId("game-tab-lines")).toContainText("2");
+    await expect(page.getByTestId("game-tab-lines")).toContainText("7");
     await expect(page.getByTestId("game-tab-players")).toContainText("4");
     await expect(page.getByTestId("game-tab-periods")).toContainText("0");
     await expect(page.getByTestId("game-tab-lines")).toHaveAttribute("aria-pressed", "true");

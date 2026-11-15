@@ -60,6 +60,37 @@ def _refuse_database(*a, **k):
 
 # ------------------------------------------------------------------ parsing
 
+class TeamLook(unittest.TestCase):
+    """The betting cards' city, nickname, colours and logo (owner, Nov 15)."""
+
+    def test_kept_from_the_fixture(self) -> None:
+        g = parse("nba_scheduled")[0]
+        team = g.participants["away"] if g.participants["away"].get("loc") == "Detroit" else g.participants["home"]
+        raw = fixture("nba_scheduled")["events"][0]["competitions"][0]["competitors"]
+        src = next(c["team"] for c in raw if c["team"]["id"] == team["id"])
+        self.assertEqual(team["loc"], src["location"])
+        self.assertEqual(team["nick"], src["name"])
+        self.assertEqual(team["color"], src["color"].lower())
+        self.assertEqual(team["alt"], src["alternateColor"].lower())
+        self.assertEqual("https://a.espncdn.com/i/teamlogos/" + team["logo"], src["logo"])
+
+    def test_a_bad_colour_or_a_foreign_logo_is_dropped_not_fatal(self) -> None:
+        data = fixture("nba_scheduled")
+        team = data["events"][0]["competitions"][0]["competitors"][0]["team"]
+        team.update(color="#1d428a", alternateColor="red", logo="https://example.com/x.png", location="  ")
+        g = espn.parse(LEAGUES["nba"], data)[0]
+        side = next(s for s in g.participants.values() if s["id"] == team["id"])
+        for key in ("color", "alt", "logo", "loc"):
+            self.assertNotIn(key, side)
+        self.assertEqual(side["nick"], team["name"])
+
+    def test_a_wrong_type_still_fails_loud(self) -> None:
+        data = fixture("nba_scheduled")
+        data["events"][0]["competitions"][0]["competitors"][0]["team"]["color"] = 7
+        with self.assertRaises(EspnShapeError):
+            espn.parse(LEAGUES["nba"], data)
+
+
 class Parsing(unittest.TestCase):
     def test_every_fixture_parses_into_valid_rows(self) -> None:
         names = sorted(p.stem[len("espn_"):] for p in FIXTURES.glob("espn_*.json"))

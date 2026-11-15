@@ -162,7 +162,7 @@ export function QuoteView({ id, quote, legs }: { id: number; quote: Quote; legs:
       </p>
       <button type="button" data-testid="combo-ask-wags"
               onClick={() => wags.open({ label: `Combo · #${id}`, pillar: "combos", slug: String(id) })}
-              className="tap mt-2 inline-flex items-center rounded-pill border border-border px-3 text-sm text-text hover:border-accent hover:text-accent">
+              className="tap mt-2 inline-flex items-center rounded-pill border border-border px-3 text-sm text-text hover:border-accent-ink hover:text-accent-ink">
         Ask Wags about this
       </button>
     </div>

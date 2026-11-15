@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { boardHeadline, boardHref, byDay, cardPrices, claimedFilter, parseFilters } from "../src/lib/betting/board";
 import { flipLeg, legFrom, loadLegs, noRefusal, requestLegs, type ComboLeg } from "../src/lib/betting/combo";
+import { cardBar, cardLines, cardTeams, cardTitle, expandTicker, logoKey, logoUrls, teamTuples } from "../src/lib/betting/teams";
 import {
   OTHER_STAT, boxTitle, eventTag, isLadder, isWinnerEvent, mainIndex, marketTicker, orderBoxes, periodLabel,
   periodsOf, playerRows, rungLabel, rungWindow, sidesOf, singleLine, statLabel, tabKey, winnerConsensus,
@@ -206,16 +207,16 @@ test.describe("the slip's YES / NO flip (owner, Nov 15)", () => {
   });
 });
 
-test.describe("the board's cards (db/082)", () => {
+test.describe("the board's cards (db/082, db/083)", () => {
   test("each card's moneyline prices: ticker, Kalshi's code, bid and ask, in the reader's order", () => {
-    expect(cardPrices({ g: "KXNBAGAME-26NOV15GSWHOU", w: [["GSW", 0.37, 0.39], ["HOU", 0.61, 0.63]] })).toEqual([
+    expect(cardPrices({ g: "KXNBAGAME-26NOV15GSWHOU", w: [["GSW", 0.37, 0.39, 0.38], ["HOU", 0.61, 0.63, 0.62]] })).toEqual([
       { t: "KXNBAGAME-26NOV15GSWHOU-GSW", code: "GSW", b: 0.37, a: 0.39 },
       { t: "KXNBAGAME-26NOV15GSWHOU-HOU", code: "HOU", b: 0.61, a: 0.63 },
     ]);
     // A tie last, an unquoted side kept without a price, a single-market event's own ticker.
-    expect(cardPrices({ g: "G", w: [["A", 0.4, 0.42], ["B", null, null], ["TIE", 0.2, 0.22]] }).map((p) => [p.t, p.a]))
+    expect(cardPrices({ g: "G", w: [["A", 0.4, 0.42, 0.4], ["B", null, null, null], ["TIE", 0.2, 0.22, 0.2]] }).map((p) => [p.t, p.a]))
       .toEqual([["G-A", 0.42], ["G-B", undefined], ["G-TIE", 0.22]]);
-    expect(cardPrices({ g: "G", w: [["", 0.5, 0.52]] })[0].t).toBe("G");
+    expect(cardPrices({ g: "G", w: [["", 0.5, 0.52, 0.51]] })[0].t).toBe("G");
     expect(cardPrices({ g: "G" })).toEqual([]);
   });
 
@@ -230,6 +231,76 @@ test.describe("the board's cards (db/082)", () => {
     expect(boardHref({ sport: "Basketball", kind: null, combo: false, claimed: false })).toBe("/betting?sport=Basketball");
     expect(parseFilters({ sport: "Basketball", claimed: "1" }).claimed).toBe(true);
     expect(parseFilters({ sport: "Basketball", claimed: "yes" }).claimed).toBeUndefined();
+  });
+});
+
+test.describe("the mock's card: teams, logos, bar, main lines (db/083)", () => {
+  const nba = {
+    g: "KXNBAGAME-26NOV13MILORL", at: 1794600000,
+    w: [["MIL", 0.23, 0.24, 0.231], ["ORL", 0.77, 0.78, 0.769]] as [string, number, number, number][],
+    wn: 9,
+    tm: [["Milwaukee", "Bucks", "nba/mil", "00471b"], ["Orlando", "Magic", "nba/orl", "0077c0"]] as
+      [string, string | null, string | null, string | null][],
+    sp: ["KXNBASPREAD-~-ORL8", "ORL", 8.5, 0.52, 0.53, 1] as [string, string, number, number, number, number],
+    to: ["KXNBATOTAL-~-224", 224.5, 0.51, 0.52, 0] as [string, number, number, number, number],
+  };
+
+  test("ESPN logo keys become ESPN's URLs; a dark variant only where ESPN keeps one", () => {
+    expect(logoUrls("nba/det")).toEqual({ logo: "https://a.espncdn.com/i/teamlogos/nba/500/det.png",
+                                          logoDark: "https://a.espncdn.com/i/teamlogos/nba/500-dark/det.png" });
+    expect(logoUrls("ncaa/254")).toEqual({ logo: "https://a.espncdn.com/i/teamlogos/ncaa/500/254.png",
+                                           logoDark: "https://a.espncdn.com/i/teamlogos/ncaa/500/254.png" });
+    for (const bad of [null, undefined, "", "../x", "nba/det.png", "NBA/det", "nba/det/x"]) expect(logoUrls(bad)).toEqual({});
+    expect(logoKey("nba/500/scoreboard/det.png")).toBe("nba/det");
+    expect(logoKey("ncaa/500/254.png")).toBe("ncaa/254");
+    expect(logoKey("https://example.com/x.png")).toBeNull();
+  });
+
+  test("teams in Kalshi's order: city, nickname, logo, colour, Kalshi's code, home or away", () => {
+    const [a, h] = cardTeams(nba)!;
+    expect(a).toEqual({ city: "Milwaukee", nick: "Bucks", logo: "https://a.espncdn.com/i/teamlogos/nba/500/mil.png",
+                        logoDark: "https://a.espncdn.com/i/teamlogos/nba/500-dark/mil.png", color: "#00471b", code: "MIL",
+                        home: false });
+    expect(h.home).toBe(true);
+    // A swapped link: home first.
+    const sw = cardTeams({ ...nba, hs: true })!;
+    expect(sw.map((t) => t.home)).toEqual([true, false]);
+    // A colour that is not six hex digits is no colour.
+    expect(cardTeams({ ...nba, tm: [["X", null, null, "red"], ["Y", null, null, null]] })!.map((t) => t.color)).toEqual([undefined, undefined]);
+  });
+
+  test("no ESPN link: the sides as the title writes them, with Kalshi's codes", () => {
+    expect(cardTeams({ t: "BC Neptunas Klaipeda at BC Zalgiris Kaunas", w: [["NEP", 0.1, 0.11, 0.1], ["ZAL", 0.89, 0.9, 0.9]] }))
+      .toEqual([{ city: "BC Neptunas Klaipeda", code: "NEP", home: false }, { city: "BC Zalgiris Kaunas", code: "ZAL", home: true }]);
+    expect(cardTeams({ t: "Tournament winner" })).toBeNull();
+    expect(cardTitle({ ...nba })).toBe("Milwaukee Bucks at Orlando Magic");
+    expect(cardTitle({ ...nba, t: "MIL Bucks at ORL Magic" })).toBe("MIL Bucks at ORL Magic");
+  });
+
+  test("the bar: each side's p and whose number it is", () => {
+    expect(cardBar(nba)).toEqual({ p: [0.231, 0.769], source: "9 books say" });
+    expect(cardBar({ ...nba, wn: undefined, we: true })!.source).toBe("ESPN's book says");
+    expect(cardBar({ ...nba, wn: undefined })!.source).toBe("Kalshi mid");
+    expect(cardBar({ w: [["A", 0.4, 0.42, null], ["B", 0.5, 0.52, null]] })).toBeNull();
+  });
+
+  test("the Spread and Total cells: the team's city and the line, the full ticker back from '~'", () => {
+    const { spread, total } = cardLines(nba);
+    expect(spread).toEqual({ t: "KXNBASPREAD-26NOV13MILORL-ORL8", label: "Orlando −8.5", b: 0.52, a: 0.53, yesOnly: true });
+    expect(total).toEqual({ t: "KXNBATOTAL-26NOV13MILORL-224", label: "Over 224.5", b: 0.51, a: 0.52, yesOnly: false });
+    expect(expandTicker("KXNBASPREAD-OTHER-ORL8", nba.g)).toBe("KXNBASPREAD-OTHER-ORL8");
+    expect(cardLines({ g: "G" })).toEqual({});
+  });
+
+  test("the game page reads the linked ESPN row into the same teams", () => {
+    expect(teamTuples({ participants: { away: { name: "Milwaukee Bucks", loc: "Milwaukee", nick: "Bucks",
+                                                logo: "nba/500/scoreboard/mil.png", color: "00471b" },
+                                        home: { name: "Orlando Magic" } },
+                        home: "Orlando Magic", away: "Milwaukee Bucks", home_away_swapped: false }))
+      .toEqual({ tm: [["Milwaukee", "Bucks", "nba/mil", "00471b"], ["Orlando Magic", null, null, null]] });
+    expect(teamTuples({ participants: { away: { name: "A" }, home: { name: "H" } }, home: "H", away: "A", home_away_swapped: true }))
+      .toEqual({ tm: [["H", null, null, null], ["A", null, null, null]], hs: true });
+    expect(teamTuples({ participants: [{ name: "x" }], home: null, away: null, home_away_swapped: null })).toBeNull();
   });
 });
 

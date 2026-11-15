@@ -27,7 +27,7 @@ function ComboChip({ ev }: { ev: BoardEvent }) {
   return (
     <span data-testid="combo-chip" data-yes-only={ev.y ? "true" : undefined} data-size-max={cap ? ev.sm : undefined}
           title={cap ? `A Kalshi combo may use at most ${ev.sm} of this event's markets` : undefined}
-          className="label-mono inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-pill border border-accent px-2 text-accent">
+          className="label-mono inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-pill border border-accent-ink px-2 text-accent-ink">
       {comboLabel(ev)}
     </span>
   );
@@ -56,7 +56,7 @@ function TickButtons({ leg, ticked, tick }: {
                 onClick={() => tick({ ...leg, side })}
                 className="tap group inline-flex items-center justify-center px-0.5">
           <span className={`label-mono inline-flex h-8 items-center rounded-pill border px-3 ${
-            ticked === side ? "border-accent bg-accent text-on-accent" : "border-border text-text-muted group-hover:border-accent"}`}>
+            ticked === side ? "border-accent-ink bg-accent text-on-accent" : "border-border text-text-muted group-hover:border-accent-ink"}`}>
             {side === "yes" ? "YES" : "NO"}
           </span>
         </button>
@@ -188,7 +188,7 @@ function GameItem({ game, kind, combo, legs }: { game: BoardGame; kind: Kind | n
         <p className="mt-1 text-base text-text">{game.t}</p>
         <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-text-muted">
           <span data-testid="game-counts">{countsLine(game)}</span>
-          {game.c ? <span className="label-mono text-accent">{game.c} combo</span> : null}
+          {game.c ? <span className="label-mono text-accent-ink">{game.c} combo</span> : null}
           <span className="label-mono">{asOfLabel(game.asof)}</span>
         </p>
       </button>
@@ -273,7 +273,7 @@ export function BoardView({ games, kind, combo }: { games: BoardGame[]; kind: Ki
         <button type="button" data-testid="combo-toggle" aria-pressed={on} onClick={switchMode}
                 className="tap group inline-flex items-center justify-center">
           <span className={`label-mono inline-flex h-8 items-center rounded-pill border px-3 ${
-            on ? "border-accent bg-accent text-on-accent" : "border-border text-text-muted group-hover:border-accent"}`}>
+            on ? "border-accent-ink bg-accent text-on-accent" : "border-border text-text-muted group-hover:border-accent-ink"}`}>
             Combo
           </span>
         </button>

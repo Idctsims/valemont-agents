@@ -55,6 +55,13 @@
      is 3.35:1, so the badge text is a lighter step of the accent. */
   --vm-paper-fg: #f0cf96;
   --vm-paper-bg: #594c3d;
+
+  /* Accent as text and outline (the fill is --vm-accent), a slate band, a
+     picked cell. App-wide they are existing values; /betting's palette sets
+     them apart (below). */
+  --vm-accent-ink: #ca9c68;
+  --vm-band: #2b2f2e;
+  --vm-pick: #2b2f2e;
 }
 
 [data-theme="day"] {
@@ -92,6 +99,45 @@
 
   --vm-paper-fg: #4a3622;
   --vm-paper-bg: #e2d6bc;
+
+  --vm-accent-ink: #4a3622;
+  --vm-band: #efe7d3;
+  --vm-pick: #efe7d3;
+}
+
+/* /betting's own palette (owner, 2026-11-15: "use its palette"): the approved
+   mock's paper ground and one deep green, day and night, scoped to the betting
+   pages: the whole page (header and tab bar too) while one of them is open
+   (:has(.betting-theme), set on their layout). Fonts and shape stay the app's.
+   check:contrast holds every pair below to AA, merged over its theme. */
+[data-theme="day"]:has(.betting-theme) {
+  --vm-bg: #f4f3ef;
+  --vm-surface: #fbfaf6;
+  --vm-surface-2: #eeede7;
+  --vm-surface-3: #dedfd8;
+  --vm-border: #cccec6;
+  --vm-text: #191a17;
+  --vm-text-muted: #676960;
+  --vm-accent: #17462f;
+  --vm-on-accent: #ffffff;
+  --vm-accent-ink: #17462f;
+  --vm-band: #ebe9e2;
+  --vm-pick: #e3ece5;
+}
+
+[data-theme="night"]:has(.betting-theme) {
+  --vm-bg: #101310;
+  --vm-surface: #181c18;
+  --vm-surface-2: #1f241f;
+  --vm-surface-3: #2a302a;
+  --vm-border: #353b34;
+  --vm-text: #eef0e8;
+  --vm-text-muted: #9aa093;
+  --vm-accent: #1f5a3d;
+  --vm-on-accent: #ffffff;
+  --vm-accent-ink: #86cba3;
+  --vm-band: #0c0f0c;
+  --vm-pick: #1c2f24;
 }
 
 /* ------------------------------------------------------- tailwind theme */
@@ -115,6 +161,9 @@
   --color-text: var(--vm-text);
   --color-text-muted: var(--vm-text-muted);
   --color-accent: var(--vm-accent);
+  --color-accent-ink: var(--vm-accent-ink);
+  --color-band: var(--vm-band);
+  --color-pick: var(--vm-pick);
   --color-accent-strong: var(--vm-accent-strong);
   --color-wood: var(--vm-wood);
   --color-on-accent: var(--vm-on-accent);
@@ -419,6 +468,27 @@
 }
 @utility grow-share {
   flex: var(--vm-share, 1) 1 0%;
+}
+
+/* /betting's team colour (ESPN's, data, set per element as --vm-team), else a
+   neutral step: the consensus bar. And a logo for each ground: ESPN's light
+   and dark variants, the theme shows one. */
+@utility bg-team {
+  background-color: var(--vm-team, var(--vm-surface-3));
+}
+/* A picked cell on a board card: the accent as an underline inside it. */
+@utility shadow-pick {
+  box-shadow: inset 0 -3px 0 var(--vm-accent-ink);
+}
+@utility logo-day {
+  [data-theme="night"] & {
+    display: none;
+  }
+}
+@utility logo-night {
+  [data-theme="day"] & {
+    display: none;
+  }
 }
 
 /* Hairline rule in wood, for the one place a divider carries meaning. */

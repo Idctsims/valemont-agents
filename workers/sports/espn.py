@@ -287,6 +287,11 @@ def _list(obj: Any, key: str, league: str, path: str) -> list[Any]:
 #: season), so it is optional there and stored NULL when absent.
 NEUTRAL_REQUIRED = frozenset({"football", "basketball", "hockey"})
 
+#: A team colour as ESPN sends it: six hex digits, no '#'.
+HEX_COLOR = re.compile(r"[0-9A-Fa-f]{6}")
+#: ESPN's logo host and folder; a logo is stored as the path after it (the web adds it back).
+LOGO_PREFIX = "https://a.espncdn.com/i/teamlogos/"
+
 def _team(cp: Any, league: str, path: str) -> tuple[str, dict[str, Any], int | str | None]:
     side = req(cp, "homeAway", str, league, path)
     if side not in ("home", "away"):
@@ -299,7 +304,21 @@ def _team(cp: Any, league: str, path: str) -> tuple[str, dict[str, Any], int | s
     abbr = opt(team, "abbreviation", str, league, f"{path}.team")
     if abbr:
         info["abbr"] = abbr[:12]
-    conf = opt(team, "conferenceId", str, league, f"{path}.team")
+    # The betting board's cards (owner, Nov 15: like the mock): city and nickname apart, the team's
+    # colours for the consensus bar, ESPN's logo. A value of the wrong shape is dropped, never a reason
+    # to fail the league; a wrong TYPE still fails loud (opt).
+    for key, src in (("loc", "location"), ("nick", "name")):
+        v = opt(team, src, str, league, f"{path}.team")
+        if v and v.strip():
+            info[key] = v.strip()[:60]
+    for key, src in (("color", "color"), ("alt", "alternateColor")):
+        v = opt(team, src, str, league, f"{path}.team")
+        if v and HEX_COLOR.fullmatch(v):
+            info[key] = v.lower()
+    logo = opt(team, "logo", str, league, f"{path}.team")
+    if logo and logo.startswith(LOGO_PREFIX) and len(logo) <= 200:
+        info["logo"] = logo[len(LOGO_PREFIX):]
+    conf =opt(team, "conferenceId", str, league, f"{path}.team")
     if conf:
         info["conference_id"] = conf
     rank = opt(cp, "curatedRank", dict, league, path)

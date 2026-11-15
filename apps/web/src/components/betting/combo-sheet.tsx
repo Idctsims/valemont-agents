@@ -46,7 +46,7 @@ export function ComboSheet({ legs, onRemove, onClear }: {
                 {legs.map((l) => (
                   <li key={l.t} className="flex items-center justify-between gap-3 py-1">
                     <span className="min-w-0 flex-1 text-sm text-text">
-                      <span className="label-mono mr-2 text-accent">{l.side === "yes" ? "YES" : "NO"}</span>
+                      <span className="label-mono mr-2 text-accent-ink">{l.side === "yes" ? "YES" : "NO"}</span>
                       {l.label}
                       <span className="block text-xs text-text-muted">{l.game}</span>
                     </span>

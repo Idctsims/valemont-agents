@@ -53,11 +53,36 @@ const pairs = [
   ["paper-fg", "paper-bg", 4.5],
 ];
 
+// /betting's own palette (.betting-theme), merged over its theme: the same
+// pairs, plus the accent as text and the slate band and the picked cell.
+function bettingBlock(theme) {
+  const re = new RegExp(`\\[data-theme="${theme}"\\]:has\\(\\.betting-theme\\)\\s*\\{([^}]*)\\}`);
+  const m = css.match(re);
+  if (!m) throw new Error(`no [data-theme="${theme}"]:has(.betting-theme) block in tokens.css`);
+  const vars = { ...block(theme) };
+  for (const [, name, hex] of m[1].matchAll(/--vm-([a-z0-9-]+):\s*(#[0-9a-fA-F]{6})/g)) vars[name] = hex;
+  return vars;
+}
+// The accent there is a FILL (night: a deep green under white text); its
+// text and outline colour is accent-ink, so "accent as text" is accent-ink's
+// pair, and no betting file may use text-accent (checked below).
+const bettingPairs = [
+  ...pairs.filter(([fg]) => fg !== "accent"),
+  ...[...surfaces, "band", "pick"].map((s) => ["accent-ink", s, 4.5]),
+  ["text", "band", 4.5],
+  ["text-muted", "band", 4.5],
+  ["text", "pick", 4.5],
+  ["text-muted", "pick", 4.5],
+];
+
 let failed = 0;
-for (const theme of ["night", "day"]) {
-  const v = block(theme);
-  console.log(`\n${theme.toUpperCase()}`);
-  for (const [fg, bg, min] of pairs) {
+const themes = [
+  ...["night", "day"].map((t) => ({ theme: t.toUpperCase(), v: block(t), set: pairs })),
+  ...["night", "day"].map((t) => ({ theme: `BETTING ${t.toUpperCase()}`, v: bettingBlock(t), set: bettingPairs })),
+];
+for (const { theme, v, set } of themes) {
+  console.log(`\n${theme}`);
+  for (const [fg, bg, min] of set) {
     if (!v[fg] || !v[bg]) throw new Error(`${theme}: missing --vm-${fg} or --vm-${bg}`);
     const r = ratio(v[fg], v[bg]);
     const ok = r >= min;
@@ -66,6 +91,19 @@ for (const theme of ["night", "day"]) {
       `  ${ok ? "pass" : "FAIL"}  ${r.toFixed(2).padStart(5)}:1  ${fg} on ${bg}  (${v[fg]} / ${v[bg]})`,
     );
   }
+}
+
+// No betting file uses the fill accent as text (text-accent, not text-accent-ink).
+{
+  const { readdirSync, statSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const roots = ["../src/components/betting", "../src/app/(app)/betting"].map((r) => fileURLToPath(new URL(r, import.meta.url)));
+  const files = [];
+  const walk = (d) => { for (const n of readdirSync(d)) { const p = join(d, n); if (statSync(p).isDirectory()) walk(p); else if (/\.tsx?$/.test(n)) files.push(p); } };
+  for (const r of roots) walk(r);
+  const bad = files.filter((f) => /\btext-accent(?![-\w])/.test(readFileSync(f, "utf8")));
+  console.log(`\nBETTING FILES: ${bad.length === 0 ? "no text-accent" : "text-accent in " + bad.join(", ")}`);
+  if (bad.length) failed += bad.length;
 }
 
 if (failed) {

@@ -26,11 +26,23 @@ export type BoardGame = {
   test?: boolean;
 };
 
-/** kalshi_board_cards (db/082): a game's card. w: its winner markets from the game's own event, each
- *  [the ticker after the event's ("" = the event's own), YES bid, YES ask], away first as the title
- *  names them, a tie last; wy: that event takes YES only in a combo; hc: a span row of the game claims
- *  an edge (db/078's rule, priced on span rows only). */
-export type BoardCard = BoardGame & { w?: [string, number | null, number | null][]; wy?: boolean; hc?: boolean };
+/** kalshi_board_cards (db/083): a game's card, as the approved mock draws it.
+ *  w: its winner markets from the game's own event, each [the ticker after the event's ("" = the
+ *  event's own), YES bid, YES ask, consensus p], away first as the title names them, a tie last;
+ *  wn: books at the line when the bar is the books'; we: the bar is ESPN's book; wy: that event takes
+ *  YES only in a combo; tm: the linked ESPN game's teams in w's order, each [city, nickname, logo key,
+ *  colour hex], hs: home first (a swapped link); sp / to: the main spread and total ('~' = the game's
+ *  date-and-teams part of the ticker); n: every market of the game; at: start, epoch seconds; t: the
+ *  title, only where no ESPN teams say it; asof: the board's latest fetch, on the first card only;
+ *  hc: a span row of the game claims an edge (db/078's rule, priced on span rows only). */
+export type BoardCard = {
+  g: string; t?: string; at: number; lg?: string; n?: number; asof?: string; test?: boolean;
+  w?: [string, number | null, number | null, number | null][]; wn?: number; we?: boolean; wy?: boolean;
+  tm?: [string, string | null, string | null, string | null][]; hs?: boolean;
+  sp?: [string, string, number, number | null, number | null, number];
+  to?: [string, number, number | null, number | null, number];
+  hc?: boolean;
+};
 
 export type CardPrice = { t: string; code: string; b?: number; a?: number };
 
