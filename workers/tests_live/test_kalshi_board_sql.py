@@ -446,9 +446,11 @@ class GameTabs079(BoardSqlCase):
 
 
 class BoardCards082(BoardSqlCase):
-    """db/082: a board card carries its moneyline prices (Kalshi's own) and
-    whether a span row of the game claims, by db/080's rule; nothing else is
-    priced. Test rows only with the flag; anon runs neither reader."""
+    """db/082, as db/083 reshaped it: a board card carries its moneyline
+    prices (Kalshi's own) with each side's consensus p, the linked ESPN
+    game's teams, and whether a span row of the game claims, by db/080's
+    rule; nothing else is priced. Test rows only with the flag; anon runs
+    neither reader."""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -502,11 +504,28 @@ class BoardCards082(BoardSqlCase):
                 return rows[0]
 
             c = card()
-            # Away first, as the title names them: [suffix, YES bid, YES ask]; YES-only from the game's own event.
-            self.assertEqual(c["w"], [["AWY", 0.37, 0.39], ["HOM", 0.61, 0.63]])
+            # Away first, as the title names them: [suffix, YES bid, YES ask, p]; with no outside row p is the
+            # event-normalized mid. YES-only from the game's own event. Every market counted (n, db/083).
+            self.assertEqual(c["w"], [["AWY", 0.37, 0.39, 0.38], ["HOM", 0.61, 0.63, 0.62]])
             self.assertTrue(c["wy"])
-            self.assertEqual((c["l"], c["p"]), (2, 1))
+            self.assertEqual(c["n"], 3)
             self.assertNotIn("hc", c)
+            self.assertNotIn("tm", c)
+            self.assertEqual(c["t"], "TL Away at TL Home")
+            # Linked to an ESPN game: its teams in Kalshi's order, logo key folded, and no title.
+            sid = conn.execute(
+                "INSERT INTO sports_events (league, kind, espn_id, event_name, starts_at, home, away, participants, "
+                "status, espn_status, content_hash, is_test) VALUES ('nba', 'game', %s, 'TL', now() + interval '3 hours', "
+                "'TL Home', 'TL Away', %s, 'scheduled', 'STATUS_SCHEDULED', md5(%s), true) RETURNING id",
+                (f"e2e-{tag().lower()}", json.dumps({
+                    "away": {"id": "1", "name": "TL Away", "loc": "Awayton", "nick": "Visitors",
+                             "logo": "nba/500/scoreboard/awy.png", "color": "112233"},
+                    "home": {"id": "2", "name": "TL Home", "loc": "Hometon", "nick": "Hosts",
+                             "logo": "ncaa/500/2.png", "color": "445566"}}), game)).fetchone()[0]
+            conn.execute("UPDATE kalshi_board_events SET sports_event_id = %s WHERE event_ticker = %s", (sid, game))
+            c = card()
+            self.assertEqual(c["tm"], [["Awayton", "Visitors", "nba/awy", "112233"], ["Hometon", "Hosts", "ncaa/2", "445566"]])
+            self.assertNotIn("t", c)
             # A books row with no span: priced on the game page, never flags the card.
             ledger.leg_consensus_upsert([self.books(f"{game}-HOM", 0.66)], NOW, is_test=True, conn=conn)
             self.assertNotIn("hc", card())
