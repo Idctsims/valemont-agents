@@ -181,7 +181,7 @@ export function isKind(v: unknown): v is Kind {
   return typeof v === "string" && (KINDS as readonly string[]).includes(v);
 }
 
-/** The board's URL for a set of filters (the chips are links). base: the old page at /betting/classic. */
+/** The board's URL for a set of filters (the chips are links). */
 export function boardHref(f: Filters, base = "/betting"): string {
   const q = new URLSearchParams();
   if (f.sport) q.set("sport", f.sport);

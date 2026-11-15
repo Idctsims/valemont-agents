@@ -85,7 +85,7 @@ test.describe("owner", () => {
     await expect(card().getByTestId("game-consensus")).toContainText("3 books say");
     await expect(card().getByTestId("bar-away")).toHaveText("38.0%");
     await expect(card().getByTestId("bar-home")).toHaveText("64.8%");
-    await expect(card().getByTestId("bar-team").first()).toHaveAttribute("style", /--vm-team: #2b6cb0/);
+    await expect(card().getByTestId("bar-team").first()).toHaveAttribute("style", /--vm-team:\s*#2b6cb0/);
     // The spread at the books' line (-6.5, not the -3.5 nearer 50c), the total nearest 50c.
     await expect(card().locator('[data-testid="card-line"][data-kind="spread"]')).toContainText("Hometown −6.5");
     await expect(card().locator('[data-testid="card-line"][data-kind="spread"]').getByTestId("card-line-price")).toHaveText("2.50×");
