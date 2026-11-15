@@ -77,7 +77,8 @@ export function cardTeams(c: Pick<BoardCard, "tm" | "hs" | "t" | "w">): Team[] |
       const home = c.hs ? i === 0 : i === 1;
       return {
         city: city || codes[i] || "",
-        ...(nick ? { nick } : {}),
+        // Soccer sends the club's name as both city and nickname: say it once.
+        ...(nick && nick !== city ? { nick } : {}),
         ...logoUrls(key),
         ...(color && HEX.test(color) ? { color: `#${color}` } : {}),
         ...(codes[i] ? { code: codes[i] } : {}),

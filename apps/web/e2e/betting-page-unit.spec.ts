@@ -265,6 +265,9 @@ test.describe("the mock's card: teams, logos, bar, main lines (db/083)", () => {
     // A swapped link: home first.
     const sw = cardTeams({ ...nba, hs: true })!;
     expect(sw.map((t) => t.home)).toEqual([true, false]);
+    // Soccer's club name as city and nickname: said once.
+    expect(cardTeams({ ...nba, tm: [["Brighton & Hove Albion", "Brighton & Hove Albion", "soccer/331", "0606fa"],
+                                    ["AEK Athens", "AEK Athens", null, null]] })!.map((t) => t.nick)).toEqual([undefined, undefined]);
     // A colour that is not six hex digits is no colour.
     expect(cardTeams({ ...nba, tm: [["X", null, null, "red"], ["Y", null, null, null]] })!.map((t) => t.color)).toEqual([undefined, undefined]);
   });
