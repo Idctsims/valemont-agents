@@ -2,12 +2,14 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { BoardEvent, BoardGame, Credits, Kind, SportChip } from "./board";
+import type { BoardCard, Credits, SportChip } from "./board";
 import type { ComboState, Quote } from "./combo";
+import type { GameMeta, GameTabs, Tab, TabEvent } from "./game";
+import { teamTuples } from "./teams";
 
 // Reads only, through the owner's session (RLS on db/071's tables), via its
-// narrow functions: never the tables themselves. One sport at a time with its
-// games collapsed (the page); one game's markets on expand (the action).
+// narrow functions: never the tables themselves. One sport's cards (the
+// board), one game's tabs (its page).
 
 export async function loadSports(supabase: SupabaseClient, withTests: boolean): Promise<SportChip[]> {
   const { data, error } = await supabase.rpc("kalshi_board_sports", { p_tests: withTests });
@@ -15,28 +17,69 @@ export async function loadSports(supabase: SupabaseClient, withTests: boolean): 
   return (data ?? []) as SportChip[];
 }
 
-export async function loadGames(
-  supabase: SupabaseClient,
-  opts: { sport: string; kind: Kind | null; combo: boolean; withTests: boolean },
-): Promise<BoardGame[]> {
-  const { data, error } = await supabase.rpc("kalshi_board_games", {
-    p_sport: opts.sport, p_kind: opts.kind, p_combo_only: opts.combo, p_tests: opts.withTests,
-  });
+/** The board's cards (db/083): each game's teams, moneyline prices and consensus, main spread and total,
+ *  and whether it holds a claimed edge. One sport, every game; the Claimed edges filter is applied here. */
+export async function loadCards(supabase: SupabaseClient, sport: string, withTests: boolean): Promise<BoardCard[]> {
+  const { data, error } = await supabase.rpc("kalshi_board_cards", { p_sport: sport, p_tests: withTests });
   if (error) throw new Error(`Couldn't read the games: ${error.message}`);
-  return (data ?? []) as BoardGame[];
+  return (data ?? []) as BoardCard[];
 }
 
-export async function loadGame(
-  supabase: SupabaseClient,
-  opts: { game: string; kind: Kind | null; combo: boolean; withTests: boolean; tickers?: boolean },
-): Promise<BoardEvent[]> {
-  // p_tickers (db/077) only in Combo mode: off, the call is db/074's.
-  const { data, error } = await supabase.rpc("kalshi_board_game", {
-    p_game: opts.game, p_kind: opts.kind, p_combo_only: opts.combo, p_tests: opts.withTests,
-    ...(opts.tickers ? { p_tickers: true } : {}),
+// ---- The game page (db/079): the three tabs' counts, and one tab (one stat
+// of the Players tab) at a time. The header reads the game's own event row
+// (select-only for the owner, db/071), the one read here not through a function.
+
+/** The game's header: its title, start, sport and league, from its own event (else any of its events). */
+export async function loadGameMeta(supabase: SupabaseClient, game: string, withTests: boolean): Promise<GameMeta | null> {
+  let q = supabase.from("kalshi_board_events")
+    .select("event_ticker, series_ticker, game_title, starts_at, milestone_start, is_test, sports_event_id")
+    .eq("game_ticker", game)
+    .limit(50);
+  if (!withTests) q = q.eq("is_test", false);
+  const { data, error } = await q;
+  if (error) throw new Error(`Couldn't read the game: ${error.message}`);
+  const rows = (data ?? []) as { event_ticker: string; series_ticker: string; game_title: string | null;
+                                 starts_at: string | null; milestone_start: string | null; is_test: boolean;
+                                 sports_event_id: number | null }[];
+  if (rows.length === 0) return null;
+  const ev = rows.find((r) => r.event_ticker === game) ?? rows[0];
+  const { data: s, error: e2 } = await supabase.from("kalshi_series_board")
+    .select("sport, league").eq("series_ticker", ev.series_ticker).maybeSingle();
+  if (e2) throw new Error(`Couldn't read the game's series: ${e2.message}`);
+  const series = (s ?? null) as { sport: string | null; league: string | null } | null;
+  // The linked ESPN game's teams (names, logos, colours: the mock's header), when the game's own event has one.
+  const own = rows.find((r) => r.event_ticker === game);
+  let teams: ReturnType<typeof teamTuples> = null;
+  if (own?.sports_event_id) {
+    const { data: se, error: e3 } = await supabase.from("sports_events")
+      .select("participants, home, away, home_away_swapped, kind").eq("id", own.sports_event_id).maybeSingle();
+    if (e3) throw new Error(`Couldn't read the game's teams: ${e3.message}`);
+    const row = se as { participants: unknown; home: string | null; away: string | null; home_away_swapped: boolean | null;
+                        kind: string } | null;
+    if (row && row.kind === "game") teams = teamTuples(row);
+  }
+  return { g: game, title: ev.game_title ?? game, startsAt: ev.starts_at ?? ev.milestone_start,
+           sport: series?.sport ?? null, league: series?.league ?? null, test: ev.is_test,
+           ...(teams ? { tm: teams.tm, ...(teams.hs ? { hs: true } : {}) } : {}) };
+}
+
+export async function loadGameTabs(supabase: SupabaseClient, game: string, withTests: boolean): Promise<GameTabs> {
+  const { data, error } = await supabase.rpc("kalshi_board_game_tabs", { p_game: game, p_tests: withTests });
+  if (error) throw new Error(`Couldn't read the game's tabs: ${error.message}`);
+  const d = (data ?? {}) as Partial<GameTabs>;
+  return { lines: Number(d.lines ?? 0), players: Number(d.players ?? 0), periods: Number(d.periods ?? 0),
+           other: Number(d.other ?? 0), stats: Array.isArray(d.stats) ? d.stats : [], asof: d.asof ?? null };
+}
+
+/** One tab's events; on the Players tab one stat (OTHER_STAT, "", for markets with none). */
+export async function loadGameTab(
+  supabase: SupabaseClient, game: string, tab: Tab, stat: string | null, withTests: boolean,
+): Promise<TabEvent[]> {
+  const { data, error } = await supabase.rpc("kalshi_board_game_tab", {
+    p_game: game, p_tab: tab, p_tests: withTests, p_stat: tab === "players" ? stat : null,
   });
-  if (error) throw new Error(`Couldn't read that game's markets: ${error.message}`);
-  return (data ?? []) as BoardEvent[];
+  if (error) throw new Error(`Couldn't read that tab: ${error.message}`);
+  return (data ?? []) as TabEvent[];
 }
 
 /** The Odds API's month (db/073 odds_api_usage): spent / 500 on /betting. */
