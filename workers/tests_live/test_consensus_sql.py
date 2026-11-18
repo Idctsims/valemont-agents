@@ -19,7 +19,7 @@ from decimal import Decimal
 import psycopg
 
 from core import ledger
-from tests_live.test_feed_rank_sql import _rolled_back
+from tests_live.test_feed_rank_sql import _act_as, _rolled_back
 from tests_live.test_kalshi_board_sql import BoardSqlCase, tag
 from tests_live import test_kalshi_board_sql as board
 from venues.kalshi.fees import FeeRegime
@@ -283,6 +283,43 @@ class Readers(ConsensusSqlCase):
             self.assertEqual(set(j), {"about", "as_of", "counts", "best_edges_tonight", "credits"})
             self.assertNotIn("TL Sport", j["counts"])
             self.assertFalse(any(x.get("tier") == "kalshi" for x in j["best_edges_tonight"]))
+
+
+class OutsideOnly081(ConsensusSqlCase):
+    """db/081: leg_consensus_priced(games, true) returns only the markets with
+    an outside line, each equal to its row in the whole-game read (the Kalshi
+    mid still normalized across the whole event); leg_consensus_for is the
+    same function with false."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        with _rolled_back() as conn:
+            if conn.execute("SELECT to_regprocedure('public.leg_consensus_priced(text[], boolean)')").fetchone()[0] is None:
+                raise unittest.SkipTest("db/081 not pasted")
+
+    def test_outside_only_is_the_same_rows_fewer_of_them(self) -> None:
+        with _rolled_back() as conn:
+            _, game, mk = self.two_team(conn, ("0.6100", "0.3500"), ("0.6300", "0.3700"))
+            ledger.leg_consensus_upsert([{"market_ticker": mk[0], "tier": "books", "n_books": 2, "p_books": 0.70,
+                                          "p_books_mult": 0.70, "p_books_lo": 0.70, "p_books_hi": 0.70, "p_espn": None,
+                                          "inputs": {"m": "power"}, "source_at": board.NOW.isoformat()}],
+                                        board.NOW, is_test=True, conn=conn)
+            whole = self.rows(conn, game)
+            cur = conn.execute("SELECT * FROM leg_consensus_priced(%s, true)", ([game],))
+            cols = [d.name for d in cur.description]
+            outside = {r[0]: dict(zip(cols, r)) for r in cur.fetchall()}
+            self.assertEqual(set(whole), set(mk))
+            self.assertEqual(set(outside), {mk[0]})
+            self.assertEqual(outside[mk[0]], whole[mk[0]])
+            self.assertTrue(outside[mk[0]]["normalized"])  # its sibling is not returned, and still counted
+            self.assertEqual(whole[mk[1]]["tier"], "kalshi")
+            cur = conn.execute("SELECT * FROM leg_consensus_priced(%s, false)", ([game],))
+            self.assertEqual({r[0]: dict(zip(cols, r)) for r in cur.fetchall()}, whole)
+            with conn.cursor() as c:
+                _act_as(c, "anon")
+                with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                    c.execute("SELECT count(*) FROM leg_consensus_priced(%s, true)", ([game],))
 
 
 if __name__ == "__main__":
