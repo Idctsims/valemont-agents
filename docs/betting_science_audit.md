@@ -375,3 +375,52 @@ Recorded as pending, not as passed:
   after each study; a surprise stops the line. M1 and M2 start first.
 - **§6 as amended by these decisions:** M1 has no before/after 2026-08-20
   cell. M4 spends nothing on Pinnacle.
+
+---
+
+## 9. The M1 listing as crawled (2026-11-14)
+
+Counts only. No fill, price or outcome has been analyzed; the trades and
+candle stages have not run.
+
+Kept combos (a 10% ticker-hash sample of traded combos, de-duplicated), by
+cell, from the series crawled so far:
+
+| | 2-5 legs | 6-10 legs | 11+ legs |
+|---|---|---|---|
+| Same-game | 32,094 | 13,136 | 2,085 |
+| Cross-game | 8,226 | 5,208 | 1,491 |
+
+**The cross-game fill sample is 2025 NFL only (owner, 2026-11-14).** Of the
+14,925 kept cross-game combos, 14,821 are `KXMVENFLMULTIGAMEEXTENDED`
+(closes 2025-10-05 to 2025-11-18), 101 `KXMVENFLMULTIGAME` and 3
+`KXMVENBAMULTIGAMEEXTENDED`. That sample is:
+
+- **fitting-only under J3** (2025-season NFL): nothing from it is cited as
+  validation of anything;
+- **pre-maker-fee** (the combo maker fee starts 2026-08-20; J2);
+- **one sport.** A multi-sport or non-NFL cross-game ticket priced from it
+  is an **extrapolation**, and the page must say so on every such ticket
+  until better data exists.
+
+What is not in it, and why:
+
+- `KXMVESPORTSMULTIGAMEEXTENDED`, the multi-sport cross-game series: 150
+  pages (150,000 rows) read, every row reserve-dated and discarded; it has
+  not reached a pre-July row. Not paged further (owner, Nov 14).
+- `KXMVECROSSCATEGORY` and its shards: skipped by the owner (713,000 and
+  2 x 150,000 reserve-dated rows discarded, 0 kept). Reopened only by the
+  owner's say-so.
+- `KXMVENFLSINGLEGAME`: unfinished when this was written (657 pages, kept
+  closes 2026-01-12 to 2026-01-19, the playoffs).
+- 3,934 kept combos sit on tournament or award events, not games (college
+  basketball 3,027, Oscars 754, Grammys 85, 68 in NBA single-game): the
+  same-game / cross-game split does not apply to them.
+
+The same-game sample is NBA 2025-26 (`KXMVENBASINGLEGAME`, closes
+2025-11-19 to 2026-06-14, complete) and NFL 2025 (fitting-only).
+
+E1's source (jsteng19/kalshi-combos-research) publishes no data, no result
+tables and no licence (checked 2026-11-14: code, notebooks and chart
+images only; its pipeline needs Kalshi credentials). Its April-June 2026
+numbers stay cited, unreproduced, and cannot be reused as data.
