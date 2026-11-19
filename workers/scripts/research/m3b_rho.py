@@ -252,7 +252,7 @@ def git_hash() -> str:
 
 def reproduce(data: Path, out: Path, table_path: Path) -> int:
     hub = {k: v["rho"] for k, v in json.loads(table_path.read_text(encoding="utf-8"))["rows"]["nba"].items()
-           if v.get("src") == "nba_hub"}
+           if v.get("src") in ("nba_hub", "nba_hub_unreproduced")}  # the 2026-11-11.4 set, so the 20 stay the same
     keys = pick_rows(hub)
     rows, info = load(data)
     games = outcomes(rows)

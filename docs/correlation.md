@@ -58,7 +58,7 @@ learns id → code from GAME markets (fetched first in every pull) and writes
 players; the 12 misses are "No Touchdown"), NHL 1,062/1,068 (the 6 "no goal").
 The ticker prefix is NOT a fallback for props: `…CARNO-NONE` reads as "NO".
 
-## 3. The ρ table (`docs/correlation_rho.json`, version 2026-11-11.4, final for Phase 3)
+## 3. The ρ table (`docs/correlation_rho.json`, version 2026-11-19.1; 2026-11-11.4 was final for Phase 3)
 
 Frozen by its sha256 (CRLF normalized), stored on every quote (`rho_version`).
 Every row carries its source and class:

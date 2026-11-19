@@ -329,7 +329,16 @@ class Implications(unittest.TestCase):
         self.assertEqual(T.row("nhl", "opp|ast|first_goal"), (0.0, "prior"))
         self.assertEqual(T.row("nhl", "team|ast|over"), (0.25, "prior"))
         self.assertEqual(T.row("nhl", "team|first_goal|over"), (0.05, "prior"))
-        self.assertEqual(T.data["version"], "2026-11-11.4")
+        self.assertEqual(T.data["version"], "2026-11-19.1")
+
+    def test_the_four_unreproduced_nba_rows_are_priors_with_their_values(self) -> None:
+        # Owner, Nov 19 (M3b): labels only, values unchanged; the other nba-hub rows stay measured.
+        for key, rho in (("self|ar|td", 0.871), ("self|ar|dd", 0.862), ("self|ast|td", 0.799), ("self|dd|pra", 0.711)):
+            self.assertEqual(T.row("nba", key), (rho, "prior"), key)
+        self.assertEqual(T.row("nba", "self|stl|td"), (0.094, "measured_external"))
+        self.assertEqual(T.row("nba", "self|pa|pr"), (0.927, "measured_external"))
+        hub = [k for k, v in T.data["rows"]["nba"].items() if v["src"] == "nba_hub"]
+        self.assertEqual(len(hub), 284)
 
     def test_nfl_first_td_implies_anytime_td(self) -> None:
         q = priced(leg("FTD", series="KXNFLFIRSTTD", p=0.11, line=None, subject="Bijan R", team="ATL"),
