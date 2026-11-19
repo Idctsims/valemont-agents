@@ -6174,6 +6174,53 @@ def combo_prune(*, conn: psycopg.Connection | None = None) -> int:
         return int(c.execute(COMBO_PRUNE_SQL).fetchone()[0])
 
 
+#: Phase 4.2 (docs/preregistration_parlays.md §3): the slot's parlay
+#: candidates, every binary market of a combo-eligible event whose game has not
+#: started, with leg_consensus_for's tier and p and the event's combo flags.
+#: Rule 1 runs again in Python on these rows (consensus/parlay_legs.universe);
+#: the binary markets of not-eligible, not-started events come back as counts
+#: per sport only (PARLAY_CUT_SQL), so the funnel starts from the whole board
+#: without reading those rows.
+PARLAY_CANDIDATES_SQL: Final = """
+    WITH g AS (
+        SELECT coalesce(array_agg(DISTINCT e.game_ticker), '{}'::text[]) AS games
+          FROM kalshi_board_events e
+         WHERE e.is_test = %(tests)s AND e.combo_eligible AND e.starts_at > now())
+    SELECT f.market_ticker, f.event_ticker, f.game_ticker, f.series_ticker, f.sport, f.league, f.starts_at,
+           f.market_kind, f.stat, f.subject, b.team, f.line, f.tier, f.p_consensus, f.yes_bid, f.yes_ask,
+           b.payout, e.combo_eligible, e.combo_yes_only, e.combo_size_max, e.mutually_exclusive
+      FROM g, leg_consensus_for(g.games) f
+      JOIN kalshi_board_events e ON e.event_ticker = f.event_ticker
+      JOIN kalshi_board b ON b.market_ticker = f.market_ticker
+     WHERE f.is_test = %(tests)s AND e.combo_eligible AND e.starts_at > now()
+     ORDER BY f.market_ticker
+"""
+
+PARLAY_CUT_SQL: Final = """
+    SELECT s.sport, count(*)::int
+      FROM kalshi_board b
+      JOIN kalshi_board_events e ON e.event_ticker = b.event_ticker
+      JOIN kalshi_series_board s ON s.series_ticker = e.series_ticker
+     WHERE b.is_test = %(tests)s AND b.payout = 'binary' AND e.starts_at > now() AND NOT e.combo_eligible
+     GROUP BY s.sport
+"""
+
+PARLAY_CANDIDATE_COLUMNS: Final = (
+    "market_ticker", "event_ticker", "game_ticker", "series_ticker", "sport", "league", "starts_at",
+    "market_kind", "stat", "subject", "team", "line", "tier", "p_yes", "yes_bid", "yes_ask",
+    "payout", "combo_eligible", "combo_yes_only", "combo_size_max", "mutually_exclusive")
+
+
+def parlay_candidates(*, tests: bool = False,
+                      conn: psycopg.Connection | None = None) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """(the candidate markets as dicts keyed by PARLAY_CANDIDATE_COLUMNS, and
+    {sport: binary markets of not-eligible, not-started events}). Read only."""
+    with _brief_conn(conn) as c, c.transaction():
+        rows = c.execute(PARLAY_CANDIDATES_SQL, {"tests": tests}).fetchall()
+        cut = dict(c.execute(PARLAY_CUT_SQL, {"tests": tests}).fetchall())
+    return [dict(zip(PARLAY_CANDIDATE_COLUMNS, r)) for r in rows], cut
+
+
 #: M5's board snapshot (db/084): the copy runs inside Postgres; the answer is
 #: the function's jsonb (snapshot_id, slot, counts, bytes, ms, or skipped).
 RESEARCH_BOARD_SNAPSHOT_SQL: Final = "SELECT research_board_snapshot_take(%s)"

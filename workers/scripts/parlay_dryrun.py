@@ -1,0 +1,102 @@
+"""Phase 4.2 dry run (owner's machine): one slot's parlay candidates, the re-quote, and P1 rules 1-4.
+
+    ..\\venv\\Scripts\\python.exe -m scripts.parlay_dryrun --env-file <repo>\\.env [--max-calls N] [--max-seconds S]
+
+Writes nothing to the database: the candidates are read through
+`valemont_readonly` (the same guard as scripts/db_inspect.py), every
+transaction rolled back. Kalshi is read keyless with the board refresh's
+adaptive pacer. The report (per sport, legs before rule 1 and after each rule;
+Kalshi calls, 429 share, seconds, bytes; the 300 s / 300 call check) is
+printed and saved under research_data/parlays/ (gitignored).
+
+Do not run while another Kalshi crawler runs from this machine (owner, Nov 19:
+M1's candles first); --force-alongside overrides the check.
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import subprocess
+import sys
+import time
+from pathlib import Path
+from urllib.parse import unquote, urlsplit
+
+import psycopg
+from dotenv import dotenv_values
+
+from consensus import parlay_legs as pl
+from core import ledger
+from scripts.research.kalshi_history import DATA_DIR
+
+SLOT_CALLS, SLOT_SECONDS = 300, 300
+
+
+def readonly(env_file: Path) -> str:
+    url = dotenv_values(env_file).get("DATABASE_URL_READONLY") if env_file.is_file() else None
+    if not url:
+        sys.exit(f"DATABASE_URL_READONLY is not set in {env_file}.")
+    user = unquote(urlsplit(url).username or "")
+    if user != "valemont_readonly" and not user.startswith("valemont_readonly."):
+        sys.exit("DATABASE_URL_READONLY is not the valemont_readonly role. Refusing.")
+    return url
+
+
+def crawler_running() -> bool:
+    """A Kalshi research crawler (scripts.research.kalshi_*) alive on this machine."""
+    out = subprocess.run(["powershell", "-NoProfile", "-Command",
+                          "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
+                          "Select-Object -ExpandProperty CommandLine"], capture_output=True, text=True).stdout
+    return any("scripts.research.kalshi_" in line and "status" not in line for line in out.splitlines())
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--env-file", type=Path, required=True)
+    ap.add_argument("--max-calls", type=int)
+    ap.add_argument("--max-seconds", type=float)
+    ap.add_argument("--force-alongside", action="store_true")
+    args = ap.parse_args(argv)
+    if not args.force_alongside and crawler_running():
+        print("A Kalshi research crawler is running on this machine; the dry run waits for it (owner, Nov 19).")
+        return 2
+    t0 = time.monotonic()
+    with psycopg.connect(readonly(args.env_file)) as conn:
+        try:
+            conn.execute("SET statement_timeout = 60000")
+            rows, cut = ledger.parlay_candidates(conn=conn)
+        finally:
+            conn.rollback()
+    read_s = time.monotonic() - t0
+    markets = pl.markets_from_rows(rows)
+    events = sorted({m.event_ticker: m.starts_at for m in markets}.items(), key=lambda kv: (kv[1], kv[0]))
+    rq = pl.requote([e for e, _ in events], max_calls=args.max_calls, max_seconds=args.max_seconds)
+    now = dt.datetime.now(dt.timezone.utc)
+    f = pl.funnel(pl.legs_of(markets, rq.quotes), now, cut=cut)
+    table = f.table()
+    totals = {k: sum(t[k] for t in table.values()) for k in ("before", *pl.RULES)}
+    report = {
+        "run_at": now.isoformat(timespec="seconds"), "git": subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=Path(__file__).parent, capture_output=True, text=True).stdout.strip(),
+        "candidate_markets": len(markets), "cut_markets_not_eligible": sum(cut.values()), "events": len(events),
+        "read_seconds": round(read_s, 1),
+        "requote": {"events_asked": rq.events_asked, "events_skipped": rq.events_skipped, "cap": rq.cap,
+                    "calls": rq.calls, "limited_429": rq.limited, "share_429": round(rq.share_429, 4),
+                    "seconds": round(rq.seconds, 1), "bytes": rq.bytes, "pace_end": round(rq.pace, 2),
+                    "markets_quoted": len(rq.quotes),
+                    "slot_check": {"calls_under_300": rq.calls < SLOT_CALLS, "seconds_under_300": rq.seconds < SLOT_SECONDS}},
+        "funnel_legs_by_sport": table, "funnel_legs_total": totals,
+    }
+    out = DATA_DIR.parent / "parlays"  # research_data/ (VALEMONT_RESEARCH_DIR for a worktree)
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / f"dryrun_{now:%Y%m%dT%H%M%SZ}.json"
+    path.write_text(json.dumps(report, indent=1, default=str), encoding="utf-8")
+    print(json.dumps(report, indent=1, default=str))
+    print(f"saved {path}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
