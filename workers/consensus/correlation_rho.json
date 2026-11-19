@@ -1,6 +1,6 @@
 {
  "about": "Same-game correlation table, Chat 8 Phase 3 (docs/correlation.md). rho is the correlation of two legs' latent normals, each oriented so higher = the YES of an over / a win; a NO leg flips the sign. Frozen by its sha256 (CRLF normalized to LF); Phase 4's pre-registration names the hash. workers/consensus/correlation_rho.json is a byte-identical copy (tests/test_correlation.py).",
- "version": "2026-11-11.4",
+ "version": "2026-11-19.1",
  "keys": "self|a|b one player's two kinds; mate|a|b teammates; opp|a|b opponents (a <= b); team|<kind>|<line> a player with his own club's win or cover, or the game total (over); a player with the OTHER club's line takes the team row with its sign flipped where the league has no draw (owner, Nov 11: no opponent rows), else unmodeled; game|<a>|<b> two game lines (a club line with the other club's: the sign flips where there is no draw).",
  "classes": {
   "measured_external": "measured by someone else, not reproduced by us",
@@ -16,7 +16,14 @@
    "method": "latent-normal (Gaussian copula) rho by maximum likelihood on binary outcomes at book lines, every pair of legs that shared a game; 5,276 games, seasons 2023-2026; shrunk toward 0 by jackknife error; projected to the nearest positive-definite table",
    "flag": "external, unreproduced",
    "license": "none stated: values cited, no file or code copied",
-   "adopted": "owner, Nov 11 (Phase 3 Step 0 decision 1)"
+   "adopted": "owner, Nov 11 (Phase 3 Step 0 decision 1)",
+   "reproduction": "M3b, 2026-11-19: 16 of 20 sampled rows within 0.05 from NBA box scores 2023-24 to 2025-26 at a walk-forward median-line proxy (docs/research/m3b_nba_repro_2026-11-19.json); the 4 that were not are relabelled nba_hub_unreproduced"
+  },
+  "nba_hub_unreproduced": {
+   "class": "prior",
+   "from": "nba_hub",
+   "flag": "external value, failed reproduction (M3b, 2026-11-19): self|ar|td, self|ar|dd, self|ast|td, self|dd|pra; value unchanged, labelled prior until M3b measures it",
+   "set_by": "owner, Nov 19"
   },
   "jx_readme": {
    "class": "measured_external",
@@ -933,7 +940,7 @@
    },
    "self|ar|dd": {
     "rho": 0.862,
-    "src": "nba_hub"
+    "src": "nba_hub_unreproduced"
    },
    "self|ar|pa": {
     "rho": 0.521,
@@ -957,7 +964,7 @@
    },
    "self|ar|td": {
     "rho": 0.871,
-    "src": "nba_hub"
+    "src": "nba_hub_unreproduced"
    },
    "self|ar|tpm": {
     "rho": 0.19,
@@ -993,7 +1000,7 @@
    },
    "self|ast|td": {
     "rho": 0.799,
-    "src": "nba_hub"
+    "src": "nba_hub_unreproduced"
    },
    "self|ast|tpm": {
     "rho": 0.139,
@@ -1045,7 +1052,7 @@
    },
    "self|dd|pra": {
     "rho": 0.711,
-    "src": "nba_hub"
+    "src": "nba_hub_unreproduced"
    },
    "self|dd|pts": {
     "rho": 0.435,

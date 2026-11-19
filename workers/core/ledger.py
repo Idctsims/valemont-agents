@@ -6172,3 +6172,15 @@ def combo_settle(request_id: int, status: str, reason: str, *, conn: psycopg.Con
 def combo_prune(*, conn: psycopg.Connection | None = None) -> int:
     with _brief_conn(conn) as c, c.transaction():
         return int(c.execute(COMBO_PRUNE_SQL).fetchone()[0])
+
+
+#: M5's board snapshot (db/084): the copy runs inside Postgres; the answer is
+#: the function's jsonb (snapshot_id, slot, counts, bytes, ms, or skipped).
+RESEARCH_BOARD_SNAPSHOT_SQL: Final = "SELECT research_board_snapshot_take(%s)"
+
+
+def research_board_snapshot(slot: str, *, conn: psycopg.Connection | None = None) -> dict[str, Any]:
+    if slot not in ("am", "pm"):
+        raise ValueError(f"research_board_snapshot: slot is am or pm, not {slot!r}")
+    with _brief_conn(conn) as c, c.transaction():
+        return dict(c.execute(RESEARCH_BOARD_SNAPSHOT_SQL, (slot,)).fetchone()[0])

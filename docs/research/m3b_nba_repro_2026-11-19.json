@@ -1,0 +1,479 @@
+{
+  "study": "M3b reproduction",
+  "script": "workers/scripts/research/m3b_rho.py",
+  "git": "b94dd529f89927702f791dd74ab82c2964c24ba5",
+  "run_at": "2026-11-19T18:30:55+00:00",
+  "rule": {
+    "tolerance": 0.05,
+    "gate": 15,
+    "quota": {
+      "self": 8,
+      "mate": 4,
+      "opp": 4,
+      "team": 4
+    },
+    "min_prior_games": 10,
+    "min_prior_minutes": 20.0,
+    "bootstrap": 200
+  },
+  "input": {
+    "files": {
+      "leaguegamelog_2023-24_Playoffs.json": {
+        "rows": 1685,
+        "games": 82,
+        "dates": [
+          "2024-04-20",
+          "2024-06-17"
+        ]
+      },
+      "leaguegamelog_2023-24_Regular_Season.json": {
+        "rows": 26401,
+        "games": 1230,
+        "dates": [
+          "2023-10-24",
+          "2024-04-14"
+        ]
+      },
+      "leaguegamelog_2024-25_Playoffs.json": {
+        "rows": 1804,
+        "games": 84,
+        "dates": [
+          "2025-04-19",
+          "2025-06-22"
+        ]
+      },
+      "leaguegamelog_2024-25_Regular_Season.json": {
+        "rows": 26306,
+        "games": 1230,
+        "dates": [
+          "2024-10-22",
+          "2025-04-13"
+        ]
+      },
+      "leaguegamelog_2025-26_Playoffs.json": {
+        "rows": 1921,
+        "games": 85,
+        "dates": [
+          "2026-04-18",
+          "2026-06-13"
+        ]
+      },
+      "leaguegamelog_2025-26_Regular_Season.json": {
+        "rows": 26651,
+        "games": 1230,
+        "dates": [
+          "2025-10-21",
+          "2026-04-12"
+        ]
+      }
+    },
+    "player_rows": 84768,
+    "games_with_a_qualifying_player": 3507,
+    "qualifying_player_games": 42225
+  },
+  "within": 16,
+  "of": 20,
+  "verdict": "reproduced (>= 15 of 20)",
+  "rows": [
+    {
+      "key": "self|pa|pr",
+      "nba_hub": 0.927,
+      "rho": 0.9242,
+      "ci95": [
+        0.92,
+        0.928
+      ],
+      "games": 3507,
+      "pairs": 42225,
+      "table": [
+        19445,
+        2580,
+        2678,
+        17522
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.8744,
+      "diff": -0.0028,
+      "within": true
+    },
+    {
+      "key": "self|ar|td",
+      "nba_hub": 0.871,
+      "rho": 0.5718,
+      "ci95": [
+        0.5263,
+        0.6205
+      ],
+      "games": 3507,
+      "pairs": 42225,
+      "table": [
+        23312,
+        18,
+        18524,
+        371
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.541,
+      "diff": -0.2992,
+      "within": false
+    },
+    {
+      "key": "self|ar|dd",
+      "nba_hub": 0.862,
+      "rho": 0.6073,
+      "ci95": [
+        0.5918,
+        0.6225
+      ],
+      "games": 3507,
+      "pairs": 42225,
+      "table": [
+        22528,
+        802,
+        14354,
+        4541
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.5745,
+      "diff": -0.2547,
+      "within": false
+    },
+    {
+      "key": "self|ast|td",
+      "nba_hub": 0.799,
+      "rho": 0.5614,
+      "ci95": [
+        0.5158,
+        0.6027
+      ],
+      "games": 3507,
+      "pairs": 42225,
+      "table": [
+        24918,
+        25,
+        16918,
+        364
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.5311,
+      "diff": -0.2376,
+      "within": false
+    },
+    {
+      "key": "self|blk|pa",
+      "nba_hub": 0.136,
+      "rho": 0.1144,
+      "ci95": [
+        0.1,
+        0.1296
+      ],
+      "games": 3507,
+      "pairs": 42225,
+      "table": [
+        16398,
+        13782,
+        5627,
+        6418
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.1082,
+      "diff": -0.0216,
+      "within": true
+    },
+    {
+      "key": "self|ar|pts",
+      "nba_hub": 0.354,
+      "rho": 0.3141,
+      "ci95": [
+        0.3006,
+        0.3275
+      ],
+      "games": 3507,
+      "pairs": 42225,
+      "table": [
+        14455,
+        8875,
+        7860,
+        11035
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.2971,
+      "diff": -0.0399,
+      "within": true
+    },
+    {
+      "key": "self|stl|td",
+      "nba_hub": 0.094,
+      "rho": 0.1065,
+      "ci95": [
+        0.0635,
+        0.1508
+      ],
+      "games": 3507,
+      "pairs": 42225,
+      "table": [
+        28141,
+        219,
+        13695,
+        170
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.1007,
+      "diff": 0.0125,
+      "within": true
+    },
+    {
+      "key": "self|dd|pra",
+      "nba_hub": 0.711,
+      "rho": 0.4798,
+      "ci95": [
+        0.466,
+        0.4965
+      ],
+      "games": 3507,
+      "pairs": 42225,
+      "table": [
+        20878,
+        16004,
+        1108,
+        4235
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.4539,
+      "diff": -0.2312,
+      "within": false
+    },
+    {
+      "key": "mate|ast|tpm",
+      "nba_hub": 0.039,
+      "rho": 0.0744,
+      "ci95": [
+        0.0676,
+        0.0804
+      ],
+      "games": 3507,
+      "pairs": 228196,
+      "table": [
+        94217,
+        43188,
+        58288,
+        32503
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.0704,
+      "diff": 0.0354,
+      "within": true
+    },
+    {
+      "key": "mate|ast|pts",
+      "nba_hub": 0.034,
+      "rho": 0.0796,
+      "ci95": [
+        0.0725,
+        0.0872
+      ],
+      "games": 3507,
+      "pairs": 228196,
+      "table": [
+        77502,
+        59903,
+        46585,
+        44206
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.0753,
+      "diff": 0.0456,
+      "within": true
+    },
+    {
+      "key": "mate|ast|pa",
+      "nba_hub": 0.03,
+      "rho": 0.0782,
+      "ci95": [
+        0.071,
+        0.0856
+      ],
+      "games": 3507,
+      "pairs": 228196,
+      "table": [
+        76690,
+        60715,
+        46127,
+        44664
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.0739,
+      "diff": 0.0482,
+      "within": true
+    },
+    {
+      "key": "mate|pa|stl",
+      "nba_hub": -0.001,
+      "rho": 0.0196,
+      "ci95": [
+        0.0128,
+        0.0266
+      ],
+      "games": 3507,
+      "pairs": 228196,
+      "table": [
+        83691,
+        39126,
+        70623,
+        34756
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.0185,
+      "diff": 0.0206,
+      "within": true
+    },
+    {
+      "key": "opp|blk|dd",
+      "nba_hub": 0.019,
+      "rho": 0.0148,
+      "ci95": [
+        0.007,
+        0.0227
+      ],
+      "games": 3472,
+      "pairs": 256674,
+      "table": [
+        161238,
+        22863,
+        63188,
+        9385
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.014,
+      "diff": -0.0042,
+      "within": true
+    },
+    {
+      "key": "opp|blk|reb",
+      "nba_hub": 0.018,
+      "rho": 0.0212,
+      "ci95": [
+        0.014,
+        0.0283
+      ],
+      "games": 3472,
+      "pairs": 256674,
+      "table": [
+        107450,
+        76651,
+        41351,
+        31222
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.0201,
+      "diff": 0.0032,
+      "within": true
+    },
+    {
+      "key": "opp|ar|pts",
+      "nba_hub": -0.007,
+      "rho": 0.0126,
+      "ci95": [
+        0.006,
+        0.0191
+      ],
+      "games": 3472,
+      "pairs": 256674,
+      "table": [
+        76561,
+        66157,
+        60219,
+        53737
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.0119,
+      "diff": 0.0196,
+      "within": true
+    },
+    {
+      "key": "opp|pra|pra",
+      "nba_hub": -0.001,
+      "rho": 0.0228,
+      "ci95": [
+        0.0139,
+        0.0325
+      ],
+      "games": 3472,
+      "pairs": 128337,
+      "table": [
+        35805,
+        31130,
+        31957,
+        29445
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.0215,
+      "diff": 0.0238,
+      "within": true
+    },
+    {
+      "key": "team|td|win",
+      "nba_hub": 0.171,
+      "rho": 0.164,
+      "ci95": [
+        0.1141,
+        0.219
+      ],
+      "games": 3507,
+      "pairs": 42225,
+      "table": [
+        20350,
+        21486,
+        122,
+        267
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.1552,
+      "diff": -0.007,
+      "within": true
+    },
+    {
+      "key": "team|pra|win",
+      "nba_hub": 0.161,
+      "rho": 0.1395,
+      "ci95": [
+        0.1244,
+        0.1528
+      ],
+      "games": 3507,
+      "pairs": 42225,
+      "table": [
+        11598,
+        10388,
+        8874,
+        11365
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.132,
+      "diff": -0.0215,
+      "within": true
+    },
+    {
+      "key": "team|tpm|win",
+      "nba_hub": 0.11,
+      "rho": 0.1014,
+      "ci95": [
+        0.0866,
+        0.1156
+      ],
+      "games": 3507,
+      "pairs": 42225,
+      "table": [
+        14141,
+        13736,
+        6331,
+        8017
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.0959,
+      "diff": -0.0086,
+      "within": true
+    },
+    {
+      "key": "team|ar|win",
+      "nba_hub": 0.141,
+      "rho": 0.1248,
+      "ci95": [
+        0.1106,
+        0.1403
+      ],
+      "games": 3507,
+      "pairs": 42225,
+      "table": [
+        12144,
+        11186,
+        8328,
+        10567
+      ],
+      "rho_shrunk_n_over_n_plus_200": 0.1181,
+      "diff": -0.0162,
+      "within": true
+    }
+  ]
+}
