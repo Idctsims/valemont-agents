@@ -252,8 +252,7 @@ def analyze(lines: list[dict[str, Any]], claims: list[dict[str, Any]], usage: di
         "consensus_edge_lost_c_by_family (0.7 x span)": {b: summary(v) for b, v in sorted(cons_drop.items())},
         "consensus_lines_where_least_favourable_costs_ge_margin": sum(1 for c in cons if W_OUTSIDE * c["span_c"] >= MARGIN * 100),
         "claims_now": claim_test(claims),
-        "odds_api_usage": {k: (v.isoformat() if isinstance(v, (dt.datetime, dt.date)) else (float(v) if v is not None and not isinstance(v, (int, str)) else v))
-                           for k, v in usage.items()},
+        "odds_api_usage": usage,  # serialized with default=str
     }
 
 
