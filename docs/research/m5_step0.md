@@ -49,3 +49,25 @@ Scheduler set to wake the PC and to run a late start (a late snapshot is
 labelled with its real time; a lost one stays lost).
 
 Pending your pick. Nothing is written or scheduled.
+
+## Decision and build (owner, 2026-11-19: B)
+
+Built on `chat8-step1-measure`, not merged: `db/084_board_snapshots.sql`
+(not pasted), the worker job `board_snapshot` (`consensus/board_snapshot.py`,
+10:30 and 16:30 Chicago, never at boot, misfire grace 30 min), the ledger call
+`research_board_snapshot`. The 14-day window starts the day it deploys and
+ends by itself after 28 real snapshots. No backfill: earlier boards are gone,
+and July 1 onward is the reserve.
+
+Measured on a full board copy (production's Nov 19 board, 12:39 Chicago,
+local PG 17, JIT off): one snapshot = 769 events, 12,082 legs, 44 eligibility
+rows; **1.14 MB on disk per snapshot** (2 snapshots 2,285,568 bytes after
+compaction; legs ~80 B a row), so **~32 MB (30.5 MiB) for 28** at this board's
+size. A weekend board is larger: unmeasured. One take 2.03–2.07 s on the copy
+(the consensus reader over the 288 eligible games is ~1.9 s of it); production
+has run these readers ~2.7x slower, so ~5–6 s, read-only, twice a day.
+
+Trimmed to fit: snapshot ids are integers; the Kalshi price age is per event
+(constant within every event, Nov 19); a prop's player is the tail before its
+last `-` (1:1 with the board's subject on all 2,093 player-events), so the
+name is not stored. Before the trims: 1.42 MB a snapshot (~40 MB for 28).

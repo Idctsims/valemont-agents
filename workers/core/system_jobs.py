@@ -178,6 +178,10 @@
                              (consensus/combo_job.py, docs/correlation.md).
     combo_prune      daily   03:20 Chicago, never at boot: combo requests and
                              their quotes past 7 days.
+    board_snapshot   18 h    10:30 and 16:30 Chicago, never at boot: M5's board
+                             snapshot (db/084), copied inside Postgres; a slot
+                             once, 28 real snapshots, then it refuses
+                             (consensus/board_snapshot.py, docs/research/m5_step0.md).
 
 Alerts go through core/push.py with deep link /settings/health.
 """
@@ -214,6 +218,7 @@ from screening import jobs as screening_jobs
 from screening import rec_jobs as screening_recs
 from sports import jobs as sports_jobs
 from sports import kalshi_board
+from consensus import board_snapshot
 from consensus import combo_job
 from consensus import job as consensus_job
 from sports import kalshi_map
@@ -864,6 +869,11 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
         PRICE_COMBO,
         SystemJob("combo_prune", 24 * 60 * 60, CronTrigger(hour=3, minute=20, timezone=OWNER_TZ),
                   combo_job.prune_job, misfire_grace=3600, run_at_boot=False),
+        # M5's board snapshot (db/084): 10:30 and 16:30 Chicago, never at boot (a
+        # redeploy must not take a slot early); a late fire within 30 min keeps its slot.
+        SystemJob(board_snapshot.JOB, board_snapshot.INTERVAL_S,
+                  CronTrigger(hour="10,16", minute=30, timezone=OWNER_TZ),
+                  board_snapshot.snapshot_job, misfire_grace=1800, run_at_boot=False),
     ]
     if env.get("HEALTH_DRILL", "").strip().lower() == "true":
         log.warning("HEALTH_DRILL=true: scheduling health_drill, which always fails")
