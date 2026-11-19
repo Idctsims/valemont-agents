@@ -1,0 +1,339 @@
+{
+  "study": "M4",
+  "script": "workers/scripts/research/m4_devig.py",
+  "git": "7220314a6b3bf8043bc6523473fdf9564ac30288",
+  "run_at": "2026-11-19T18:27:25+00:00",
+  "margin": 0.02,
+  "input": {
+    "book_lines_rows": 6851,
+    "devigged": 6851,
+    "refused": 0,
+    "fetched_at": [
+      "2026-11-09T23:02:54.609323+00:00",
+      "2026-11-19T16:15:00.193492+00:00"
+    ],
+    "starts_at": [
+      "2026-11-09T23:30:00+00:00",
+      "2026-11-21T02:00:00+00:00"
+    ],
+    "by_source": {
+      "e": 2128,
+      "o": 4723
+    },
+    "books_tier_legs_priced_now": 37
+  },
+  "row_spread_c_by_band": {
+    "0.5-0.6": {
+      "n": 5430,
+      "median": 0.047,
+      "p90": 0.419,
+      "max": 0.926
+    },
+    "0.6-0.7": {
+      "n": 680,
+      "median": 0.976,
+      "p90": 1.339,
+      "max": 1.908
+    },
+    "0.7-0.8": {
+      "n": 292,
+      "median": 1.506,
+      "p90": 1.813,
+      "max": 2.225
+    },
+    "0.8-0.9": {
+      "n": 238,
+      "median": 2.162,
+      "p90": 2.566,
+      "max": 2.956
+    },
+    "0.9-1.0": {
+      "n": 211,
+      "median": 2.596,
+      "p90": 2.78,
+      "max": 3.661
+    }
+  },
+  "row_spread_c_by_book": {
+    "betmgm": {
+      "n": 598,
+      "median": 0.1,
+      "p90": 1.244,
+      "max": 2.913
+    },
+    "betonlineag": {
+      "n": 724,
+      "median": 0.077,
+      "p90": 1.065,
+      "max": 2.606
+    },
+    "betrivers": {
+      "n": 401,
+      "median": 0.056,
+      "p90": 1.473,
+      "max": 3.661
+    },
+    "betus": {
+      "n": 270,
+      "median": 0.0,
+      "p90": 1.556,
+      "max": 2.725
+    },
+    "bovada": {
+      "n": 736,
+      "median": 0.108,
+      "p90": 1.078,
+      "max": 3.325
+    },
+    "draftkings": {
+      "n": 757,
+      "median": 0.072,
+      "p90": 1.02,
+      "max": 2.633
+    },
+    "draftkings (espn)": {
+      "n": 2128,
+      "median": 0.077,
+      "p90": 2.026,
+      "max": 2.78
+    },
+    "fanduel": {
+      "n": 687,
+      "median": 0.062,
+      "p90": 1.19,
+      "max": 2.667
+    },
+    "lowvig": {
+      "n": 278,
+      "median": 0.049,
+      "p90": 1.373,
+      "max": 2.26
+    },
+    "mybookieag": {
+      "n": 272,
+      "median": 0.0,
+      "p90": 1.765,
+      "max": 3.265
+    }
+  },
+  "row_overround_pct_by_book": {
+    "betmgm": {
+      "n": 598,
+      "median": 6.735,
+      "p90": 7.296,
+      "max": 7.964
+    },
+    "betonlineag": {
+      "n": 724,
+      "median": 6.319,
+      "p90": 6.542,
+      "max": 6.645
+    },
+    "betrivers": {
+      "n": 401,
+      "median": 5.211,
+      "p90": 7.28,
+      "max": 9.486
+    },
+    "betus": {
+      "n": 270,
+      "median": 4.762,
+      "p90": 4.762,
+      "max": 4.762
+    },
+    "bovada": {
+      "n": 736,
+      "median": 6.775,
+      "p90": 6.977,
+      "max": 6.993
+    },
+    "draftkings": {
+      "n": 757,
+      "median": 5.652,
+      "p90": 6.018,
+      "max": 6.236
+    },
+    "draftkings (espn)": {
+      "n": 2128,
+      "median": 4.708,
+      "p90": 4.762,
+      "max": 4.945
+    },
+    "fanduel": {
+      "n": 687,
+      "median": 6.103,
+      "p90": 7.017,
+      "max": 7.132
+    },
+    "lowvig": {
+      "n": 278,
+      "median": 3.382,
+      "p90": 3.547,
+      "max": 4.708
+    },
+    "mybookieag": {
+      "n": 272,
+      "median": 4.762,
+      "p90": 4.987,
+      "max": 5.392
+    }
+  },
+  "row_spread_c_by_source_family": {
+    "e:ml": {
+      "n": 677,
+      "median": 1.375,
+      "p90": 2.634,
+      "max": 2.78
+    },
+    "e:spread": {
+      "n": 727,
+      "median": 0.077,
+      "p90": 0.736,
+      "max": 1.388
+    },
+    "e:total": {
+      "n": 724,
+      "median": 0.031,
+      "p90": 0.121,
+      "max": 0.323
+    },
+    "o:ml": {
+      "n": 835,
+      "median": 1.072,
+      "p90": 2.278,
+      "max": 3.661
+    },
+    "o:prop": {
+      "n": 2303,
+      "median": 0.1,
+      "p90": 0.907,
+      "max": 1.908
+    },
+    "o:spread": {
+      "n": 799,
+      "median": 0.02,
+      "p90": 0.077,
+      "max": 0.212
+    },
+    "o:total": {
+      "n": 786,
+      "median": 0.0,
+      "p90": 0.077,
+      "max": 0.149
+    }
+  },
+  "consensus_lines": 1096,
+  "consensus_span_c_by_band": {
+    "0.5-0.6": {
+      "n": 971,
+      "median": 0.029,
+      "p90": 0.425,
+      "max": 0.896
+    },
+    "0.6-0.7": {
+      "n": 84,
+      "median": 1.049,
+      "p90": 1.471,
+      "max": 1.816
+    },
+    "0.7-0.8": {
+      "n": 19,
+      "median": 1.511,
+      "p90": 1.748,
+      "max": 1.777
+    },
+    "0.8-0.9": {
+      "n": 16,
+      "median": 2.056,
+      "p90": 2.256,
+      "max": 2.306
+    },
+    "0.9-1.0": {
+      "n": 6,
+      "median": 2.582,
+      "p90": 2.749,
+      "max": 2.749
+    }
+  },
+  "consensus_edge_lost_c_by_family (0.7 x span)": {
+    "ml": {
+      "n": 93,
+      "median": 0.751,
+      "p90": 1.502,
+      "max": 1.924
+    },
+    "prop": {
+      "n": 663,
+      "median": 0.036,
+      "p90": 0.591,
+      "max": 1.271
+    },
+    "spread": {
+      "n": 152,
+      "median": 0.018,
+      "p90": 0.072,
+      "max": 0.104
+    },
+    "total": {
+      "n": 188,
+      "median": 0.0,
+      "p90": 0.053,
+      "max": 0.095
+    }
+  },
+  "consensus_lines_where_least_favourable_costs_ge_margin": 0,
+  "claims_now": {
+    "counts": {
+      "legs": 37,
+      "legs fresh": 0,
+      "legs with a span": 37,
+      "shipped edge_claimed": 0,
+      "sides priced": 74,
+      "sides with a span": 74,
+      "sides power-positive": 4,
+      "sides power-positive, fresh": 0
+    },
+    "blend_check_max_abs": 0.0,
+    "power_positive_sides": [
+      {
+        "market": "KXNBAGAME-26NOV19LACSAS-SAS",
+        "side": "yes",
+        "edge_power_c": 0.59,
+        "edge_least_c": -1.21,
+        "fresh": false
+      },
+      {
+        "market": "KXNBAGAME-26NOV19LACSAS-LAC",
+        "side": "no",
+        "edge_power_c": 0.59,
+        "edge_least_c": -1.21,
+        "fresh": false
+      },
+      {
+        "market": "KXNFLGAME-26NOV19INDHOU-IND",
+        "side": "no",
+        "edge_power_c": 0.25,
+        "edge_least_c": -1.33,
+        "fresh": false
+      },
+      {
+        "market": "KXNFLGAME-26NOV19INDHOU-HOU",
+        "side": "yes",
+        "edge_power_c": 0.25,
+        "edge_least_c": -1.33,
+        "fresh": false
+      }
+    ]
+  },
+  "odds_api_usage": {
+    "odds_api_usage": {
+      "used": 119,
+      "calls": 47,
+      "spent": 108,
+      "last_at": "2026-11-19T16:15:02.599766+00:00",
+      "allowance": 500,
+      "remaining": 381,
+      "month_start": "2026-11-01T00:00:00+00:00"
+    }
+  }
+}
