@@ -24,15 +24,20 @@ markets, one candle call each.
    `test`: per league, the first 70% of game dates (every admitted row's date,
    not only the sample's) are `fit`, the rest `test`. The sample file carries
    no result, settlement or price field: the crawl never sees an outcome.
-2. `starts` (network, `--live`): each league's schedule (NBA: stats.nba.com
-   `scheduleleaguev2`, one call a season; NHL: api-web.nhle.com
-   `/v1/schedule/{date}`, one call a week) to `starts.jsonl`. The response
-   shapes are UNVERIFIED until the first live call; an unknown shape fails
-   loudly, never quietly empty.
+2. `starts` (network, `--live`; owner, 2026-11-19: ESPN, through the
+   existing `sports/espn.py` fetch): ESPN's scoreboard for every Eastern date
+   in the sample, one call per league per date (`Espn.events`, the same
+   parser and shape checks the worker uses), to `starts.jsonl`. Team codes go
+   through `sports.kalshi_map.kalshi_code` with the `sports_team_aliases`
+   rows (read once through `valemont_readonly`), so a code maps exactly as
+   the live mapper maps it. `starts --dry-run-dates nba:YYYY-MM-DD,...`
+   fetches only those dates and checks them against the listing's events of
+   the same dates, writing `starts.dryrun.jsonl`, never `starts.jsonl`.
 3. `candles` (network, `--live`): one call per sampled market whose game was
-   matched to a start (same Eastern date within a day, the ticker's team
-   string = away + home), the window [start - 60 min, start], never past the
-   wall. Keeps the last candle at or before the start: bid and ask close.
+   matched to a start (the ticker's team string is the two Kalshi codes, in
+   either order; ESPN's Eastern date within a day of the ticker's), the
+   window [start - 60 min, start], never past the wall. Keeps the last candle
+   at or before the start: bid and ask close.
 """
 
 from __future__ import annotations
@@ -46,10 +51,13 @@ import urllib.parse
 import zlib
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any, Callable, Iterable, Iterator
+from typing import Any, Callable, Iterable, Iterator, Mapping
+from urllib.parse import unquote, urlsplit
 
 from scripts.research.kalshi_fills import game_of
 from scripts.research.kalshi_history import DATA_DIR, WALL, Counts, Fetch, Pacer, TooMany429s, admit, http_fetch
+from sports.espn import Espn, EspnError, League, httpx_get
+from sports.kalshi_map import eastern_day, kalshi_code
 from venues.kalshi.client import BASE_URL
 
 WALL_TS = int(dt.datetime.fromisoformat(WALL).replace(tzinfo=dt.timezone.utc).timestamp())
@@ -123,41 +131,85 @@ def build_sample(listing_dir: Path, per_cell: int = PER_CELL) -> tuple[list[dict
 
 
 # --------------------------------------------------------------------------- starts
-def parse_nba_schedule(body: dict[str, Any]) -> list[dict[str, Any]]:
-    out = []
-    try:
-        for day in body["leagueSchedule"]["gameDates"]:
-            for g in day["games"]:
-                out.append({"league": "nba", "start": g["gameDateTimeUTC"], "away": g["awayTeam"]["teamTricode"],
-                            "home": g["homeTeam"]["teamTricode"]})
-    except (KeyError, TypeError) as exc:
-        raise ValueError(f"unknown NBA schedule shape: {exc!r}") from None
-    return out
+#: The registry's rows for the two leagues (sports_leagues, read 2026-11-19).
+LEAGUES = {"nba": League(code="nba", path="basketball/nba", params={}, fetch_mode="per_day", kind="game"),
+           "nhl": League(code="nhl", path="hockey/nhl", params={}, fetch_mode="per_day", kind="game")}
 
 
-def parse_nhl_week(body: dict[str, Any]) -> list[dict[str, Any]]:
+def start_rows(events: Iterable[Any], aliases: Mapping[tuple[str, str], str]) -> list[dict[str, Any]]:
+    """ESPN games -> {league, espn_id, start, eastern_date, away, home} with Kalshi codes.
+    A game without both team codes is left out (it cannot be matched)."""
     out = []
-    try:
-        for day in body["gameWeek"]:
-            for g in day["games"]:
-                out.append({"league": "nhl", "start": g["startTimeUTC"], "away": g["awayTeam"]["abbrev"],
-                            "home": g["homeTeam"]["abbrev"]})
-    except (KeyError, TypeError) as exc:
-        raise ValueError(f"unknown NHL schedule shape: {exc!r}") from None
+    for ev in events:
+        p = ev.participants or {}
+        a, h = (p.get("away") or {}).get("abbr"), (p.get("home") or {}).get("abbr")
+        if not a or not h:
+            continue
+        out.append({"league": ev.league, "espn_id": ev.espn_id, "start": ev.starts_at.astimezone(dt.timezone.utc).isoformat(),
+                    "eastern_date": eastern_day(ev.starts_at).isoformat(), "status": ev.status,
+                    "away": kalshi_code(ev.league, a, aliases), "home": kalshi_code(ev.league, h, aliases)})
     return out
 
 
 def match_start(league: str, teams: str, date: dt.date, starts: dict[str, list[dict[str, Any]]]) -> int | None:
-    """Epoch seconds of the game's start, or None. Kalshi's team string is away
-    + home; the Eastern date may differ from the UTC date by one day."""
+    """Epoch seconds of the game's start, or None. Kalshi's team string is the
+    two codes, in either order; ESPN's Eastern date within a day of the
+    ticker's. Two candidates (a rematch the next day) answer the nearer date."""
+    best: tuple[int, int] | None = None
     for s in starts.get(league, []):
-        if s["away"] + s["home"] != teams:
+        if teams not in (s["away"] + s["home"], s["home"] + s["away"]):
             continue
-        ts = dt.datetime.fromisoformat(s["start"].replace("Z", "+00:00"))
-        eastern = (ts - dt.timedelta(hours=5)).date()
-        if abs((eastern - date).days) <= 1:
-            return int(ts.timestamp())
-    return None
+        gap = abs((dt.date.fromisoformat(s["eastern_date"]) - date).days)
+        if gap <= 1 and (best is None or gap < best[0]):
+            best = (gap, int(dt.datetime.fromisoformat(s["start"]).timestamp()))
+    return None if best is None else best[1]
+
+
+def readonly_aliases(env_file: Path) -> dict[tuple[str, str], str]:
+    """sports_team_aliases for nba and nhl through valemont_readonly (db_inspect's guard)."""
+    import psycopg
+    from dotenv import dotenv_values
+
+    url = dotenv_values(env_file).get("DATABASE_URL_READONLY") if env_file.is_file() else None
+    if not url:
+        sys.exit(f"DATABASE_URL_READONLY is not set in {env_file}.")
+    user = unquote(urlsplit(url).username or "")
+    if user != "valemont_readonly" and not user.startswith("valemont_readonly."):
+        sys.exit("DATABASE_URL_READONLY is not the valemont_readonly role. Refusing.")
+    with psycopg.connect(url) as conn, conn.cursor() as cur:
+        try:
+            cur.execute("SELECT league, espn_code, kalshi_code FROM sports_team_aliases WHERE league IN ('nba', 'nhl')")
+            return {(lg, e): k for lg, e, k in cur.fetchall()}
+        finally:
+            conn.rollback()
+
+
+def fetch_starts(espn: Espn, days: Mapping[str, Iterable[dt.date]], aliases: Mapping[tuple[str, str], str],
+                 log: Callable[[str], None] = print) -> list[dict[str, Any]]:
+    """ESPN's games on each (league, Eastern date), one call per date."""
+    out: list[dict[str, Any]] = []
+    for league, ds in sorted(days.items()):
+        for d in sorted(set(ds)):
+            try:
+                out += [r for r in start_rows(espn.events(LEAGUES[league], [d]), aliases)]
+            except EspnError as exc:
+                log(f"starts: {league} {d}: {exc}")
+                out.append({"league": league, "eastern_date": d.isoformat(), "error": str(exc)[-160:]})
+    return out
+
+
+def listing_events(listing_dir: Path, days: Mapping[str, set[dt.date]]) -> dict[str, set[tuple[str, dt.date]]]:
+    """{league: {(teams, date)}} from the listing's events on those dates (through the gate)."""
+    counts = Counts()
+    paths = [listing_dir / f"{s}.jsonl" for s, (lg, fam) in FAMILIES.items()
+             if fam == "winner" and lg in days and (listing_dir / f"{s}.jsonl").exists()]
+    out: dict[str, set[tuple[str, dt.date]]] = defaultdict(set)
+    for series, row in gated_rows(paths, counts):
+        lg = FAMILIES[series][0]
+        g = game_of(row.get("event_ticker") or "")
+        if g is not None and g[1] in days[lg]:
+            out[lg].add(g)
+    return out
 
 
 # --------------------------------------------------------------------------- candles
@@ -198,7 +250,8 @@ def _append(path: Path, rows: Iterable[dict[str, Any]]) -> None:
 def plan(out: Path) -> dict[str, int]:
     starts: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for s in _read(out / "starts.jsonl"):
-        starts[s["league"]].append(s)
+        if "error" not in s:
+            starts[s["league"]].append(s)
     done = set((out / "candles.done").read_text(encoding="utf-8").split()) if (out / "candles.done").exists() else set()
     c: Counter = Counter()
     for r in _read(out / "sample.jsonl"):
@@ -219,7 +272,8 @@ def crawl_candles(out: Path, pacer: Pacer, fetch: Fetch, *, deadline: float | No
                   log: Callable[[str], None] = print) -> Counter:
     starts: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for s in _read(out / "starts.jsonl"):
-        starts[s["league"]].append(s)
+        if "error" not in s:
+            starts[s["league"]].append(s)
     done = set((out / "candles.done").read_text(encoding="utf-8").split()) if (out / "candles.done").exists() else set()
     counts: Counter = Counter()
     for r in _read(out / "sample.jsonl"):
@@ -252,10 +306,54 @@ def crawl_candles(out: Path, pacer: Pacer, fetch: Fetch, *, deadline: float | No
 
 
 # --------------------------------------------------------------------------- cli
+def parse_dates(spec: str) -> dict[str, set[dt.date]]:
+    """'nba:2025-11-20,2026-02-10;nhl:2025-12-01' -> {league: {dates}}; every date before the wall."""
+    out: dict[str, set[dt.date]] = defaultdict(set)
+    for part in filter(None, (p.strip() for p in spec.split(";"))):
+        league, _, ds = part.partition(":")
+        if league not in LEAGUES:
+            raise ValueError(f"unknown league {league!r}")
+        for d in filter(None, (x.strip() for x in ds.split(","))):
+            day = dt.date.fromisoformat(d)
+            if day.isoformat() >= WALL:
+                raise ValueError(f"{day} is in the reserve")
+            out[league].add(day)
+    return dict(out)
+
+
+def dry_run_starts(listing: Path, out: Path, days: dict[str, set[dt.date]], espn: Espn,
+                   aliases: Mapping[tuple[str, str], str], log: Callable[[str], None] = print) -> dict[str, Any]:
+    """ESPN's starts on `days` against the listing's game events of those dates.
+    Writes starts.dryrun.jsonl only."""
+    rows = fetch_starts(espn, days, aliases, log)
+    (out / "starts.dryrun.jsonl").unlink(missing_ok=True)
+    _append(out / "starts.dryrun.jsonl", rows)
+    by_lg: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for r in rows:
+        if "error" not in r:
+            by_lg[r["league"]].append(r)
+    report: dict[str, Any] = {"espn_calls": espn.calls, "espn_wire_bytes": espn.wire_bytes, "by_date": {}}
+    for lg, games in sorted(listing_events(listing, days).items()):
+        for d in sorted(days[lg]):
+            ev = sorted(t for t, gd in games if gd == d)
+            miss = [t for t in ev if match_start(lg, t, d, by_lg) is None]
+            report["by_date"][f"{lg} {d}"] = {
+                "espn_games": sum(1 for r in by_lg[lg] if r["eastern_date"] == d.isoformat()),
+                "errors": sum(1 for r in rows if r.get("error") and r["league"] == lg and r["eastern_date"] == d.isoformat()),
+                "kalshi_events": len(ev), "matched": len(ev) - len(miss), "unmatched": miss}
+    for lg, ds in days.items():  # dates with no listing event at all
+        for d in ds:
+            report["by_date"].setdefault(f"{lg} {d}", {"espn_games": sum(1 for r in by_lg[lg] if r["eastern_date"] == d.isoformat()),
+                                                       "kalshi_events": 0, "matched": 0, "unmatched": []})
+    return report
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("cmd", choices=("sample", "starts", "candles", "status"))
     ap.add_argument("--live", action="store_true", help="make network calls (otherwise: say what would be done)")
+    ap.add_argument("--dry-run-dates", help="starts only: 'nba:YYYY-MM-DD,...;nhl:...' (ESPN calls for these dates only)")
+    ap.add_argument("--env-file", type=Path, help="starts: the repo's .env (DATABASE_URL_READONLY only, for the aliases)")
     ap.add_argument("--max-minutes", type=float)
     args = ap.parse_args(argv)
     listing, out = DATA_DIR / "m2", DATA_DIR / "m2" / "calibration"
@@ -270,6 +368,17 @@ def main(argv: list[str] | None = None) -> int:
         (out / "sample.info.json").write_text(json.dumps(info, indent=1), encoding="utf-8")
         print(json.dumps(info, indent=1))
         return 0
+    if args.cmd == "starts" and args.dry_run_dates:
+        if args.env_file is None:
+            ap.error("starts needs --env-file for the team aliases")
+        http, close = httpx_get()
+        try:
+            report = dry_run_starts(listing, out, parse_dates(args.dry_run_dates), Espn(http),
+                                    readonly_aliases(args.env_file))
+        finally:
+            close()
+        print(json.dumps(report, indent=1))
+        return 0
     if args.cmd == "status" or not args.live:
         print(json.dumps(plan(out), indent=1))
         if args.cmd != "status":
@@ -277,9 +386,25 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     pacer = Pacer()
     if args.cmd == "starts":
-        print("starts --live: the NBA and NHL schedule calls are not wired to a fetch yet; "
-              "add them after the owner approves the start-time source.")
-        return 2
+        if args.env_file is None:
+            ap.error("starts needs --env-file for the team aliases")
+        days: dict[str, set[dt.date]] = defaultdict(set)
+        for r in _read(out / "sample.jsonl"):
+            days[r["league"]].add(dt.date.fromisoformat(r["date"]))
+        if not days:
+            print("starts --live: no sample yet; run `sample` first.")
+            return 2
+        http, close = httpx_get()
+        try:
+            espn = Espn(http)
+            rows = fetch_starts(espn, days, readonly_aliases(args.env_file))
+        finally:
+            close()
+        (out / "starts.jsonl").unlink(missing_ok=True)
+        _append(out / "starts.jsonl", rows)
+        print(f"starts: {sum('error' not in r for r in rows)} games, {sum('error' in r for r in rows)} failed dates; "
+              f"{espn.calls} ESPN calls, {espn.wire_bytes} bytes")
+        return 0
     deadline = time.time() + args.max_minutes * 60 if args.max_minutes else None
     try:
         counts = crawl_candles(out, pacer, http_fetch, deadline=deadline)

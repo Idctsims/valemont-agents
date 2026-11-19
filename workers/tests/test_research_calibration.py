@@ -88,31 +88,63 @@ class Candles(unittest.TestCase):
         self.assertEqual(cal.last_before(cs, 200), {"end": 160, "bid_close": 41, "ask_close": 43})
         self.assertIsNone(cal.last_before(cs, 50))
 
-    def test_start_match_is_away_plus_home_within_a_day(self):
-        starts = {"nba": [{"league": "nba", "start": "2026-03-02T00:30:00Z", "away": "NYK", "home": "SAS"}]}
-        self.assertIsNotNone(cal.match_start("nba", "NYKSAS", dt.date(2026, 3, 1), starts))
-        self.assertIsNone(cal.match_start("nba", "SASNYK", dt.date(2026, 3, 1), starts))
+    def test_start_match_takes_either_order_within_a_day_and_the_nearer_date(self):
+        starts = {"nba": [{"league": "nba", "start": "2026-03-02T00:30:00+00:00", "eastern_date": "2026-03-01",
+                           "away": "NYK", "home": "SAS"},
+                          {"league": "nba", "start": "2026-03-03T00:30:00+00:00", "eastern_date": "2026-03-02",
+                           "away": "SAS", "home": "NYK"}]}
+        first = int(dt.datetime(2026, 3, 2, 0, 30, tzinfo=dt.timezone.utc).timestamp())
+        self.assertEqual(cal.match_start("nba", "NYKSAS", dt.date(2026, 3, 1), starts), first)
+        self.assertEqual(cal.match_start("nba", "SASNYK", dt.date(2026, 3, 1), starts), first)
+        self.assertEqual(cal.match_start("nba", "NYKSAS", dt.date(2026, 3, 2), starts), first + 86400)
         self.assertIsNone(cal.match_start("nba", "NYKSAS", dt.date(2026, 3, 5), starts))
+        self.assertIsNone(cal.match_start("nba", "NYKBOS", dt.date(2026, 3, 1), starts))
 
-    def test_unknown_schedule_shapes_fail_loudly(self):
+
+class EspnStarts(unittest.TestCase):
+    def ev(self, away, home, when, league="nba"):
+        from sports.espn import SportsEvent
+        return SportsEvent(league=league, kind="game", espn_id=f"{away}{home}", event_name="x", starts_at=when,
+                           status="final", espn_status="STATUS_FINAL",
+                           participants={"away": {"abbr": away}, "home": {"abbr": home}})
+
+    def test_codes_go_through_the_aliases_and_the_date_is_eastern(self):
+        late = dt.datetime(2026, 3, 2, 3, 0, tzinfo=dt.timezone.utc)  # 10 pm Eastern on Mar 1
+        rows = cal.start_rows([self.ev("GS", "NY", late), self.ev("BOS", None, late)], {("nba", "GS"): "GSW", ("nba", "NY"): "NYK"})
+        self.assertEqual(len(rows), 1)
+        self.assertEqual((rows[0]["away"], rows[0]["home"], rows[0]["eastern_date"]), ("GSW", "NYK", "2026-03-01"))
+
+    def test_fetch_starts_one_call_per_date_and_a_failed_date_is_recorded(self):
+        from sports.espn import EspnFetchError
+        calls = []
+
+        class FakeEspn:
+            def events(self, lg, days):
+                calls.append((lg.code, days[0]))
+                if days[0] == dt.date(2026, 3, 2):
+                    raise EspnFetchError("nba", "HTTP 503")
+                return [EspnStarts.ev(self_, "BOS", "TOR", dt.datetime(2026, 3, 2, 0, 0, tzinfo=dt.timezone.utc))]
+
+        self_ = self
+        rows = cal.fetch_starts(FakeEspn(), {"nba": [dt.date(2026, 3, 1), dt.date(2026, 3, 2), dt.date(2026, 3, 1)]}, {},
+                                log=lambda s: None)
+        self.assertEqual(calls, [("nba", dt.date(2026, 3, 1)), ("nba", dt.date(2026, 3, 2))])
+        self.assertEqual(sum("error" in r for r in rows), 1)
+
+    def test_dry_run_dates_refuse_the_reserve_and_unknown_leagues(self):
+        self.assertEqual(cal.parse_dates("nba:2025-11-20,2026-02-10;nhl:2025-12-01"),
+                         {"nba": {dt.date(2025, 11, 20), dt.date(2026, 2, 10)}, "nhl": {dt.date(2025, 12, 1)}})
         with self.assertRaises(ValueError):
-            cal.parse_nba_schedule({"games": []})
+            cal.parse_dates("nba:2026-07-01")
         with self.assertRaises(ValueError):
-            cal.parse_nhl_week({"gameWeek": [{"games": [{"startTimeUTC": "x"}]}]})
-        self.assertEqual(cal.parse_nhl_week({"gameWeek": [{"games": [
-            {"startTimeUTC": "2026-03-02T00:00:00Z", "awayTeam": {"abbrev": "BOS"}, "homeTeam": {"abbrev": "TOR"}}]}]}),
-            [{"league": "nhl", "start": "2026-03-02T00:00:00Z", "away": "BOS", "home": "TOR"}])
+            cal.parse_dates("nfl:2025-11-20")
 
 
 class NoNetworkWithoutLive(unittest.TestCase):
     def test_candles_and_starts_make_no_call_without_live(self):
-        with tempfile.TemporaryDirectory() as d, \
-                mock.patch.object(cal, "DATA_DIR", Path(d)), \
-                mock.patch.object(cal, "http_fetch", side_effect=AssertionError("network")), \
-                mock.patch("builtins.print"):
+        with tempfile.TemporaryDirectory() as d,                 mock.patch.object(cal, "DATA_DIR", Path(d)),                 mock.patch.object(cal, "http_fetch", side_effect=AssertionError("network")),                 mock.patch.object(cal, "httpx_get", side_effect=AssertionError("network")),                 mock.patch("builtins.print"):
             self.assertEqual(cal.main(["candles"]), 0)
             self.assertEqual(cal.main(["starts"]), 0)
-            self.assertEqual(cal.main(["starts", "--live"]), 2)  # not wired until the owner approves the source
 
 
 if __name__ == "__main__":
