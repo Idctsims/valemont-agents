@@ -15,16 +15,17 @@ The structure follows CLAUDE.md §3:
 
 ## Before Phase 4.1: owner decisions
 
-1. **How the three agents run on the worker.** Agents run only under
-   `ROSTER=production`, and each also needs `agents.enabled = true`
-   (two-gated, CLAUDE.md "Deploy").
-   - **Proposal:** add the three to the production roster, enabled by their
-     own migration (db/013's pattern).
-   - `nfl_ml` and `_kalshi_probe` stay disabled (db/013 stays unpasted).
-   - `ROSTER=production` is then set on Railway by the owner when 4.4 closes.
+1. **How the three agents run: APPROVED (owner, 2026-11-19).** Agents run
+   only under `ROSTER=production`, and each also needs `agents.enabled =
+   true` (two-gated, CLAUDE.md "Deploy").
+   - The three rows are added **disabled** in db/085.
+   - They are enabled by their own migration, and `ROSTER=production` is set
+     on Railway by the owner, when 4.4 closes.
+   - `nfl_ml` and `_kalshi_probe` stay off, and db/013 stays unpasted.
    - This is not the `nfl_ml` go-live, and it moves no money.
 2. **Approval of the pre-registration text.** Wording changes go in before
-   the stamp, never after it.
+   the stamp, never after it. Approved choices (owner, Nov 19): the relative
+   cost over fair as the selection measure, and a nominal 100 contracts.
 
 ## 4.1: the stamp and the agents (db/085)
 
@@ -71,14 +72,23 @@ The structure follows CLAUDE.md §3:
 - **Prices:** `naive_p`; `scored_price` with the one taker fee at the nominal
   100 contracts; the maker-fee assumption; edge-leg tags (the M4 rule).
 - **`expected_quote`:** an empty slot until M1 is frozen.
-- **Pure, with no SQL:** given the same candidates, it builds the same ticket.
+- **The cross-sport Lotto:** the search over the pooled candidates with the
+  one-sport replacement step, `scope = cross_sport` and "extrapolated fill".
+- **The one-line reason per leg:** the pre-registration's template, from the
+  leg's own data; no AI call.
+- **Pure, with no SQL:** given the same candidates, it builds the same ticket
+  and the same reasons.
 
 **Done when:**
 - [ ] Unit tests: each ticket rule; the tie-breaks; the tick floor; the fee
-      rounding; the same input gives the same ticket.
+      rounding; the same input gives the same ticket; the same input gives
+      the same reason text, byte for byte; the cross-sport replacement step
+      (all one sport, then replaced; none to replace with, then no ticket);
+      a cross-sport ticket always carries "extrapolated fill".
 - [ ] A dry run of two real slots (no commit) prints, per tier and sport, the
-      ticket or the empty slot with its binding rule, the prices and the
-      relative cost over fair, and the time per tier. The owner reviews it.
+      ticket or the empty slot with its binding rule, the prices, the
+      relative cost over fair, the leg reasons and the time per tier. The
+      cross-sport Lotto is reported on its own line. The owner reviews it.
 - [ ] Lotto at P1: the share of slots that draw one is reported. The 1¢ floor
       is expected to bind; the number is recorded, not tuned.
 
@@ -87,7 +97,8 @@ The structure follows CLAUDE.md §3:
 - **`adapters/parlays.py`:**
   - `observe`: candidates plus the re-quote;
   - `form_thesis`: the search;
-  - `build_commitment`: a slate, at most one ticket per sport;
+  - `build_commitment`: a slate, at most one ticket per sport, plus Lotto's
+    one cross-sport ticket (at most 19; `max_slate_size` stays 25);
   - `resolve`: the product of the legs' settlement values, so `hit`, `miss`
     or `partial`;
   - `capture_close`: the CLV proxy from each leg's last candle before its
@@ -120,8 +131,10 @@ The structure follows CLAUDE.md §3:
 ## 4.5: the page, the brief and Wags
 
 - **`/betting`:** a Parlays tab, one card per ticket, with the tier, sport,
-  legs, scored price, fair p, naive p, the `expected_quote` slot, the CLV
-  proxy (labelled), combo status and outcome.
+  legs with their one-line reasons, scored price, fair p, naive p, the
+  `expected_quote` slot, the CLV proxy (labelled), combo status and
+  outcome. A cross-sport Lotto card carries the "extrapolated fill" label
+  and is listed apart from the per-sport Lottos.
 - **The brief and Wags:** one Parlays line in the brief, and a context
   provider so Wags can say what was committed. Both report per tier, with no
   blended figure.

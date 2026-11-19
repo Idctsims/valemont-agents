@@ -1,8 +1,9 @@
 # Pre-registration: the Parlay Generator (`parlay_safer`, `parlay_mid`, `parlay_lotto`)
 
 **Version 1, DRAFT for the owner's read. Not stamped.** Written 2026-11-19,
-before any ticket exists. Sources: `docs/parlay_generator_step0.md` and the
-owner's decisions of Nov 19 on it; `docs/betting_science_audit.md` §4–§6 and
+before any ticket exists. Amended the same day, still unstamped (owner): the
+one-line reason per leg, and the cross-sport Lotto. Sources:
+`docs/parlay_generator_step0.md` and the owner's decisions of Nov 19 on it; `docs/betting_science_audit.md` §4–§6 and
 §8; CLAUDE.md §1, §2, §8–§10.
 
 When the owner approves it, §1–§10 are DB-stamped one section at a time
@@ -29,9 +30,10 @@ change already scheduled is §7's switch.
 
 - Three agents, one per tier: `parlay_safer` (3–5 legs), `parlay_mid` (6–10)
   and `parlay_lotto` (11–20). Each keeps its own track record. Sport is a
-  field on every ticket.
+  field on every ticket, and so is `scope` (`sport` or `cross_sport`, §2).
 - Results are never averaged, summed or blended across tiers (CLAUDE.md §9.2),
-  nor across the two cohorts of §7.
+  nor across the two cohorts of §7, nor across scopes. The cross-sport Lotto
+  is its own cohort.
 - **Paper only.** Every commitment carries `mode = 'paper'`. Nothing places an
   order: Kalshi combos are never automated (CLAUDE.md §1). A ticket the owner
   builds by hand is a separate manual record and never changes these rows.
@@ -40,11 +42,22 @@ change already scheduled is §7's switch.
 
 - Two slots a day: **10:45 and 16:45 America/Chicago**. That is after the
   consensus runs (10:15, 16:15) and M5's snapshots (10:30, 16:30).
-- Per slot, each tier commits **at most one ticket per sport**, and only when
-  §3's rules can draw one. A sport is the board's sport tag of the legs'
-  series; a ticket's legs all share one sport.
-- A slot where a tier draws nothing is recorded as an empty slot, with the
-  reason (the rule that bound), never skipped silently.
+- Per slot, each tier commits **at most one ticket per sport** (scope
+  `sport`), and only when §3's rules can draw one. A sport is the board's
+  sport tag of the legs' series. A per-sport ticket's legs share one sport.
+- **The cross-sport Lotto.** Per slot, `parlay_lotto` also commits **at most
+  one extra ticket whose legs span two or more sports** (scope
+  `cross_sport`), under the same rules 1–11.
+  - It carries **"extrapolated fill"** on the ticket and in the payload: the
+    only cross-game fill sample is 2025 NFL (audit §9).
+  - It is its own cohort in reporting, never pooled with the per-sport Lottos.
+  - Safer and Mid have no cross-sport ticket.
+- **Slate size.** A tier's slate in one slot is at most one ticket per sport,
+  plus one for Lotto. The registry holds 18 sports (7 with combo-eligible
+  events on Nov 19), so a slate is at most 19 and `max_slate_size` stays 25.
+- A slot where a tier (or the cross-sport Lotto) draws nothing is recorded as
+  an empty slot, with the reason (the rule that bound), never skipped
+  silently.
 
 ## 3. Leg rules, version P1 (provisional)
 
@@ -87,6 +100,31 @@ go by market ticker, then by side. The search is deterministic:
 - Ties go to the larger share of measured (not prior) pairs, then to fewer
   legs, then to the lexicographically first list of market tickers.
 
+**The cross-sport Lotto's selection** uses the same order over every
+sport's candidates pooled:
+
+- For each leg count from 11 to 20, the ticket is built greedily as above.
+- If the legs chosen all share one sport, the last leg added is replaced by
+  the first remaining candidate, in order, from another sport that keeps
+  rules 5–11.
+- If there is none, that leg count yields no cross-sport ticket.
+- The lowest relative cost over fair wins, with the same tie-breaks.
+
+**The one-line reason per leg** (MASTER_PLAN §6, Chat 8, item 4) is built
+from the leg's own data by a fixed template, with no AI call. It is
+deterministic, so the same candidates give the same text:
+
+> `<side> <market label>: <tier> consensus p <p, 3 places>, ask <ask>¢, ask÷p <ratio, 3 places>, ranked <n> of <N>; <k> ranked higher were not taken (<rule>: <count>, ...)`
+
+- **`n` and `N`:** the leg's position in the slot's candidate order (§3)
+  among the N candidates that passed rules 1–4 for this ticket's scope.
+- **`k`:** the candidates ranked above it that the ticket does not hold.
+- **The rule counts:** for each of those, the first of rules 5–11 it broke,
+  counted by rule. On a cross-sport ticket, a leg removed by the one-sport
+  replacement step counts as `replaced for a second sport`.
+
+The reason is frozen in the payload at commit, like the prices.
+
 ## 4. Prices recorded on every ticket
 
 All of these are frozen at commit, in the commitment's payload, with each
@@ -102,6 +140,9 @@ leg's fetch time:
 | `expected_quote` | the product of mids plus M1's measured premium for the ticket's cell, once M1 is frozen; until then absent, shown as "pending (M1)" | **Never scored** |
 | `edge_legs` | legs that are books-tier, fresh, positive under all four de-vig methods and at or above 2¢ under the least favourable (audit M4) | No; a tag only |
 | `combo_status` | eligible as one ticket, or "build manually" | No |
+| `leg_reasons` | one line per leg, by §3's template | No |
+| `scope` | `sport` or `cross_sport` (§2) | — (a reporting key) |
+| `fill_note` | "extrapolated fill" on every cross-sport ticket; absent otherwise | No |
 | `rule_version` | `P1` here; §7's switch makes the next one | — |
 
 ## 5. The commitment
@@ -162,7 +203,8 @@ The proxy is not a profit measure, and CLV is not a profit measure either
 
 ## 8. Reporting
 
-- **The headline,** per agent and per sport, separately per cohort: the §9
+- **The headline,** per agent and per sport (the cross-sport Lotto as its own
+  line), separately per cohort: the §9
   R-multiple net of fees, with standard errors clustered by slate day (a
   ticket spans games; one day's slates share games).
 - **Leading measures:** relative cost over fair at commit, and the CLV proxy
