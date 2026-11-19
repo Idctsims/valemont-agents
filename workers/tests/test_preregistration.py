@@ -74,6 +74,30 @@ class FrozenTexts(unittest.TestCase):
                 text = pr.section_text((REPO_ROOT / document).read_text(encoding="utf-8"), section)
                 self.assertEqual(pr.content_hash(text), sha)
 
+    def test_db085_parlay_hashes_match_the_document_on_disk(self) -> None:
+        # The parlay pre-registration v1 (owner-approved 2026-11-19, 484fd4d): §0-§10, one stamp each.
+        rows = self.db085_rows()
+        self.assertEqual([s.split(".")[0] for _, s, _ in rows], [f"## {i}" for i in range(11)])
+        for document, section, sha in rows:
+            with self.subTest(section=section):
+                self.assertEqual(document, "docs/preregistration_parlays.md")
+                text = pr.section_text((REPO_ROOT / document).read_text(encoding="utf-8"), section)
+                self.assertEqual(pr.content_hash(text), sha)
+
+    def test_an_edit_to_any_stamped_parlay_section_breaks_its_hash(self) -> None:
+        doc = (REPO_ROOT / "docs/preregistration_parlays.md").read_text(encoding="utf-8")
+        for _, section, sha in self.db085_rows():
+            with self.subTest(section=section):
+                body = pr.section_text(doc, section)
+                edited = doc.replace(body, body[:-1] + ("X" if body[-1] != "X" else "Y"), 1)
+                self.assertNotEqual(pr.content_hash(pr.section_text(edited, section)), sha)
+
+    @staticmethod
+    def db085_rows() -> list[tuple[str, str, str]]:
+        sql = (REPO_ROOT / "db/085_parlay_preregistration.sql").read_text(encoding="utf-8")
+        return [(d, s.replace("''", "'"), h) for d, s, h in
+                re.findall(r"\(\s*'([^']+)',\s*'((?:[^']|'')+)',\s*'([0-9a-f]{64})'", sql)]
+
     def test_every_runner_names_a_section_that_exists(self) -> None:
         for runner in (holdout_nfl_ml, holdout_nfl_props, holdout_cfb_totals):
             with self.subTest(runner=runner.__name__):
