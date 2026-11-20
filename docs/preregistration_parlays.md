@@ -41,6 +41,11 @@ Everything else in version 1 stands.
   (the top of rule 3's band, with the tightest spread), so every tier was a
   heavy-favourite parlay. Lotto's tickets priced near 57¢. The windows make
   each tier the ticket it is named for.
+- **The window search's behaviour, accepted (owner, 2026-11-20):** on the
+  Nov 20 dry runs it builds each ticket from one high-ratio leg plus legs at
+  the band's floor (75¢), priced just under the window's top (Safer about
+  0.397, Mid 0.150, Lotto 0.030). This is the accepted behaviour of §3 as
+  written.
 - **Cohorts:** 0 tickets existed under P1, so version 2 starts cohort 1.
   There is no P1 cohort.
 - **Rule versions:** version 2's rules are rule version `P2`. §7's switch
@@ -125,11 +130,18 @@ rule are unchanged. With every ask between 0.75 and 0.95, some leg counts can
 never reach their window: Safer needs 4–5 legs (0.75³ is above 0.40), Mid
 7–10 (0.75⁶ is above 0.15), Lotto 13–20 (0.75¹² is above 0.03). Those counts
 are still tried, and they yield nothing. A slot where a tier draws no ticket
-is empty with its binding rule (§2). The rule is `window` when no leg count
-can reach the window from this slot's lowest and highest candidate asks, or
-when, over the counts that can, the window turned more candidates (or
-complete tickets) away than any single one of rules 5–11. The band is never
-widened.
+is empty with its binding rule (§2), and that rule is `window` in three cases:
+- **No count reaches it:** no leg count can reach the window from this slot's
+  lowest and highest candidate asks.
+- **Too few candidates:** candidates passed rules 1–4 but are fewer than the
+  smallest leg count that can reach the window. The counts are recorded, for
+  example "3 candidates < 5, the fewest legs that reach the window".
+- **The window turned the most away:** over the counts that can reach it, the
+  window turned more candidates (or complete tickets) away than any single one
+  of rules 5–11.
+
+"No candidates" is the binding rule only when no leg passed rules 1–4. The
+band is never widened.
 
 **Selection.** Candidates are ordered by **ask ÷ the leg's raw fresh Kalshi
 mid**, lowest first; ties go by market ticker, then by side. The mid is the
