@@ -8,6 +8,8 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest import mock
 
+from consensus import parlay_prereg
+from consensus import parlay_ticket
 from core import ledger
 from core import preregistration as pr
 from core.paths import REPO_ROOT
@@ -74,27 +76,52 @@ class FrozenTexts(unittest.TestCase):
                 text = pr.section_text((REPO_ROOT / document).read_text(encoding="utf-8"), section)
                 self.assertEqual(pr.content_hash(text), sha)
 
-    def test_db085_parlay_hashes_match_the_document_on_disk(self) -> None:
-        # The parlay pre-registration v1 (owner-approved 2026-11-19, 484fd4d): §0-§10, one stamp each.
-        rows = self.db085_rows()
-        self.assertEqual([s.split(".")[0] for _, s, _ in rows], [f"## {i}" for i in range(11)])
-        for document, section, sha in rows:
+    # The parlay pre-registration: v1 (owner-approved 2026-11-19, 484fd4d), §0-§10 stamped by db/085;
+    # v2 (owner-approved 2026-11-20, d34a8e8) changed §0, §1, §3, §4, §7, stamped by db/086. The hashes
+    # are read from the migrations, never written here.
+    PARLAYS = "docs/preregistration_parlays.md"
+    V2_CHANGED = ("## 0", "## 1", "## 3", "## 4", "## 7")
+
+    def test_db085_stamps_all_eleven_v1_sections_and_db086_the_five_v2_changes(self) -> None:
+        self.assertEqual([s.split(".")[0] for _, s, _ in self.rows("085")], [f"## {i}" for i in range(11)])
+        self.assertEqual(tuple(s.split(".")[0] for _, s, _ in self.rows("086")), self.V2_CHANGED)
+        for document, _, _ in self.rows("085") + self.rows("086"):
+            self.assertEqual(document, self.PARLAYS)
+
+    def test_every_parlay_section_on_disk_matches_its_latest_stamp(self) -> None:
+        doc = (REPO_ROOT / self.PARLAYS).read_text(encoding="utf-8")
+        heads = [line.rstrip() for line in doc.replace("\r\n", "\n").split("\n") if line.startswith("## ")]
+        self.assertEqual(tuple(heads), parlay_prereg.SECTIONS)
+        latest = {s: h for _, s, h in self.rows("085")} | {s: h for _, s, h in self.rows("086")}
+        for section in heads:
             with self.subTest(section=section):
-                self.assertEqual(document, "docs/preregistration_parlays.md")
-                text = pr.section_text((REPO_ROOT / document).read_text(encoding="utf-8"), section)
-                self.assertEqual(pr.content_hash(text), sha)
+                self.assertIn(section, latest)
+                self.assertEqual(pr.content_hash(pr.section_text(doc, section)), latest[section])
+
+    def test_v2_changed_only_its_four_sections(self) -> None:
+        # db/085's stamps of §0, §1, §3, §4, §7 no longer match the file (superseded by db/086, never
+        # edited); its other six still do.
+        doc = (REPO_ROOT / self.PARLAYS).read_text(encoding="utf-8")
+        for _, section, sha in self.rows("085"):
+            with self.subTest(section=section):
+                if section.split(".")[0] in self.V2_CHANGED:
+                    on_disk = section.replace("version P1", "version P2")
+                    self.assertNotEqual(pr.content_hash(pr.section_text(doc, on_disk)), sha)
+                else:
+                    self.assertEqual(pr.content_hash(pr.section_text(doc, section)), sha)
 
     def test_an_edit_to_any_stamped_parlay_section_breaks_its_hash(self) -> None:
-        doc = (REPO_ROOT / "docs/preregistration_parlays.md").read_text(encoding="utf-8")
-        for _, section, sha in self.db085_rows():
+        doc = (REPO_ROOT / self.PARLAYS).read_text(encoding="utf-8")
+        latest = {s: h for _, s, h in self.rows("085")} | {s: h for _, s, h in self.rows("086")}
+        for section in parlay_prereg.SECTIONS:
             with self.subTest(section=section):
                 body = pr.section_text(doc, section)
                 edited = doc.replace(body, body[:-1] + ("X" if body[-1] != "X" else "Y"), 1)
-                self.assertNotEqual(pr.content_hash(pr.section_text(edited, section)), sha)
+                self.assertNotEqual(pr.content_hash(pr.section_text(edited, section)), latest[section])
 
     @staticmethod
-    def db085_rows() -> list[tuple[str, str, str]]:
-        sql = (REPO_ROOT / "db/085_parlay_preregistration.sql").read_text(encoding="utf-8")
+    def rows(number: str) -> list[tuple[str, str, str]]:
+        sql = next((REPO_ROOT / "db").glob(f"{number}_*.sql")).read_text(encoding="utf-8")
         return [(d, s.replace("''", "'"), h) for d, s, h in
                 re.findall(r"\(\s*'([^']+)',\s*'((?:[^']|'')+)',\s*'([0-9a-f]{64})'", sql)]
 
@@ -124,6 +151,41 @@ class Guard(unittest.TestCase):
             got = pr.require_registered(*self.ARGS)
         self.assertEqual(got["sha256"], stamp.call_args.kwargs["content_sha256"])
         self.assertEqual(got["registered_at"], (self.NOW - timedelta(days=1)).isoformat())
+
+
+class ParlayGuard(unittest.TestCase):
+    """The generator refuses to commit unless every v2 section is stamped before now (owner, Nov 20)."""
+
+    NOW = datetime(2026, 11, 22, 16, 45, tzinfo=timezone.utc)
+
+    def test_every_section_stamped_before_now_passes(self) -> None:
+        with mock.patch.object(ledger, "preregistration_stamp", return_value=(self.NOW - timedelta(hours=1), self.NOW)):
+            got = parlay_prereg.require_stamped()
+        self.assertEqual([g["section"] for g in got], list(parlay_prereg.SECTIONS))
+
+    def test_one_unstamped_section_refuses_the_whole(self) -> None:
+        def stamp(*, document, section, content_sha256):
+            return None if section.startswith("## 3.") else (self.NOW - timedelta(hours=1), self.NOW)
+
+        with mock.patch.object(ledger, "preregistration_stamp", side_effect=stamp), \
+                self.assertRaises(pr.PreregistrationMissing):
+            parlay_prereg.require_stamped()
+
+    def test_a_stamp_not_before_now_refuses(self) -> None:
+        with mock.patch.object(ledger, "preregistration_stamp", return_value=(self.NOW, self.NOW)), \
+                self.assertRaises(pr.PreregistrationMissing):
+            parlay_prereg.require_stamped()
+
+    def test_a_file_still_at_version_1_has_no_v2_section_3_and_is_refused(self) -> None:
+        v1 = (REPO_ROOT / FrozenTexts.PARLAYS).read_text(encoding="utf-8").replace("version P2", "version P1")
+        with mock.patch("pathlib.Path.read_text", return_value=v1), \
+                mock.patch.object(ledger, "preregistration_stamp", return_value=(self.NOW - timedelta(hours=1), self.NOW)), \
+                self.assertRaises(pr.PreregistrationMissing):
+            parlay_prereg.require_stamped()
+
+    def test_the_ticket_carries_the_guarded_rule_version(self) -> None:
+        self.assertEqual(parlay_ticket.RULE_VERSION, parlay_prereg.RULE_VERSION)
+        self.assertEqual(parlay_prereg.RULE_VERSION, "P2")
 
 
 if __name__ == "__main__":

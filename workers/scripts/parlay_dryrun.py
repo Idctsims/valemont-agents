@@ -45,11 +45,14 @@ def readonly(env_file: Path) -> str:
 
 
 def crawler_running() -> bool:
-    """A Kalshi research crawler (scripts.research.kalshi_*) alive on this machine."""
+    """A Kalshi research crawler alive on this machine: scripts.research.kalshi_*
+    or scripts.research.m1b (Nov 20: the M1b crawler was not caught by the first
+    pattern). A `status` call is not a crawler."""
     out = subprocess.run(["powershell", "-NoProfile", "-Command",
                           "Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
                           "Select-Object -ExpandProperty CommandLine"], capture_output=True, text=True).stdout
-    return any("scripts.research.kalshi_" in line and "status" not in line for line in out.splitlines())
+    return any(("scripts.research.kalshi_" in line or "scripts.research.m1b" in line) and "status" not in line
+               for line in out.splitlines())
 
 
 def main(argv: list[str] | None = None) -> int:

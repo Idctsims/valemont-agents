@@ -24,9 +24,9 @@ from __future__ import annotations
 
 import time
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from venues.kalshi import board as kb
@@ -70,6 +70,16 @@ class Market:
     combo_yes_only: bool
     combo_size_max: int | None
     mutually_exclusive: bool | None
+    #: The Kalshi market title (owner, Nov 20); the ticker stays the key.
+    label: str | None = None
+    #: The outside inputs of the engine's blend (leg_consensus_for), so the slot
+    #: recomputes p from its fresh quote (owner, Nov 20). stale_outside is the
+    #: engine's 12 h flag: it blocks a claim, never the blend (as the engine does).
+    p_books: Decimal | None = None
+    p_espn: Decimal | None = None
+    stale_outside: bool | None = None
+    #: The game's teams in words (kalshi_board_events.game_title).
+    game_title: str | None = None
 
 
 @dataclass(frozen=True)
@@ -106,7 +116,82 @@ def markets_from_rows(rows: Iterable[Mapping[str, Any]]) -> list[Market]:
         return None if v is None else Decimal(str(v))
 
     return [Market(**{**r, "line": d(r["line"]), "p_yes": d(r["p_yes"]), "yes_bid": d(r["yes_bid"]),
-                      "yes_ask": d(r["yes_ask"])}) for r in rows]
+                      "yes_ask": d(r["yes_ask"]), "p_books": d(r.get("p_books")), "p_espn": d(r.get("p_espn"))})
+            for r in rows]
+
+
+# --------------------------------------------------------------------------- p from the fresh quote
+#: The consensus engine's blend and normalization (db/073-db/081:
+#: consensus_leg and leg_consensus_priced), applied to the slot's fresh quotes.
+#: The engine is SQL; this is its Python twin, held equal to it on the real
+#: board by tests_live/test_parlay_candidates_sql.FreshTwin.
+OUTSIDE_W, KALSHI_W = Decimal("0.7"), Decimal("0.3")
+NORM_LO, NORM_HI = Decimal("0.95"), Decimal("1.05")
+P_PLACES = Decimal("0.000001")
+
+
+def _round6(x: Decimal) -> Decimal:
+    return x.quantize(P_PLACES, rounding=ROUND_HALF_UP)  # Postgres round(numeric, 6): half away from zero
+
+
+def p_outside(m: Market) -> Decimal | None:
+    """The tier's outside price, as consensus_leg takes it: books -> p_books, espn -> p_espn."""
+    return {"books": m.p_books, "espn": m.p_espn}.get(m.tier)
+
+
+def _events(markets: Sequence[Market], quotes: Mapping[str, Quote]):
+    """Per event: (its markets, {market: fresh mid or None}, the mids' sum,
+    normalized?) by the engine's rule (leg_consensus_priced: mutually
+    exclusive, at least 2 markets, every one quoted, sum within 0.95-1.05)."""
+    def mid(t: str) -> Decimal | None:
+        q = quotes.get(t)
+        if q is None or q.yes_bid is None or q.yes_ask is None:
+            return None
+        return (q.yes_bid + q.yes_ask) / 2
+
+    by_event: dict[str, list[Market]] = defaultdict(list)
+    for m in markets:
+        by_event[m.event_ticker].append(m)
+    for group in by_event.values():
+        mids = {m.market_ticker: mid(m.market_ticker) for m in group}
+        quoted = [v for v in mids.values() if v is not None]
+        total = sum(quoted, Decimal(0))
+        norm = bool(group[0].mutually_exclusive and len(group) >= 2 and len(quoted) == len(group)
+                    and NORM_LO <= total <= NORM_HI)
+        yield group, mids, total, norm
+
+
+def normalized_events(markets: Sequence[Market], quotes: Mapping[str, Quote]) -> set[str]:
+    """The events whose fresh mids the engine's rule normalizes (for the report)."""
+    return {group[0].event_ticker for group, _, _, norm in _events(markets, quotes) if norm}
+
+
+def fresh_p(markets: Sequence[Market], quotes: Mapping[str, Quote]) -> dict[str, Decimal | None]:
+    """{market: consensus p of YES} from the slot's quotes, by the engine's rules:
+    the Kalshi mid, normalized across a mutually exclusive event when every
+    market of it is quoted and the mids sum to 0.95-1.05 (anything else, and
+    ladder rungs, plain); then 0.7 x outside + 0.3 x that mid where the tier
+    has an outside price, else the mid. A market with no two-sided fresh quote
+    gets None: its stored p is never used."""
+    out: dict[str, Decimal | None] = {}
+    for group, mids, total, norm in _events(markets, quotes):
+        for m in group:
+            k = mids[m.market_ticker]
+            if k is None:
+                out[m.market_ticker] = None
+                continue
+            pk = _round6(k / total if norm else k)
+            o = p_outside(m)
+            out[m.market_ticker] = _round6(OUTSIDE_W * o + KALSHI_W * pk) if o is not None else pk
+    return out
+
+
+def with_fresh_p(markets: Sequence[Market], quotes: Mapping[str, Quote]) -> list[Market]:
+    """The markets with p_yes replaced by the slot's recomputed p (None when not
+    re-read). The stored p never reaches ordering or pricing (owner, Nov 20: the
+    Nov 9 decision, re-quote and recompute before selecting)."""
+    fresh = fresh_p(markets, quotes)
+    return [replace(m, p_yes=fresh[m.market_ticker]) for m in markets]
 
 
 def legs_of(markets: Iterable[Market], quotes: Mapping[str, Quote]) -> list[Leg]:

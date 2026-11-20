@@ -142,6 +142,64 @@ class Requote(unittest.TestCase):
             pl.requote([e1], http=http, now=lambda: NOW, sleep=lambda s: None, pace=0)
 
 
+def q(bid, ask):
+    return pl.Quote(None if bid is None else D(bid), None if ask is None else D(ask), NOW)
+
+
+class FreshP(unittest.TestCase):
+    """The engine's blend and normalization on the slot's fresh quotes (owner, Nov 20)."""
+
+    def test_kalshi_tier_is_the_fresh_mid_never_the_stored_p(self):
+        m = market(p_yes=D("0.90"))
+        self.assertEqual(pl.fresh_p([m], {m.market_ticker: q("0.40", "0.43")}), {m.market_ticker: D("0.415000")})
+        self.assertEqual(pl.fresh_p([m], {}), {m.market_ticker: None})  # not re-read: no p at all
+        self.assertEqual(pl.fresh_p([m], {m.market_ticker: q(None, "0.43")}), {m.market_ticker: None})
+
+    def test_a_mutually_exclusive_event_is_normalized_inside_the_band_only(self):
+        ev = [market(market_ticker=f"E-{c}", event_ticker="E", mutually_exclusive=True) for c in "ABC"]
+        inside = {"E-A": q("0.29", "0.31"), "E-B": q("0.32", "0.34"), "E-C": q("0.39", "0.41")}  # sum 1.03
+        out = pl.fresh_p(ev, inside)
+        self.assertEqual(out["E-A"], (D("0.30") / D("1.03")).quantize(D("0.000001")))
+        outside = {"E-A": q("0.34", "0.36"), "E-B": q("0.34", "0.36"), "E-C": q("0.39", "0.41")}  # sum 1.10
+        self.assertEqual(pl.fresh_p(ev, outside)["E-A"], D("0.350000"))  # plain
+        partial = {"E-A": q("0.29", "0.31"), "E-B": q("0.32", "0.34")}  # E-C not quoted
+        self.assertEqual(pl.fresh_p(ev, partial), {"E-A": D("0.300000"), "E-B": D("0.330000"), "E-C": None})
+
+    def test_normalized_events_names_exactly_the_events_the_rule_normalizes(self):
+        ev = [market(market_ticker=f"E-{c}", event_ticker="E", mutually_exclusive=True) for c in "AB"]
+        lad = [market(market_ticker=f"L-{c}", event_ticker="L", mutually_exclusive=False) for c in "AB"]
+        quotes = {"E-A": q("0.59", "0.61"), "E-B": q("0.37", "0.39"),   # sum 0.98: normalized
+                  "L-A": q("0.59", "0.61"), "L-B": q("0.37", "0.39")}   # not exclusive: plain
+        self.assertEqual(pl.normalized_events([*ev, *lad], quotes), {"E"})
+
+    def test_rungs_of_a_ladder_stay_plain(self):
+        rungs = [market(market_ticker=f"L-{i}", event_ticker="L", mutually_exclusive=False) for i in range(3)]
+        quotes = {"L-0": q("0.79", "0.81"), "L-1": q("0.49", "0.51"), "L-2": q("0.19", "0.21")}  # sum 1.50
+        self.assertEqual(list(pl.fresh_p(rungs, quotes).values()), [D("0.800000"), D("0.500000"), D("0.200000")])
+        single = [market(market_ticker="S", event_ticker="S", mutually_exclusive=True)]
+        self.assertEqual(pl.fresh_p(single, {"S": q("0.60", "0.62")}), {"S": D("0.610000")})  # one market: plain
+
+    def test_books_and_espn_blend_0_7_outside_0_3_fresh_mid_and_fall_back_as_the_engine_does(self):
+        quotes = {"X": q("0.49", "0.51")}
+        books = market(market_ticker="X", tier="books", p_books=D("0.60"))
+        espn = market(market_ticker="X", tier="espn", p_espn=D("0.62"), p_books=D("0.10"))
+        self.assertEqual(pl.fresh_p([books], quotes)["X"], D("0.570000"))  # 0.42 + 0.15
+        self.assertEqual(pl.fresh_p([espn], quotes)["X"], D("0.584000"))   # 0.434 + 0.15
+        no_line = market(market_ticker="X", tier="books", p_books=None)
+        self.assertEqual(pl.fresh_p([no_line], quotes)["X"], D("0.500000"))  # consensus_leg: no outside -> mid
+        kalshi = market(market_ticker="X", tier="kalshi", p_books=D("0.60"))
+        self.assertEqual(pl.fresh_p([kalshi], quotes)["X"], D("0.500000"))  # the kalshi tier never blends
+        stale = market(market_ticker="X", tier="books", p_books=D("0.60"), stale_outside=True)
+        # The engine's 12 h flag blocks a claim, never the blend: kept exactly.
+        self.assertEqual(pl.fresh_p([stale], quotes)["X"], D("0.570000"))
+
+    def test_with_fresh_p_replaces_the_stored_p_and_nothing_else(self):
+        m = market(p_yes=D("0.95"))
+        (out,) = pl.with_fresh_p([m], {m.market_ticker: q("0.70", "0.72")})
+        self.assertEqual(out.p_yes, D("0.710000"))
+        self.assertEqual(out.__dict__ | {"p_yes": m.p_yes}, m.__dict__)
+
+
 class OrderAndAge(unittest.TestCase):
     def test_latest_start_first_so_the_earliest_games_are_read_last(self):
         ms = [market(event_ticker="E-SOON", starts_at=NOW + timedelta(hours=1)),

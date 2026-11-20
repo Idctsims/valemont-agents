@@ -37,6 +37,8 @@ class Candidates(board.BoardSqlCase):
             self.assertIsNotNone(r["p_yes"])
             m = pl.markets_from_rows([r])[0]
             self.assertEqual(str(m.yes_ask), "0.4200")
+            # The Kalshi title rides along (owner, Nov 20); the ticker stays the key.
+            self.assertEqual((r["label"], m.label), ("TL Player: 10+", "TL Player: 10+"))
 
     def test_not_eligible_events_are_counted_by_sport_never_returned(self) -> None:
         with _rolled_back() as conn:
@@ -47,6 +49,43 @@ class Candidates(board.BoardSqlCase):
             rows, cut = ledger.parlay_candidates(tests=True, conn=conn)
             self.assertFalse(any(r["event_ticker"] == event for r in rows))
             self.assertEqual(cut.get("TL Sport", 0) - before, 3)
+
+
+class FreshTwin(unittest.TestCase):
+    """parlay_legs.fresh_p is the Python twin of the engine's blend and
+    normalization (owner, Nov 20). Fed the board's own stored quotes, it must
+    give leg_consensus_for's p_consensus exactly, on real rows: games chosen to
+    hold a mutually exclusive event and a books and an espn row. Read only;
+    narrow, a few games."""
+
+    def test_the_twin_equals_the_engine_on_the_real_board(self) -> None:
+        with _rolled_back() as conn:
+            games = [r[0] for r in conn.execute("""
+                (SELECT e.game_ticker FROM kalshi_board_events e
+                  WHERE NOT e.is_test AND e.combo_eligible AND e.starts_at > now() AND e.mutually_exclusive
+                  ORDER BY e.game_ticker LIMIT 3)
+                UNION
+                (SELECT e.game_ticker FROM leg_consensus c JOIN kalshi_board b USING (market_ticker)
+                   JOIN kalshi_board_events e ON e.event_ticker = b.event_ticker
+                  WHERE NOT e.is_test AND e.combo_eligible AND e.starts_at > now() AND c.tier = 'espn'
+                  ORDER BY e.game_ticker LIMIT 2)
+                UNION
+                (SELECT e.game_ticker FROM leg_consensus c JOIN kalshi_board b USING (market_ticker)
+                   JOIN kalshi_board_events e ON e.event_ticker = b.event_ticker
+                  WHERE NOT e.is_test AND e.combo_eligible AND e.starts_at > now() AND c.tier = 'books'
+                  ORDER BY e.game_ticker LIMIT 2)""").fetchall()]
+            if not games:
+                self.skipTest("no eligible, not-started game on the board right now")
+            rows, _ = ledger.parlay_candidates(games=games, conn=conn)
+        markets = pl.markets_from_rows(rows)
+        quotes = {m.market_ticker: pl.Quote(m.yes_bid, m.yes_ask, board.NOW) for m in markets}
+        twin = pl.fresh_p(markets, quotes)
+        diff = [(m.market_ticker, m.p_yes, twin[m.market_ticker]) for m in markets if twin[m.market_ticker] != m.p_yes]
+        self.assertEqual(diff, [], f"{len(diff)} of {len(markets)} differ")
+        self.assertGreater(len(markets), 0)
+        tiers = {m.tier for m in markets}
+        print(f"\n  FreshTwin: {len(markets)} markets in {len(games)} games, tiers {sorted(tiers)}, "
+              f"exclusive events {len({m.event_ticker for m in markets if m.mutually_exclusive})}")
 
 
 if __name__ == "__main__":

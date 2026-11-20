@@ -1476,7 +1476,23 @@ absent row as "I never looked."
     **Merge gate** (`chat8-db085-stamp`, from the worktree with the main checkout's `.env` loaded into the process):
     - `tests/` OK.
     - `scripts.tests_live_metered`: **546 tests, 0 failures, 0 errors, 0 skipped; 3,841,832 bytes (~3.66 MB); 1,432 s.**
-    - Next new file: `db/086`.
+  - **`db/086_parlay_preregistration_v2.sql` applied 2026-11-20 20:01:01 UTC** (`migration_log`; the first paste, by the owner). Chat 8 Phase 4.3, `chat8-phase4-3`. Rows only: the stamp of `docs/preregistration_parlays.md` **version 2** (owner-approved Nov 20 at `d34a8e8`, before any ticket existed), five rows for the changed sections §0, §1, §3, §4, §7. §2, §5, §6, §8, §9, §10 keep db/085's stamps; db/085's eleven v1 rows stay.
+    - **What v2 is (owner, Nov 20):**
+      - Legs are ordered by ask ÷ the raw fresh Kalshi side mid (P1's ask ÷ consensus p selected on ESPN single-book p and on normalization).
+      - Per-tier scored-price windows, inclusive, before fee: Safer 0.15–0.40, Mid 0.03–0.15, Lotto and the cross-sport Lotto 0.01–0.03. The search reaches them deterministically; the accepted behaviour is one high-ratio leg plus 75¢ legs, priced just under the window's top.
+      - `fair_p` comes from the full engine, recomputed on the slot's fresh quotes, and chooses among in-window tickets only.
+      - `window` as a binding rule; rule version P2, §7's switch makes P3. No P1 cohort exists.
+    - **Before handover:** on a scratch PG 17 (production's schema, db/085 as pasted), the self-test passed as one transaction and on a re-paste (16 rows); **8 mutations, 8 red**; INSERT tuples 5 × 4. `tests/test_preregistration.py` reads the hashes from db/085 and db/086 and requires every section on disk to match its latest stamp. The guard `consensus/parlay_prereg.require_stamped()` refuses unless all 11 are stamped before now.
+
+    **Verified via db_inspect the same session (~20:05 UTC):**
+    - (a) The log row.
+    - (b) 16 stamps for the document: 11 v1 (19:46:09 UTC Nov 19) and 5 v2 (20:01:01 UTC Nov 20).
+    - (c) **Every section of the document as it stands matches a stamp made before now()**, all 11, by full sha256, read as `valemont_readonly` (`parlay_ticket_dryrun.stamp_state`: "v2 stamped (all 11 sections)").
+
+    **Merge gate** (`chat8-phase4-3` at `293418a`, from the worktree with the main checkout's `.env` loaded into the process):
+    - `tests/` 1,646 OK.
+    - `scripts.tests_live_metered`: **549 tests, 0 failures, 0 errors, 0 skipped; 3,353,464 bytes (~3.20 MB); 1,551 s.**
+    - Next new file: `db/087`.
   - **Rule (owner, 2026-10-12): the migration record updates in the same session a migration is verified, never deferred to a merge.** Record `applied_at` from `migration_log` and the verification, and move "Next new file" here and in MASTER_PLAN §"Migration numbering", in their own commit.
 - **Known intermittent `tests_live` skip (identified 2026-10-12):** `test_system_jobs_sql.SystemJobsSql.test_claim_retry_and_finish` skips with "another poller claimed the test job first" when the production worker's 10 s `job_queue` poller claims the test's `noop` job first (observed 2 of 60 isolated runs). By design (skip, not fail); not a broken invariant. Two sibling tests in the same file skip the same way ("another poller claimed/failed the test job first"). Since 2026-10-13 `tests_live` runs with `-v`, so a skip is named, not assumed.
   - **2026-10-13, cleared (owner):** a quiet Phase 3 run reported "314 tests, OK (skipped=1)" with no name. The full verbose rerun had **0 skips** (314 OK, 593 s). The owner's judgment: the plausible cause is this documented poller race, since every migration-gated skip cannot fire (all applied). One alternative was not ruled out: a class whose own `setUpClass` hits a transient "database unreachable" is also reported as one skip.

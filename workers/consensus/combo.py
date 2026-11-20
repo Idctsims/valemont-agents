@@ -298,9 +298,28 @@ def _merge_implications(latents: dict[tuple[Any, ...], _Latent], t: cr.RhoTable,
         latents[merged.key] = merged
 
 
-def price_block(game: str, legs: Sequence[LegIn], t: cr.RhoTable, *, draws: int = cr.MC_DRAWS,
-                draws_max: int = cr.MC_DRAWS_MAX) -> Block:
-    """One game's legs: merge latents, build Sigma, the joint."""
+@dataclass(frozen=True)
+class Structure:
+    """One game's legs up to the joint: the latents' intervals, the pairs'
+    rho and class, Sigma after the PSD shrink. Refused is raised before this
+    exists, so building it is the refusal check (the parlay search's rules 7
+    and 9 read it without paying for the joint)."""
+
+    los: list[float]
+    his: list[float]
+    qs: list[float]
+    nested: list[list[str]]
+    pairs: list[dict[str, Any]]
+    sigma: list[list[float]]
+    shrink: float
+
+    @property
+    def unmodeled(self) -> int:
+        return sum(1 for x in self.pairs if x["cls"] == cr.UNMODELED)
+
+
+def structure(legs: Sequence[LegIn], t: cr.RhoTable) -> Structure:
+    """One game's legs: merge latents, refuse what cannot be priced, build Sigma."""
     league, sport = legs[0].league, legs[0].sport
     table, borrowed = t.table_for(league, sport)
     no_draw = t.no_draw(league)
@@ -357,11 +376,19 @@ def price_block(game: str, legs: Sequence[LegIn], t: cr.RhoTable, *, draws: int 
             sigma[i][j] = sigma[j][i] = pr.rho
             pairs.append({"a": i, "b": j, "rho": round(pr.rho, 4), "cls": pr.cls, "key": pr.key})
     sigma, shrink = cr.psd_shrink(sigma)
+    return Structure(los, his, qs, nested, pairs, sigma, shrink)
+
+
+def price_block(game: str, legs: Sequence[LegIn], t: cr.RhoTable, *, draws: int = cr.MC_DRAWS,
+                draws_max: int = cr.MC_DRAWS_MAX) -> Block:
+    """One game's legs: the structure, then the joint."""
+    s = structure(legs, t)
+    k = len(s.qs)
     keys = [f"{leg.market_ticker}:{leg.side}" for leg in legs]
     # One latent: its interval's own probability, exactly (no round trip
     # through Phi and its inverse): nested rungs and implications price at P(A).
-    j = cr.Joint(qs[0]) if k == 1 else cr.joint(los, his, sigma, keys, draws=draws, draws_max=draws_max)
-    return Block(game, list(legs), j.p, j.se, j.method, j.draws, shrink, k, pairs, nested)
+    j = cr.Joint(s.qs[0]) if k == 1 else cr.joint(s.los, s.his, s.sigma, keys, draws=draws, draws_max=draws_max)
+    return Block(game, list(legs), j.p, j.se, j.method, j.draws, s.shrink, k, s.pairs, s.nested)
 
 
 def combo_status(legs: Sequence[LegIn]) -> tuple[str, str | None]:

@@ -1035,10 +1035,11 @@ def register_preregistration(*, document: str, section: str, content_sha256: str
         )
 
 
-def preregistration_stamp(*, document: str, section: str,
-                          content_sha256: str) -> tuple[datetime, datetime] | None:
-    """(registered_at, the database's now()) for this exact text, or None."""
-    with _pool().connection() as conn:
+def preregistration_stamp(*, document: str, section: str, content_sha256: str,
+                          conn: psycopg.Connection | None = None) -> tuple[datetime, datetime] | None:
+    """(registered_at, the database's now()) for this exact text, or None.
+    `conn` lets a read-only caller (the parlay dry run, as valemont_readonly) ask."""
+    with _brief_conn(conn) as conn:
         row = conn.execute(
             """
             SELECT registered_at, now() FROM preregistrations
@@ -6185,10 +6186,12 @@ PARLAY_CANDIDATES_SQL: Final = """
     WITH g AS (
         SELECT coalesce(array_agg(DISTINCT e.game_ticker), '{}'::text[]) AS games
           FROM kalshi_board_events e
-         WHERE e.is_test = %(tests)s AND e.combo_eligible AND e.starts_at > now())
+         WHERE e.is_test = %(tests)s AND e.combo_eligible AND e.starts_at > now()
+           AND (%(games)s::text[] IS NULL OR e.game_ticker = ANY(%(games)s::text[])))
     SELECT f.market_ticker, f.event_ticker, f.game_ticker, f.series_ticker, f.sport, f.league, f.starts_at,
            f.market_kind, f.stat, f.subject, b.team, f.line, f.tier, f.p_consensus, f.yes_bid, f.yes_ask,
-           b.payout, e.combo_eligible, e.combo_yes_only, e.combo_size_max, e.mutually_exclusive
+           b.payout, e.combo_eligible, e.combo_yes_only, e.combo_size_max, e.mutually_exclusive, b.label,
+           f.p_books, f.p_espn, f.stale_outside, e.game_title
       FROM g, leg_consensus_for(g.games) f
       JOIN kalshi_board_events e ON e.event_ticker = f.event_ticker
       JOIN kalshi_board b ON b.market_ticker = f.market_ticker
@@ -6208,15 +6211,25 @@ PARLAY_CUT_SQL: Final = """
 PARLAY_CANDIDATE_COLUMNS: Final = (
     "market_ticker", "event_ticker", "game_ticker", "series_ticker", "sport", "league", "starts_at",
     "market_kind", "stat", "subject", "team", "line", "tier", "p_yes", "yes_bid", "yes_ask",
-    "payout", "combo_eligible", "combo_yes_only", "combo_size_max", "mutually_exclusive")
+    "payout", "combo_eligible", "combo_yes_only", "combo_size_max", "mutually_exclusive",
+    # The Kalshi market title (the board's label): the leg in words for reasons
+    # and cards (owner, Nov 20). The ticker stays the key.
+    "label",
+    # The outside inputs, so the slot recomputes p from its fresh quote with the
+    # engine's blend (owner, Nov 20); the stored p_yes above never orders a leg.
+    "p_books", "p_espn", "stale_outside",
+    # The game's teams in words, for the leg reasons (owner, Nov 20).
+    "game_title")
 
 
-def parlay_candidates(*, tests: bool = False,
+def parlay_candidates(*, tests: bool = False, games: Sequence[str] | None = None,
                       conn: psycopg.Connection | None = None) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """(the candidate markets as dicts keyed by PARLAY_CANDIDATE_COLUMNS, and
-    {sport: binary markets of not-eligible, not-started events}). Read only."""
+    {sport: binary markets of not-eligible, not-started events}). Read only.
+    `games` narrows the read to those games (the live twin test)."""
     with _brief_conn(conn) as c, c.transaction():
-        rows = c.execute(PARLAY_CANDIDATES_SQL, {"tests": tests}).fetchall()
+        rows = c.execute(PARLAY_CANDIDATES_SQL,
+                         {"tests": tests, "games": None if games is None else list(games)}).fetchall()
         cut = dict(c.execute(PARLAY_CUT_SQL, {"tests": tests}).fetchall())
     return [dict(zip(PARLAY_CANDIDATE_COLUMNS, r)) for r in rows], cut
 

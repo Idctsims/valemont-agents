@@ -1,8 +1,10 @@
 # Pre-registration: the Parlay Generator (`parlay_safer`, `parlay_mid`, `parlay_lotto`)
 
-**Version 1, DRAFT for the owner's read. Not stamped.** Written 2026-11-19,
-before any ticket exists. Amended the same day, still unstamped (owner): the
-one-line reason per leg, and the cross-sport Lotto. Sources:
+**Version 2.** Version 1's sections were stamped by db/085; version 2's
+changed sections (§0, §1, §3, §4, §7) are stamped by db/086 (owner, 2026-11-20),
+before any ticket was committed. Version 1 was written 2026-11-19 and amended
+the same day, before its stamp (owner): the one-line reason per leg, and the
+cross-sport Lotto. Sources:
 `docs/parlay_generator_step0.md` and the owner's decisions of Nov 19 on it; `docs/betting_science_audit.md` §4–§6 and
 §8; CLAUDE.md §1, §2, §8–§10.
 
@@ -26,10 +28,35 @@ separate cohorts, reported apart and never pooled. A rule that turns out
 ambiguous takes its stricter reading, and the reading is recorded. The one
 change already scheduled is §7's switch.
 
+**Version 2 (owner, 2026-11-20), before any ticket was committed.** Two
+changes: §3's selection order, and a scored-price window per tier (§1, §3).
+Everything else in version 1 stands.
+- **Why the order:** the P1 dry runs on Nov 20 showed that ordering by ask ÷
+  consensus p selects on two artifacts, not on information:
+  - ESPN's single-book p sitting above Kalshi's ask (the espn tier never
+    claims edge: owner, Nov 14);
+  - normalization lifting favourites in mutually exclusive events whose
+    underdog has a wide spread.
+- **Why the windows:** with the new order alone, the dry runs bought 95¢ legs
+  (the top of rule 3's band, with the tightest spread), so every tier was a
+  heavy-favourite parlay. Lotto's tickets priced near 57¢. The windows make
+  each tier the ticket it is named for.
+- **The window search's behaviour, accepted (owner, 2026-11-20):** on the
+  Nov 20 dry runs it builds each ticket from one high-ratio leg plus legs at
+  the band's floor (75¢), priced just under the window's top (Safer about
+  0.397, Mid 0.150, Lotto 0.030). This is the accepted behaviour of §3 as
+  written.
+- **Cohorts:** 0 tickets existed under P1, so version 2 starts cohort 1.
+  There is no P1 cohort.
+- **Rule versions:** version 2's rules are rule version `P2`. §7's switch
+  then makes `P3`.
+
 ## 1. Agents and money
 
-- Three agents, one per tier: `parlay_safer` (3–5 legs), `parlay_mid` (6–10)
-  and `parlay_lotto` (11–20). Each keeps its own track record. Sport is a
+- Three agents, one per tier, each with a leg count and a scored-price window
+  (§3): `parlay_safer` (3–5 legs, 0.15–0.40), `parlay_mid` (6–10 legs,
+  0.03–0.15) and `parlay_lotto` (11–20 legs, 0.01–0.03; its cross-sport
+  ticket takes the same window). Each keeps its own track record. Sport is a
   field on every ticket, and so is `scope` (`sport` or `cross_sport`, §2).
 - Results are never averaged, summed or blended across tiers (CLAUDE.md §9.2),
   nor across the two cohorts of §7, nor across scopes. The cross-sport Lotto
@@ -59,7 +86,7 @@ change already scheduled is §7's switch.
   an empty slot, with the reason (the rule that bound), never skipped
   silently.
 
-## 3. Leg rules, version P1 (provisional)
+## 3. Leg rules, version P2 (provisional)
 
 A leg is one side (YES or NO) of one market. A candidate leg must meet all of
 these:
@@ -86,27 +113,76 @@ A ticket must meet all of these:
 9. **Modeled pairs only.** Every same-game pair has a row in the rho table
    (measured, prior or borrowed). No pair is priced at an assumed 0.
 10. **At most 3 legs from one game.**
-11. **The tick floor.** The product of the legs' side asks is 1¢ or more. The
-    owner accepts that this pushes Lotto toward fewer, safer legs until §7.
+11. **The tick floor.** The product of the legs' side asks is 1¢ or more. It
+    is also the bottom of Lotto's price window (below).
 
-**Selection.** Candidates are ordered by ask ÷ consensus p, lowest first; ties
-go by market ticker, then by side. The search is deterministic:
+**Price windows.** A ticket's scored price (§4: the product of its legs' side
+asks, before the fee) must fall inside its tier's window, bounds inclusive:
 
-- For each leg count in the tier's range, the ticket is built greedily in that
-  order, skipping any leg that breaks rules 5–11.
-- Each complete ticket is priced (§4).
-- The ticket with the **lowest relative cost over fair**, (scored price ÷ fair
-  p) − 1, is committed.
+| Tier | Legs | Scored price |
+|---|---|---|
+| Safer | 3–5 | 0.15–0.40 |
+| Mid | 6–10 | 0.03–0.15 |
+| Lotto, and the cross-sport Lotto | 11–20 | 0.01–0.03 (0.01 is rule 11's floor) |
+
+A ticket outside its window is not a candidate. Rule 3's band and every other
+rule are unchanged. With every ask between 0.75 and 0.95, some leg counts can
+never reach their window: Safer needs 4–5 legs (0.75³ is above 0.40), Mid
+7–10 (0.75⁶ is above 0.15), Lotto 13–20 (0.75¹² is above 0.03). Those counts
+are still tried, and they yield nothing. A slot where a tier draws no ticket
+is empty with its binding rule (§2), and that rule is `window` in three cases:
+- **No count reaches it:** no leg count can reach the window from this slot's
+  lowest and highest candidate asks.
+- **Too few candidates:** candidates passed rules 1–4 but are fewer than the
+  smallest leg count that can reach the window. The counts are recorded, for
+  example "3 candidates < 5, the fewest legs that reach the window".
+- **The window turned the most away:** over the counts that can reach it, the
+  window turned more candidates (or complete tickets) away than any single one
+  of rules 5–11.
+
+"No candidates" is the binding rule only when no leg passed rules 1–4. The
+band is never widened.
+
+**Selection.** Candidates are ordered by **ask ÷ the leg's raw fresh Kalshi
+mid**, lowest first; ties go by market ticker, then by side. The mid is the
+side's mid from this slot's re-quote: (YES bid + YES ask) / 2, and 1 minus
+that for a NO leg. It takes no outside blend and no normalization. The search
+is deterministic:
+
+- For each leg count n in the tier's range, the ticket is built greedily in
+  that order. A leg is skipped if it breaks rules 5–11, or if adding it would
+  put the window out of reach (`window`).
+  - Out of reach means: with k legs still to add after it, the product so far
+    times the lowest ask among this scope's candidates, raised to the k, is
+    above the window's top; or the product so far times the highest such ask,
+    raised to the k, is below the window's bottom.
+  - The order alone would fill a ticket with 95¢ legs. This check makes the
+    later legs come from lower in the band, in the same order, until the
+    window is reachable.
+- A complete ticket whose scored price is outside the window yields nothing
+  for that n.
+- Each complete ticket inside its window is priced (§4).
+- Among those, the ticket with the **lowest relative cost over fair**,
+  (scored price ÷ fair p) − 1, is committed.
+- **`fair_p`** is the copula over each leg's consensus p from the full
+  consensus engine exactly as built: the books and espn blend, the
+  normalization of mutually exclusive events, and the engine's 12 h rule as
+  it stands, recomputed on this slot's fresh quotes. It chooses among the
+  complete tickets and is recorded and shown. **It never ranks legs.**
+- **Edge legs** are unchanged (§4): books tier, positive under all four
+  de-vig methods, at or above the margin under the least favourable. A tag
+  only.
 - Ties go to the larger share of measured (not prior) pairs, then to fewer
   legs, then to the lexicographically first list of market tickers.
 
 **The cross-sport Lotto's selection** uses the same order over every
 sport's candidates pooled:
 
-- For each leg count from 11 to 20, the ticket is built greedily as above.
+- For each leg count from 11 to 20, the ticket is built greedily as above,
+  with Lotto's window.
 - If the legs chosen all share one sport, the last leg added is replaced by
   the first remaining candidate, in order, from another sport that keeps
-  rules 5–11.
+  rules 5–11 and leaves the scored price inside the window.
 - If there is none, that leg count yields no cross-sport ticket.
 - The lowest relative cost over fair wins, with the same tie-breaks.
 
@@ -114,14 +190,15 @@ sport's candidates pooled:
 from the leg's own data by a fixed template, with no AI call. It is
 deterministic, so the same candidates give the same text:
 
-> `<side> <market label>: <tier> consensus p <p, 3 places>, ask <ask>¢, ask÷p <ratio, 3 places>, ranked <n> of <N>; <k> ranked higher were not taken (<rule>: <count>, ...)`
+> `<side> <market label>: ask <ask>¢, mid <mid, 3 places>, ask÷mid <ratio, 3 places>, ranked <n> of <N>; <tier> consensus p <p, 3 places>; <k> ranked higher were not taken (<rule>: <count>, ...)`
 
 - **`n` and `N`:** the leg's position in the slot's candidate order (§3)
   among the N candidates that passed rules 1–4 for this ticket's scope.
 - **`k`:** the candidates ranked above it that the ticket does not hold.
 - **The rule counts:** for each of those, the first of rules 5–11 it broke,
-  counted by rule. On a cross-sport ticket, a leg removed by the one-sport
-  replacement step counts as `replaced for a second sport`.
+  or `window` when the price window turned it away, counted by rule. On a
+  cross-sport ticket, a leg removed by the one-sport replacement step counts
+  as `replaced for a second sport`.
 
 The reason is frozen in the payload at commit, like the prices.
 
@@ -143,7 +220,7 @@ leg's fetch time:
 | `leg_reasons` | one line per leg, by §3's template | No |
 | `scope` | `sport` or `cross_sport` (§2) | — (a reporting key) |
 | `fill_note` | "extrapolated fill" on every cross-sport ticket; absent otherwise | No |
-| `rule_version` | `P1` here; §7's switch makes the next one | — |
+| `rule_version` | `P2` here; §7's switch makes `P3` | — |
 
 ## 5. The commitment
 
@@ -192,12 +269,12 @@ The proxy is not a profit measure, and CLV is not a profit measure either
   lowest median cost over fair among those that draw at least 5 distinct
   tickets on 12 of the 14 days and stay at or above 1¢ on 95% of tickets.
 - **When:** the generator switches to M5's chosen rule sets at the **first
-  slot after the owner accepts the M5 report**. If it is not accepted, P1
+  slot after the owner accepts the M5 report**. If it is not accepted, P2
   stays.
-- **How:** the switch is version 2 of this file. §3 is replaced by the chosen
+- **How:** the switch is version 3 of this file. §3 is replaced by the chosen
   sets, and the M5 output's sha256 is quoted in it. It is stamped before its
   first slot.
-- **No pooling:** P1 tickets and version-2 tickets are separate cohorts,
+- **No pooling:** P2 tickets and version-3 tickets are separate cohorts,
   reported apart and never pooled.
 - **Nothing else changes a rule before the switch.**
 
