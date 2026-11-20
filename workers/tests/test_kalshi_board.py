@@ -1109,6 +1109,21 @@ class Pacing(unittest.TestCase):
         self.assertEqual(p.interval, kb.PACE_FLOOR)
         self.assertAlmostEqual(p.limited_pct, 100 / 401)
 
+    def test_a_caller_floor_eases_lower_with_the_same_steps_and_the_default_is_unchanged(self) -> None:
+        self.assertEqual(kb.PACE_FLOOR, 0.3)  # the board refresh's floor (owner, Nov 20: not changed)
+        low, _ = self.paced([200] * 1000, interval=0.5, floor=0.10)
+        default, _ = self.paced([200] * 1000, interval=0.5)
+        for _ in range(kb.PACE_EASE_AFTER):
+            low("u")
+            default("u")
+        self.assertAlmostEqual(low.interval, 0.45)  # one 10% step, as before
+        self.assertAlmostEqual(default.interval, 0.45)
+        for _ in range(1000 - kb.PACE_EASE_AFTER):
+            low("u")
+            default("u")
+        self.assertEqual(low.interval, 0.10)
+        self.assertEqual(default.interval, kb.PACE_FLOOR)
+
     def test_the_ceiling(self) -> None:
         p, _ = self.paced([429] * 10, interval=0.5)
         for _ in range(10):
