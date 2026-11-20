@@ -141,10 +141,15 @@ def line(r: pt.Result) -> str:
 OWNER_TZ = ZoneInfo("America/Chicago")
 
 
-def chicago_today(hhmm: str) -> dt.datetime:
-    """Today's HH:MM in Chicago, as UTC."""
+def chicago_today(when: str) -> dt.datetime:
+    """'HH:MM' (today) or 'YYYY-MM-DD HH:MM' in Chicago, as UTC."""
+    day, _, hhmm = when.strip().rpartition(" ")
     h, m = (int(x) for x in hhmm.split(":"))
-    local = dt.datetime.now(OWNER_TZ).replace(hour=h, minute=m, second=0, microsecond=0)
+    base = dt.datetime.now(OWNER_TZ)
+    if day:
+        y, mo, d = (int(x) for x in day.split("-"))
+        base = base.replace(year=y, month=mo, day=d)
+    local = base.replace(hour=h, minute=m, second=0, microsecond=0)
     return local.astimezone(dt.timezone.utc)
 
 
