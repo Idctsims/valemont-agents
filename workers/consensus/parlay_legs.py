@@ -70,6 +70,8 @@ class Market:
     combo_yes_only: bool
     combo_size_max: int | None
     mutually_exclusive: bool | None
+    #: The Kalshi market title (owner, Nov 20); the ticker stays the key.
+    label: str | None = None
 
 
 @dataclass(frozen=True)

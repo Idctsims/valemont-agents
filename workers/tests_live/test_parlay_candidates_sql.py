@@ -37,6 +37,8 @@ class Candidates(board.BoardSqlCase):
             self.assertIsNotNone(r["p_yes"])
             m = pl.markets_from_rows([r])[0]
             self.assertEqual(str(m.yes_ask), "0.4200")
+            # The Kalshi title rides along (owner, Nov 20); the ticker stays the key.
+            self.assertEqual((r["label"], m.label), ("TL Player: 10+", "TL Player: 10+"))
 
     def test_not_eligible_events_are_counted_by_sport_never_returned(self) -> None:
         with _rolled_back() as conn:

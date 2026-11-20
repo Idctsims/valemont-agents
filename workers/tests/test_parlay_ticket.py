@@ -216,6 +216,16 @@ class Reasons(unittest.TestCase):
         self.assertEqual(lines[1], "YES C: kalshi consensus p 0.900, ask 85¢, ask÷p 0.944, "
                                    "ranked 3 of 3; 1 ranked higher were not taken (one prop per player: 1)")
 
+    def test_the_leg_is_named_by_its_kalshi_title_and_the_ticker_stays_the_key(self):
+        leg = cand("KXNBAPTS-26NOV22AAABBB-P1-20").leg
+        titled = pt.Cand(pl.Leg(pl.Market(**{**leg.market.__dict__, "label": "  P One: 20+ "}), "no", leg.quote),
+                         D("0.10"), D("0.21"))
+        line = pt.leg_reasons([titled], [titled], {})[0]
+        self.assertTrue(line.startswith("NO P One: 20+: kalshi consensus p 0.100, ask 21¢"), line)
+        self.assertEqual(titled.key, ("KXNBAPTS-26NOV22AAABBB-P1-20", "no"))
+        self.assertEqual(pt.label_of(leg.market), "KXNBAPTS-26NOV22AAABBB-P1-20")  # no title: the ticker
+        self.assertEqual(pt.leg_in(titled).label, "  P One: 20+ ")  # the pricer's refusals name it too
+
     def test_a_fractional_ask_keeps_its_cents(self):
         c = cand("A", ask="0.805", p="0.90")
         self.assertIn("ask 80.5¢", pt.leg_reasons([c], [c], {})[0])

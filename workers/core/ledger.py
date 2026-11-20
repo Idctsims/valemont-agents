@@ -6188,7 +6188,7 @@ PARLAY_CANDIDATES_SQL: Final = """
          WHERE e.is_test = %(tests)s AND e.combo_eligible AND e.starts_at > now())
     SELECT f.market_ticker, f.event_ticker, f.game_ticker, f.series_ticker, f.sport, f.league, f.starts_at,
            f.market_kind, f.stat, f.subject, b.team, f.line, f.tier, f.p_consensus, f.yes_bid, f.yes_ask,
-           b.payout, e.combo_eligible, e.combo_yes_only, e.combo_size_max, e.mutually_exclusive
+           b.payout, e.combo_eligible, e.combo_yes_only, e.combo_size_max, e.mutually_exclusive, b.label
       FROM g, leg_consensus_for(g.games) f
       JOIN kalshi_board_events e ON e.event_ticker = f.event_ticker
       JOIN kalshi_board b ON b.market_ticker = f.market_ticker
@@ -6208,7 +6208,10 @@ PARLAY_CUT_SQL: Final = """
 PARLAY_CANDIDATE_COLUMNS: Final = (
     "market_ticker", "event_ticker", "game_ticker", "series_ticker", "sport", "league", "starts_at",
     "market_kind", "stat", "subject", "team", "line", "tier", "p_yes", "yes_bid", "yes_ask",
-    "payout", "combo_eligible", "combo_yes_only", "combo_size_max", "mutually_exclusive")
+    "payout", "combo_eligible", "combo_yes_only", "combo_size_max", "mutually_exclusive",
+    # The Kalshi market title (the board's label): the leg in words for reasons
+    # and cards (owner, Nov 20). The ticker stays the key.
+    "label")
 
 
 def parlay_candidates(*, tests: bool = False,

@@ -1,7 +1,8 @@
 """Phase 4.3: the ticket search, its prices and the leg reasons (P1).
 
 docs/preregistration_parlays.md §2-§4 (stamped, db/085). Pure: no SQL, no
-network, no clock. Given the same candidates (the legs that passed rules 1-4
+network, and no clock that decides anything (a search only measures its own
+pricing time, for the report). Given the same candidates (the legs that passed rules 1-4
 in `consensus.parlay_legs`), the same rho table and the same draw count, it
 builds the same tickets and the same reason text, byte for byte. Nothing here
 commits; Phase 4.4's adapter does.
@@ -34,13 +35,17 @@ here so the owner can see them:
 - On a cross-sport ticket, a candidate of the ticket's one sport that the
   replacement scan passes over was never a rule break: it counts as rule 5
   (the count was full when the greedy pass reached it).
-- With no Kalshi title on the candidate row, a leg's market label is its
-  market ticker.
+- A leg's market label is its Kalshi title (the board's `label`, owner
+  Nov 20); a row with none falls back to the market ticker. The ticker stays
+  the key everywhere.
+
+These readings were approved as written by the owner on 2026-11-20.
 """
 
 from __future__ import annotations
 
 import math
+import time
 from collections import Counter
 from dataclasses import dataclass, field
 from decimal import ROUND_CEILING, ROUND_HALF_EVEN, Decimal
@@ -129,7 +134,7 @@ def leg_in(c: Cand) -> combo.LegIn:
     return combo.LegIn(
         market_ticker=m.market_ticker, side=c.leg.side, event_ticker=m.event_ticker, game_ticker=m.game_ticker,
         series_ticker=m.series_ticker, sport=m.sport, league=m.league, market_kind=m.market_kind, payout=m.payout,
-        subject=m.subject, stat=m.stat, line=None if m.line is None else float(m.line), label=None, team=m.team,
+        subject=m.subject, stat=m.stat, line=None if m.line is None else float(m.line), label=m.label, team=m.team,
         tier=m.tier, p_yes=None if m.p_yes is None else float(m.p_yes),
         yes_ask=None if q.yes_ask is None else float(q.yes_ask),
         no_ask=None if q.yes_bid is None else float(Decimal(1) - q.yes_bid),
@@ -306,6 +311,11 @@ def _cents(ask: Decimal) -> str:
     return s.rstrip("0").rstrip(".") if "." in s else s
 
 
+def label_of(m: pl.Market) -> str:
+    """The leg in words: the Kalshi market title, or the ticker when the row has none."""
+    return m.label.strip() if m.label and m.label.strip() else m.market_ticker
+
+
 def leg_reasons(legs: Sequence[Cand], scope: Sequence[Cand], why: Mapping[tuple[str, str], str]) -> list[str]:
     """§3's one line per leg, in the ticket's order:
     `<side> <label>: <tier> consensus p <p>, ask <ask>c, ask/p <ratio>, ranked <n> of <N>;
@@ -317,7 +327,7 @@ def leg_reasons(legs: Sequence[Cand], scope: Sequence[Cand], why: Mapping[tuple[
         n = rank[c.key]
         higher = [x for x in scope[: n - 1] if x.key not in held]
         counts = Counter(why.get(x.key, RULE_LABELS[5]) for x in higher)
-        line = (f"{c.leg.side.upper()} {c.m.market_ticker}: {c.m.tier} consensus p {_num(c.p, 3)}, "
+        line = (f"{c.leg.side.upper()} {label_of(c.m)}: {c.m.tier} consensus p {_num(c.p, 3)}, "
                 f"ask {_cents(c.ask)}¢, ask÷p {_num(c.ratio, 3)}, ranked {n} of {len(scope)}; "
                 f"{len(higher)} ranked higher were not taken")
         if higher:
@@ -378,6 +388,10 @@ class Result:
     ticket: Ticket | None
     binding: str | None             # why the slot is empty
     tried: dict[int, str]           # leg count -> "rel <x>" or the reason it built nothing
+    #: Measurement only (never an input): seconds pricing each leg count's
+    #: ticket (the copula, Monte Carlo past two latents a game), and the whole search.
+    price_seconds: dict[int, float] = field(default_factory=dict)
+    seconds: float = 0.0
 
 
 def _choose(priced: list[tuple[Build, Priced]]) -> tuple[Build, Priced]:
@@ -404,13 +418,16 @@ def search(tier: str, cands: Sequence[Cand], t: cr.RhoTable, *, sport: str | Non
     (already in §3's order): a greedy ticket per leg count, each priced, the
     lowest relative cost over fair wins (ties: more measured pairs, fewer
     legs, the first sorted ticker list)."""
+    t0 = time.perf_counter()
     agent, lo, hi = TIERS[tier]
     scope = "cross_sport" if cross_sport else "sport"
     tried: dict[int, str] = {}
+    timing: dict[int, float] = {}
     built: list[tuple[Build, Priced]] = []
     first_skips: Counter | None = None
     if len(cands) < lo:
-        return Result(tier, scope, sport, len(cands), None, f"rules 1-4: {len(cands)} candidates < {lo}", tried)
+        return Result(tier, scope, sport, len(cands), None, f"rules 1-4: {len(cands)} candidates < {lo}", tried,
+                      timing, time.perf_counter() - t0)
     for n in range(lo, hi + 1):
         b: Build | None = greedy(cands, n, t)
         if first_skips is None:
@@ -423,20 +440,22 @@ def search(tier: str, cands: Sequence[Cand], t: cr.RhoTable, *, sport: str | Non
             if b is None:
                 tried[n] = "no second sport"
                 continue
+        tp = time.perf_counter()
         pr = price_ticket(b.legs, t, draws=draws, draws_max=draws_max)
+        timing[n] = time.perf_counter() - tp
         tried[n] = f"rel {pr.rel_cost:.6f}"
         built.append((b, pr))
     if not built:
         why = "no second sport" if cross_sport and any(v == "no second sport" for v in tried.values()) \
             else _binding(first_skips or Counter())
-        return Result(tier, scope, sport, len(cands), None, why, tried)
+        return Result(tier, scope, sport, len(cands), None, why, tried, timing, time.perf_counter() - t0)
     b, pr = _choose(built)
     reasons = leg_reasons(b.legs, cands, b.why)
     edges = [f"{c.m.market_ticker}:{c.leg.side}" for c in b.legs
              if is_edge_leg(c, (spans or {}).get(c.m.market_ticker))]
     ticket = Ticket(tier, agent, scope, None if cross_sport else sport, list(b.legs), pr, reasons, edges,
                     t.data.get("version"), t.sha256, FILL_NOTE if cross_sport else None)
-    return Result(tier, scope, sport, len(cands), ticket, None, tried)
+    return Result(tier, scope, sport, len(cands), ticket, None, tried, timing, time.perf_counter() - t0)
 
 
 @dataclass(frozen=True)
