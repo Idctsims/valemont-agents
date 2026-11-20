@@ -104,3 +104,32 @@ test("owner signs in, sees the active page, and logs out", async ({ page }, test
   await page.goto("/goals");
   await expect(page).toHaveURL(/\/login\?next=%2Fgoals$/);
 });
+
+test("the More sheet fits the screen and scrolls inside itself", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "phone", "the More sheet is phone only");
+  // Shorter than the sheet's ~21 links, so its list must scroll (owner, Nov 20:
+  // the page behind showed a scrollbar and the sheet never moved).
+  await page.setViewportSize({ width: 390, height: 640 });
+  await signIn(page, "/goals");
+  await page.getByRole("navigation", { name: "Dock" }).getByRole("button", { name: "More" }).click();
+  const sheet = page.getByTestId("more-sheet");
+  await expect(sheet).toBeVisible();
+
+  const box = await sheet.boundingBox();
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  const { scrollable, bodyLocked } = await sheet.evaluate((el) => ({
+    scrollable: el.scrollHeight > el.clientHeight,
+    bodyLocked: getComputedStyle(document.body).overflow === "hidden",
+  }));
+  expect(scrollable).toBe(true);
+  expect(bodyLocked).toBe(true);
+
+  // The last link (System · Design tokens) is reachable by scrolling the sheet.
+  const last = sheet.getByRole("link", { name: "Design tokens" });
+  await sheet.evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
+  await expect(last).toBeInViewport();
+
+  await page.keyboard.press("Escape");
+  await expect(sheet).toHaveCount(0);
+  expect(await page.evaluate(() => document.body.style.overflow)).toBe("");
+});

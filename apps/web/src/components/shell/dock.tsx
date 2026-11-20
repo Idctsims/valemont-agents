@@ -28,23 +28,32 @@ export function Dock() {
   const sheetId = useId();
   const moreButton = useRef<HTMLButtonElement>(null);
 
+  // The tab just tapped, lit at once rather than when its page arrives.
+  const [going, setGoing] = useState<string | null>(null);
+
   // Close on navigation.
   const [seen, setSeen] = useState(pathname);
   if (seen !== pathname) {
     setSeen(pathname);
     setOpen(false);
+    setGoing(null);
   }
 
-  const inDock = DOCK.some((d) => isActive(pathname, d.href));
+  const here = going ?? pathname;
+  const inDock = DOCK.some((d) => isActive(here, d.href));
   const wags = useWags();
 
   const tab = ({ label, href, Icon }: (typeof DOCK)[number]) => {
-    const active = isActive(pathname, href);
+    const active = isActive(here, href);
     return (
       <li key={href} className="flex flex-1">
         <Link
           href={href}
-          aria-current={active ? "page" : undefined}
+          onClick={(e) => {
+            if (e.metaKey || e.ctrlKey || e.shiftKey || isActive(pathname, href)) return;
+            setGoing(href);
+          }}
+          aria-current={isActive(pathname, href) ? "page" : undefined}
           className={`${item} ${active ? "font-medium text-accent" : "text-text-muted hover:text-text"}`}
         >
           <span
@@ -117,14 +126,29 @@ export function Dock() {
 function MoreSheet({ id, pathname, onClose }: { id: string; pathname: string; onClose: () => void }) {
   const panel = useRef<HTMLDivElement>(null);
 
+  // onClose is a fresh function each render; read it through a ref so the
+  // effect below runs once per opening (it used to re-focus the first link
+  // whenever the dock re-rendered).
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     panel.current?.querySelector<HTMLElement>("a")?.focus({ preventScroll: true });
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") close.current();
     };
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    // The page behind must not scroll while the sheet is up: its scrollbar
+    // showed and moved while the sheet stood still (owner, Nov 20).
+    const prior = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prior;
+    };
+  }, []);
 
   const groups = [...builtGroups(), { key: "system", name: "System", pages: SYSTEM_PAGES }];
 
@@ -143,7 +167,8 @@ function MoreSheet({ id, pathname, onClose }: { id: string; pathname: string; on
         role="dialog"
         aria-modal="true"
         aria-label="All pages"
-        className="absolute inset-x-0 bottom-dock rounded-t-card border-t border-border bg-surface px-safe pt-6 pb-4"
+        data-testid="more-sheet"
+        className="absolute inset-x-0 bottom-dock max-h-above-dock overflow-y-auto overscroll-contain rounded-t-card border-t border-border bg-surface px-safe pt-6 pb-4"
       >
         {groups.map((g) => (
           <section key={g.key} aria-label={g.name} className="mb-4 last:mb-0">
