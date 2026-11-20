@@ -182,6 +182,12 @@
                              snapshot (db/084), copied inside Postgres; a slot
                              once, 28 real snapshots, then it refuses
                              (consensus/board_snapshot.py, docs/research/m5_step0.md).
+    parlay_requote   18 h    10:33 and 16:33 Chicago, never at boot, misfire
+                             grace 5 min: the parlay slot's one re-quote, shared
+                             by the three tiers committing at :45; the board
+                             refresh yields while it runs. JobSkipped unless
+                             ROSTER=production and a parlay agent is enabled
+                             (consensus/parlay_slot.py; Chat 8 Phase 4.4).
 
 Alerts go through core/push.py with deep link /settings/health.
 """
@@ -220,6 +226,7 @@ from sports import jobs as sports_jobs
 from sports import kalshi_board
 from consensus import board_snapshot
 from consensus import combo_job
+from consensus import parlay_slot
 from consensus import job as consensus_job
 from sports import kalshi_map
 
@@ -874,6 +881,11 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
         SystemJob(board_snapshot.JOB, board_snapshot.INTERVAL_S,
                   CronTrigger(hour="10,16", minute=30, timezone=OWNER_TZ),
                   board_snapshot.snapshot_job, misfire_grace=1800, run_at_boot=False),
+        # The parlay slot's shared re-quote (owner, Nov 20): :33, never at boot; a
+        # re-quote that cannot start by :38 does not run (the slot is then empty, `fresh`).
+        SystemJob(parlay_slot.JOB, parlay_slot.INTERVAL_S,
+                  CronTrigger(hour="10,16", minute=parlay_slot.REQUOTE_MINUTE, timezone=OWNER_TZ),
+                  parlay_slot.requote_job, misfire_grace=parlay_slot.MISFIRE_GRACE_S, run_at_boot=False),
     ]
     if env.get("HEALTH_DRILL", "").strip().lower() == "true":
         log.warning("HEALTH_DRILL=true: scheduling health_drill, which always fails")
