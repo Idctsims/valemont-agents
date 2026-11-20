@@ -1,8 +1,10 @@
 # Pre-registration: the Parlay Generator (`parlay_safer`, `parlay_mid`, `parlay_lotto`)
 
-**Version 1, DRAFT for the owner's read. Not stamped.** Written 2026-11-19,
-before any ticket exists. Amended the same day, still unstamped (owner): the
-one-line reason per leg, and the cross-sport Lotto. Sources:
+**Version 2.** Version 1's sections were stamped by db/085; version 2's
+changed sections (§0, §3, §4, §7) are stamped by db/086 (owner, 2026-11-20),
+before any ticket was committed. Version 1 was written 2026-11-19 and amended
+the same day, before its stamp (owner): the one-line reason per leg, and the
+cross-sport Lotto. Sources:
 `docs/parlay_generator_step0.md` and the owner's decisions of Nov 19 on it; `docs/betting_science_audit.md` §4–§6 and
 §8; CLAUDE.md §1, §2, §8–§10.
 
@@ -25,6 +27,19 @@ applies only to tickets committed after it. Tickets under two versions are
 separate cohorts, reported apart and never pooled. A rule that turns out
 ambiguous takes its stricter reading, and the reading is recorded. The one
 change already scheduled is §7's switch.
+
+**Version 2 (owner, 2026-11-20), before any ticket was committed.** Only §3's
+selection order changes. Everything else in version 1 stands.
+- **Why:** the P1 dry runs on Nov 20 showed that ordering by ask ÷ consensus
+  p selects on two artifacts, not on information:
+  - ESPN's single-book p sitting above Kalshi's ask (the espn tier never
+    claims edge: owner, Nov 14);
+  - normalization lifting favourites in mutually exclusive events whose
+    underdog has a wide spread.
+- **Cohorts:** 0 tickets existed under P1, so version 2 starts cohort 1.
+  There is no P1 cohort.
+- **Rule versions:** version 2's rules are rule version `P2`. §7's switch
+  then makes `P3`.
 
 ## 1. Agents and money
 
@@ -59,7 +74,7 @@ change already scheduled is §7's switch.
   an empty slot, with the reason (the rule that bound), never skipped
   silently.
 
-## 3. Leg rules, version P1 (provisional)
+## 3. Leg rules, version P2 (provisional)
 
 A leg is one side (YES or NO) of one market. A candidate leg must meet all of
 these:
@@ -89,14 +104,25 @@ A ticket must meet all of these:
 11. **The tick floor.** The product of the legs' side asks is 1¢ or more. The
     owner accepts that this pushes Lotto toward fewer, safer legs until §7.
 
-**Selection.** Candidates are ordered by ask ÷ consensus p, lowest first; ties
-go by market ticker, then by side. The search is deterministic:
+**Selection.** Candidates are ordered by **ask ÷ the leg's raw fresh Kalshi
+mid**, lowest first; ties go by market ticker, then by side. The mid is the
+side's mid from this slot's re-quote: (YES bid + YES ask) / 2, and 1 minus
+that for a NO leg. It takes no outside blend and no normalization. The search
+is deterministic:
 
 - For each leg count in the tier's range, the ticket is built greedily in that
   order, skipping any leg that breaks rules 5–11.
 - Each complete ticket is priced (§4).
 - The ticket with the **lowest relative cost over fair**, (scored price ÷ fair
   p) − 1, is committed.
+- **`fair_p`** is the copula over each leg's consensus p from the full
+  consensus engine exactly as built: the books and espn blend, the
+  normalization of mutually exclusive events, and the engine's 12 h rule as
+  it stands, recomputed on this slot's fresh quotes. It chooses among the
+  complete tickets and is recorded and shown. **It never ranks legs.**
+- **Edge legs** are unchanged (§4): books tier, positive under all four
+  de-vig methods, at or above the margin under the least favourable. A tag
+  only.
 - Ties go to the larger share of measured (not prior) pairs, then to fewer
   legs, then to the lexicographically first list of market tickers.
 
@@ -114,7 +140,7 @@ sport's candidates pooled:
 from the leg's own data by a fixed template, with no AI call. It is
 deterministic, so the same candidates give the same text:
 
-> `<side> <market label>: <tier> consensus p <p, 3 places>, ask <ask>¢, ask÷p <ratio, 3 places>, ranked <n> of <N>; <k> ranked higher were not taken (<rule>: <count>, ...)`
+> `<side> <market label>: ask <ask>¢, mid <mid, 3 places>, ask÷mid <ratio, 3 places>, ranked <n> of <N>; <tier> consensus p <p, 3 places>; <k> ranked higher were not taken (<rule>: <count>, ...)`
 
 - **`n` and `N`:** the leg's position in the slot's candidate order (§3)
   among the N candidates that passed rules 1–4 for this ticket's scope.
@@ -143,7 +169,7 @@ leg's fetch time:
 | `leg_reasons` | one line per leg, by §3's template | No |
 | `scope` | `sport` or `cross_sport` (§2) | — (a reporting key) |
 | `fill_note` | "extrapolated fill" on every cross-sport ticket; absent otherwise | No |
-| `rule_version` | `P1` here; §7's switch makes the next one | — |
+| `rule_version` | `P2` here; §7's switch makes `P3` | — |
 
 ## 5. The commitment
 
@@ -192,12 +218,12 @@ The proxy is not a profit measure, and CLV is not a profit measure either
   lowest median cost over fair among those that draw at least 5 distinct
   tickets on 12 of the 14 days and stay at or above 1¢ on 95% of tickets.
 - **When:** the generator switches to M5's chosen rule sets at the **first
-  slot after the owner accepts the M5 report**. If it is not accepted, P1
+  slot after the owner accepts the M5 report**. If it is not accepted, P2
   stays.
-- **How:** the switch is version 2 of this file. §3 is replaced by the chosen
+- **How:** the switch is version 3 of this file. §3 is replaced by the chosen
   sets, and the M5 output's sha256 is quoted in it. It is stamped before its
   first slot.
-- **No pooling:** P1 tickets and version-2 tickets are separate cohorts,
+- **No pooling:** P2 tickets and version-3 tickets are separate cohorts,
   reported apart and never pooled.
 - **Nothing else changes a rule before the switch.**
 
