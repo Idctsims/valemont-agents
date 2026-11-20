@@ -1,0 +1,48 @@
+{
+  "study": "M1",
+  "script": "workers/scripts/research/m1_analysis.py",
+  "git": "38b8c86400964a2623cfe1379c6660bce2f9edec",
+  "run_at": "2026-11-20T16:56:51+00:00",
+  "input": {
+    "sampled_combos": 18020,
+    "settled": 18020,
+    "trades": 26050,
+    "legs_with_candles_asked": 18472,
+    "candle_markets": 15014
+  },
+  "reproduction": {
+    "window": [
+      "2026-04-03",
+      "2026-06-01"
+    ],
+    "e1_equal_weight_c": 3.3,
+    "tolerance_c": 1.0,
+    "equal_weight": {
+      "mean_c": 8.856,
+      "ci95_c": [
+        -3.85,
+        17.046
+      ],
+      "combos": 76,
+      "trades": 171
+    },
+    "volume_weight": {
+      "mean_c": -2.311,
+      "ci95_c": [
+        -28.785,
+        21.935
+      ],
+      "combos": 76,
+      "trades": 171
+    },
+    "e1_volume_weight_c": 2.1,
+    "reproduced": false,
+    "window_combos_by_series_kind": {
+      "KXMVENBASINGLEGAME same-game": 76
+    }
+  },
+  "cells": "NOT COMPUTED: E1 not reproduced within +-1.0c (the frozen rule: stop and report)",
+  "counts": {
+    "blocks": 0
+  }
+}
