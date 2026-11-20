@@ -139,11 +139,22 @@ one crypto uses. A slate exists because forty independent player props on a
 Sunday are forty independent commitments, and one-per-tick would either lose
 thirty-nine or need forty ticks. Core commits each proposal **independently** —
 a bad one at index 3 does not strand the rest — and refuses the **whole** slate
-before writing anything if it exceeds `max_slate_size` or contains two legs
-identical in subject, market, direction and line. Half a slate is permanently
-indistinguishable from a complete one, which is why the refusal is total.
-`max_slate_size` defaults to 25 and must be raised deliberately, the same way
-`max_overdue` must be (§9.3).
+before writing anything if it exceeds `max_slate_size`, or proposes the same bet
+twice:
+- **two proposals that are the same ticket:** identical leg sets, compared as
+  sets of (subject, market, direction, line), the line numerically;
+- **one proposal that repeats a leg within itself.**
+
+For single-leg proposals that is exactly the old rule: the same leg in two
+proposals is still refused. Two **different** multi-leg tickets that share some
+legs are two positions and are written.
+- **Why (owner, 2026-11-20, for parlay slates):** a Lotto slate's cross-sport
+  ticket shares most of its legs with a per-sport Lotto ticket. Under the old
+  leg-level check that refused every Lotto slate, and 0 tickets would commit.
+
+Half a slate is permanently indistinguishable from a complete one, which is why
+the refusal is total. `max_slate_size` defaults to 25 and must be raised
+deliberately, the same way `max_overdue` must be (§9.3).
 
 Everything else — scheduling, persistence, scoring, event emission, error
 handling, retries — belongs to `core/` and is written once.

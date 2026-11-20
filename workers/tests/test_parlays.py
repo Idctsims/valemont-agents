@@ -220,6 +220,19 @@ class Commit(LedgerTestCase):
         self.assertEqual(set(pay["kickoffs"]), {c.m.market_ticker for c in t.legs})
         self.assertTrue(D("0.15") <= D(pay["scored_price"]) <= D("0.40"))
 
+    def test_a_lotto_slate_commits_its_cross_sport_ticket_beside_a_per_sport_one_sharing_legs(self):
+        # Owner, Nov 20 (option D): core refuses the same ticket twice, not two tickets sharing legs.
+        ms = [market(i) for i in range(14)] + [market(100 + i, sport="Hockey") for i in range(2)]
+        quotes = {m.market_ticker: pl.Quote(m.yes_bid, m.yes_ask, REQUOTED, EXPIRES) for m in ms}
+        data = ps.SlotQuotes(key=ps.slot_key(COMMIT), markets=pl.with_fresh_p(ms, quotes), quotes=quotes, cut={},
+                             requote=pl.Requote(quotes=quotes), started_at=REQUOTED, finished_at=REQUOTED,
+                             read_seconds=1.0)
+        out = agent(data, tier="lotto").run_once()
+        self.assertEqual((out.status, len(out.commitment_ids)), ("ok", 2), out.error)
+        legs = [{l.subject for l in c.kwargs["legs"]} for c in self.ledger.named("commit")]
+        self.assertGreater(len(legs[0] & legs[1]), 0)  # they do share legs
+        self.assertEqual([c.kwargs["payload"]["scope"] for c in self.ledger.named("commit")], ["sport", "cross_sport"])
+
     def test_a_full_run_commits_a_slate_as_the_test_agent(self):
         a = agent(slot())
         out = a.run_once()
