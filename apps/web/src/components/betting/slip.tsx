@@ -41,7 +41,7 @@ export function Slip() {
         <span aria-hidden className="font-mono lg:hidden">{open ? "↓" : "↑"}</span>
       </button>
 
-      <div className={`${open ? "flex" : "hidden"} min-h-0 flex-1 flex-col overflow-y-auto lg:flex`}>
+      <div className={`${open ? "flex" : "hidden"} min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain lg:flex`}>
         {n === 0 ? (
           <p data-testid="slip-empty" className="px-4 py-6 text-sm text-text-muted">Tap any price to start a slip.</p>
         ) : (

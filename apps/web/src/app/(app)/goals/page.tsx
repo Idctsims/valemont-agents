@@ -30,8 +30,9 @@ export default async function GoalsPage({ searchParams }: PageProps<"/goals">) {
   const view = parseView((await searchParams).view);
   const supabase = await createClient();
   const today = localToday();
-  await ensureRollover(supabase);
-  const links = await ventureLinks(supabase);
+  // The venture links don't depend on the rollover, so they load beside it;
+  // the goals below wait for it (a carried goal must exist before it is read).
+  const [links] = await Promise.all([ventureLinks(supabase), ensureRollover(supabase)]);
   const linkProps = { ventures: links.options, ventureNames: links.names };
 
   return (

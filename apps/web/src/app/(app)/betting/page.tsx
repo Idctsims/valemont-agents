@@ -32,9 +32,13 @@ export default async function BettingPage({ searchParams }: { searchParams: Prom
   const want = wanted?.trim().slice(0, 40) || null;
   const claimed = (Array.isArray(params.claimed) ? params.claimed[0] : params.claimed) === "1";
   const withTests = decideMarker((await headers()).get(MARKER_HEADER), process.env).kind === "test";
-  const [sports, credits] = await Promise.all([loadSports(supabase, withTests), loadCredits(supabase)]);
+  // A chip tap names its sport, so its cards load beside the chips instead of
+  // after them. Used only if the chips confirm that sport; otherwise (a stale
+  // link) the first sport's cards load as before.
+  const early = want ? loadCards(supabase, want, withTests).catch(() => null) : Promise.resolve(null);
+  const [sports, credits, guessed] = await Promise.all([loadSports(supabase, withTests), loadCredits(supabase), early]);
   const sport = pickSport(sports, want);
-  const all = sport ? await loadCards(supabase, sport, withTests) : [];
+  const all = !sport ? [] : sport === want && guessed ? guessed : await loadCards(supabase, sport, withTests);
   const nClaimed = claimedFilter(all, true).length;
   const games = claimedFilter(all, claimed).map((c) => ({ card: c, g: c.g, at: new Date(c.at * 1000).toISOString() }));
   const now = new Date();

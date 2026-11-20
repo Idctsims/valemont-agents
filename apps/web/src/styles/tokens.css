@@ -326,6 +326,11 @@
 @utility bottom-dock {
   bottom: calc(var(--vm-tabbar-height) + env(safe-area-inset-bottom, 0px));
 }
+/* The More sheet: everything between the status bar (plus a sliver of the
+   page, so it reads as a sheet) and the dock. Taller lists scroll inside. */
+@utility max-h-above-dock {
+  max-height: calc(100dvh - var(--vm-tabbar-height) - env(safe-area-inset-bottom, 0px) - env(safe-area-inset-top, 0px) - 3rem);
+}
 /* Room for the pinned composer; the shell's pb-tabbar already clears the dock. */
 @utility pb-composer {
   padding-bottom: var(--vm-composer-height);
