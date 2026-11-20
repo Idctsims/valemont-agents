@@ -237,18 +237,20 @@ def git_hash() -> str:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--out", type=Path, required=True)
+    # M1b (owner, Nov 20) reads its own crawl; every definition above is unchanged.
+    ap.add_argument("--study", choices=("m1", "m1b"), default="m1")
     args = ap.parse_args(argv)
-    base = DATA_DIR / "m1"
+    base = DATA_DIR / args.study
     done = len(set((base / "fills" / "candles.done").read_text(encoding="utf-8").split())) if (base / "fills" / "candles.done").exists() else 0
     sample, trades, candles, settle, counts = load(base)
-    result = {"study": "M1", "script": "workers/scripts/research/m1_analysis.py", "git": git_hash(),
+    result = {"study": args.study.upper(), "script": "workers/scripts/research/m1_analysis.py", "git": git_hash(),
               "run_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
               "input": {"sampled_combos": len(sample), "settled": len(settle), "trades": len(trades),
                         "legs_with_candles_asked": done, "candle_markets": len(candles)}}
     result |= analyze(sample, trades, candles, settle, counts)
     result["counts"] = dict(counts)
     args.out.mkdir(parents=True, exist_ok=True)
-    path = args.out / f"m1_fills_{result['run_at'][:10]}.json"
+    path = args.out / f"{args.study}_fills_{result['run_at'][:10]}.json"
     path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8", newline="\n")
     r = result["reproduction"]
     print(f"written {path}: E1 window equal-weight maker edge {r['equal_weight']['mean_c']}c "
