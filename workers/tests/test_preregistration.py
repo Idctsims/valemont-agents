@@ -77,12 +77,12 @@ class FrozenTexts(unittest.TestCase):
                 self.assertEqual(pr.content_hash(text), sha)
 
     # The parlay pre-registration: v1 (owner-approved 2026-11-19, 484fd4d), §0-§10 stamped by db/085;
-    # v2 (owner-approved 2026-11-20, 001559d) changed §0, §3, §4, §7, stamped by db/086. The hashes are
-    # read from the migrations, never written here.
+    # v2 (owner-approved 2026-11-20, f92aba6) changed §0, §1, §3, §4, §7, stamped by db/086. The hashes
+    # are read from the migrations, never written here.
     PARLAYS = "docs/preregistration_parlays.md"
-    V2_CHANGED = ("## 0", "## 3", "## 4", "## 7")
+    V2_CHANGED = ("## 0", "## 1", "## 3", "## 4", "## 7")
 
-    def test_db085_stamps_all_eleven_v1_sections_and_db086_the_four_v2_changes(self) -> None:
+    def test_db085_stamps_all_eleven_v1_sections_and_db086_the_five_v2_changes(self) -> None:
         self.assertEqual([s.split(".")[0] for _, s, _ in self.rows("085")], [f"## {i}" for i in range(11)])
         self.assertEqual(tuple(s.split(".")[0] for _, s, _ in self.rows("086")), self.V2_CHANGED)
         for document, _, _ in self.rows("085") + self.rows("086"):
@@ -99,8 +99,8 @@ class FrozenTexts(unittest.TestCase):
                 self.assertEqual(pr.content_hash(pr.section_text(doc, section)), latest[section])
 
     def test_v2_changed_only_its_four_sections(self) -> None:
-        # db/085's stamps of §0, §3, §4, §7 no longer match the file (superseded by db/086, never edited);
-        # its other seven still do.
+        # db/085's stamps of §0, §1, §3, §4, §7 no longer match the file (superseded by db/086, never
+        # edited); its other six still do.
         doc = (REPO_ROOT / self.PARLAYS).read_text(encoding="utf-8")
         for _, section, sha in self.rows("085"):
             with self.subTest(section=section):

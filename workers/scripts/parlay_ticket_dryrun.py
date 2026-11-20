@@ -22,6 +22,7 @@ import statistics
 import subprocess
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 
 import psycopg
@@ -87,6 +88,7 @@ def result_json(r: pt.Result, stored: dict | None = None) -> dict:
         k, p = r.ticket, r.ticket.priced
         out["ticket"] = {
             "agent": k.agent, "legs": len(k.legs), "scored_price": str(p.scored_price),
+            "payout_multiple": round(1 / float(p.scored_price), 2),
             "taker_fee_order": str(p.taker_fee_order), "taker_fee": str(p.taker_fee),
             "maker_fee_assumed": str(p.maker_fee_assumed), "fair_p": round(p.fair_p, 8),
             "fair_se": None if p.fair_se is None else round(p.fair_se, 8), "naive_p": str(p.naive_p),
@@ -110,8 +112,15 @@ def medians(results: list[pt.Result]) -> dict[str, dict]:
         groups.setdefault(key, [])
         if r.ticket:
             groups[key].append(r.ticket.priced.rel_cost)
+    tried: dict[str, list[pt.Result]] = {}
+    for r in results:
+        tried.setdefault("lotto cross_sport" if r.scope == "cross_sport" else r.tier, []).append(r)
     return {k: {"tickets": len(v), "median_rel_cost": None if not v else round(statistics.median(v), 6),
-                "positive": sum(1 for x in v if x > 0)} for k, v in groups.items()}
+                "positive": sum(1 for x in v if x > 0),
+                # How often the tier filled its window: tickets over the scopes tried, and why the rest were empty.
+                "filled": f"{len(v)} of {len(tried[k])}",
+                "empty_by_binding": dict(sorted(Counter(r.binding for r in tried[k] if r.ticket is None).items()))}
+            for k, v in groups.items()}
 
 
 def line(r: pt.Result) -> str:
@@ -120,7 +129,8 @@ def line(r: pt.Result) -> str:
         return f"{head} EMPTY ({r.binding}); search {r.seconds:.2f}s"
     p = r.ticket.priced
     priced = sum(r.price_seconds.values())
-    return (f"{head} {len(r.ticket.legs):2} legs  scored {float(p.scored_price):.4f}  fee {p.taker_fee}/ct  "
+    return (f"{head} {len(r.ticket.legs):2} legs  scored {float(p.scored_price):.4f}  pays x{1 / float(p.scored_price):.1f}  "
+            f"fee {p.taker_fee}/ct  "
             f"fair {p.fair_p:.4f}  naive {float(p.naive_p):.4f}  rel {p.rel_cost:+.4f}  "
             f"pairs {p.measured_pairs}m/{p.prior_pairs}p of {p.pairs}  {p.combo_status}"
             f"{'  [' + r.ticket.fill_note + ']' if r.ticket.fill_note else ''}; "
@@ -183,7 +193,8 @@ def main(argv: list[str] | None = None) -> int:
         print(line(r))
     print(f"rule version {pt.RULE_VERSION}; stamp: {report['stamp']}; leg mix: {report['leg_mix']}")
     for k, v in report["median_by_tier"].items():
-        print(f"median {k}: {v['median_rel_cost']} over {v['tickets']} tickets ({v['positive']} positive)")
+        print(f"median {k}: {v['median_rel_cost']} over {v['tickets']} tickets ({v['positive']} positive); "
+              f"filled {v['filled']}; empty by binding {v['empty_by_binding']}")
     print(f"candidates {len(markets)} markets; passed rules 1-4 {len(f.passed)} legs; no consensus p {s.no_p}")
     print(f"re-quote {rq.calls} calls, {rq.limited} 429 ({rq.share_429:.2%}), {rq.seconds:.1f}s; "
           f"search {search_s:.1f}s; slot {time.monotonic() - t0:.1f}s")

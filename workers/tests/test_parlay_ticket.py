@@ -157,16 +157,19 @@ def board(n, sport="Basketball", prefix="L", ask="0.92", p="0.95", bid=None):
 
 
 class Search(unittest.TestCase):
-    def test_one_ticket_per_count_priced_and_the_lowest_relative_cost_wins(self):
-        # Identical independent legs: the relative cost is (ask / p)^n - 1, so
-        # below 1 the most legs win and above 1 the fewest do.
-        under = pt.search("safer", sorted(board(6, ask="0.92", p="0.95"), key=lambda c: c.order), T,
+    def test_one_ticket_per_count_inside_the_window_and_the_lowest_relative_cost_wins(self):
+        # 75c legs: 3 legs price 0.4219, above Safer's 0.40, so only 4 and 5 can fill.
+        # Identical independent legs: the relative cost is (ask / p)^n - 1, so below 1
+        # the most legs win and above 1 the fewest that fit do.
+        under = pt.search("safer", sorted(board(6, ask="0.75", p="0.78"), key=lambda c: c.order), T,
                           sport="Basketball", **DRAWS)
-        self.assertEqual((sorted(under.tried), len(under.ticket.legs)), ([3, 4, 5], 5))
-        r = pt.search("safer", sorted(board(6, ask="0.95", p="0.94"), key=lambda c: c.order), T,
+        self.assertEqual(under.tried[3], "window: unreachable at this leg count")
+        self.assertEqual(len(under.ticket.legs), 5)
+        r = pt.search("safer", sorted(board(6, ask="0.75", p="0.74"), key=lambda c: c.order), T,
                       sport="Basketball", **DRAWS)
         self.assertIsNotNone(r.ticket)
-        self.assertEqual(len(r.ticket.legs), 3)
+        self.assertEqual(len(r.ticket.legs), 4)
+        self.assertTrue(D("0.15") <= r.ticket.priced.scored_price <= D("0.40"))
         self.assertEqual(r.ticket.agent, "parlay_safer")
         self.assertEqual((r.ticket.scope, r.ticket.fill_note, r.ticket.rule_version), ("sport", None, "P2"))
         self.assertIsNone(r.ticket.expected_quote)
@@ -174,7 +177,7 @@ class Search(unittest.TestCase):
         self.assertEqual(r.ticket.rho_sha256, T.sha256)
 
     def test_the_same_candidates_give_the_same_ticket_and_the_same_reason_bytes(self):
-        cands = sorted([*board(8), cand("X", ask="0.95", p="0.96", game="GX", subject="Same Guy"),
+        cands = sorted([*board(9, ask="0.75", p="0.78"), cand("X", ask="0.95", p="0.96", game="GX", subject="Same Guy"),
                         cand("Y", ask="0.80", p="0.96", game="GY", subject="Same Guy")], key=lambda c: c.order)
         one = pt.search("mid", cands, T, sport="Basketball", **DRAWS)
         two = pt.search("mid", list(cands), T, sport="Basketball", **DRAWS)
@@ -187,11 +190,51 @@ class Search(unittest.TestCase):
         self.assertIsNone(r.ticket)
         self.assertEqual(r.binding, "rules 1-4: 2 candidates < 3")
 
-    def test_an_empty_slot_names_the_rule_that_bound(self):
-        cands = sorted(board(5, ask="0.20", p="0.25"), key=lambda c: c.order)  # 0.2^3 < 1c
+    def test_a_tier_that_cannot_reach_its_window_is_empty_with_window_never_a_wider_band(self):
+        cands = sorted(board(5, ask="0.95", p="0.96"), key=lambda c: c.order)  # 0.95^5 = 0.774 > 0.40
         r = pt.search("safer", cands, T, sport="Basketball", **DRAWS)
         self.assertIsNone(r.ticket)
-        self.assertEqual(r.binding, "tick floor")
+        self.assertEqual(r.binding, "window")
+        self.assertEqual(set(r.tried.values()), {"window: unreachable at this leg count"})
+
+    def test_an_empty_slot_names_the_rule_that_bound(self):
+        # Reachable counts exist (75c legs), but one event caps them to one leg each: event cap binds.
+        cands = sorted([cand(f"E{i}", ask="0.75", p="0.78", game="G1", event="E1", cap=1, subject=f"P{i}")
+                        for i in range(6)], key=lambda c: c.order)
+        r = pt.search("safer", cands, T, sport="Basketball", **DRAWS)
+        self.assertIsNone(r.ticket)
+        self.assertEqual(r.binding, "event cap")
+
+
+class Window(unittest.TestCase):
+    """v2's per-tier scored-price windows (owner, Nov 20)."""
+
+    def test_the_windows_and_their_inclusive_bounds(self):
+        self.assertEqual(pt.WINDOWS, {"safer": (D("0.15"), D("0.40")), "mid": (D("0.03"), D("0.15")),
+                                      "lotto": (D("0.01"), D("0.03"))})
+        for tier, (lo, hi) in pt.WINDOWS.items():
+            self.assertTrue(pt.in_window(lo, (lo, hi)) and pt.in_window(hi, (lo, hi)))
+            self.assertFalse(pt.in_window(lo - D("0.0001"), (lo, hi)) or pt.in_window(hi + D("0.0001"), (lo, hi)))
+
+    def test_which_leg_counts_can_ever_fill_on_the_75_to_95_band(self):
+        band = (D("0.75"), D("0.95"))
+        can = {tier: [n for n in range(pt.TIERS[tier][1], pt.TIERS[tier][2] + 1)
+                      if pt.reachable(D(1), n, pt.WINDOWS[tier], *band)] for tier in pt.TIERS}
+        self.assertEqual(can, {"safer": [4, 5], "mid": [7, 8, 9, 10], "lotto": list(range(13, 21))})
+
+    def test_the_search_explores_down_the_band_toward_the_window(self):
+        # 95c legs with no spread rank first (ask/mid 1.000); 75c legs (1.014) after.
+        # The order alone would buy five 95c legs (0.774). The reach check takes two
+        # 95c legs, then turns the third away (`window`) and fills from the 75c legs.
+        cands = sorted([*board(5, prefix="H", ask="0.95", p="0.96", bid="0.95"),
+                        *board(5, prefix="L", ask="0.75", p="0.78")], key=lambda c: c.order)
+        b = pt.greedy(cands, 5, T, pt.WINDOWS["safer"])
+        self.assertEqual([str(c.ask) for c in b.legs], ["0.95", "0.95", "0.75", "0.75", "0.75"])
+        self.assertEqual(b.why[("H02", "yes")], "window")
+        self.assertTrue(pt.in_window(pt._product(b.legs), pt.WINDOWS["safer"]))
+        r = pt.search("safer", cands, T, sport="Basketball", **DRAWS)
+        self.assertTrue(D("0.15") <= r.ticket.priced.scored_price <= D("0.40"))
+        self.assertTrue(any("window: " in s for s in r.ticket.leg_reasons))
 
     def test_tie_breaks_measured_share_then_fewer_legs_then_tickers(self):
         def p(rel, measured, pairs):
@@ -270,31 +313,46 @@ class Reasons(unittest.TestCase):
 
 
 class CrossSport(unittest.TestCase):
+    LOTTO = None  # set in setUp
+
+    def setUp(self):
+        self.LOTTO = pt.WINDOWS["lotto"]
+
     def test_all_one_sport_then_the_last_leg_is_replaced_from_another_sport(self):
-        bball = board(12, "Basketball", "B", ask="0.92", p="0.96", bid="0.92")  # ask/mid 1.000
-        hockey = board(2, "Hockey", "H", ask="0.93", p="0.95")                  # 1.011: ranked after every B
+        bball = board(14, "Basketball", "B", ask="0.75", p="0.78", bid="0.75")  # ask/mid 1.000
+        hockey = board(2, "Hockey", "H", ask="0.76", p="0.78")                  # 1.013: ranked after every B
         cands = sorted([*bball, *hockey], key=lambda c: c.order)
-        b = pt.greedy(cands, 11, T)
+        b = pt.greedy(cands, 13, T, self.LOTTO)
         self.assertEqual({c.m.sport for c in b.legs}, {"Basketball"})
-        out = pt.replace_for_second_sport(b, cands, 11, T)
+        out = pt.replace_for_second_sport(b, cands, 13, T, self.LOTTO)
         self.assertEqual([c.m.market_ticker for c in out.legs][-1], "H00")
-        self.assertEqual(out.removed.m.market_ticker, "B10")
-        self.assertEqual(out.why[("B10", "yes")], pt.REPLACED)
+        self.assertEqual(out.removed.m.market_ticker, "B12")
+        self.assertEqual(out.why[("B12", "yes")], pt.REPLACED)
+        self.assertTrue(pt.in_window(pt._product(out.legs), self.LOTTO))
+
+    def test_a_replacement_must_keep_the_ticket_inside_the_window(self):
+        # 13 B legs at 0.75^13 = 0.0238; swapping the last for a 0.40 leg would price 0.0127,
+        # still inside; for a 0.20 leg 0.0063, outside: the 0.20 leg is turned away (`window`).
+        bball = board(13, "Basketball", "B", ask="0.75", p="0.78", bid="0.75")
+        low = [cand("H00", ask="0.20", p="0.21", sport="Hockey")]
+        cands = sorted([*bball, *low], key=lambda c: c.order)
+        b = pt.greedy(cands, 13, T, self.LOTTO)
+        self.assertIsNone(pt.replace_for_second_sport(b, cands, 13, T, self.LOTTO))
 
     def test_none_to_replace_with_gives_no_ticket(self):
-        cands = sorted(board(12, "Basketball", "B"), key=lambda c: c.order)
-        self.assertIsNone(pt.replace_for_second_sport(pt.greedy(cands, 11, T), cands, 11, T))
+        cands = sorted(board(14, "Basketball", "B", ask="0.75", p="0.78"), key=lambda c: c.order)
+        self.assertIsNone(pt.replace_for_second_sport(pt.greedy(cands, 13, T, self.LOTTO), cands, 13, T, self.LOTTO))
         r = pt.search("lotto", cands, T, sport=None, cross_sport=True, **DRAWS)
         self.assertIsNone(r.ticket)
         self.assertEqual(r.binding, "no second sport")
 
     def test_a_cross_sport_ticket_always_carries_extrapolated_fill(self):
-        # Ratios above 1 (fewest legs win), every Basketball leg ranked above Hockey:
-        # 11 legs are 10 B + H00 after the replacement step.
-        cands = sorted([*board(12, "Basketball", "B", ask="0.95", p="0.94", bid="0.95"),
-                        *board(3, "Hockey", "H", ask="0.97", p="0.95")], key=lambda c: c.order)
+        # Ratios above 1 (fewest legs that fit win), every Basketball leg ranked above Hockey:
+        # 13 legs (the fewest that reach 0.03) are 12 B + H00 after the replacement step.
+        cands = sorted([*board(14, "Basketball", "B", ask="0.75", p="0.74", bid="0.75"),
+                        *board(3, "Hockey", "H", ask="0.76", p="0.75")], key=lambda c: c.order)
         r = pt.search("lotto", cands, T, sport=None, cross_sport=True, **DRAWS)
-        self.assertEqual(len(r.ticket.legs), 11)
+        self.assertEqual(len(r.ticket.legs), 13)
         self.assertIsNotNone(r.ticket)
         self.assertEqual((r.ticket.scope, r.ticket.sport, r.ticket.fill_note), ("cross_sport", None, "extrapolated fill"))
         self.assertEqual(r.ticket.payload()["fill_note"], "extrapolated fill")
@@ -302,16 +360,16 @@ class CrossSport(unittest.TestCase):
         self.assertTrue(any("replaced for a second sport: 1" in s for s in r.ticket.leg_reasons))
 
     def test_a_ticket_already_spanning_two_sports_is_kept_as_built(self):
-        cands = sorted([*board(6, "Basketball", "B", ask="0.95", p="0.97"),
-                        *board(6, "Hockey", "H", ask="0.95", p="0.97")], key=lambda c: c.order)
-        b = pt.greedy(cands, 11, T)
-        self.assertIs(pt.replace_for_second_sport(b, cands, 11, T), b)
+        cands = sorted([*board(7, "Basketball", "B", ask="0.75", p="0.78"),
+                        *board(7, "Hockey", "H", ask="0.75", p="0.78")], key=lambda c: c.order)
+        b = pt.greedy(cands, 13, T, self.LOTTO)
+        self.assertIs(pt.replace_for_second_sport(b, cands, 13, T, self.LOTTO), b)
 
 
 class Slot(unittest.TestCase):
     def test_every_tier_per_sport_and_one_cross_sport_lotto(self):
-        legs = [c.leg for c in [*board(12, "Basketball", "B", ask="0.95", p="0.97"),
-                                *board(4, "Hockey", "H", ask="0.95", p="0.97")]]
+        legs = [c.leg for c in [*board(12, "Basketball", "B", ask="0.75", p="0.78"),
+                                *board(4, "Hockey", "H", ask="0.75", p="0.78")]]
         s = pt.slot(legs, T, **DRAWS)
         keys = [(r.tier, r.scope, r.sport) for r in s.results]
         self.assertEqual(keys, [("safer", "sport", "Basketball"), ("safer", "sport", "Hockey"),

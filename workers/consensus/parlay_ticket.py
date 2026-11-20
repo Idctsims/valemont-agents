@@ -1,7 +1,7 @@
 """Phase 4.3: the ticket search, its prices and the leg reasons (rule version P2).
 
 docs/preregistration_parlays.md §2-§4, version 2 (stamped: db/085 for the
-unchanged sections, db/086 for §0, §3, §4 and §7). Pure: no SQL, no
+unchanged sections, db/086 for §0, §1, §3, §4 and §7). Pure: no SQL, no
 network, and no clock that decides anything (a search only measures its own
 pricing time, for the report). Given the same candidates (the legs that passed rules 1-4
 in `consensus.parlay_legs`), the same rho table and the same draw count, it
@@ -21,6 +21,11 @@ search meets; the first one it breaks is its reason:
                         borrowed): never priced at an assumed 0
    10  3 per game       a fourth leg from one game
    11  tick floor       the product of the side asks below 1c
+       window           (v2, owner Nov 20) once added, the remaining legs
+                        could not bring the scored price into the tier's
+                        window (Safer 0.15-0.40, Mid 0.03-0.15, Lotto
+                        0.01-0.03, inclusive); a complete ticket outside it
+                        is not a candidate
 
 Readings of the text where it is silent, each the stricter one (§0), stated
 here so the owner can see them:
@@ -98,6 +103,15 @@ RULE_LABELS: Mapping[int, str] = {
 }
 #: A leg the cross-sport replacement step removed (§3).
 REPLACED = "replaced for a second sport"
+#: Version 2's scored-price windows per tier, inclusive (owner, 2026-11-20; §1, §3).
+#: The cross-sport Lotto takes Lotto's. A ticket outside its window is not a candidate.
+WINDOWS: Mapping[str, tuple[Decimal, Decimal]] = {
+    "safer": (Decimal("0.15"), Decimal("0.40")),
+    "mid": (Decimal("0.03"), Decimal("0.15")),
+    "lotto": (Decimal("0.01"), Decimal("0.03")),
+}
+#: The binding rule (and a skipped leg's reason) when the window turned it away.
+WINDOW = "window"
 MEASURED = "measured_external"
 
 
@@ -225,23 +239,50 @@ class Build:
     removed: Cand | None = None
 
 
-def greedy(cands: Sequence[Cand], n: int, t: cr.RhoTable) -> Build:
+def _product(legs: Sequence[Cand]) -> Decimal:
+    return math.prod((c.ask for c in legs), start=Decimal(1))
+
+
+def in_window(price: Decimal, window: tuple[Decimal, Decimal] | None) -> bool:
+    return window is None or window[0] <= price <= window[1]
+
+
+def reachable(price: Decimal, k: int, window: tuple[Decimal, Decimal], ask_lo: Decimal, ask_hi: Decimal) -> bool:
+    """Can k more legs, each asking between ask_lo and ask_hi (the scope's lowest
+    and highest candidate asks), bring a ticket priced `price` so far into the window?"""
+    lo, hi = window
+    return price * ask_lo ** k <= hi and price * ask_hi ** k >= lo
+
+
+def greedy(cands: Sequence[Cand], n: int, t: cr.RhoTable,
+           window: tuple[Decimal, Decimal] | None = None) -> Build:
+    """One leg count's greedy pass in v2 §3's order. With a window, a leg that
+    keeps rules 5-11 is still skipped (`window`) if, once added, the remaining
+    legs could no longer bring the price into the window; so later legs come
+    from lower in the band, in the same order (owner, Nov 20)."""
     b = Build([])
+    ask_lo = min((c.ask for c in cands), default=Decimal(1))
+    ask_hi = max((c.ask for c in cands), default=Decimal(0))
     for c in cands:
         if len(b.legs) >= n:
             break
         r = first_broken(b.legs, c, n, t)
-        if r is None:
-            b.legs.append(c)
-        else:
+        if r is not None:
             b.why[c.key] = RULE_LABELS[r]
+        elif window is not None and not reachable(_product(b.legs) * c.ask, n - len(b.legs) - 1,
+                                                  window, ask_lo, ask_hi):
+            b.why[c.key] = WINDOW
+        else:
+            b.legs.append(c)
     return b
 
 
-def replace_for_second_sport(b: Build, cands: Sequence[Cand], n: int, t: cr.RhoTable) -> Build | None:
+def replace_for_second_sport(b: Build, cands: Sequence[Cand], n: int, t: cr.RhoTable,
+                             window: tuple[Decimal, Decimal] | None = None) -> Build | None:
     """§3's cross-sport step: when every leg shares one sport, the last leg
     added gives way to the first remaining candidate, in order, from another
-    sport that keeps rules 5-11. None when there is none."""
+    sport that keeps rules 5-11 and leaves the price inside the window. None
+    when there is none."""
     sports = {x.m.sport for x in b.legs}
     if len(sports) != 1:
         return b
@@ -255,9 +296,12 @@ def replace_for_second_sport(b: Build, cands: Sequence[Cand], n: int, t: cr.RhoT
         if c.key in held or c.m.sport == only:
             continue
         r = first_broken(base, c, n, t)
-        if r is None:
+        if r is not None:
+            why[c.key] = RULE_LABELS[r]
+        elif not in_window(_product(base) * c.ask, window):
+            why[c.key] = WINDOW
+        else:
             return Build([*base, c], why, removed=last)
-        why[c.key] = RULE_LABELS[r]
     return None
 
 
@@ -452,12 +496,12 @@ def _choose(priced: list[tuple[Build, Priced]]) -> tuple[Build, Priced]:
                                         sorted(c.m.market_ticker for c in bp[0].legs)))
 
 
-REASON_ORDER = (*RULE_LABELS.values(), REPLACED)
+REASON_ORDER = (*RULE_LABELS.values(), WINDOW, REPLACED)
 
 
 def _binding(skips: Counter) -> str:
     """The empty slot's binding rule: the rule that skipped the most
-    candidates at the tier's smallest leg count (ties: the lower rule)."""
+    candidates across the leg counts tried (ties: the lower rule)."""
     if not skips:
         return "no candidates"
     top = max(skips.values())
@@ -473,23 +517,36 @@ def search(tier: str, cands: Sequence[Cand], t: cr.RhoTable, *, sport: str | Non
     legs, the first sorted ticker list)."""
     t0 = time.perf_counter()
     agent, lo, hi = TIERS[tier]
+    window = WINDOWS[tier]
     scope = "cross_sport" if cross_sport else "sport"
     tried: dict[int, str] = {}
     timing: dict[int, float] = {}
     built: list[tuple[Build, Priced]] = []
-    first_skips: Counter | None = None
+    skips: Counter = Counter()
     if len(cands) < lo:
         return Result(tier, scope, sport, len(cands), None, f"rules 1-4: {len(cands)} candidates < {lo}", tried,
                       timing, time.perf_counter() - t0)
+    ask_lo, ask_hi = min(c.ask for c in cands), max(c.ask for c in cands)
+    reachable_counts = 0
     for n in range(lo, hi + 1):
-        b: Build | None = greedy(cands, n, t)
-        if first_skips is None:
-            first_skips = Counter(b.why.values())  # type: ignore[union-attr]
+        # A count that cannot reach the window even from this scope's cheapest and
+        # dearest asks (Safer 3, Mid 6, Lotto 11-12 on the 0.75-0.95 band) is tried
+        # and recorded, but its skips are not what bound the slot.
+        if not reachable(Decimal(1), n, window, ask_lo, ask_hi):
+            tried[n] = "window: unreachable at this leg count"
+            continue
+        reachable_counts += 1
+        b: Build | None = greedy(cands, n, t, window)
+        skips.update(b.why.values())  # type: ignore[union-attr]
         if len(b.legs) < n:  # type: ignore[union-attr]
             tried[n] = f"short: {len(b.legs)} legs"  # type: ignore[union-attr]
             continue
+        if not in_window(_product(b.legs), window):  # type: ignore[union-attr]
+            tried[n] = f"window: {_product(b.legs)}"  # type: ignore[union-attr]
+            skips[WINDOW] += 1
+            continue
         if cross_sport:
-            b = replace_for_second_sport(b, cands, n, t)  # type: ignore[arg-type]
+            b = replace_for_second_sport(b, cands, n, t, window)  # type: ignore[arg-type]
             if b is None:
                 tried[n] = "no second sport"
                 continue
@@ -499,8 +556,16 @@ def search(tier: str, cands: Sequence[Cand], t: cr.RhoTable, *, sport: str | Non
         tried[n] = f"rel {pr.rel_cost:.6f}"
         built.append((b, pr))
     if not built:
-        why = "no second sport" if cross_sport and any(v == "no second sport" for v in tried.values()) \
-            else _binding(first_skips or Counter())
+        # Owner, Nov 20: a tier that cannot reach its window is empty with `window`.
+        # No count can reach it: `window`. Otherwise the reason that stopped the
+        # counts that could: the cross-sport step's, else the most frequent skip
+        # (the window among them, when it turned legs or complete tickets away).
+        if reachable_counts == 0:
+            why = WINDOW
+        elif cross_sport and any(v == "no second sport" for v in tried.values()):
+            why = "no second sport"
+        else:
+            why = _binding(skips)
         return Result(tier, scope, sport, len(cands), None, why, tried, timing, time.perf_counter() - t0)
     b, pr = _choose(built)
     reasons = leg_reasons(b.legs, cands, b.why)
