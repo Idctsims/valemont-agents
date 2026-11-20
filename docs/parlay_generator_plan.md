@@ -78,6 +78,28 @@ The structure follows CLAUDE.md §3:
   leg's own data; no AI call.
 - **Pure, with no SQL:** given the same candidates, it builds the same ticket
   and the same reasons.
+- **p is recomputed from the fresh quote before ordering and pricing (owner,
+  2026-11-20).** This is a reading of the stamped rule, not a change to it: the
+  §0 stricter reading of the Nov 9 decision ("re-quote and recompute before
+  selecting").
+  - **Found by the first dry run (Nov 20):** every kalshi-tier p was the board's
+    mid from the 09:30 full pull, about 2.5 h old (the refresh only covers games
+    within 3 h). So ask ÷ p ranked legs by how stale their board price was, and
+    `fair_p` repeated that gap: relative costs ran to −58%.
+  - **The fix:** `consensus/parlay_legs.with_fresh_p` applies the engine's own
+    rules to the slot's fresh mids:
+    - kalshi tier: the mid, normalized across a mutually exclusive event
+      (0.95–1.05 band; ladder rungs plain);
+    - books and espn: 0.7 × outside + 0.3 × that mid.
+  - **The engine's 12 h outside flag** blocks a claim, never the blend, and
+    the same holds here.
+  - **One formula.** The engine is SQL (`consensus_leg`, `leg_consensus_priced`);
+    the Python twin is held equal to it on real board rows by
+    `tests_live/test_parlay_candidates_sql.FreshTwin` (Nov 20: 1,061 markets in
+    5 games, all three tiers and 9 exclusive events, 0 differences).
+- **Legs named in words (owner, Nov 20):** the Kalshi title, the stat for a
+  prop, "wins" for a winner market, and the game's teams
+  (`kalshi_board_events.game_title`). The ticker stays the key.
 
 **Done when:**
 - [ ] Unit tests: each ticket rule; the tie-breaks; the tick floor; the fee
@@ -122,9 +144,9 @@ stamped one: every leg at most 20 minutes old **at commit** (§3 rule 2).
 
 - **Times.** The stamped commit times stay **10:45 and 16:45 Chicago**. The
   slot's re-quote starts at **:33** (10:33, 16:33): a cron job, `parlay_requote`,
-  never at boot. *Proposed, for the owner:* a misfire grace of 5 minutes; a
-  re-quote that cannot start by :38 leaves the slot empty with the binding
-  rule `fresh`, rather than re-quoting late.
+  never at boot, misfire grace 5 minutes (owner, Nov 20): a re-quote that
+  cannot start by :38 leaves the slot recorded empty with the binding rule
+  `fresh`, rather than re-quoting late.
 - **One re-quote per slot, shared by the three tiers.** `parlay_requote`
   reads the candidates and re-quotes once, latest start first, so the
   earliest games are read last. It keeps the slot's quotes in worker memory,

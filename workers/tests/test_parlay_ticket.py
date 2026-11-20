@@ -221,10 +221,38 @@ class Reasons(unittest.TestCase):
         titled = pt.Cand(pl.Leg(pl.Market(**{**leg.market.__dict__, "label": "  P One: 20+ "}), "no", leg.quote),
                          D("0.10"), D("0.21"))
         line = pt.leg_reasons([titled], [titled], {})[0]
-        self.assertTrue(line.startswith("NO P One: 20+: kalshi consensus p 0.100, ask 21¢"), line)
+        self.assertTrue(line.startswith("NO P One: 20+ pts: kalshi consensus p 0.100, ask 21¢"), line)
         self.assertEqual(titled.key, ("KXNBAPTS-26NOV22AAABBB-P1-20", "no"))
         self.assertEqual(pt.label_of(leg.market), "KXNBAPTS-26NOV22AAABBB-P1-20")  # no title: the ticker
         self.assertEqual(pt.leg_in(titled).label, "  P One: 20+ ")  # the pricer's refusals name it too
+
+    def test_the_leg_in_words_has_its_stat_and_its_game(self):
+        base = cand("A").leg.market.__dict__
+
+        def label(**kw):
+            return pt.label_of(pl.Market(**(base | kw)))
+
+        self.assertEqual(label(label="AJ Dybantsa", stat="double double", game_title="WAS Wizards at CHI Bulls"),
+                         "AJ Dybantsa double-double (WAS Wizards at CHI Bulls)")
+        self.assertEqual(label(label="Over 183.5 points", market_kind="game_line", stat="total",
+                               game_title="EIU at Illinois"), "Over 183.5 points (EIU at Illinois)")
+        self.assertEqual(label(label="Aarhus", market_kind="game_line", stat="winner", game_title="Aarhus vs Lyngby"),
+                         "Aarhus wins (Aarhus vs Lyngby)")
+        self.assertEqual(label(label="10+ corners", market_kind="other", stat=None, game_title=None), "10+ corners")
+        self.assertEqual(label(label="X: 2+", stat="some new stat", game_title="G"), "X: 2+ some new stat (G)")
+        self.assertEqual(label(label=None), "A")  # no title: the ticker
+
+    def test_a_stale_stored_p_never_reaches_ordering(self):
+        # Stored p would rank A first (ask/p 0.80/0.99); the fresh mids rank B first.
+        a = pl.Market(**(cand("A").leg.market.__dict__ | {"p_yes": D("0.99")}))
+        b = pl.Market(**(cand("B").leg.market.__dict__ | {"p_yes": D("0.50")}))
+        quotes = {"A": pl.Quote(D("0.79"), D("0.81"), NOW), "B": pl.Quote(D("0.89"), D("0.91"), NOW)}
+        fresh = pl.with_fresh_p([a, b], quotes)
+        order, _ = pt.candidates([pl.Leg(m, "yes", quotes[m.market_ticker]) for m in fresh])
+        self.assertEqual([c.m.market_ticker for c in order], ["B", "A"])
+        self.assertEqual([c.p for c in order], [D("0.900000"), D("0.800000")])
+        gone, no_p = pt.candidates([pl.Leg(m, "yes", quotes["A"]) for m in pl.with_fresh_p([a], {})])
+        self.assertEqual((gone, no_p), ([], 1))  # not re-read: its stored p is not used
 
     def test_a_fractional_ask_keeps_its_cents(self):
         c = cand("A", ask="0.805", p="0.90")

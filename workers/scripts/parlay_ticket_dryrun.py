@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import statistics
 import subprocess
 import sys
 import time
@@ -33,7 +34,18 @@ from scripts.parlay_dryrun import crawler_running, readonly
 from scripts.research.kalshi_history import DATA_DIR
 
 
-def result_json(r: pt.Result) -> dict:
+def legs_json(k: pt.Ticket, stored: dict) -> list[dict]:
+    """Each leg: its side, ask and fresh side mid, the recomputed side p and the
+    board's stored side p it replaced (the stale input the Nov 20 fix removes)."""
+    def side(p, s):
+        return None if p is None else (p if s == "yes" else 1 - p)
+
+    return [{"ticker": c.m.market_ticker, "side": c.leg.side, "tier": c.m.tier, "ask": str(c.ask),
+             "mid": str(pt.side_mid(c)), "p_fresh": str(c.p), "p_stored": str(side(stored.get(c.m.market_ticker), c.leg.side)),
+             "stale_outside": c.m.stale_outside} for c in k.legs]
+
+
+def result_json(r: pt.Result, stored: dict | None = None) -> dict:
     out = {"tier": r.tier, "scope": r.scope, "sport": r.sport, "candidates": r.candidates,
            "binding": r.binding, "tried": r.tried,
            "price_seconds": {n: round(s, 3) for n, s in r.price_seconds.items()}, "search_seconds": round(r.seconds, 3)}
@@ -51,8 +63,21 @@ def result_json(r: pt.Result) -> dict:
             "sports": sorted({c.m.sport for c in k.legs}), "games": len({c.m.game_ticker for c in k.legs}),
             "leg_reasons": k.leg_reasons,
             "tickers": [f"{c.m.market_ticker}:{c.leg.side}" for c in k.legs],
+            "legs_detail": legs_json(k, stored or {}),
         }
     return out
+
+
+def medians(results: list[pt.Result]) -> dict[str, dict]:
+    """Per tier (the cross-sport Lotto apart): tickets drawn and the median relative cost over fair."""
+    groups: dict[str, list[float]] = {}
+    for r in results:
+        key = "lotto cross_sport" if r.scope == "cross_sport" else r.tier
+        groups.setdefault(key, [])
+        if r.ticket:
+            groups[key].append(r.ticket.priced.rel_cost)
+    return {k: {"tickets": len(v), "median_rel_cost": None if not v else round(statistics.median(v), 6),
+                "positive": sum(1 for x in v if x > 0)} for k, v in groups.items()}
 
 
 def line(r: pt.Result) -> str:
@@ -88,6 +113,9 @@ def main(argv: list[str] | None = None) -> int:
     markets = pl.markets_from_rows(rows)
     rq = pl.requote(pl.requote_order(markets))
     now = dt.datetime.now(dt.timezone.utc)
+    stored = {m.market_ticker: m.p_yes for m in markets}
+    # The Nov 9 rule (owner, Nov 20): p recomputed from the fresh quotes before anything orders a leg.
+    markets = pl.with_fresh_p(markets, rq.quotes)
     f = pl.funnel(pl.legs_of(markets, rq.quotes), now, cut=cut)
     t_search = time.monotonic()
     s = pt.slot(f.passed, cr.load_table(), draws=args.draws)
@@ -104,7 +132,8 @@ def main(argv: list[str] | None = None) -> int:
                     "bytes": rq.bytes, "pace_end": round(rq.pace, 2)},
         "passed_rules_1_4": len(f.passed), "no_consensus_p": s.no_p,
         "search_seconds": round(search_s, 1), "slot_seconds": round(time.monotonic() - t0, 1),
-        "results": [result_json(r) for r in s.results],
+        "results": [result_json(r, stored) for r in s.results],
+        "median_by_tier": medians(s.results),
     }
     out = DATA_DIR.parent / "parlays"
     out.mkdir(parents=True, exist_ok=True)
@@ -112,6 +141,8 @@ def main(argv: list[str] | None = None) -> int:
     path.write_text(json.dumps(report, indent=1, default=str), encoding="utf-8")
     for r in s.results:
         print(line(r))
+    for k, v in report["median_by_tier"].items():
+        print(f"median {k}: {v['median_rel_cost']} over {v['tickets']} tickets ({v['positive']} positive)")
     print(f"candidates {len(markets)} markets; passed rules 1-4 {len(f.passed)} legs; no consensus p {s.no_p}")
     print(f"re-quote {rq.calls} calls, {rq.limited} 429 ({rq.share_429:.2%}), {rq.seconds:.1f}s; "
           f"search {search_s:.1f}s; slot {time.monotonic() - t0:.1f}s")

@@ -40,6 +40,18 @@ here so the owner can see them:
   the key everywhere.
 
 These readings were approved as written by the owner on 2026-11-20.
+
+**Consensus p is recomputed from the slot's fresh quote before ordering and
+pricing** (owner, 2026-11-20). This is the stamped rule's stricter reading
+(§0), not a change to it: the owner's Nov 9 decision, "the generator re-quotes
+every candidate leg and recomputes its edge before selecting". The caller
+passes legs whose markets went through `parlay_legs.with_fresh_p`, the
+consensus engine's own blend and normalization on the fresh mids (kalshi
+tier: the mid, normalized across a mutually exclusive event; books and espn:
+0.7 x outside + 0.3 x that mid). The stored p from the board's last read
+never orders, prices or names a leg. `fair_p`'s marginals are those p. The
+engine's 12 h outside flag blocks a claim, never the blend, and that is
+kept here exactly.
 """
 
 from __future__ import annotations
@@ -311,9 +323,29 @@ def _cents(ask: Decimal) -> str:
     return s.rstrip("0").rstrip(".") if "." in s else s
 
 
+#: A prop's stat in words, after its Kalshi title (the title names the player
+#: and the line, not the stat). Unknown stats are written as the board has them.
+STAT_WORDS: Mapping[str, str] = {
+    "points": "pts", "rebounds": "reb", "assists": "ast", "threes": "threes", "steals": "stl", "blocks": "blk",
+    "combined points, rebounds, and assists": "pts+reb+ast", "combined steals and blocks": "stl+blk",
+    "double double": "double-double", "triple double": "triple-double",
+}
+
+
 def label_of(m: pl.Market) -> str:
-    """The leg in words: the Kalshi market title, or the ticker when the row has none."""
-    return m.label.strip() if m.label and m.label.strip() else m.market_ticker
+    """The leg in words (owner, Nov 20): the Kalshi title, the stat for a prop
+    (its title does not say it), "wins" for a winner market, then the game's
+    teams in parentheses. The ticker when the row has no title; the ticker
+    stays the key in the payload."""
+    title = m.label.strip() if m.label and m.label.strip() else None
+    if title is None:
+        return m.market_ticker
+    if m.market_kind == "prop" and m.stat:
+        title = f"{title} {STAT_WORDS.get(m.stat, m.stat)}"
+    elif m.market_kind == "game_line" and m.stat == "winner":
+        title = f"{title} wins"
+    game = (m.game_title or "").strip()
+    return f"{title} ({game})" if game else title
 
 
 def leg_reasons(legs: Sequence[Cand], scope: Sequence[Cand], why: Mapping[tuple[str, str], str]) -> list[str]:
