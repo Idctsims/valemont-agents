@@ -113,7 +113,53 @@ The structure follows CLAUDE.md §3:
   closing snapshots take it from their commitment. If a new money table
   becomes necessary, it gets its own migration, with `mode`.
 
+### The slot's re-quote and the board refresh (owner, 2026-11-20; design, built in 4.4)
+
+Measured Nov 20 (weekday board, owner's machine): the strict re-quote of
+every eligible event is ~2,040 calls and 546 s at a 0.10 s floor (723 s at
+0.3 s). The 8-minute target is **retired**. The rule that counts is the
+stamped one: every leg at most 20 minutes old **at commit** (§3 rule 2).
+
+- **Times.** The stamped commit times stay **10:45 and 16:45 Chicago**. The
+  slot's re-quote starts at **:33** (10:33, 16:33): a cron job, `parlay_requote`,
+  never at boot. *Proposed, for the owner:* a misfire grace of 5 minutes; a
+  re-quote that cannot start by :38 leaves the slot empty with the binding
+  rule `fresh`, rather than re-quoting late.
+- **One re-quote per slot, shared by the three tiers.** `parlay_requote`
+  reads the candidates and re-quotes once, latest start first, so the
+  earliest games are read last. It keeps the slot's quotes in worker memory,
+  keyed by slot. Each tier's `observe` at :45 takes that slot's quotes and
+  never calls Kalshi itself. Three tiers re-quoting would triple the calls.
+  Rule 2 is checked against each quote's own fetch time at the
+  commit, by the database clock. A leg read at :33 is ~12 minutes old at :45.
+- **The refresh yields.** A process-wide flag (`venues/kalshi` module level,
+  a `threading.Event` set for the whole re-quote, cleared in `finally`):
+  - **When the refresh is due during a re-quote,** `kalshi_board_refresh`
+    raises `JobSkipped("slot re-quote running")`. `core/jobs.run_tracked`
+    already records that as a success with the note `skipped: slot re-quote
+    running`: no failure counted, no alert, and the staleness clock is reset
+    (it counts from the last success). Nothing in `job_health` changes.
+  - **When the re-quote starts during a refresh run** (the refresh runs on a
+    15-minute interval from boot, not on the clock, so this will happen), the
+    refresh checks the flag before each event and stops early. It keeps what
+    it has written and records the same skip note with how many events it
+    had done. The re-quote does not wait for it.
+  - **Not a database lock.** One worker runs both jobs. During a redeploy two
+    workers can overlap for well under a minute; at worst one refresh run
+    overlaps one re-quote, which costs pacing, not correctness.
+- **Pacing.** The re-quote keeps its own floor (0.10 s, AIMD unchanged); the
+  refresh keeps `PACE_FLOOR` 0.3 s. With the refresh yielding, the re-quote
+  is the only Kalshi traffic from the worker in its window. The full pulls
+  (09:30, 15:30) end about an hour before. The worker's own answer times from
+  Railway are unmeasured; 4.4 reports them.
+- **What 4.4 reports:** each slot's re-quote calls, 429 share and seconds; the
+  oldest leg's age at commit; and every refresh skip, read from `job_health`
+  notes and the Railway log.
+
 **Done when:**
+- [ ] `tests/`: the refresh's skip while the flag is set (a success with the
+      note, no failure); the mid-run yield; one re-quote serving three tiers;
+      a leg older than 20 minutes at commit is dropped (rule 2).
 - [ ] `tests/`: commit, slate isolation, resolve (hit, miss, partial; a miss
       scores −1.0), capture (two-sided only; missed when a leg lacks one),
       the stamp refusal, the started-game refusal.
