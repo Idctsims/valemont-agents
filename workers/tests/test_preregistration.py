@@ -77,7 +77,7 @@ class FrozenTexts(unittest.TestCase):
                 self.assertEqual(pr.content_hash(text), sha)
 
     # The parlay pre-registration: v1 (owner-approved 2026-11-19, 484fd4d), §0-§10 stamped by db/085;
-    # v2 (owner-approved 2026-11-20, f92aba6) changed §0, §1, §3, §4, §7, stamped by db/086. The hashes
+    # v2 (owner-approved 2026-11-20, d34a8e8) changed §0, §1, §3, §4, §7, stamped by db/086. The hashes
     # are read from the migrations, never written here.
     PARLAYS = "docs/preregistration_parlays.md"
     V2_CHANGED = ("## 0", "## 1", "## 3", "## 4", "## 7")

@@ -5,7 +5,7 @@
 -- (ON CONFLICT DO NOTHING).
 --
 -- WHAT. Rows only: no table, column, function or trigger.
---   The stamp of docs/preregistration_parlays.md version 2 (commit f92aba6),
+--   The stamp of docs/preregistration_parlays.md version 2 (commit d34a8e8),
 --   owner-approved 2026-11-20 before any ticket was committed. Version 2
 --   changes five sections; one preregistrations row each (db/017's pattern:
 --   the section's sha256 by core/preregistration.py, CRLF to LF, trailing
@@ -30,15 +30,15 @@
 -- ===================================================================== 1
 INSERT INTO preregistrations (document, section, content_sha256, note) VALUES
   ('docs/preregistration_parlays.md', '## 0. Amendments',
-   '399fde4764b8838ec8521020b77222dba1400a34ecd75e0f823a1d5320024d5a', 'parlays v2 (f92aba6), owner-approved 2026-11-20'),
+   '9cd2b2f2c0a20210377d26be05ff6a12b6bc129fe7808698a442afeec9901e25', 'parlays v2 (d34a8e8), owner-approved 2026-11-20'),
   ('docs/preregistration_parlays.md', '## 1. Agents and money',
-   '598af2a4f6564fa810ccc4e5c5b64fec58739b2a13dbc4824a35b373ca1e6a5f', 'parlays v2 (f92aba6), owner-approved 2026-11-20'),
+   '598af2a4f6564fa810ccc4e5c5b64fec58739b2a13dbc4824a35b373ca1e6a5f', 'parlays v2 (d34a8e8), owner-approved 2026-11-20'),
   ('docs/preregistration_parlays.md', '## 3. Leg rules, version P2 (provisional)',
-   '2287ade82fc32e3ca58076b5673829017348a53c58caad520a72e2d802891da5', 'parlays v2 (f92aba6), owner-approved 2026-11-20'),
+   '5a8ab8a89b633325770804a4688072252b2b229173132be45cbd0de6015b5e7b', 'parlays v2 (d34a8e8), owner-approved 2026-11-20'),
   ('docs/preregistration_parlays.md', '## 4. Prices recorded on every ticket',
-   '910d4c0ee27ef20d8315a465dda08be7fed717716803b2279d0e8e8f584c1be3', 'parlays v2 (f92aba6), owner-approved 2026-11-20'),
+   '910d4c0ee27ef20d8315a465dda08be7fed717716803b2279d0e8e8f584c1be3', 'parlays v2 (d34a8e8), owner-approved 2026-11-20'),
   ('docs/preregistration_parlays.md', '## 7. The switch to M5''s rules',
-   'e6c10b23c5c2a46215087c0808b4a0fa1e6e5f5606a688b78d314a0d4820a4b3', 'parlays v2 (f92aba6), owner-approved 2026-11-20')
+   'e6c10b23c5c2a46215087c0808b4a0fa1e6e5f5606a688b78d314a0d4820a4b3', 'parlays v2 (d34a8e8), owner-approved 2026-11-20')
 ON CONFLICT (document, section, content_sha256) DO NOTHING;
 
 INSERT INTO migration_log (name) VALUES ('086_parlay_preregistration_v2')
@@ -63,9 +63,9 @@ BEGIN
         -- 1. The five version 2 rows, exactly.
         SELECT count(*) INTO v_n FROM public.preregistrations
          WHERE document = v_doc AND registered_at <= now() AND (section, content_sha256) IN (
-               ('## 0. Amendments', '399fde4764b8838ec8521020b77222dba1400a34ecd75e0f823a1d5320024d5a'),
+               ('## 0. Amendments', '9cd2b2f2c0a20210377d26be05ff6a12b6bc129fe7808698a442afeec9901e25'),
                ('## 1. Agents and money', '598af2a4f6564fa810ccc4e5c5b64fec58739b2a13dbc4824a35b373ca1e6a5f'),
-               ('## 3. Leg rules, version P2 (provisional)', '2287ade82fc32e3ca58076b5673829017348a53c58caad520a72e2d802891da5'),
+               ('## 3. Leg rules, version P2 (provisional)', '5a8ab8a89b633325770804a4688072252b2b229173132be45cbd0de6015b5e7b'),
                ('## 4. Prices recorded on every ticket', '910d4c0ee27ef20d8315a465dda08be7fed717716803b2279d0e8e8f584c1be3'),
                ('## 7. The switch to M5''s rules', 'e6c10b23c5c2a46215087c0808b4a0fa1e6e5f5606a688b78d314a0d4820a4b3'));
         IF v_n <> 5 THEN

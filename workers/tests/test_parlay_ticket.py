@@ -194,8 +194,24 @@ class Search(unittest.TestCase):
         cands = sorted(board(5, ask="0.95", p="0.96"), key=lambda c: c.order)  # 0.95^5 = 0.774 > 0.40
         r = pt.search("safer", cands, T, sport="Basketball", **DRAWS)
         self.assertIsNone(r.ticket)
-        self.assertEqual(r.binding, "window")
+        self.assertEqual(r.binding, "window: no leg count from 3 to 5 reaches it on asks 95-95¢")
         self.assertEqual(set(r.tried.values()), {"window: unreachable at this leg count"})
+
+    def test_too_few_candidates_for_the_fewest_legs_that_reach_the_window_binds_window(self):
+        # The Nov 20 Tennis case: 3 candidates passed rules 1-4. At 80c asks, 4 legs price
+        # 0.4096 (above Safer's 0.40), so 5 is the fewest that reach it: `window`, counts recorded.
+        cands = sorted(board(3, sport="Tennis", ask="0.80", p="0.82"), key=lambda c: c.order)
+        r = pt.search("safer", cands, T, sport="Tennis", **DRAWS)
+        self.assertIsNone(r.ticket)
+        self.assertEqual(r.binding, "window: 3 candidates < 5, the fewest legs that reach the window")
+        self.assertEqual(r.tried, {3: "window: unreachable at this leg count",
+                                   4: "window: unreachable at this leg count", 5: "short: 3 candidates"})
+
+    def test_no_candidates_only_when_nothing_passed_rules_1_to_4(self):
+        r = pt.search("safer", [], T, sport="Tennis", **DRAWS)
+        self.assertEqual((r.ticket, r.binding, r.candidates), (None, "no candidates", 0))
+        r2 = pt.search("safer", board(2, sport="Tennis"), T, sport="Tennis", **DRAWS)
+        self.assertEqual(r2.binding, "rules 1-4: 2 candidates < 3")
 
     def test_an_empty_slot_names_the_rule_that_bound(self):
         # Reachable counts exist (75c legs), but one event caps them to one leg each: event cap binds.

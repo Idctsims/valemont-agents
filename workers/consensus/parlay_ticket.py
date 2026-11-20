@@ -112,6 +112,8 @@ WINDOWS: Mapping[str, tuple[Decimal, Decimal]] = {
 }
 #: The binding rule (and a skipped leg's reason) when the window turned it away.
 WINDOW = "window"
+#: An empty slot's binding rule only when no leg passed rules 1-4 (owner, Nov 20).
+NO_CANDIDATES = "no candidates"
 MEASURED = "measured_external"
 
 
@@ -503,7 +505,9 @@ def _binding(skips: Counter) -> str:
     """The empty slot's binding rule: the rule that skipped the most
     candidates across the leg counts tried (ties: the lower rule)."""
     if not skips:
-        return "no candidates"
+        # Unreachable by construction: with enough candidates for a reachable count,
+        # the greedy pass either completes or records a skip. Kept loud, never "no candidates".
+        return "unexplained: no skip recorded"
     top = max(skips.values())
     return min((r for r, k in skips.items() if k == top), key=REASON_ORDER.index)
 
@@ -523,10 +527,23 @@ def search(tier: str, cands: Sequence[Cand], t: cr.RhoTable, *, sport: str | Non
     timing: dict[int, float] = {}
     built: list[tuple[Build, Priced]] = []
     skips: Counter = Counter()
+    if not cands:
+        # "No candidates" only when nothing passed rules 1-4 (owner, Nov 20).
+        return Result(tier, scope, sport, 0, None, NO_CANDIDATES, tried, timing, time.perf_counter() - t0)
     if len(cands) < lo:
         return Result(tier, scope, sport, len(cands), None, f"rules 1-4: {len(cands)} candidates < {lo}", tried,
                       timing, time.perf_counter() - t0)
     ask_lo, ask_hi = min(c.ask for c in cands), max(c.ask for c in cands)
+    fewest = next((n for n in range(lo, hi + 1) if reachable(Decimal(1), n, window, ask_lo, ask_hi)), None)
+    if fewest is not None and len(cands) < fewest:
+        # Owner, Nov 20: candidates passed rules 1-4 but are fewer than the smallest
+        # leg count that can reach the window. The binding rule is `window`, counts recorded.
+        for n in range(lo, hi + 1):
+            tried[n] = ("window: unreachable at this leg count" if not reachable(Decimal(1), n, window, ask_lo, ask_hi)
+                        else f"short: {len(cands)} candidates")
+        return Result(tier, scope, sport, len(cands), None,
+                      f"{WINDOW}: {len(cands)} candidates < {fewest}, the fewest legs that reach the window",
+                      tried, timing, time.perf_counter() - t0)
     reachable_counts = 0
     for n in range(lo, hi + 1):
         # A count that cannot reach the window even from this scope's cheapest and
@@ -561,7 +578,8 @@ def search(tier: str, cands: Sequence[Cand], t: cr.RhoTable, *, sport: str | Non
         # counts that could: the cross-sport step's, else the most frequent skip
         # (the window among them, when it turned legs or complete tickets away).
         if reachable_counts == 0:
-            why = WINDOW
+            why = (f"{WINDOW}: no leg count from {lo} to {hi} reaches it on asks "
+                   f"{_cents(ask_lo)}-{_cents(ask_hi)}¢")
         elif cross_sport and any(v == "no second sport" for v in tried.values()):
             why = "no second sport"
         else:
