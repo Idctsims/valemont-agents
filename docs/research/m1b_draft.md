@@ -1,4 +1,9 @@
-# M1b draft: E1's window at 100% (NOT crawled; awaiting the owner's OK)
+# M1b draft: E1's window at 100%
+
+**APPROVED as drafted (owner, 2026-11-20).** The decision rule below is frozen
+by this commit, before any M1b call. The crawl runs only after the day's dry
+runs, with no other Kalshi traffic from this machine. Nothing is frozen from
+its result without the owner.
 
 Drafted 2026-11-20, after M1 came back inconclusive (`m1_result_2026-11-20.md`:
 +8.856¢, CI −3.85 to +17.05, n = 76). **No M1b number exists. This rule is
@@ -74,4 +79,4 @@ Reported with the output: the script hash, the date range, row counts
 (listing pages, combos, trades, block trades, legs, candle rows, misses), the
 429 share, and the mix by legs.
 
-**Pending: the owner's OK on this file.** Nothing is crawled before it.
+The owner's OK was given 2026-11-20; nothing was crawled before this commit.

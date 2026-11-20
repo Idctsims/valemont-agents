@@ -1158,6 +1158,25 @@ absent row as "I never looked."
 
 ## Current State (2026-10-09)
 
+- **Database growth, 2026-11-20 (read via db_inspect and the Railway `db_size` log; MiB = 2^20):**
+  - **Trend: ~1.43 MiB/day**, from 290,696,339 bytes (Nov 9) to 306,629,779 bytes (18:35 UTC Nov 19).
+    The database was 316,763,283 bytes (~302.1 MiB) at 17:25 UTC Nov 20.
+  - **The Nov 19-20 jump (~+10 MB) is not the trend.**
+    - `kalshi_board` went from 19.0 to 22.3 MiB: Friday's board lists the weekend slate, under its 35 MB budget.
+    - M5's first two snapshots added 3.4 MiB on disk (1,030,576 and 1,847,618 bytes by the job's own count).
+    - At that size, 28 snapshots are ~48 MiB on disk.
+  - **Projection (linear):** 350 MiB about **Dec 26** once M5 is exported and dropped on Dec 3 (about Nov 30
+    while it is kept); 400 about Jan 30; 450 about Mar 6. The board's slate swings move these by days.
+  - **Owner decisions, Nov 20:**
+    - (a) M5: export and drop at Dec 3, as planned.
+    - (b) Props archive weeks 1-5 (`kalshi_candles`, `kalshi_trades`, `kalshi_markets`, `kalshi_settlements`;
+      40.1 MiB) go to Storage and the tables are dropped. Approved in principle; **its own PR after Phase 4
+      ships, not before Dec 10**. Every object is hash-checked against the source rows before any drop. The
+      drop is a deliberate migration: the tables stay append-only and TRUNCATE-guarded, and no guard is
+      weakened.
+    - (c) No other cuts: no `feed_similarity_log` 14-day retention, no `story_scores` trim, and the board
+      shrinks stay parked.
+
 - **2026-11-02 (owner back after Oct 23 – Nov 2; read via db_inspect unless said otherwise):**
   - **The worker ran the whole time.** There was no gap over 16 min in the 15-min egress samples from Oct 21, no "Worker down" push, and two `job_queue` blips that recovered within 2 min (Oct 22, Nov 1). Drops ran on all 11 days Oct 23 – Nov 2, with no top-up. The brief was pushed on all 12 days Oct 22 – Nov 2. **The Railway CLI is logged out on this machine**, so the deployment, uptime and credit are unread; the owner logs in. **Closed Nov 6: logged in (`railway whoami` names the owner's account).**
   - **Arsenal pool rescue.** On Nov 2 the ready pool was down to 4 references in 2 categories (a drop needs 3), and the Nov 1 batch lost 15 of 36 cards to near-duplicates.
