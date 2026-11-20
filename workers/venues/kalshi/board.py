@@ -175,9 +175,13 @@ class Paced(Counting):
 
     def __init__(self, *, interval: float, max_calls: int | None = None, deadline: float | None = None,
                  http: Http | None = None, clock: Callable[[], float] = time.monotonic,
-                 sleep: Callable[[float], None] = time.sleep, timeout: float = 30.0) -> None:
+                 sleep: Callable[[float], None] = time.sleep, timeout: float = 30.0,
+                 floor: float = PACE_FLOOR) -> None:
         super().__init__(timeout, http)
-        self.interval = min(max(interval, PACE_FLOOR), PACE_CEILING)
+        #: The board refresh keeps PACE_FLOOR; only the parlay re-quote passes its own
+        #: (owner, Nov 20). The AIMD steps are the same for both.
+        self.floor = floor
+        self.interval = min(max(interval, floor), PACE_CEILING)
         self.max_calls, self.deadline = max_calls, deadline
         self._clock, self._sleep = clock, sleep
         self._last: float | None = None
@@ -205,7 +209,7 @@ class Paced(Counting):
         else:
             self._ok_run += 1
             if self._ok_run >= PACE_EASE_AFTER:
-                self.interval = max(self.interval * 0.9, PACE_FLOOR)
+                self.interval = max(self.interval * 0.9, self.floor)
                 self._ok_run = 0
         return status, body
 

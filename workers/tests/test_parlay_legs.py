@@ -142,6 +142,28 @@ class Requote(unittest.TestCase):
             pl.requote([e1], http=http, now=lambda: NOW, sleep=lambda s: None, pace=0)
 
 
+class OrderAndAge(unittest.TestCase):
+    def test_latest_start_first_so_the_earliest_games_are_read_last(self):
+        ms = [market(event_ticker="E-SOON", starts_at=NOW + timedelta(hours=1)),
+              market(event_ticker="E-LATE", starts_at=NOW + timedelta(hours=9)),
+              market(event_ticker="E-SOON", market_ticker="X2", starts_at=NOW + timedelta(hours=1)),
+              market(event_ticker="E-MID-B", starts_at=NOW + timedelta(hours=4)),
+              market(event_ticker="E-MID-A", starts_at=NOW + timedelta(hours=4))]
+        self.assertEqual(pl.requote_order(ms), ["E-LATE", "E-MID-A", "E-MID-B", "E-SOON"])
+
+    def test_oldest_age_is_the_oldest_quote_and_none_when_empty(self):
+        q = {"A": pl.Quote(D("0.1"), D("0.2"), NOW - timedelta(seconds=30)),
+             "B": pl.Quote(D("0.1"), D("0.2"), NOW)}
+        self.assertEqual(pl.oldest_age(q, NOW), timedelta(seconds=30))
+        self.assertEqual(pl.oldest_age({"B": q["B"]}, NOW), timedelta(0))
+        self.assertIsNone(pl.oldest_age({}, NOW))
+
+    def test_the_requote_floor_is_its_own(self):
+        from venues.kalshi import board as kb
+        self.assertEqual(pl.REQUOTE_FLOOR, 0.10)
+        self.assertEqual(kb.PACE_FLOOR, 0.3)
+
+
 class Rows(unittest.TestCase):
     def test_reader_rows_become_markets(self):
         from core import ledger

@@ -58,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--max-calls", type=int)
     ap.add_argument("--max-seconds", type=float)
     ap.add_argument("--force-alongside", action="store_true")
+    ap.add_argument("--floor", type=float, default=pl.REQUOTE_FLOOR, help="the re-quote's pace floor, seconds")
     args = ap.parse_args(argv)
     if not args.force_alongside and crawler_running():
         print("A Kalshi research crawler is running on this machine; the dry run waits for it (owner, Nov 19).")
@@ -71,10 +72,14 @@ def main(argv: list[str] | None = None) -> int:
             conn.rollback()
     read_s = time.monotonic() - t0
     markets = pl.markets_from_rows(rows)
-    events = sorted({m.event_ticker: m.starts_at for m in markets}.items(), key=lambda kv: (kv[1], kv[0]))
-    rq = pl.requote([e for e, _ in events], max_calls=args.max_calls, max_seconds=args.max_seconds)
+    events = pl.requote_order(markets)
+    rq = pl.requote(events, max_calls=args.max_calls, max_seconds=args.max_seconds, floor=args.floor)
     now = dt.datetime.now(dt.timezone.utc)
     f = pl.funnel(pl.legs_of(markets, rq.quotes), now, cut=cut)
+    passed = {leg.market.market_ticker for leg in f.passed}
+    oldest = pl.oldest_age(rq.quotes, now)
+    oldest_passed = pl.oldest_age({t: q for t, q in rq.quotes.items() if t in passed}, now)
+    first_start = min((m.starts_at for m in markets), default=None)
     table = f.table()
     totals = {k: sum(t[k] for t in table.values()) for k in ("before", *pl.RULES)}
     report = {
@@ -85,7 +90,10 @@ def main(argv: list[str] | None = None) -> int:
         "requote": {"events_asked": rq.events_asked, "events_skipped": rq.events_skipped, "cap": rq.cap,
                     "calls": rq.calls, "limited_429": rq.limited, "share_429": round(rq.share_429, 4),
                     "seconds": round(rq.seconds, 1), "bytes": rq.bytes, "pace_end": round(rq.pace, 2),
-                    "markets_quoted": len(rq.quotes),
+                    "markets_quoted": len(rq.quotes), "floor": args.floor, "order": "latest start first",
+                    "oldest_quote_age_s_at_end": None if oldest is None else round(oldest.total_seconds(), 1),
+                    "oldest_passing_leg_age_s_at_end": None if oldest_passed is None else round(oldest_passed.total_seconds(), 1),
+                    "earliest_start": first_start,
                     "slot_check": {"calls_under_300": rq.calls < SLOT_CALLS, "seconds_under_300": rq.seconds < SLOT_SECONDS}},
         "funnel_legs_by_sport": table, "funnel_legs_total": totals,
     }

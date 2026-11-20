@@ -40,6 +40,9 @@ RULES = ("universe", "fresh", "ask_band", "spread")
 SIDES = ("yes", "no")
 #: One call's timeout, as the board refresh (sports/kalshi_board.REFRESH_CALL_TIMEOUT_S).
 CALL_TIMEOUT_S = 15.0
+#: The re-quote's pace floor (owner, Nov 20: faster, not smaller). The board
+#: refresh keeps kb.PACE_FLOOR; the AIMD steps are unchanged.
+REQUOTE_FLOOR = 0.10
 
 
 @dataclass(frozen=True)
@@ -211,16 +214,31 @@ def parse_quotes(body: Any, event: str, at: datetime) -> tuple[dict[str, Quote],
     return out, (opt(body, "cursor", str, p, "$") or None)
 
 
+def requote_order(markets: Iterable[Market]) -> list[str]:
+    """The slot's events, latest start first, so the earliest games are re-read
+    last, closest to the commit (owner, Nov 20). Ties by event ticker."""
+    starts: dict[str, datetime] = {}
+    for m in markets:
+        starts[m.event_ticker] = m.starts_at
+    return [e for e, _ in sorted(starts.items(), key=lambda kv: (-kv[1].timestamp(), kv[0]))]
+
+
+def oldest_age(quotes: Mapping[str, Quote], at: datetime) -> timedelta | None:
+    """How old the oldest re-read quote is at `at` (the end of the run)."""
+    return max((at - q.at for q in quotes.values()), default=None)
+
+
 def requote(events: Sequence[str], *, http: kb.Http | None = None, max_calls: int | None = None,
             max_seconds: float | None = None, now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
             clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep,
-            pace: float = kb.PACE_START) -> Requote:
+            pace: float = kb.PACE_START, floor: float = REQUOTE_FLOOR) -> Requote:
     """Every open market of each event, one event at a time (`event_ticker=E`,
-    the refresh's only shape), paced by kb.Paced. A spent budget stops the run
-    and counts the events not read; their legs then fail `fresh`."""
+    the refresh's only shape), in the order given, paced by kb.Paced with the
+    re-quote's own floor. A spent budget stops the run and counts the events
+    not read; their legs then fail `fresh`."""
     t0 = clock()
     paced = kb.Paced(interval=pace, max_calls=max_calls, deadline=None if max_seconds is None else t0 + max_seconds,
-                     http=http, clock=clock, sleep=sleep, timeout=CALL_TIMEOUT_S)
+                     http=http, clock=clock, sleep=sleep, timeout=CALL_TIMEOUT_S, floor=floor)
     client = KalshiClient(transport=paced, min_interval=0, sleep=paced.sleep)
     run = Requote()
     try:
