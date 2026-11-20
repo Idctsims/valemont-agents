@@ -1035,10 +1035,11 @@ def register_preregistration(*, document: str, section: str, content_sha256: str
         )
 
 
-def preregistration_stamp(*, document: str, section: str,
-                          content_sha256: str) -> tuple[datetime, datetime] | None:
-    """(registered_at, the database's now()) for this exact text, or None."""
-    with _pool().connection() as conn:
+def preregistration_stamp(*, document: str, section: str, content_sha256: str,
+                          conn: psycopg.Connection | None = None) -> tuple[datetime, datetime] | None:
+    """(registered_at, the database's now()) for this exact text, or None.
+    `conn` lets a read-only caller (the parlay dry run, as valemont_readonly) ask."""
+    with _brief_conn(conn) as conn:
         row = conn.execute(
             """
             SELECT registered_at, now() FROM preregistrations

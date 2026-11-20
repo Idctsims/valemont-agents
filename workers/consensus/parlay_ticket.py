@@ -1,6 +1,7 @@
-"""Phase 4.3: the ticket search, its prices and the leg reasons (P1).
+"""Phase 4.3: the ticket search, its prices and the leg reasons (rule version P2).
 
-docs/preregistration_parlays.md §2-§4 (stamped, db/085). Pure: no SQL, no
+docs/preregistration_parlays.md §2-§4, version 2 (stamped: db/085 for the
+unchanged sections, db/086 for §0, §3, §4 and §7). Pure: no SQL, no
 network, and no clock that decides anything (a search only measures its own
 pricing time, for the report). Given the same candidates (the legs that passed rules 1-4
 in `consensus.parlay_legs`), the same rho table and the same draw count, it
@@ -24,8 +25,10 @@ search meets; the first one it breaks is its reason:
 Readings of the text where it is silent, each the stricter one (§0), stated
 here so the owner can see them:
 
-- A passing leg with no consensus p (or p of 0) cannot be ordered by
-  ask / p, so it is not a candidate; the slot counts it (`no_p`).
+- A passing leg with no consensus p (or p of 0) cannot be priced into
+  fair_p, so it is not a candidate; the slot counts it (`no_p`). (Under P1 it
+  could not be ordered either; under P2 the order uses the mid, but fair_p
+  still needs p.)
 - "Share of measured pairs" is measured pairs / same-game pairs; a ticket
   with no same-game pair has share 1.0 (nothing on it is a prior).
 - "The lexicographically first list of market tickers" compares the
@@ -41,17 +44,22 @@ here so the owner can see them:
 
 These readings were approved as written by the owner on 2026-11-20.
 
-**Consensus p is recomputed from the slot's fresh quote before ordering and
-pricing** (owner, 2026-11-20). This is the stamped rule's stricter reading
-(§0), not a change to it: the owner's Nov 9 decision, "the generator re-quotes
-every candidate leg and recomputes its edge before selecting". The caller
-passes legs whose markets went through `parlay_legs.with_fresh_p`, the
-consensus engine's own blend and normalization on the fresh mids (kalshi
-tier: the mid, normalized across a mutually exclusive event; books and espn:
-0.7 x outside + 0.3 x that mid). The stored p from the board's last read
-never orders, prices or names a leg. `fair_p`'s marginals are those p. The
-engine's 12 h outside flag blocks a claim, never the blend, and that is
-kept here exactly.
+**Version 2's order (owner, 2026-11-20; §3, db/086).** Legs are ordered by
+ask / the leg's RAW fresh Kalshi side mid from the slot's re-quote: no outside
+blend, no normalization. Why: the P1 dry runs showed ask / consensus p
+selecting on ESPN's single-book p sitting above Kalshi's ask, and on
+normalization lifting favourites in events with a wide underdog.
+
+**Consensus p is recomputed from the slot's fresh quote, for fair_p only**
+(owner, 2026-11-20). This is the Nov 9 decision ("re-quote and recompute
+before selecting"), read strictly (§0). The caller passes legs whose markets
+went through `parlay_legs.with_fresh_p`: the consensus engine's own blend and
+normalization on the fresh mids (kalshi tier: the mid, normalized across a
+mutually exclusive event; books and espn: 0.7 x outside + 0.3 x that mid).
+The engine's 12 h outside flag blocks a claim, never the blend, and is kept
+here exactly. `fair_p`'s marginals are those p. fair_p chooses among complete
+tickets (the lowest relative cost over fair) and is recorded and shown. **It
+never ranks legs.** The stored p from the board's last read is never used.
 """
 
 from __future__ import annotations
@@ -67,7 +75,8 @@ from consensus import combo
 from consensus import correlation as cr
 from consensus import parlay_legs as pl
 
-RULE_VERSION = "P1"
+#: The pre-registration's version 2 (owner, 2026-11-20; db/086). §7's M5 switch makes P3.
+RULE_VERSION = "P2"
 #: Tier -> (agent, the leg-count range), §1.
 TIERS: Mapping[str, tuple[str, int, int]] = {
     "safer": ("parlay_safer", 3, 5),
@@ -110,8 +119,15 @@ class Cand:
         return self.m.market_ticker, self.leg.side
 
     @property
+    def mid(self) -> Decimal:
+        """The side's raw fresh Kalshi mid from the slot's re-quote: no outside
+        blend, no normalization (v2 §3)."""
+        return side_mid(self)
+
+    @property
     def ratio(self) -> Decimal:
-        return self.ask / self.p
+        """v2 §3's ordering ratio: ask / the raw fresh side mid."""
+        return self.ask / self.mid
 
     @property
     def order(self) -> tuple[Decimal, str, str]:
@@ -126,15 +142,20 @@ def side_p(leg: pl.Leg) -> Decimal | None:
 
 
 def candidates(passed: Sequence[pl.Leg]) -> tuple[list[Cand], int]:
-    """The slot's candidates in §3's order (ask / p lowest first; ties by
-    market ticker, then side), and how many passing legs had no usable p."""
+    """The slot's candidates in v2 §3's order (ask / the raw fresh side mid,
+    lowest first; ties by market ticker, then side), and how many passing legs
+    had no usable consensus p (fair_p needs one; it never orders)."""
     out, no_p = [], 0
     for leg in passed:
-        p, ask = side_p(leg), leg.ask
-        if p is None or p <= 0 or ask is None:
+        p, ask, q = side_p(leg), leg.ask, leg.quote
+        if p is None or p <= 0 or ask is None or q is None or q.yes_bid is None or q.yes_ask is None:
             no_p += 1
             continue
-        out.append(Cand(leg, p, ask))
+        c = Cand(leg, p, ask)
+        if c.mid <= 0:
+            no_p += 1
+            continue
+        out.append(c)
     out.sort(key=lambda c: c.order)
     return out, no_p
 
@@ -349,9 +370,9 @@ def label_of(m: pl.Market) -> str:
 
 
 def leg_reasons(legs: Sequence[Cand], scope: Sequence[Cand], why: Mapping[tuple[str, str], str]) -> list[str]:
-    """§3's one line per leg, in the ticket's order:
-    `<side> <label>: <tier> consensus p <p>, ask <ask>c, ask/p <ratio>, ranked <n> of <N>;
-    <k> ranked higher were not taken (<rule>: <count>, ...)`."""
+    """v2 §3's one line per leg, in the ticket's order:
+    `<side> <label>: ask <ask>c, mid <mid>, ask/mid <ratio>, ranked <n> of <N>;
+    <tier> consensus p <p>; <k> ranked higher were not taken (<rule>: <count>, ...)`."""
     rank = {c.key: i for i, c in enumerate(scope, 1)}
     held = {c.key for c in legs}
     out = []
@@ -359,9 +380,9 @@ def leg_reasons(legs: Sequence[Cand], scope: Sequence[Cand], why: Mapping[tuple[
         n = rank[c.key]
         higher = [x for x in scope[: n - 1] if x.key not in held]
         counts = Counter(why.get(x.key, RULE_LABELS[5]) for x in higher)
-        line = (f"{c.leg.side.upper()} {label_of(c.m)}: {c.m.tier} consensus p {_num(c.p, 3)}, "
-                f"ask {_cents(c.ask)}¢, ask÷p {_num(c.ratio, 3)}, ranked {n} of {len(scope)}; "
-                f"{len(higher)} ranked higher were not taken")
+        line = (f"{c.leg.side.upper()} {label_of(c.m)}: ask {_cents(c.ask)}¢, mid {_num(c.mid, 3)}, "
+                f"ask÷mid {_num(c.ratio, 3)}, ranked {n} of {len(scope)}; "
+                f"{c.m.tier} consensus p {_num(c.p, 3)}; {len(higher)} ranked higher were not taken")
         if higher:
             line += " (" + ", ".join(f"{r}: {counts[r]}" for r in REASON_ORDER if counts[r]) + ")"
         out.append(line)

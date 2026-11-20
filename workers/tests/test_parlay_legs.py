@@ -165,6 +165,13 @@ class FreshP(unittest.TestCase):
         partial = {"E-A": q("0.29", "0.31"), "E-B": q("0.32", "0.34")}  # E-C not quoted
         self.assertEqual(pl.fresh_p(ev, partial), {"E-A": D("0.300000"), "E-B": D("0.330000"), "E-C": None})
 
+    def test_normalized_events_names_exactly_the_events_the_rule_normalizes(self):
+        ev = [market(market_ticker=f"E-{c}", event_ticker="E", mutually_exclusive=True) for c in "AB"]
+        lad = [market(market_ticker=f"L-{c}", event_ticker="L", mutually_exclusive=False) for c in "AB"]
+        quotes = {"E-A": q("0.59", "0.61"), "E-B": q("0.37", "0.39"),   # sum 0.98: normalized
+                  "L-A": q("0.59", "0.61"), "L-B": q("0.37", "0.39")}   # not exclusive: plain
+        self.assertEqual(pl.normalized_events([*ev, *lad], quotes), {"E"})
+
     def test_rungs_of_a_ladder_stay_plain(self):
         rungs = [market(market_ticker=f"L-{i}", event_ticker="L", mutually_exclusive=False) for i in range(3)]
         quotes = {"L-0": q("0.79", "0.81"), "L-1": q("0.49", "0.51"), "L-2": q("0.19", "0.21")}  # sum 1.50

@@ -41,13 +41,20 @@ def cand(ticker, *, side="yes", ask="0.90", bid=None, p="0.90", game=None, event
 
 
 class Order(unittest.TestCase):
-    def test_ask_over_p_lowest_first_then_ticker_then_side(self):
-        a = cand("B", ask="0.80", p="0.90").leg   # 0.889
-        b = cand("A", ask="0.90", p="0.90").leg   # 1.0
-        c = cand("C", ask="0.81", p="0.90").leg   # 0.9
-        d = cand("A0", ask="0.90", p="0.90").leg  # 1.0, ticker after "A"
+    def test_ask_over_the_raw_fresh_mid_lowest_first_then_ticker_then_side(self):
+        # v2 §3: the consensus p plays no part in the order (here it would rank them the other way).
+        a = cand("B", ask="0.80", bid="0.80", p="0.70").leg   # ask/mid 1.000
+        b = cand("A", ask="0.90", bid="0.88", p="0.99").leg   # 1.011
+        c = cand("C", ask="0.81", bid="0.80", p="0.75").leg   # 1.006
+        d = cand("A0", ask="0.90", bid="0.88", p="0.99").leg  # 1.011, ticker after "A"
         out, _ = pt.candidates([b, d, c, a])
         self.assertEqual([x.m.market_ticker for x in out], ["B", "C", "A", "A0"])
+
+    def test_a_no_legs_mid_is_one_minus_the_yes_mid(self):
+        m = pl.Market(**(cand("N").leg.market.__dict__ | {"p_yes": D("0.15")}))
+        (no,), _ = pt.candidates([pl.Leg(m, "no", pl.Quote(D("0.18"), D("0.20"), NOW))])
+        # NO ask = 1 - YES bid = 0.82; NO mid = 1 - 0.19 = 0.81
+        self.assertEqual((no.ask, no.mid, no.ratio.quantize(D("0.0001"))), (D("0.82"), D("0.81"), D("1.0123")))
 
     def test_a_leg_without_consensus_p_is_not_a_candidate_and_is_counted(self):
         out, no_p = pt.candidates([cand("A", p=None), cand("B").leg])
@@ -143,9 +150,10 @@ class Prices(unittest.TestCase):
         self.assertTrue(pt.is_edge_leg(no, span))              # 0.12 - 0.10 = 0.02
 
 
-def board(n, sport="Basketball", prefix="L", ask="0.92", p="0.95"):
-    """n candidates on n games of one sport, ordered by their tickers."""
-    return [cand(f"{prefix}{i:02d}", ask=ask, p=p, sport=sport) for i in range(n)]
+def board(n, sport="Basketball", prefix="L", ask="0.92", p="0.95", bid=None):
+    """n candidates on n games of one sport, ordered by their tickers. A bid
+    equal to the ask makes ask/mid exactly 1, below any 2c-wide leg."""
+    return [cand(f"{prefix}{i:02d}", ask=ask, p=p, sport=sport, bid=bid) for i in range(n)]
 
 
 class Search(unittest.TestCase):
@@ -160,7 +168,7 @@ class Search(unittest.TestCase):
         self.assertIsNotNone(r.ticket)
         self.assertEqual(len(r.ticket.legs), 3)
         self.assertEqual(r.ticket.agent, "parlay_safer")
-        self.assertEqual((r.ticket.scope, r.ticket.fill_note, r.ticket.rule_version), ("sport", None, "P1"))
+        self.assertEqual((r.ticket.scope, r.ticket.fill_note, r.ticket.rule_version), ("sport", None, "P2"))
         self.assertIsNone(r.ticket.expected_quote)
         self.assertEqual(r.ticket.payload()["expected_quote_note"], "pending (M1)")
         self.assertEqual(r.ticket.rho_sha256, T.sha256)
@@ -204,24 +212,26 @@ class Search(unittest.TestCase):
 
 class Reasons(unittest.TestCase):
     def test_the_template_exactly(self):
-        top = cand("A", ask="0.80", p="0.90")                                  # 0.889, taken
-        dup = cand("B", ask="0.81", p="0.90", subject="Player A")               # 0.900, same player: rule 8
-        low = cand("C", ask="0.85", p="0.90")                                   # 0.944, taken
+        top = cand("A", ask="0.80", bid="0.80", p="0.90")                      # ask/mid 1.000, taken
+        dup = cand("B", ask="0.81", bid="0.80", p="0.90", subject="Player A")   # 1.006, same player: rule 8
+        low = cand("C", ask="0.85", bid="0.83", p="0.90")                      # 1.012, taken
         cands = sorted([top, dup, low], key=lambda c: c.order)
         b = pt.greedy(cands, 2, T)
         self.assertEqual([c.m.market_ticker for c in b.legs], ["A", "C"])
         lines = pt.leg_reasons(b.legs, cands, b.why)
-        self.assertEqual(lines[0], "YES A: kalshi consensus p 0.900, ask 80¢, ask÷p 0.889, "
-                                   "ranked 1 of 3; 0 ranked higher were not taken")
-        self.assertEqual(lines[1], "YES C: kalshi consensus p 0.900, ask 85¢, ask÷p 0.944, "
-                                   "ranked 3 of 3; 1 ranked higher were not taken (one prop per player: 1)")
+        # These test markets carry no Kalshi title, so the leg is named by its ticker alone.
+        self.assertEqual(lines[0], "YES A: ask 80¢, mid 0.800, ask÷mid 1.000, ranked 1 of 3; "
+                                   "kalshi consensus p 0.900; 0 ranked higher were not taken")
+        self.assertEqual(lines[1], "YES C: ask 85¢, mid 0.840, ask÷mid 1.012, ranked 3 of 3; "
+                                   "kalshi consensus p 0.900; 1 ranked higher were not taken (one prop per player: 1)")
 
     def test_the_leg_is_named_by_its_kalshi_title_and_the_ticker_stays_the_key(self):
         leg = cand("KXNBAPTS-26NOV22AAABBB-P1-20").leg
         titled = pt.Cand(pl.Leg(pl.Market(**{**leg.market.__dict__, "label": "  P One: 20+ "}), "no", leg.quote),
                          D("0.10"), D("0.21"))
         line = pt.leg_reasons([titled], [titled], {})[0]
-        self.assertTrue(line.startswith("NO P One: 20+ pts: kalshi consensus p 0.100, ask 21¢"), line)
+        self.assertTrue(line.startswith("NO P One: 20+ pts: ask 21¢, mid 0.110, ask÷mid 1.909"), line)
+        self.assertIn("; kalshi consensus p 0.100; ", line)
         self.assertEqual(titled.key, ("KXNBAPTS-26NOV22AAABBB-P1-20", "no"))
         self.assertEqual(pt.label_of(leg.market), "KXNBAPTS-26NOV22AAABBB-P1-20")  # no title: the ticker
         self.assertEqual(pt.leg_in(titled).label, "  P One: 20+ ")  # the pricer's refusals name it too
@@ -261,8 +271,8 @@ class Reasons(unittest.TestCase):
 
 class CrossSport(unittest.TestCase):
     def test_all_one_sport_then_the_last_leg_is_replaced_from_another_sport(self):
-        bball = board(12, "Basketball", "B", ask="0.92", p="0.96")
-        hockey = board(2, "Hockey", "H", ask="0.93", p="0.95")               # ranked after every B
+        bball = board(12, "Basketball", "B", ask="0.92", p="0.96", bid="0.92")  # ask/mid 1.000
+        hockey = board(2, "Hockey", "H", ask="0.93", p="0.95")                  # 1.011: ranked after every B
         cands = sorted([*bball, *hockey], key=lambda c: c.order)
         b = pt.greedy(cands, 11, T)
         self.assertEqual({c.m.sport for c in b.legs}, {"Basketball"})
@@ -281,7 +291,7 @@ class CrossSport(unittest.TestCase):
     def test_a_cross_sport_ticket_always_carries_extrapolated_fill(self):
         # Ratios above 1 (fewest legs win), every Basketball leg ranked above Hockey:
         # 11 legs are 10 B + H00 after the replacement step.
-        cands = sorted([*board(12, "Basketball", "B", ask="0.95", p="0.94"),
+        cands = sorted([*board(12, "Basketball", "B", ask="0.95", p="0.94", bid="0.95"),
                         *board(3, "Hockey", "H", ask="0.97", p="0.95")], key=lambda c: c.order)
         r = pt.search("lotto", cands, T, sport=None, cross_sport=True, **DRAWS)
         self.assertEqual(len(r.ticket.legs), 11)

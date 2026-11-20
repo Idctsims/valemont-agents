@@ -28,10 +28,36 @@ import psycopg
 
 from consensus import correlation as cr
 from consensus import parlay_legs as pl
+from consensus import parlay_prereg
 from consensus import parlay_ticket as pt
 from core import ledger
+from core import preregistration as pr
+from core.paths import REPO_ROOT
 from scripts.parlay_dryrun import crawler_running, readonly
 from scripts.research.kalshi_history import DATA_DIR
+
+
+NORMALIZED: set[str] = set()
+ENV_FILE: Path | None = None
+
+
+def stamp_state() -> str:
+    """Whether every v2 section, as it stands, has a stamp before now: read as
+    valemont_readonly (never DATABASE_URL), every transaction rolled back. The
+    dry run commits nothing either way; 4.4's adapter refuses without it."""
+    doc = (REPO_ROOT / parlay_prereg.DOCUMENT).read_text(encoding="utf-8")
+    missing = []
+    with psycopg.connect(readonly(ENV_FILE)) as conn:  # type: ignore[arg-type]
+        try:
+            for s in parlay_prereg.SECTIONS:
+                sha = pr.content_hash(pr.section_text(doc, s))
+                got = ledger.preregistration_stamp(document=parlay_prereg.DOCUMENT, section=s, content_sha256=sha,
+                                                   conn=conn)
+                if got is None or not got[0] < got[1]:
+                    missing.append(s.split(".")[0])
+        finally:
+            conn.rollback()
+    return "v2 stamped (all 11 sections)" if not missing else f"NOT stamped: {', '.join(missing)}"
 
 
 def legs_json(k: pt.Ticket, stored: dict) -> list[dict]:
@@ -42,7 +68,15 @@ def legs_json(k: pt.Ticket, stored: dict) -> list[dict]:
 
     return [{"ticker": c.m.market_ticker, "side": c.leg.side, "tier": c.m.tier, "ask": str(c.ask),
              "mid": str(pt.side_mid(c)), "p_fresh": str(c.p), "p_stored": str(side(stored.get(c.m.market_ticker), c.leg.side)),
-             "stale_outside": c.m.stale_outside} for c in k.legs]
+             "stale_outside": c.m.stale_outside, "normalized": c.m.event_ticker in NORMALIZED} for c in k.legs]
+
+
+def leg_mix(results: list[pt.Result]) -> dict[str, int]:
+    """Across every ticket in the slot: legs, ESPN-tier legs, books-tier legs, and legs in a normalized event."""
+    legs = [c for r in results if r.ticket for c in r.ticket.legs]
+    return {"legs": len(legs), "espn_tier": sum(1 for c in legs if c.m.tier == "espn"),
+            "books_tier": sum(1 for c in legs if c.m.tier == "books"),
+            "normalized_event": sum(1 for c in legs if c.m.event_ticker in NORMALIZED)}
 
 
 def result_json(r: pt.Result, stored: dict | None = None) -> dict:
@@ -99,6 +133,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--draws", type=int, default=cr.MC_DRAWS)
     ap.add_argument("--label", default="slot")
     args = ap.parse_args(argv)
+    global ENV_FILE
+    ENV_FILE = args.env_file
     if crawler_running():
         print("A Kalshi research crawler is running on this machine; the dry run waits for it.")
         return 2
@@ -116,6 +152,7 @@ def main(argv: list[str] | None = None) -> int:
     stored = {m.market_ticker: m.p_yes for m in markets}
     # The Nov 9 rule (owner, Nov 20): p recomputed from the fresh quotes before anything orders a leg.
     markets = pl.with_fresh_p(markets, rq.quotes)
+    NORMALIZED.update(pl.normalized_events(markets, rq.quotes))
     f = pl.funnel(pl.legs_of(markets, rq.quotes), now, cut=cut)
     t_search = time.monotonic()
     s = pt.slot(f.passed, cr.load_table(), draws=args.draws)
@@ -134,6 +171,9 @@ def main(argv: list[str] | None = None) -> int:
         "search_seconds": round(search_s, 1), "slot_seconds": round(time.monotonic() - t0, 1),
         "results": [result_json(r, stored) for r in s.results],
         "median_by_tier": medians(s.results),
+        "leg_mix": leg_mix(s.results),
+        "rule_version": pt.RULE_VERSION,
+        "stamp": stamp_state(),
     }
     out = DATA_DIR.parent / "parlays"
     out.mkdir(parents=True, exist_ok=True)
@@ -141,6 +181,7 @@ def main(argv: list[str] | None = None) -> int:
     path.write_text(json.dumps(report, indent=1, default=str), encoding="utf-8")
     for r in s.results:
         print(line(r))
+    print(f"rule version {pt.RULE_VERSION}; stamp: {report['stamp']}; leg mix: {report['leg_mix']}")
     for k, v in report["median_by_tier"].items():
         print(f"median {k}: {v['median_rel_cost']} over {v['tickets']} tickets ({v['positive']} positive)")
     print(f"candidates {len(markets)} markets; passed rules 1-4 {len(f.passed)} legs; no consensus p {s.no_p}")

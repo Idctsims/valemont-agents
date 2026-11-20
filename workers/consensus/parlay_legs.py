@@ -139,13 +139,10 @@ def p_outside(m: Market) -> Decimal | None:
     return {"books": m.p_books, "espn": m.p_espn}.get(m.tier)
 
 
-def fresh_p(markets: Sequence[Market], quotes: Mapping[str, Quote]) -> dict[str, Decimal | None]:
-    """{market: consensus p of YES} from the slot's quotes, by the engine's rules:
-    the Kalshi mid, normalized across a mutually exclusive event when every
-    market of it is quoted and the mids sum to 0.95-1.05 (anything else, and
-    ladder rungs, plain); then 0.7 x outside + 0.3 x that mid where the tier
-    has an outside price, else the mid. A market with no two-sided fresh quote
-    gets None: its stored p is never used."""
+def _events(markets: Sequence[Market], quotes: Mapping[str, Quote]):
+    """Per event: (its markets, {market: fresh mid or None}, the mids' sum,
+    normalized?) by the engine's rule (leg_consensus_priced: mutually
+    exclusive, at least 2 markets, every one quoted, sum within 0.95-1.05)."""
     def mid(t: str) -> Decimal | None:
         q = quotes.get(t)
         if q is None or q.yes_bid is None or q.yes_ask is None:
@@ -155,13 +152,29 @@ def fresh_p(markets: Sequence[Market], quotes: Mapping[str, Quote]) -> dict[str,
     by_event: dict[str, list[Market]] = defaultdict(list)
     for m in markets:
         by_event[m.event_ticker].append(m)
-    out: dict[str, Decimal | None] = {}
     for group in by_event.values():
         mids = {m.market_ticker: mid(m.market_ticker) for m in group}
         quoted = [v for v in mids.values() if v is not None]
         total = sum(quoted, Decimal(0))
         norm = bool(group[0].mutually_exclusive and len(group) >= 2 and len(quoted) == len(group)
                     and NORM_LO <= total <= NORM_HI)
+        yield group, mids, total, norm
+
+
+def normalized_events(markets: Sequence[Market], quotes: Mapping[str, Quote]) -> set[str]:
+    """The events whose fresh mids the engine's rule normalizes (for the report)."""
+    return {group[0].event_ticker for group, _, _, norm in _events(markets, quotes) if norm}
+
+
+def fresh_p(markets: Sequence[Market], quotes: Mapping[str, Quote]) -> dict[str, Decimal | None]:
+    """{market: consensus p of YES} from the slot's quotes, by the engine's rules:
+    the Kalshi mid, normalized across a mutually exclusive event when every
+    market of it is quoted and the mids sum to 0.95-1.05 (anything else, and
+    ladder rungs, plain); then 0.7 x outside + 0.3 x that mid where the tier
+    has an outside price, else the mid. A market with no two-sided fresh quote
+    gets None: its stored p is never used."""
+    out: dict[str, Decimal | None] = {}
+    for group, mids, total, norm in _events(markets, quotes):
         for m in group:
             k = mids[m.market_ticker]
             if k is None:
