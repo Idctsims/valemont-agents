@@ -1469,6 +1469,10 @@ absent row as "I never looked."
     - (a) The log row.
     - (b) 16 stamps for the document: 11 v1 (19:46:09 UTC Nov 19) and 5 v2 (20:01:01 UTC Nov 20).
     - (c) **Every section of the document as it stands matches a stamp made before now()**, all 11, by full sha256, read as `valemont_readonly` (`parlay_ticket_dryrun.stamp_state`: "v2 stamped (all 11 sections)").
+
+    **Merge gate** (`chat8-phase4-3` at `293418a`, from the worktree with the main checkout's `.env` loaded into the process):
+    - `tests/` 1,646 OK.
+    - `scripts.tests_live_metered`: **549 tests, 0 failures, 0 errors, 0 skipped; 3,353,464 bytes (~3.20 MB); 1,551 s.**
     - Next new file: `db/087`.
   - **Rule (owner, 2026-10-12): the migration record updates in the same session a migration is verified, never deferred to a merge.** Record `applied_at` from `migration_log` and the verification, and move "Next new file" here and in MASTER_PLAN §"Migration numbering", in their own commit.
 - **Known intermittent `tests_live` skip (identified 2026-10-12):** `test_system_jobs_sql.SystemJobsSql.test_claim_retry_and_finish` skips with "another poller claimed the test job first" when the production worker's 10 s `job_queue` poller claims the test's `noop` job first (observed 2 of 60 isolated runs). By design (skip, not fail); not a broken invariant. Two sibling tests in the same file skip the same way ("another poller claimed/failed the test job first"). Since 2026-10-13 `tests_live` runs with `-v`, so a skip is named, not assumed.
