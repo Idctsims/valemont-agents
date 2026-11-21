@@ -1,20 +1,25 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
 
 import { TeamLogo } from "@/components/betting/matchup";
-import { StatusChip } from "@/components/ui/badges";
 import type { Team } from "@/lib/betting/teams";
 import { serviceFor } from "@/lib/gameday/services";
 import {
-  LEAGUES, followedLine, isLive, kindOf, leaderLine, rankPrefix, statusLabel, timeSlot, tvItems, type SlateRow,
+  LEAGUES, followedLine, isLive, kindOf, leaderLine, liveClock, rankPrefix, statusLabel, timeSlot, tvItems,
+  type SlateRow,
 } from "@/lib/gameday/slate";
 import { slateTeam } from "@/lib/gameday/teams";
 
-// One event on Game Day as a card, in the betting board's look (owner, Nov
-// 20: "like the betting tab, with the logos"): the start (or status) and the
-// league; each team's logo, name and rank, and its score once live or over;
-// a strip in the teams' own colours; and the networks along the foot, a gold
-// chip when it is on the owner's services. The whole card links to
-// /gameday/[id]. No Kalshi price here.
+// One event on Game Day as a scoreboard card (owner, Nov 20: "like the
+// betting tab, with the logos"; then "a new way for the quarter and time
+// left", "make me want to open the app"): each team's logo, name and rank,
+// and the middle of the card is the scoreboard: the start time before the
+// game, the period and clock in play under a pulsing LIVE, Final after. Each
+// score sits in the board's box and pops when it changes. The networks run
+// along the foot, a gold chip when on the owner's services. The whole card
+// opens /gameday/[id]. No Kalshi price here.
 
 /** One network: the gold chip when it streams on the owner's service (named in its title), else plain text. */
 function Network({ name, service }: { name: string; service: string | null }) {
@@ -49,17 +54,39 @@ export function Networks({ tv, testId = "game-tv" }: { tv: readonly string[] | n
   );
 }
 
+/** The pulsing red dot and LIVE, shared by the card and the section bar. */
+export function LiveMark({ label = "Live" }: { label?: string }) {
+  return (
+    <span className="label-mono inline-flex items-center gap-1.5 text-live">
+      <span aria-hidden className="relative inline-flex size-2">
+        <span className="absolute inline-flex size-full animate-ping rounded-pill bg-live opacity-60" />
+        <span className="relative inline-flex size-2 rounded-pill bg-live" />
+      </span>
+      {label}
+    </span>
+  );
+}
+
 function num(v: number | string | undefined): number | null {
   const n = typeof v === "number" ? v : typeof v === "string" && v.trim() ? Number(v) : NaN;
   return Number.isFinite(n) ? n : null;
 }
 
-/** A side's score in the board's price box; once final, the loser's in muted ink. */
+/** A side's score in the board's box. It pops when the live poll changes it; once final, the loser's is muted. */
 function ScoreBox({ value, testId, muted }: { value: number | string | undefined; testId: string; muted: boolean }) {
+  // The previous value kept in state (React's "information from previous renders"): no effect, no timer.
+  const [prev, setPrev] = useState(value);
+  const [bumps, setBumps] = useState(0);
+  if (value !== prev) {
+    setPrev(value);
+    setBumps((n) => n + 1);
+  }
   return (
-    <span className="mt-2 flex min-h-14 w-full max-w-38 flex-col items-center justify-center rounded-tile border border-border bg-bg">
+    <span key={bumps}
+          className={`mt-2.5 flex min-h-14 w-full max-w-38 items-center justify-center rounded-tile border border-border bg-bg ${
+            bumps > 0 ? "animate-score-pop" : ""}`}>
       <span data-testid={testId}
-            className={`font-mono text-2xl tabular-nums tracking-tight ${muted ? "text-text-muted" : "text-text"}`}>
+            className={`font-mono text-3xl tabular-nums tracking-tight ${muted ? "text-text-muted" : "text-text"}`}>
         {value ?? ""}
       </span>
     </span>
@@ -84,22 +111,40 @@ function Side({ team, rank, score, scoreId, muted, showScore }: {
   );
 }
 
-/** The teams' colours as one strip; a side with no colour takes the accent (away) or the neutral step (home). */
-function ColourStrip({ teams }: { teams: Team[] }) {
-  if (!teams.some((t) => t.color)) return null;
+/** The scoreboard's middle: the start before, the period and clock in play, Final (or the status) after. */
+function Middle({ row }: { row: SlateRow }) {
+  const vs = row.neutral ? "vs" : "at";
+  if (isLive(row)) {
+    const c = liveClock(row);
+    return (
+      <div data-testid="game-clock" className="flex flex-col items-center gap-1 pt-3 text-center">
+        <LiveMark />
+        <span data-testid="game-period" className="font-mono text-xl font-semibold tabular-nums text-text">{c.period}</span>
+        {c.clock && <span data-testid="game-time-left" className="font-mono text-sm tabular-nums text-live">{c.clock}</span>}
+      </div>
+    );
+  }
+  const status = statusLabel(row);
+  if (status) {
+    return (
+      <div className="flex flex-col items-center gap-1 pt-5 text-center">
+        <span data-testid="game-start" className="label-mono text-text">{status}</span>
+        <span className="text-xs text-text-muted">{vs}</span>
+      </div>
+    );
+  }
   return (
-    <div aria-hidden data-testid="team-strip" className="flex h-1 gap-0.5">
-      {teams.map((t, i) => (
-        <i key={i} className="block h-full grow-share bg-team"
-           style={(t.color ? { "--vm-team": t.color } : i === 0 ? { "--vm-team": "var(--vm-accent)" } : {}) as React.CSSProperties} />
-      ))}
+    <div className="flex flex-col items-center gap-1 pt-4 text-center">
+      <span data-testid="game-start" className="whitespace-nowrap font-mono text-base font-semibold tabular-nums text-text">
+        {timeSlot(row)}
+      </span>
+      <span className="text-xs text-text-muted">{vs}</span>
     </div>
   );
 }
 
-export function GameRow({ row }: { row: SlateRow }) {
+export function GameRow({ row, className = "" }: { row: SlateRow; className?: string }) {
   const live = isLive(row);
-  const status = statusLabel(row);
   const kind = kindOf(row.league);
   const final = row.status === "final";
   const showScore = !!row.score && (live || final || row.status === "suspended");
@@ -112,34 +157,34 @@ export function GameRow({ row }: { row: SlateRow }) {
 
   return (
     <li data-testid="game-row" data-id={row.id} data-league={row.league} data-status={row.status}
-        data-bama={row.bama ? "true" : undefined} className="flex min-w-0">
+        data-bama={row.bama ? "true" : undefined} className={`flex min-w-0 ${className}`}>
       <Link href={`/gameday/${row.id}`}
             className={`flex w-full min-w-0 flex-col overflow-hidden rounded-inner border bg-surface transition-colors hover:border-accent-ink ${
-              live ? "border-accent-ink" : "border-border"}`}>
-        {teams && <ColourStrip teams={teams} />}
-        <p className="flex min-h-10 items-center justify-between gap-3 border-b border-border px-4 py-2 text-xs text-text-muted">
-          <span data-testid="game-start" className="font-semibold text-text">{timeSlot(row)}</span>
+              live ? "border-live" : "border-border"}`}>
+        <p className="flex min-h-9 items-center justify-between gap-3 px-4 pt-3 text-xs text-text-muted">
+          <span className="label-mono">{tag}</span>
           <span className="flex items-center gap-2">
-            {live && <StatusChip status="live" label={status ?? "Live"} />}
             {row.test && <span className="label-mono rounded-pill border border-border px-1.5">test</span>}
-            <span>{tag}</span>
+            {/* An event with no scoreboard middle keeps its slot up here: the round, the start, the status. */}
+            {!teams && live && <LiveMark />}
+            {!teams && <span data-testid="game-start" className="font-mono font-semibold text-text">{timeSlot(row)}</span>}
           </span>
         </p>
 
         {teams ? (
-          <div className="grid grid-matchup items-start gap-2 px-4 pb-3.5 pt-4">
+          <div className="grid grid-matchup items-start gap-2 px-4 pb-4 pt-1">
             <Side team={teams[0]} rank={row.ar} score={row.score?.away} scoreId="score-away"
                   muted={decided && sa! < sh!} showScore={showScore} />
-            <span aria-hidden className="col-start-2 row-start-1 pt-5 text-xs text-text-muted">
-              {row.neutral ? "vs" : "at"}
-            </span>
+            <div className="col-start-2 row-start-1 min-w-16">
+              <Middle row={row} />
+            </div>
             <Side team={teams[1]} rank={row.hr} score={row.score?.home} scoreId="score-home"
                   muted={decided && sh! < sa!} showScore={showScore} />
           </div>
         ) : (
-          <div className="flex flex-col gap-1 px-4 pb-3.5 pt-4">
+          <div className="flex flex-col gap-1 px-4 pb-4 pt-1">
             <p className="font-display text-xl text-text">{row.title}</p>
-            {/* A live TBD round already shows its round in the time slot: once, not twice. */}
+            {/* A live TBD round already shows its round up top: once, not twice. */}
             {row.session && row.session !== timeSlot(row) && <p className="text-sm text-text-muted">{row.session}</p>}
             {showScore && row.score?.leader?.name && (
               <p data-testid="score-leader" className="mt-1 text-sm text-text">
