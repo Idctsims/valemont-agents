@@ -3,6 +3,7 @@
 // poll asks for. No I/O: unit-tested in e2e/gameday-unit.spec.ts. The rows
 // come from db/068 gameday_slate() (one compact object each).
 
+import type { SlateSide } from "./teams";
 import type { TvTier } from "./tiers";
 
 export const TZ = "America/Chicago";
@@ -50,6 +51,8 @@ export type SlateRow = {
   clock?: string;
   score?: Score;
   test?: boolean;
+  /** ESPN's faces for a game's two sides, [away, home] (data.ts adds them; not from db/068). */
+  tm?: [SlateSide, SlateSide];
 };
 
 /** db/068 gameday_live(): what moves in play. */

@@ -57,30 +57,24 @@ export function SlateView({ initial, today, all }: { initial: SlateRow[]; today:
 
   return (
     <div data-testid="gameday-slate" data-polling={hot > 0 ? "true" : "false"} data-polls={polls}
-         className="lg:max-w-3xl">
+         className="flex flex-col gap-8">
       {error && (
-        <p role="status" className="mb-4 text-sm text-danger">{error} It will try again in a minute.</p>
+        <p role="status" className="text-sm text-danger">{error} It will try again in a minute.</p>
       )}
 
       {sections.live.length > 0 && (
-        <section aria-label="Live now" data-testid="section-live" className="mb-10">
-          <h2 className="font-display text-2xl text-text">Live now</h2>
-          <ul className="mt-3 border-t border-border">
-            {sections.live.map((r) => <GameRow key={r.id} row={r} />)}
-          </ul>
+        <section aria-label="Live now" data-testid="section-live">
+          <Band title="Live now" n={sections.live.length} />
+          <Cards rows={sections.live} />
         </section>
       )}
 
-      <section aria-label="Tonight" data-testid="section-tonight" className="mb-10">
-        <h2 className="font-display text-2xl text-text">
-          Tonight <span className="label-mono align-middle text-text-muted">{dateLabel(today)}</span>
-        </h2>
+      <section aria-label="Tonight" data-testid="section-tonight">
+        <Band title="Tonight" note={dateLabel(today)} n={sections.tonight.length} />
         {sections.tonight.length > 0 ? (
-          <ul className="mt-3 border-t border-border">
-            {sections.tonight.map((r) => <GameRow key={r.id} row={r} />)}
-          </ul>
+          <Cards rows={sections.tonight} />
         ) : (
-          <p data-testid="tonight-empty" className="mt-3 border-t border-border pt-4 text-base text-text-muted">
+          <p data-testid="tonight-empty" className="pt-4 text-base text-text-muted">
             {sections.live.length > 0
               ? "Nothing else on tonight."
               : all ? "Nothing on tonight." : "Nothing on tonight across the five. All sports shows the rest."}
@@ -88,24 +82,45 @@ export function SlateView({ initial, today, all }: { initial: SlateRow[]; today:
         )}
       </section>
 
-      <section aria-label="This week" data-testid="section-week" className="mb-10">
-        <h2 className="font-display text-2xl text-text">This week</h2>
-        {all && <p className="mt-1 label-mono text-text-muted">The five only</p>}
+      <section aria-label="This week" data-testid="section-week" className="flex flex-col gap-6">
+        <div>
+          <h2 className="font-display text-3xl text-text">This week</h2>
+          {all && <p className="mt-1 label-mono text-text-muted">The five only</p>}
+        </div>
         {sections.week.length > 0 ? (
           sections.week.map(({ day, rows: dayRows }) => (
-            <div key={day} data-testid="week-day" data-day={day} className="mt-6">
-              <h3 className="label-mono text-text-muted">{dayLabel(day, today)}</h3>
-              <ul className="mt-2 border-t border-border">
-                {dayRows.map((r) => <GameRow key={r.id} row={r} />)}
-              </ul>
+            <div key={day} data-testid="week-day" data-day={day}>
+              <Band title={dayLabel(day, today)} n={dayRows.length} level={3} />
+              <Cards rows={dayRows} />
             </div>
           ))
         ) : (
-          <p data-testid="week-empty" className="mt-3 border-t border-border pt-4 text-base text-text-muted">
+          <p data-testid="week-empty" className="text-base text-text-muted">
             Nothing scheduled across the five in the next 7 days.
           </p>
         )}
       </section>
     </div>
+  );
+}
+
+/** The betting board's green day band: the name, and how many. */
+function Band({ title, note, n, level = 2 }: { title: string; note?: string; n: number; level?: 2 | 3 }) {
+  const H = level === 2 ? "h2" : "h3";
+  return (
+    <div className="flex items-center justify-between rounded-t-tile bg-accent px-4 py-2.75 text-on-accent">
+      <H className="text-sm font-semibold">
+        {title}{note && <span className="label-mono ml-2 opacity-85">{note}</span>}
+      </H>
+      <span className="label-mono opacity-85">{n} {n === 1 ? "event" : "events"}</span>
+    </div>
+  );
+}
+
+function Cards({ rows }: { rows: SlateRow[] }) {
+  return (
+    <ul className="grid gap-3 pt-3 sm:grid-cols-2">
+      {rows.map((r) => <GameRow key={r.id} row={r} />)}
+    </ul>
   );
 }

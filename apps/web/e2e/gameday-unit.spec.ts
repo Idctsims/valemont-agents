@@ -5,6 +5,7 @@ import {
   addDays, applyPatches, compareInDay, dayLabel, followedLine, gameDay, kalshiUrl, leaderLine, matchup, minusSign,
   pollIds, sectionize, startLabel, timeSlot, tvItems, tvLabel, type SlateRow,
 } from "../src/lib/gameday/slate";
+import { slateSides, slateTeam } from "../src/lib/gameday/teams";
 import { tvTier } from "../src/lib/gameday/tiers";
 
 // Game Day's pure logic (Chat 7 Phase 3; docs/gameday.md). No page, no server.
@@ -263,5 +264,44 @@ test.describe("Kalshi", () => {
   test("the event page URL is built from the series and the ticker", () => {
     expect(kalshiUrl("KXNFLGAME", "KXNFLGAME-26NOV05JACBAL"))
       .toBe("https://kalshi.com/markets/kxnflgame/kxnflgame/kxnflgame-26nov05jacbal");
+  });
+});
+
+test.describe("the cards' team faces (owner, Nov 20: like the betting tab)", () => {
+  const raw = {
+    id: 1, aloc: "Orlando", an: "Magic", al: "nba/500/scoreboard/orl.png", ac: "0150B5",
+    hloc: "Toledo", hn: "Rockets", hl: "ncaa/500/2649.png", hc: "not-a-colour",
+  };
+
+  test("ESPN's paths fold to logo keys, colours checked, junk dropped", () => {
+    expect(slateSides(raw)).toEqual([
+      { loc: "Orlando", nick: "Magic", logo: "nba/orl", color: "0150b5" },
+      { loc: "Toledo", nick: "Rockets", logo: "ncaa/2649" },
+    ]);
+    expect(slateSides({ id: 2, aloc: null, an: " ", al: "elsewhere/x.png", ac: null,
+                        hloc: null, hn: null, hl: null, hc: null })).toBeNull();
+  });
+
+  test("city big and nickname under it only when they make the slate's name; dark logo where ESPN has one", () => {
+    const [a, h] = slateSides(raw)!;
+    expect(slateTeam(a, "Orlando Magic", false)).toEqual({
+      city: "Orlando", nick: "Magic", home: false, color: "#0150b5",
+      logo: "https://a.espncdn.com/i/teamlogos/nba/500/orl.png",
+      logoDark: "https://a.espncdn.com/i/teamlogos/nba/500-dark/orl.png",
+    });
+    const t = slateTeam(h, "Toledo Rockets", true);
+    expect(t.logoDark).toBe(t.logo);
+    // A name that is not "city nickname" (or no ESPN fields at all) stays whole.
+    expect(slateTeam(a, "Magic of Orlando", false).nick).toBeUndefined();
+    expect(slateTeam(a, "Magic of Orlando", false).city).toBe("Magic of Orlando");
+    expect(slateTeam(undefined, "Alabama Crimson Tide", true)).toEqual({ city: "Alabama Crimson Tide", home: true });
+    // Soccer: the club's name as both: said once.
+    expect(slateTeam({ loc: "Arsenal", nick: "Arsenal" }, "Arsenal", false)).toEqual({ city: "Arsenal", home: false });
+  });
+
+  test("a live patch keeps the faces", () => {
+    const r = row({ id: 900, tm: [{ loc: "A" }, { loc: "B" }], status: "scheduled" });
+    const [p] = applyPatches([r], [{ id: 900, status: "live", score: { home: 1, away: 0 } }]);
+    expect(p.tm).toEqual(r.tm);
   });
 });
