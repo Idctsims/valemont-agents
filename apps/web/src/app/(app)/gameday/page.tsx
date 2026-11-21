@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { headers } from "next/headers";
 import Link from "next/link";
+import { SquaresFour, Star } from "@phosphor-icons/react/ssr";
 
 import { SlateView } from "@/components/gameday/slate-view";
 import { PageHeader } from "@/components/ui/page-header";
@@ -22,7 +23,7 @@ export const metadata: Metadata = { title: "Game Day" };
 type Params = { sports?: string | string[] };
 
 const CHIPS = [
-  { label: "The five", all: false },
+  { label: "My five", all: false },
   { label: "All sports", all: true },
 ] as const;
 
@@ -41,25 +42,31 @@ export default async function GameDayPage({ searchParams }: { searchParams: Prom
     <>
       <PageHeader label="Sports" title="Game Day" />
 
-      {/* The betting board's switcher: a compact segmented pill, the accent on the one shown. */}
+      {/* Whose games: a segmented switch, the shown side raised on the track (owner, Nov 20: a better
+          way than two chips). Each side is a link, so the choice stays in the URL. */}
       <nav aria-label="Sports shown" data-testid="gameday-chips"
-           className="mb-7 flex w-fit max-w-full gap-0.5 overflow-x-auto rounded-tile border border-border p-0.75">
-        {CHIPS.map((c) => (
-          <Link
-            key={c.label}
-            href={c.all ? "/gameday?sports=all" : "/gameday"}
-            data-testid={`gameday-chip-${c.all ? "all" : "five"}`}
-            aria-current={c.all === all ? "page" : undefined}
-            className={`inline-flex min-h-8.5 shrink-0 items-center whitespace-nowrap rounded-tile px-3.25 font-mono text-label uppercase transition-colors ${
-              c.all === all ? "bg-accent text-on-accent" : "text-text-muted hover:text-text"}`}
-          >
-            {c.label}
-          </Link>
-        ))}
+           className="-mt-2 mb-6 grid w-full grid-cols-2 gap-1 rounded-pill border border-border bg-surface-2 p-1 sm:w-fit">
+        {CHIPS.map((c) => {
+          const on = c.all === all;
+          const Icon = c.all ? SquaresFour : Star;
+          return (
+            <Link
+              key={c.label}
+              href={c.all ? "/gameday?sports=all" : "/gameday"}
+              data-testid={`gameday-chip-${c.all ? "all" : "five"}`}
+              aria-current={on ? "page" : undefined}
+              className={`inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-pill border px-5 text-sm font-semibold transition-colors ${
+                on ? "border-accent bg-accent text-on-accent" : "border-transparent text-text-muted hover:text-text"}`}
+            >
+              <Icon size={16} weight={on ? "fill" : "regular"} aria-hidden />
+              {c.label}
+            </Link>
+          );
+        })}
       </nav>
 
       {/* Keyed by the view, so a chip switch starts from the server's rows. */}
-      <section className="-mx-4 border-t border-border bg-band px-4 pb-14 pt-9 lg:mx-0 lg:rounded-inner lg:border lg:px-6">
+      <section className="-mx-4 border-t border-border bg-band px-4 pb-14 lg:mx-0 lg:rounded-inner lg:border lg:px-6">
         <SlateView key={`${today}-${all}`} initial={rows} today={today} all={all} />
       </section>
     </>

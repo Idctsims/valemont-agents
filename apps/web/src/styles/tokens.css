@@ -587,3 +587,27 @@
     visibility: hidden;
   }
 }
+/* Game Day (owner, Nov 20): the section bar sticks under the phone's top bar
+   (h-14 plus the notch) and at the top on desktop; a jump lands below both. */
+@utility top-below-header {
+  top: calc(3.5rem + env(safe-area-inset-top, 0px));
+}
+@utility scroll-mt-gameday {
+  scroll-margin-top: calc(3.5rem + env(safe-area-inset-top, 0px) + 4.5rem);
+}
+/* A score that just changed: a short live-coloured pop, none for reduced motion. */
+@keyframes vm-score-pop {
+  0% {
+    background-color: var(--vm-live-fill);
+    color: var(--vm-live);
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@utility animate-score-pop {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: vm-score-pop 1.6s ease-out;
+  }
+}

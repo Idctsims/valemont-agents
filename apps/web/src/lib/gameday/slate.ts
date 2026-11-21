@@ -287,6 +287,37 @@ export function statusLabel(r: Pick<SlateRow, "status" | "detail">): string | nu
   }
 }
 
+/** Leagues whose ESPN periods are quarters (Q1..Q4), halves (1H, 2H) or periods (P1..P3). */
+const QUARTERS = new Set(["nfl", "cfb", "nba"]);
+const HALVES = new Set(["mcbb"]);
+const PERIODS = new Set(["nhl"]);
+
+function periodShort(league: string, p: string): string {
+  const n = /^(\d)(?:st|nd|rd|th)$/i.exec(p.trim());
+  if (!n) return p.trim();
+  if (QUARTERS.has(league)) return `Q${n[1]}`;
+  if (HALVES.has(league)) return `${n[1]}H`;
+  if (PERIODS.has(league)) return `P${n[1]}`;
+  return p.trim();
+}
+
+/**
+ * The scoreboard's middle while in play, from ESPN's short detail (read on
+ * production, Nov 20): "2:56 - 1st" -> Q1 / 2:56 (1H in college basketball,
+ * P1 in hockey); "End of 1st" -> End Q1; "Halftime" -> Half; anything else
+ * (soccer's minutes, a delay) as ESPN gives it.
+ */
+export function liveClock(r: Pick<SlateRow, "league" | "detail" | "clock" | "status">): { period: string; clock?: string } {
+  const d = (r.detail ?? "").trim();
+  if (!d) return { period: r.status === "delayed" ? "Delayed" : "Live" };
+  const timed = /^(\d{1,2}:\d{2}(?:\.\d)?)\s*-\s*(.+)$/.exec(d);
+  if (timed) return { period: periodShort(r.league, timed[2]), clock: timed[1] };
+  const end = /^End of (.+)$/i.exec(d);
+  if (end) return { period: `End ${periodShort(r.league, end[1])}` };
+  if (/^half\s*time$/i.test(d)) return { period: "Half" };
+  return { period: d };
+}
+
 export function rankPrefix(rank: number | undefined): string {
   return rank != null ? `No. ${rank} ` : "";
 }

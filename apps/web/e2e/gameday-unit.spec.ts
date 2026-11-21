@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import { BROADCAST_SERVICES, annotateSportsContext, serviceFor, servicesFor } from "../src/lib/gameday/services";
 import {
-  addDays, applyPatches, compareInDay, dayLabel, followedLine, gameDay, kalshiUrl, leaderLine, matchup, minusSign,
+  addDays, applyPatches, liveClock, compareInDay, dayLabel, followedLine, gameDay, kalshiUrl, leaderLine, matchup, minusSign,
   pollIds, sectionize, startLabel, timeSlot, tvItems, tvLabel, type SlateRow,
 } from "../src/lib/gameday/slate";
 import { slateSides, slateTeam } from "../src/lib/gameday/teams";
@@ -303,5 +303,24 @@ test.describe("the cards' team faces (owner, Nov 20: like the betting tab)", () 
     const r = row({ id: 900, tm: [{ loc: "A" }, { loc: "B" }], status: "scheduled" });
     const [p] = applyPatches([r], [{ id: 900, status: "live", score: { home: 1, away: 0 } }]);
     expect(p.tm).toEqual(r.tm);
+  });
+});
+
+test.describe("the scoreboard's live clock (ESPN's short detail, as read Nov 20)", () => {
+  const at = (league: string, detail?: string, status: SlateRow["status"] = "live") =>
+    liveClock({ league, detail, status });
+  test("a running clock splits into the period and the time left, by the sport's periods", () => {
+    expect(at("nba", "4:12 - 3rd")).toEqual({ period: "Q3", clock: "4:12" });
+    expect(at("cfb", "14:15 - 1st")).toEqual({ period: "Q1", clock: "14:15" });
+    expect(at("mcbb", "2:56 - 1st")).toEqual({ period: "1H", clock: "2:56" });
+    expect(at("nhl", "8:50 - 2nd")).toEqual({ period: "P2", clock: "8:50" });
+    expect(at("nba", "0:27 - OT")).toEqual({ period: "OT", clock: "0:27" });
+  });
+  test("breaks and anything else as ESPN says it", () => {
+    expect(at("nba", "End of 1st")).toEqual({ period: "End Q1" });
+    expect(at("cfb", "Halftime")).toEqual({ period: "Half" });
+    expect(at("epl", "67'")).toEqual({ period: "67'" });
+    expect(at("nfl", undefined)).toEqual({ period: "Live" });
+    expect(at("nfl", undefined, "delayed")).toEqual({ period: "Delayed" });
   });
 });
