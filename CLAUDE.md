@@ -1503,7 +1503,14 @@ absent row as "I never looked."
     **Merge gate** (`chat8-phase4-3` at `293418a`, from the worktree with the main checkout's `.env` loaded into the process):
     - `tests/` 1,646 OK.
     - `scripts.tests_live_metered`: **549 tests, 0 failures, 0 errors, 0 skipped; 3,353,464 bytes (~3.20 MB); 1,551 s.**
-    - Next new file: `db/087`.
+    - Next new file: `db/087` (superseded below).
+  - **`db/087_enable_parlay_agents.sql` applied 2026-11-21 00:47:28 UTC** (`migration_log`; the first paste, by the owner). Chat 8 Phase 4.4, PR #137 (merge `1aaf221`, 00:41:17 UTC Nov 21; deployed with #135's `98d040c`, Railway success 00:41:40 UTC, worker boot runs 00:41:45 UTC, `parlay_requote` registered 00:41:43 UTC, 43 jobs ok, 0 failures). Rows only: `agents.enabled = true` for `parlay_safer` (12), `parlay_mid` (13), `parlay_lotto` (14). `nfl_ml` and `_kalshi_probe` stay off; db/013 stays unpasted. Nothing runs until `ROSTER=production` is set on Railway (both gates, `core/orchestrator.py`).
+    - **Before handover:** scratch PG 17 (production's schema with its `agents` and `preregistrations` rows): the self-test passes, and again on a re-paste; **6 mutations, 6 red**; tuples checked.
+
+    **Verified via db_inspect the same session (~00:50 UTC):**
+    - (a) The log row.
+    - (b) Enabled agents: the three parlay agents (real, `kalshi`) and `_fake` (is_test; db/087 does not touch it; registered only by `CANARY`, which stays unset). `nfl_ml` (7) and `_kalshi_probe` (11) disabled. No db/013 log row.
+    - Next new file: `db/088`.
   - **Rule (owner, 2026-10-12): the migration record updates in the same session a migration is verified, never deferred to a merge.** Record `applied_at` from `migration_log` and the verification, and move "Next new file" here and in MASTER_PLAN §"Migration numbering", in their own commit.
 - **Known intermittent `tests_live` skip (identified 2026-10-12):** `test_system_jobs_sql.SystemJobsSql.test_claim_retry_and_finish` skips with "another poller claimed the test job first" when the production worker's 10 s `job_queue` poller claims the test's `noop` job first (observed 2 of 60 isolated runs). By design (skip, not fail); not a broken invariant. Two sibling tests in the same file skip the same way ("another poller claimed/failed the test job first"). Since 2026-10-13 `tests_live` runs with `-v`, so a skip is named, not assumed.
   - **2026-10-13, cleared (owner):** a quiet Phase 3 run reported "314 tests, OK (skipped=1)" with no name. The full verbose rerun had **0 skips** (314 OK, 593 s). The owner's judgment: the plausible cause is this documented poller race, since every migration-gated skip cannot fire (all applied). One alternative was not ruled out: a class whose own `setUpClass` hits a transient "database unreachable" is also reported as one skip.
