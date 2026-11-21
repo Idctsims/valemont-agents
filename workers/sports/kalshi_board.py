@@ -41,6 +41,7 @@ from typing import Any, Callable, Iterable, Mapping
 from zoneinfo import ZoneInfo
 
 from core import ledger, memory
+from core.jobs import JobSkipped
 from consensus import priority
 from venues.kalshi import board as kb
 from venues.kalshi.client import KalshiClient
@@ -52,6 +53,9 @@ REFRESH_JOB = "kalshi_board_refresh"
 #: The longest gap between full pulls is 15:30 -> 09:30 (18 h).
 FULL_INTERVAL_S = 18 * 60 * 60
 REFRESH_INTERVAL_S = 15 * 60
+#: The refresh's note when it yields to a parlay slot's re-quote (owner, Nov 20).
+#: run_tracked prefixes a JobSkipped note with "skipped: ".
+YIELD_NOTE = "slot re-quote running"
 OWNER_TZ = ZoneInfo("America/Chicago")
 #: The refresh works from 08:00 Chicago until 23:00 exactly: 23:xx is outside
 #: (owner, Nov 11; the 23:14 run of Nov 10 had slipped through).
@@ -633,7 +637,14 @@ def refresh_job(*, http: kb.Http | None = None,
     events with an outside price (consensus/priority.py) first, then soonest,
     under REFRESH_MAX_CALLS and REFRESH_MAX_S. A run never
     overlaps itself (the scheduler's max_instances=1 and coalesce) or a full
-    pull (PULL_LOCK: it idles while one runs)."""
+    pull (PULL_LOCK: it idles while one runs).
+
+    It YIELDS to a parlay slot's re-quote (owner, Nov 20; kb.SLOT_REQUOTE):
+    due while one runs, it raises JobSkipped (run_tracked records a success
+    with the note: no failure, no alert); started before one, it stops at its
+    next event, keeps what it wrote, and raises the same with its counts."""
+    if kb.SLOT_REQUOTE.is_set():
+        raise JobSkipped(YIELD_NOTE)
     at = now()
     hour = _owner_hour(at)
     if not (REFRESH_HOURS[0] <= hour < REFRESH_HOURS[1]):
@@ -685,8 +696,12 @@ def _refresh(http: kb.Http | None, at: datetime, soon: list[str], state: BoardSt
             w.touch(done, [], at)
         changed, done, seen = [], [], []
 
+    yielded_at: int | None = None
     try:
         for i, t in enumerate(soon):
+            if kb.SLOT_REQUOTE.is_set():
+                yielded_at = i  # a slot re-quote began: stop here, keep what is written
+                break
             try:
                 batch = kb.event_markets(c, state.series, t)
             except kb.BudgetSpent as cap:
@@ -730,6 +745,9 @@ def _refresh(http: kb.Http | None, at: datetime, soon: list[str], state: BoardSt
         run.calls, run.limited, run.kalshi_bytes = paced.calls, paced.limited, paced.bytes
         run.seconds = clock() - t0
         memory.release()
+    if yielded_at is not None:
+        raise JobSkipped(f"{YIELD_NOTE}: stopped after {yielded_at} of {len(soon)} events "
+                         f"({run.written} rows written, {run.calls} calls)")
     return run
 
 

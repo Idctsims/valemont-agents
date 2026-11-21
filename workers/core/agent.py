@@ -740,9 +740,12 @@ class BaseAgent[Obs, Th](ABC):
             commitments would write five hundred permanent rows. Over the cap,
             the WHOLE slate is refused and nothing is written — half a slate is
             worse than none, because it looks like a complete one.
-        *   **Exact duplicates.** Two legs identical in subject, market,
-            direction AND line inside one slate is the adapter proposing the
-            same bet twice. Refused whole.
+        *   **The same bet twice.** Two proposals that are the same ticket
+            (identical leg sets, each leg by subject, market, direction AND
+            line), or one proposal holding a leg twice. Refused whole. For a
+            single-leg slate that is the old rule exactly; two different
+            multi-leg tickets sharing some legs are written (owner, Nov 20:
+            parlay slates; CLAUDE.md §3).
 
             Core does NOT dedupe by subject alone. Two props on one player —
             his passing yards and his passing touchdowns — are legitimately
@@ -905,8 +908,17 @@ class BaseAgent[Obs, Th](ABC):
                 f"this big."
             )
 
-        seen: dict[tuple[str, str, str | None, str | None], int] = {}
+        # What is refused (owner, Nov 20, for parlay slates; CLAUDE.md §3): the
+        # SAME BET twice. Two proposals with identical leg sets are one ticket
+        # proposed twice; a leg repeated inside one proposal is a ticket that
+        # holds itself twice. Two DIFFERENT multi-leg tickets that share some
+        # legs are two positions and pass: a Lotto slate's cross-sport ticket
+        # shares most of its legs with a per-sport one. A single-leg proposal's
+        # identity is its one leg, so single-leg slates behave exactly as
+        # before: the same leg in two proposals is still refused.
+        seen: dict[frozenset[tuple[str, str, str | None, Decimal | None]], int] = {}
         for index, proposal in enumerate(slate):
+            legs: list[tuple[str, str, str | None, Decimal | None]] = []
             for leg in proposal.legs:
                 # The line compares NUMERICALLY, not as text. `str(Decimal(...))`
                 # preserves trailing zeros, so 25.5 and 25.50 produced different
@@ -919,17 +931,28 @@ class BaseAgent[Obs, Th](ABC):
                     leg.direction,
                     None if leg.line is None else Decimal(str(leg.line)),
                 )
-                if identity in seen:
+                if identity in legs:
                     raise AgentError(
-                        f"{self.slug} proposed the same leg twice in one slate: "
+                        f"{self.slug} proposed a ticket holding the same leg twice: "
                         f"{leg.subject!r}/{leg.market!r}/{leg.direction!r} at "
-                        f"line {leg.line} appears in proposals "
-                        f"{seen[identity] + 1} and {index + 1}. Refusing the "
-                        f"whole slate — two identical bets is a bug, not a "
-                        f"position. (Same subject on a DIFFERENT market or "
-                        f"line is fine and is not what this checks.)"
+                        f"line {leg.line} in proposal {index + 1}. Refusing the "
+                        f"whole slate — a leg twice in one ticket is a bug."
                     )
-                seen[identity] = index
+                legs.append(identity)
+            ticket = frozenset(legs)
+            if ticket in seen:
+                first = next(iter(ticket)) if len(ticket) == 1 else None
+                what = (f"the same leg {first[0]!r}/{first[1]!r}/{first[2]!r} at line {first[3]}"
+                        if first else f"the same {len(ticket)}-leg ticket")
+                raise AgentError(
+                    f"{self.slug} proposed {what} twice in one slate: proposals "
+                    f"{seen[ticket] + 1} and {index + 1}. Refusing the whole "
+                    f"slate — two identical bets is a bug, not a position. "
+                    f"(Same subject on a DIFFERENT market or line, or two "
+                    f"different tickets sharing some legs, is fine and is not "
+                    f"what this checks.)"
+                )
+            seen[ticket] = index
 
     def _measure_clock(self) -> ledger.ClockSample | None:
         """One timed round trip per tick. A failure here costs the reading,

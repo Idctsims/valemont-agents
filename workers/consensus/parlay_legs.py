@@ -30,7 +30,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from venues.kalshi import board as kb
-from venues.kalshi.client import KalshiClient, dec
+from venues.kalshi.client import KalshiClient, dec, ts
 from venues.kalshi.events import KalshiShapeError, opt, req
 
 ASK_LO, ASK_HI = Decimal("0.75"), Decimal("0.95")
@@ -87,6 +87,9 @@ class Quote:
     yes_bid: Decimal | None
     yes_ask: Decimal | None
     at: datetime
+    #: Kalshi's expected_expiration_time for the market (Phase 4.4: a ticket's
+    #: resolves_after is its latest leg's, from the API, pre-registration §5).
+    expires: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -293,9 +296,10 @@ def parse_quotes(body: Any, event: str, at: datetime) -> tuple[dict[str, Quote],
             raise KalshiShapeError(p, path, f"{ticker[:60]!r} is not in {event[:60]!r}")
         try:
             bid, ask = dec(opt(raw, "yes_bid_dollars", str, p, path)), dec(opt(raw, "yes_ask_dollars", str, p, path))
-        except Exception as exc:  # dec raises KalshiError on a non-decimal
+            expires = ts(opt(raw, "expected_expiration_time", str, p, path))
+        except Exception as exc:  # dec / ts raise KalshiError on a malformed value
             raise KalshiShapeError(p, path, str(exc)) from None
-        out[ticker] = Quote(bid, ask, at)
+        out[ticker] = Quote(bid, ask, at, expires)
     return out, (opt(body, "cursor", str, p, "$") or None)
 
 

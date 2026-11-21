@@ -164,7 +164,7 @@ class ParlayGuard(unittest.TestCase):
         self.assertEqual([g["section"] for g in got], list(parlay_prereg.SECTIONS))
 
     def test_one_unstamped_section_refuses_the_whole(self) -> None:
-        def stamp(*, document, section, content_sha256):
+        def stamp(*, document, section, content_sha256, conn=None):
             return None if section.startswith("## 3.") else (self.NOW - timedelta(hours=1), self.NOW)
 
         with mock.patch.object(ledger, "preregistration_stamp", side_effect=stamp), \

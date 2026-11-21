@@ -141,6 +141,42 @@ class NearDuplicatesAllowed(LedgerTestCase):
         ])
 
 
+class MultiLegTickets(LedgerTestCase):
+    """Owner, Nov 20 (parlay slates; CLAUDE.md §3): core refuses the SAME ticket
+    twice, or a leg repeated inside one ticket; two DIFFERENT tickets that share
+    some legs are two positions and pass. Single-leg slates are unchanged
+    (ExactDuplicates above)."""
+
+    B = Leg("B", "points_over", D("10.5"), "over", D(1))
+    C = Leg("C", "points_over", D("12.5"), "over", D(1))
+
+    def run_slate(self, slate):
+        return ScriptedAgent(proposals=slate).run_once()
+
+    def test_two_parlays_sharing_legs_are_both_written(self) -> None:
+        out = self.run_slate([proposal("A", extra_legs=[self.B]), proposal("A", extra_legs=[self.C])])
+        self.assertEqual((out.status, len(out.commitment_ids), out.failed), ("ok", 2, 0))
+
+    def test_a_parlay_and_a_single_leg_it_contains_are_two_tickets(self) -> None:
+        out = self.run_slate([proposal("A", extra_legs=[self.B]), proposal("A")])
+        self.assertEqual((out.status, len(out.commitment_ids)), ("ok", 2))
+
+    def test_the_same_ticket_twice_is_refused_whole_in_any_leg_order(self) -> None:
+        a = Leg("A", "points_over", D("25.5"), "over", D(1))
+        same = proposal("B", "points_over", D("10.5"), extra_legs=[a])  # B then A
+        ExactDuplicates.assert_refused_whole(self, [proposal("A", extra_legs=[self.B]), proposal("C"), same])
+
+    def test_the_same_ticket_spelled_with_another_line_scale_is_still_the_same(self) -> None:
+        ExactDuplicates.assert_refused_whole(self, [proposal("A", line=D("25.5"), extra_legs=[self.B]),
+                                                    proposal("A", line=D("25.50"), extra_legs=[self.B])])
+
+    def test_a_leg_repeated_inside_a_parlay_is_refused_whole(self) -> None:
+        ExactDuplicates.assert_refused_whole(self, [proposal("C"), proposal("A", extra_legs=[self.B, self.B])])
+
+    def test_a_single_leg_proposed_twice_is_still_refused(self) -> None:
+        ExactDuplicates.assert_refused_whole(self, [proposal("A"), proposal("A")])
+
+
 class SlateCap(LedgerTestCase):
 
     def test_over_the_cap_writes_zero_rows(self) -> None:

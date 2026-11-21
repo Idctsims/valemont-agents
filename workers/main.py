@@ -75,7 +75,8 @@ def main() -> None:
     if roster == "production":
         from core.orchestrator import build_production
 
-        log.info("production roster — _kalshi_probe, nfl_ml (each two-gated)")
+        log.info("production roster — _kalshi_probe, nfl_ml, parlay_safer, parlay_mid, parlay_lotto "
+                 "(each two-gated by agents.enabled)")
         orchestrator = build_production()
     elif canary:
         from adapters._fake import CanaryConfigError, build, canary_interval_s, canary_schedule

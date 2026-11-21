@@ -584,6 +584,9 @@ def build_production() -> Orchestrator:
       _kalshi_probe   is_test; one real contract per NFL week to exercise
                       Kalshi settlement and close capture on real data
       nfl_ml          forward live-pipeline test; expected to commit ~never (A3)
+      parlay_safer,   the Parlay Generator, paper (Chat 8 Phase 4.4), enabled
+      parlay_mid,     by db/087; commits at 10:45 and 16:45 Chicago
+      parlay_lotto
 
     A props strategy is added here only if it passes its pre-registered
     holdout (docs/preregistration_nfl.md §7).
@@ -603,7 +606,31 @@ def build_production() -> Orchestrator:
             agent=agent, schedule=kalshi_schedule,
             defer_policy=NFL_ML_DEFER_POLICY, capture_policy=NFL_ML_CAPTURE_POLICY,
         ))
+    for registration in parlay_registrations():
+        orchestrator.register(registration)
     return orchestrator
+
+
+def parlay_registrations() -> list[Registration]:
+    """The Parlay Generator's three agents (Chat 8 Phase 4.4; docs/preregistration_parlays.md v2).
+
+    They commit at the stamped slot times, 10:45 and 16:45 Chicago, from the
+    shared re-quote taken at :33 (consensus/parlay_slot.py). Each is two-gated
+    like every agent here: scheduled only if agents.enabled is true (db/087).
+    max_overdue is 10 days, set explicitly (pre-registration §5; CLAUDE.md §9.3).
+    """
+    from adapters.parlays import PARLAY_CAPTURE_POLICY, PARLAY_DEFER_POLICY, ParlayLotto, ParlayMid, ParlaySafer
+
+    schedule = Schedule(
+        run=cron("45 10,16 * * *", timezone="America/Chicago"),
+        sweep=every(hours=1, jitter=120),
+        capture=every(minutes=10, jitter=30),
+        # A slot that cannot commit within 5 minutes of :45 does not commit late.
+        misfire_grace=300,
+    )
+    return [Registration(agent=agent, schedule=schedule, defer_policy=PARLAY_DEFER_POLICY,
+                         capture_policy=PARLAY_CAPTURE_POLICY)
+            for agent in (ParlaySafer(), ParlayMid(), ParlayLotto())]
 
 
 if __name__ == "__main__":

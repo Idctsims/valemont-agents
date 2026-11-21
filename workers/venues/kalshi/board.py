@@ -56,6 +56,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -78,6 +79,11 @@ REFRESH_WITHIN = timedelta(hours=3)
 #: Paced's adaptive pacing, seconds between calls (owner, Nov 7: < 2% 429s).
 PACE_START, PACE_FLOOR, PACE_CEILING = 0.5, 0.3, 4.0
 PACE_EASE_AFTER = 25
+#: Set for the whole of a parlay slot's re-quote (consensus/parlay_slot.py;
+#: owner, Nov 20). While it is set the board refresh yields: it skips a run
+#: that is due, and stops a run already going at its next event, so the
+#: re-quote is the only Kalshi traffic from the worker in its window.
+SLOT_REQUOTE = threading.Event()
 #: A series with at most this many wanted events is read event by event;
 #: a larger one in one series query (market_batches).
 PER_EVENT_MAX = 2

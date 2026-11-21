@@ -931,6 +931,44 @@ class Refresh(unittest.TestCase):
         run = job.refresh_job(http=http_of(FakeKalshi()), now=lambda: NOW, state=job.BoardState())
         self.assertIn("no window yet", run.job_note)
 
+    def test_it_yields_to_a_slot_requote_due_skips_with_a_note_no_kalshi_call(self) -> None:
+        # Owner, Nov 20: the refresh yields while a parlay slot's re-quote runs; JobSkipped is
+        # recorded by run_tracked as a success with the note (no failure, no alert).
+        from core.jobs import JobSkipped
+        kb.SLOT_REQUOTE.set()
+        self.addCleanup(kb.SLOT_REQUOTE.clear)
+        fake = FakeKalshi()
+        with self.assertRaisesRegex(JobSkipped, r"^slot re-quote running$"):
+            self.refresh(fake=fake)
+        self.assertEqual(fake.urls, [])
+
+    def test_a_requote_starting_mid_run_stops_it_at_the_next_event_keeping_what_it_wrote(self) -> None:
+        from core.jobs import JobSkipped
+        self.addCleanup(kb.SLOT_REQUOTE.clear)
+        inner = FakeKalshi()
+
+        def serve(url: str):
+            out = inner(url)
+            if url.split("?")[0].endswith("/markets"):
+                kb.SLOT_REQUOTE.set()  # the re-quote begins after the refresh's first event
+            return out
+
+        w = RecordingWriter()
+        with self.assertRaisesRegex(JobSkipped, r"slot re-quote running: stopped after 1 of \d+ events"):
+            self.refresh(fake=serve, writer=w)
+        # The event it finished reading is kept: touched as read (its prices did not change
+        # since the full pull, so no market row needed writing), and no second event was asked.
+        touched = [v for k, v in w.calls if k == "touch"]
+        self.assertEqual(len(touched), 1)
+        self.assertEqual(len(touched[0][0]), 1)
+        self.assertEqual(len([u for u in inner.urls if u.split("?")[0].endswith("/markets")]), 1)
+
+    def test_with_no_requote_running_the_refresh_runs_as_before(self) -> None:
+        self.assertFalse(kb.SLOT_REQUOTE.is_set())
+        run, _, _, _ = self.refresh()
+        self.assertIsNone(run.idle)
+        self.assertGreater(run.markets, 0)
+
     def test_the_window_ends_at_23_00_chicago_exactly(self) -> None:
         # Owner, Nov 11: 23:xx is outside (the 23:14 run of Nov 10 worked).
         # Nov 11 is CST (UTC-6): 22:59 Chicago = 04:59 UTC, 23:00 = 05:00 UTC.

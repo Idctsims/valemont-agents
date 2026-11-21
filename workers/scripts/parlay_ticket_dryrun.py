@@ -24,6 +24,7 @@ import sys
 import time
 from collections import Counter
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import psycopg
 
@@ -137,17 +138,56 @@ def line(r: pt.Result) -> str:
             f"pricing {priced:.2f}s over {len(r.price_seconds)} counts, search {r.seconds:.2f}s")
 
 
+OWNER_TZ = ZoneInfo("America/Chicago")
+
+
+def chicago_today(when: str) -> dt.datetime:
+    """'HH:MM' (today) or 'YYYY-MM-DD HH:MM' in Chicago, as UTC."""
+    day, _, hhmm = when.strip().rpartition(" ")
+    h, m = (int(x) for x in hhmm.split(":"))
+    base = dt.datetime.now(OWNER_TZ)
+    if day:
+        y, mo, d = (int(x) for x in day.split("-"))
+        base = base.replace(year=y, month=mo, day=d)
+    local = base.replace(hour=h, minute=m, second=0, microsecond=0)
+    return local.astimezone(dt.timezone.utc)
+
+
+def wait_until(at: dt.datetime) -> None:
+    left = (at - dt.datetime.now(dt.timezone.utc)).total_seconds()
+    if left > 0:
+        print(f"waiting {left:.0f} s until {at:%H:%M:%S}Z", flush=True)
+        time.sleep(left)
+
+
+def ages(quotes: dict, passed: list, at: dt.datetime) -> dict:
+    """The oldest re-read quote's age, and the oldest leg passing rules 1-4, at `at` (seconds)."""
+    def age(q) -> float:
+        return round((at - q.at).total_seconds(), 1)
+    out = {"oldest_quote_s": max((age(q) for q in quotes.values()), default=None),
+           "oldest_passing_leg_s": max((age(leg.quote) for leg in passed if leg.quote), default=None),
+           "limit_s": pl.FRESH.total_seconds()}
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--env-file", type=Path, required=True)
     ap.add_argument("--draws", type=int, default=cr.MC_DRAWS)
     ap.add_argument("--label", default="slot")
+    # A slot rehearsal (owner, Nov 20: Sunday's 10:45 or 16:45 slot, from the owner's machine):
+    # wait until --start-at (Chicago, e.g. 10:33) to re-quote, then until --commit-at (e.g. 10:45)
+    # to apply rule 2 and measure every leg's age at that moment. Nothing is committed.
+    ap.add_argument("--start-at", help="HH:MM America/Chicago: wait, then start the re-quote")
+    ap.add_argument("--commit-at", help="HH:MM America/Chicago: the commit moment rule 2 and the ages are measured at")
     args = ap.parse_args(argv)
     global ENV_FILE
     ENV_FILE = args.env_file
     if crawler_running():
         print("A Kalshi research crawler is running on this machine; the dry run waits for it.")
         return 2
+    if args.start_at:
+        wait_until(chicago_today(args.start_at))
     t0 = time.monotonic()
     with psycopg.connect(readonly(args.env_file)) as conn:
         try:
@@ -158,7 +198,13 @@ def main(argv: list[str] | None = None) -> int:
     read_s = time.monotonic() - t0
     markets = pl.markets_from_rows(rows)
     rq = pl.requote(pl.requote_order(markets))
-    now = dt.datetime.now(dt.timezone.utc)
+    requote_end = dt.datetime.now(dt.timezone.utc)
+    if args.commit_at:
+        commit = chicago_today(args.commit_at)
+        wait_until(commit)
+        now = max(commit, dt.datetime.now(dt.timezone.utc))
+    else:
+        now = requote_end
     stored = {m.market_ticker: m.p_yes for m in markets}
     # The Nov 9 rule (owner, Nov 20): p recomputed from the fresh quotes before anything orders a leg.
     markets = pl.with_fresh_p(markets, rq.quotes)
@@ -177,6 +223,8 @@ def main(argv: list[str] | None = None) -> int:
         "requote": {"events": rq.events_asked, "skipped": rq.events_skipped, "calls": rq.calls,
                     "limited_429": rq.limited, "share_429": round(rq.share_429, 4), "seconds": round(rq.seconds, 1),
                     "bytes": rq.bytes, "pace_end": round(rq.pace, 2)},
+        "requote_end": requote_end.isoformat(timespec="seconds"), "measured_at": now.isoformat(timespec="seconds"),
+        "ages_at_measure": ages(rq.quotes, f.passed, now),
         "passed_rules_1_4": len(f.passed), "no_consensus_p": s.no_p,
         "search_seconds": round(search_s, 1), "slot_seconds": round(time.monotonic() - t0, 1),
         "results": [result_json(r, stored) for r in s.results],
@@ -196,8 +244,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"median {k}: {v['median_rel_cost']} over {v['tickets']} tickets ({v['positive']} positive); "
               f"filled {v['filled']}; empty by binding {v['empty_by_binding']}")
     print(f"candidates {len(markets)} markets; passed rules 1-4 {len(f.passed)} legs; no consensus p {s.no_p}")
-    print(f"re-quote {rq.calls} calls, {rq.limited} 429 ({rq.share_429:.2%}), {rq.seconds:.1f}s; "
-          f"search {search_s:.1f}s; slot {time.monotonic() - t0:.1f}s")
+    print(f"re-quote {rq.calls} calls, {rq.limited} 429 ({rq.share_429:.2%}), {rq.seconds:.1f}s, ended "
+          f"{requote_end:%H:%M:%S}Z; search {search_s:.1f}s; slot {time.monotonic() - t0:.1f}s")
+    print(f"ages at {now:%H:%M:%S}Z: {report['ages_at_measure']}")
     print(f"saved {path}")
     return 0
 

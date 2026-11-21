@@ -33,7 +33,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 __all__ = ["REPO_ROOT", "WORKERS_ROOT", "ENV_FILE", "VOICE_FILE", "VOICE_COPY", "ARSENAL_VOICE_FILE",
-           "ARSENAL_VOICE_COPY", "load_env"]
+           "ARSENAL_VOICE_COPY", "PARLAYS_PREREG_ORIGINAL", "PARLAYS_PREREG_COPY", "PARLAYS_PREREG_FILE",
+           "load_env"]
 
 WORKERS_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = WORKERS_ROOT.parent
@@ -45,6 +46,13 @@ VOICE_FILE = VOICE_ORIGINAL if VOICE_ORIGINAL.exists() else VOICE_COPY
 ARSENAL_VOICE_ORIGINAL = REPO_ROOT / "prompts" / "arsenal_voice.md"
 ARSENAL_VOICE_COPY = WORKERS_ROOT / "prompts" / "arsenal_voice.md"
 ARSENAL_VOICE_FILE = ARSENAL_VOICE_ORIGINAL if ARSENAL_VOICE_ORIGINAL.exists() else ARSENAL_VOICE_COPY
+#: The parlay pre-registration (Chat 8 Phase 4.4), the same arrangement: the
+#: generator's stamp guard must read it on Railway, where docs/ is absent. The
+#: copy is drift-tested (tests/test_parlay_prereg.py), and the guard also
+#: refuses to commit when both exist and differ.
+PARLAYS_PREREG_ORIGINAL = REPO_ROOT / "docs" / "preregistration_parlays.md"
+PARLAYS_PREREG_COPY = WORKERS_ROOT / "prereg" / "preregistration_parlays.md"
+PARLAYS_PREREG_FILE = PARLAYS_PREREG_ORIGINAL if PARLAYS_PREREG_ORIGINAL.exists() else PARLAYS_PREREG_COPY
 
 
 def load_env() -> None:
