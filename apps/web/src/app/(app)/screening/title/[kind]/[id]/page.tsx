@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { headers } from "next/headers";
 import Link from "next/link";
+import { Sparkle } from "@phosphor-icons/react/ssr";
 import { notFound } from "next/navigation";
 
 import { JustWatchAttribution, TmdbAttribution } from "@/components/screening/attribution";
@@ -82,6 +83,13 @@ export default async function TitlePage({ params }: { params: Promise<{ kind: st
           <div className="mt-5 flex flex-col gap-3">
             <ShelfButtons target={shelf ? { titleId: shelf.title.id } : { kind: t.kind, tmdbId: t.tmdbId }} current={shelf?.status ?? null} />
             <TitleReactions target={shelf ? { titleId: shelf.title.id } : { kind: t.kind, tmdbId: t.tmdbId }} current={reaction} />
+            {/* More like… with this title as the anchor (owner, Nov 21; docs/screening.md §8). */}
+            <Link data-testid="title-more-like"
+                  href={`/screening?like=${t.kind}:${t.tmdbId}&label=${encodeURIComponent(t.name)}${
+                    yearOf(t.releaseDate) ? `&year=${yearOf(t.releaseDate)}` : ""}#vibe`}
+                  className="tap inline-flex w-fit items-center gap-2 rounded-pill border border-border px-4 text-sm text-text hover:border-accent-ink">
+              <Sparkle size={16} aria-hidden className="text-text-muted" /> More like this
+            </Link>
           </div>
         </div>
       </div>

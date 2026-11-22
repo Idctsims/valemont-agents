@@ -3,8 +3,9 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Kind } from "@/lib/tmdb/client";
-import type { Providers } from "@/lib/tmdb/services";
+import { splitProviders, type Providers } from "@/lib/tmdb/services";
 
+import { anchorFromKey, type Anchor } from "./vibe";
 import { FINISHED_SHOWN, UPCOMING_DAYS, chicagoDay, type Shelf, type ShelfTitle } from "./types";
 
 // Reads only, through the owner's session (RLS, db/051). The shelves are the
@@ -80,4 +81,64 @@ export async function titleOnShelf(supabase: SupabaseClient, kind: Kind, tmdbId:
   const cur = await supabase.from("v_watch_current").select("title_id, status, finished_at, moved_at, is_test").eq("title_id", t.id).maybeSingle();
   if (cur.error) throw new Error(`Couldn't read the shelf: ${cur.error.message}`);
   return { title: t, status: ((cur.data as CurrentRow | null)?.status ?? null) as Shelf | null };
+}
+
+/** What the owner has on a title (More like…'s cards): its shelf, seen, latest reaction, and services tonight. */
+export type TitleState = { titleId: number; shelf: Shelf | null; seen: boolean; reaction: string | null; services: string[] };
+
+/**
+ * The owner's state for TMDB titles, keyed "kind:tmdbId": only titles already
+ * in `titles` have one (a title the owner never touched has none). Two narrow
+ * reads: titles by TMDB id, then v_title_state by title id (db/053).
+ */
+export async function titleStates(
+  supabase: SupabaseClient, keys: readonly { kind: Kind; tmdbId: number }[], opts: { withTests?: boolean } = {},
+): Promise<Map<string, TitleState>> {
+  const out = new Map<string, TitleState>();
+  const ids = [...new Set(keys.map((k) => k.tmdbId))];
+  if (!ids.length) return out;
+  let q = supabase.from("titles").select("id, kind, tmdb_id, providers").in("tmdb_id", ids);
+  if (!opts.withTests) q = q.eq("is_test", false);
+  const { data, error } = await q;
+  if (error) throw new Error(`Couldn't read the titles: ${error.message}`);
+  const wanted = new Set(keys.map((k) => `${k.kind}:${k.tmdbId}`));
+  const rows = ((data ?? []) as { id: number; kind: Kind; tmdb_id: number; providers: Providers | null }[])
+    .filter((r) => wanted.has(`${r.kind}:${r.tmdb_id}`));
+  if (!rows.length) return out;
+  const st = await supabase.from("v_title_state").select("title_id, shelf, seen, reaction").in("title_id", rows.map((r) => r.id));
+  if (st.error) throw new Error(`Couldn't read the titles' state: ${st.error.message}`);
+  const byId = new Map(((st.data ?? []) as { title_id: number; shelf: Shelf | null; seen: boolean; reaction: string | null }[])
+    .map((s) => [s.title_id, s]));
+  for (const r of rows) {
+    const s = byId.get(r.id);
+    out.set(`${r.kind}:${r.tmdb_id}`, {
+      titleId: r.id, shelf: s?.shelf ?? null, seen: !!s?.seen, reaction: s?.reaction ?? null,
+      services: splitProviders(r.providers).tonight.map((t) => t.service),
+    });
+  }
+  return out;
+}
+
+/**
+ * More like…'s recent searches (db/088): the last `limit` distinct anchors,
+ * newest first, each as the anchor a chip re-runs (served from its stored
+ * row while it is in the cache window). An unpasted db/088 is no chips, logged.
+ */
+export async function recentVibes(supabase: SupabaseClient, opts: { withTests?: boolean; limit?: number } = {}) {
+  const { data, error } = await supabase.from("screening_vibe_searches").select("anchor_key, label")
+    .eq("is_test", !!opts.withTests).order("created_at", { ascending: false }).limit(40);
+  if (error) {
+    console.error(`screening: recent vibes unread: ${error.message}`);
+    return [];
+  }
+  const out: { key: string; label: string; anchor: Anchor }[] = [];
+  const seen = new Set<string>();
+  for (const r of (data ?? []) as { anchor_key: string; label: string }[]) {
+    if (seen.has(r.anchor_key)) continue;
+    seen.add(r.anchor_key);
+    const anchor = anchorFromKey(r.anchor_key, r.label);
+    if (anchor) out.push({ key: r.anchor_key, label: r.label, anchor });
+    if (out.length >= (opts.limit ?? 6)) break;
+  }
+  return out;
 }

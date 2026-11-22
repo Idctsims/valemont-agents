@@ -9,13 +9,15 @@ import { ForYouRow } from "@/components/screening/for-you";
 import { Poster, SearchBox } from "@/components/screening/search-box";
 import { SeenBanner } from "@/components/screening/seen-banner";
 import { ShelfButtons } from "@/components/screening/shelf-buttons";
+import { VibeBox } from "@/components/screening/vibe-box";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireOwner } from "@/lib/auth";
 import { MARKER_HEADER, decideMarker } from "@/lib/capital/marker";
 import { latestStories, storiesInOrder } from "@/lib/feed/data";
 import { PAGE_SIZE, pageFromParam } from "@/lib/feed/types";
-import { shelves, upcoming } from "@/lib/screening/data";
+import { recentVibes, shelves, upcoming } from "@/lib/screening/data";
 import { forYou, seenPassProgress, trailersForYouIds } from "@/lib/screening/recs";
+import type { Anchor } from "@/lib/screening/vibe";
 import {
   FINISHED_SHOWN, UPCOMING_DAYS, screeningTabFromParam, shortDate, trailerViewFromParam, yearOf, type ScreeningTab,
   type ShelfTitle, type TrailerView,
@@ -36,7 +38,13 @@ export const metadata: Metadata = { title: "Screening Room" };
 // A test title or trailer shows only to a request with the verified e2e
 // marker. TMDB's attribution closes the page.
 
-type Params = { tab?: string | string[]; page?: string | string[]; view?: string | string[] };
+type Params = {
+  tab?: string | string[]; page?: string | string[]; view?: string | string[];
+  /** A title page's "More like this": kind:tmdbId, with its name and year. */
+  like?: string | string[]; label?: string | string[]; year?: string | string[];
+};
+
+const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 export default async function ScreeningPage({ searchParams }: { searchParams: Promise<Params> }) {
   await requireOwner();
@@ -56,7 +64,8 @@ export default async function ScreeningPage({ searchParams }: { searchParams: Pr
         <Trailers page={pageFromParam(params.page)} view={trailerViewFromParam(params.view)} withTests={withTests} now={now}
                   supabase={supabase} />
       ) : (
-        <Shelves withTests={withTests} supabase={supabase} />
+        <Shelves withTests={withTests} supabase={supabase}
+                 like={parseLike(one(params.like), one(params.label), one(params.year))} />
       )}
       <TmdbAttribution />
     </>
@@ -82,9 +91,21 @@ function Tabs({ tab }: { tab: ScreeningTab }) {
   );
 }
 
-async function Shelves({ withTests, supabase }: { withTests: boolean; supabase: Awaited<ReturnType<typeof createClient>> }) {
-  const [s, recs, pass] = await Promise.all([
+/** ?like=movie:98&label=Gladiator&year=2000, as a More like… anchor (anything else: none). */
+function parseLike(like: string | undefined, label: string | undefined, year: string | undefined): Anchor | null {
+  const m = /^(movie|tv):(\d{1,10})$/.exec(like ?? "");
+  const name = (label ?? "").trim().slice(0, 180);
+  if (!m || name.length < 1) return null;
+  const y = Number(year);
+  return { kind: m[1] as "movie" | "tv", id: Number(m[2]), label: name, year: Number.isInteger(y) && y > 1800 ? y : null };
+}
+
+async function Shelves({ withTests, supabase, like }: {
+  withTests: boolean; supabase: Awaited<ReturnType<typeof createClient>>; like: Anchor | null;
+}) {
+  const [s, recs, pass, recent] = await Promise.all([
     shelves(supabase, { withTests }), forYou(supabase, { withTests }), seenPassProgress(supabase, { withTests }),
+    recentVibes(supabase, { withTests }),
   ]);
   const soon = upcoming(s.all);
   return (
@@ -97,6 +118,7 @@ async function Shelves({ withTests, supabase }: { withTests: boolean; supabase: 
         </div>
         <ForYouRow recs={recs} />
       </section>
+      <VibeBox recent={recent} initial={like} />
       <SearchBox />
       <section aria-label="Upcoming" data-testid="upcoming" className="mt-10 lg:max-w-3xl">
         <h2 className="label-mono text-text-muted">Upcoming · next {UPCOMING_DAYS} days</h2>
