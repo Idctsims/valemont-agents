@@ -78,6 +78,17 @@ export function VibeBox({ recent, initial }: { recent: RecentVibe[]; initial: An
   }, [initial, run]);
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
+  // The suggestions close on Escape and on a tap outside the box.
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (formRef.current && !formRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [open]);
+
   const onType = (value: string) => {
     setQ(value);
     const text = value.trim();
@@ -113,7 +124,8 @@ export function VibeBox({ recent, initial }: { recent: RecentVibe[]; initial: An
         <span className="label-mono text-text-muted">a title, a person or a mood</span>
       </div>
 
-      <form role="search" className="relative mt-3" onSubmit={(e) => {
+      <form ref={formRef} role="search" className="relative mt-3" onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
+            onSubmit={(e) => {
         e.preventDefault();
         const text = q.trim();
         if (text.length >= 2) void run({ kind: "text", label: text });

@@ -75,5 +75,12 @@ test.describe("owner", () => {
     await page.goto("/screening");
     await page.getByTestId("vibe-input").pressSequentially("ridley scott", { delay: 30 });
     await expect(page.locator('[data-testid="vibe-suggestion"][data-type="person"]').first()).toContainText("Ridley Scott");
+    // The list never sits over the page: Escape closes it, and so does a tap elsewhere.
+    await page.getByTestId("vibe-input").press("Escape");
+    await expect(page.getByTestId("vibe-suggestions")).toHaveCount(0);
+    await page.getByTestId("vibe-input").pressSequentially(" ", { delay: 30 });
+    await expect(page.getByTestId("vibe-suggestions")).toBeVisible();
+    await page.getByTestId("for-you").click({ position: { x: 5, y: 5 } });
+    await expect(page.getByTestId("vibe-suggestions")).toHaveCount(0);
   });
 });
