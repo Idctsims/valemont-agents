@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { headers } from "next/headers";
 import Link from "next/link";
+import { MagnifyingGlass, Sparkle } from "@phosphor-icons/react/ssr";
 
 import { FeedList } from "@/components/feed/feed-list";
 import { TmdbAttribution } from "@/components/screening/attribution";
@@ -11,6 +12,7 @@ import { SeenBanner } from "@/components/screening/seen-banner";
 import { ShelfButtons } from "@/components/screening/shelf-buttons";
 import { VibeBox } from "@/components/screening/vibe-box";
 import { PageHeader } from "@/components/ui/page-header";
+import { ToolDialog } from "@/components/ui/tool-dialog";
 import { requireOwner } from "@/lib/auth";
 import { MARKER_HEADER, decideMarker } from "@/lib/capital/marker";
 import { latestStories, storiesInOrder } from "@/lib/feed/data";
@@ -52,20 +54,32 @@ export default async function ScreeningPage({ searchParams }: { searchParams: Pr
   const params = await searchParams;
   const tab = screeningTabFromParam(params.tab);
   const withTests = decideMarker((await headers()).get(MARKER_HEADER), process.env).kind === "test";
+  const like = parseLike(one(params.like), one(params.label), one(params.year));
+  const recent = await recentVibes(supabase, { withTests });
   // Display only ("3h"): rendered per request.
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
 
   return (
     <>
-      <PageHeader label="Screening" title="Screening Room" summary="What you're watching, what you want to, where it streams tonight, and new trailers." />
+      {/* Search and More like… as buttons at the top right, each opening its box (owner, Nov 21: as on Game Day). */}
+      <div className="relative">
+        <PageHeader label="Screening" title="Screening Room" summary="What you're watching, what you want to, where it streams tonight, and new trailers." />
+        <div data-testid="screening-tools" className="absolute right-0 top-0 flex items-center gap-2">
+          <ToolDialog icon={<MagnifyingGlass size={20} aria-hidden />} label="Find a show or film" testId="screening-search-box">
+            <SearchBox />
+          </ToolDialog>
+          <ToolDialog icon={<Sparkle size={20} aria-hidden />} label="More like" testId="vibe-box" autoOpen={!!like}>
+            <VibeBox recent={recent} initial={like} />
+          </ToolDialog>
+        </div>
+      </div>
       <Tabs tab={tab} />
       {tab === "trailers" ? (
         <Trailers page={pageFromParam(params.page)} view={trailerViewFromParam(params.view)} withTests={withTests} now={now}
                   supabase={supabase} />
       ) : (
-        <Shelves withTests={withTests} supabase={supabase}
-                 like={parseLike(one(params.like), one(params.label), one(params.year))} />
+        <Shelves withTests={withTests} supabase={supabase} />
       )}
       <TmdbAttribution />
     </>
@@ -100,12 +114,9 @@ function parseLike(like: string | undefined, label: string | undefined, year: st
   return { kind: m[1] as "movie" | "tv", id: Number(m[2]), label: name, year: Number.isInteger(y) && y > 1800 ? y : null };
 }
 
-async function Shelves({ withTests, supabase, like }: {
-  withTests: boolean; supabase: Awaited<ReturnType<typeof createClient>>; like: Anchor | null;
-}) {
-  const [s, recs, pass, recent] = await Promise.all([
+async function Shelves({ withTests, supabase }: { withTests: boolean; supabase: Awaited<ReturnType<typeof createClient>> }) {
+  const [s, recs, pass] = await Promise.all([
     shelves(supabase, { withTests }), forYou(supabase, { withTests }), seenPassProgress(supabase, { withTests }),
-    recentVibes(supabase, { withTests }),
   ]);
   const soon = upcoming(s.all);
   return (
@@ -118,8 +129,6 @@ async function Shelves({ withTests, supabase, like }: {
         </div>
         <ForYouRow recs={recs} />
       </section>
-      <VibeBox recent={recent} initial={like} />
-      <SearchBox />
       <section aria-label="Upcoming" data-testid="upcoming" className="mt-10 lg:max-w-3xl">
         <h2 className="label-mono text-text-muted">Upcoming · next {UPCOMING_DAYS} days</h2>
         {soon.length === 0 ? (

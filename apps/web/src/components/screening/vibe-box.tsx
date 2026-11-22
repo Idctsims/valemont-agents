@@ -12,7 +12,8 @@ import { tmdbImage } from "@/lib/tmdb/services";
 import { Poster } from "./search-box";
 import { ShelfButtons } from "./shelf-buttons";
 
-// More like… (owner, 2026-11-21; docs/screening.md §8). Type a film, a
+// More like… (owner, 2026-11-21; docs/screening.md §8), in the sparkles
+// button's box at the Screening Room's top right. Type a film, a
 // series, a person or a phrase: TMDB suggests titles and people
 // (/api/screening/anchors, 250 ms after the last keystroke); choosing one,
 // or pressing Enter on the text, asks /api/screening/vibe for titles with
@@ -118,10 +119,10 @@ export function VibeBox({ recent, initial }: { recent: RecentVibe[]; initial: An
   };
 
   return (
-    <section id="vibe" aria-label="More like" data-testid="vibe" className="mt-10 scroll-mt-6 lg:max-w-3xl">
-      <div className="flex items-baseline justify-between gap-3">
+    <section aria-label="More like" data-testid="vibe">
+      <div className="pr-10">
         <h2 className="font-display text-2xl text-text">More like…</h2>
-        <span className="label-mono text-text-muted">a title, a person or a mood</span>
+        <p className="label-mono mt-0.5 text-text-muted">a title, a person or a mood</p>
       </div>
 
       <form ref={formRef} role="search" className="relative mt-3" onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}
@@ -147,7 +148,7 @@ export function VibeBox({ recent, initial }: { recent: RecentVibe[]; initial: An
 
         {open && suggestions.length > 0 && (
           <ul data-testid="vibe-suggestions"
-              className="absolute inset-x-0 top-full z-30 mt-2 max-h-search overflow-y-auto rounded-inner border border-border bg-surface">
+              className="mt-2 overflow-hidden rounded-inner border border-border bg-surface">
             {suggestions.map((s) => (
               <li key={`${s.type}:${s.type === "title" ? s.kind : "p"}:${s.tmdbId}`}>
                 <button type="button" onClick={() => choose(s)} data-testid="vibe-suggestion" data-type={s.type}
@@ -175,7 +176,7 @@ export function VibeBox({ recent, initial }: { recent: RecentVibe[]; initial: An
       </form>
 
       {recent.length > 0 && !busy && !result && (
-        <div data-testid="vibe-recent" className="scroll-row -mx-4 mt-3 flex gap-2 overflow-x-auto px-4 lg:mx-0 lg:px-0">
+        <div data-testid="vibe-recent" className="scroll-row mt-3 flex gap-2 overflow-x-auto">
           {recent.map((r) => (
             <button key={r.key} type="button" onClick={() => { setQ(r.label); void run(r.anchor); }}
                     className="tap shrink-0 whitespace-nowrap rounded-pill border border-border bg-surface px-3 text-sm text-text hover:border-accent-ink">

@@ -42,9 +42,15 @@ test.describe("owner", () => {
   });
 
   const cards = () => page.getByTestId("vibe-card");
+  /** The sparkles button at the top right opens More like…'s box (owner, Nov 21). */
+  const openVibe = async () => {
+    await page.goto("/screening");
+    await page.getByTestId("vibe-box-open").click();
+    await expect(page.getByTestId("vibe-box")).toBeVisible();
+  };
 
   test("a phrase: the verified picks only, each with its reason; the invented one never shows", async () => {
-    await page.goto("/screening");
+    await openVibe();
     await page.getByTestId("vibe-input").fill(`${P}sword and sandal epics`);
     await page.getByTestId("vibe-input").press("Enter");
     await expect(page.getByTestId("vibe-results")).toHaveAttribute("data-cached", "false", { timeout: 30_000 });
@@ -55,7 +61,7 @@ test.describe("owner", () => {
   });
 
   test("the same phrase again is the saved search, and a recent chip", async () => {
-    await page.goto("/screening");
+    await openVibe();
     await expect(page.getByTestId("vibe-recent")).toContainText(`${P}sword and sandal epics`);
     await page.getByTestId("vibe-input").fill(`${P}sword and sandal epics`);
     await page.getByTestId("vibe-input").press("Enter");
@@ -66,21 +72,20 @@ test.describe("owner", () => {
   test("More like this on Gladiator's page never lists Gladiator itself", async () => {
     await page.goto("/screening/title/movie/98");
     await page.getByTestId("title-more-like").click();
+    await expect(page.getByTestId("vibe-box")).toBeVisible(); // the box opens by itself
     await expect(page.getByTestId("vibe-results")).toBeVisible({ timeout: 30_000 });
     await expect(cards().filter({ hasText: "Troy" })).toHaveCount(1);
     await expect(page.locator('[data-testid="vibe-card"][data-tmdb="movie:98"]')).toHaveCount(0);
   });
 
   test("typing suggests titles and people", async () => {
-    await page.goto("/screening");
+    await openVibe();
     await page.getByTestId("vibe-input").pressSequentially("ridley scott", { delay: 30 });
     await expect(page.locator('[data-testid="vibe-suggestion"][data-type="person"]').first()).toContainText("Ridley Scott");
-    // The list never sits over the page: Escape closes it, and so does a tap elsewhere.
+    // Escape closes the box; the sparkles button opens it again with the text still there.
     await page.getByTestId("vibe-input").press("Escape");
-    await expect(page.getByTestId("vibe-suggestions")).toHaveCount(0);
-    await page.getByTestId("vibe-input").pressSequentially(" ", { delay: 30 });
-    await expect(page.getByTestId("vibe-suggestions")).toBeVisible();
-    await page.getByTestId("for-you").click({ position: { x: 5, y: 5 } });
-    await expect(page.getByTestId("vibe-suggestions")).toHaveCount(0);
+    await expect(page.getByTestId("vibe-box")).toBeHidden();
+    await page.getByTestId("vibe-box-open").click();
+    await expect(page.getByTestId("vibe-input")).toHaveValue("ridley scott");
   });
 });
