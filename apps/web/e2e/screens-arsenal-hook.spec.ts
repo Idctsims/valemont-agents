@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { addTestTitle, addTestTitleHookCards, hasOwner, runPrefix, setTheme, signIn, useE2eMarker } from "./support/owner";
+import { addTestTitle, addTestTitleHookCards, addTestSave, titleHookCards, hasOwner, runPrefix, setTheme, signIn, useE2eMarker } from "./support/owner";
 
 // Screenshot gate for Chat 5 Phase 3, the Screening Room hook: a finished
 // title's page while it drafts ("Drafting…"), the same page with its cards
@@ -28,10 +28,8 @@ async function snap(page: Page, name: string, phone: boolean, theme: string) {
 
 async function finish(page: Page, tmdbId: number) {
   await page.goto(`/screening/title/tv/${tmdbId}`);
-  await page.getByTestId("shelf-finished").click();
-  await expect(page.getByTestId("shelf-buttons")).toHaveAttribute("aria-busy", "false");
-  await page.reload();
-  await expect(page.getByTestId("title-arsenal")).toBeVisible();
+  await page.getByTestId("title-watched").click();
+  await expect(page.getByTestId("title-actions")).toHaveAttribute("aria-busy", "false");
 }
 
 test("arsenal hook screens", async ({ page }, testInfo) => {
@@ -46,21 +44,12 @@ test("arsenal hook screens", async ({ page }, testInfo) => {
   for (const theme of THEMES) {
     await setTheme(page, theme);
 
-    const drafting = await addTestTitle({ kind: "tv", name: `${P}Drafting show ${theme} ${stamp}` });
-    await finish(page, drafting.tmdbId);
-    await expect(page.getByTestId("title-arsenal-drafting")).toBeVisible();
-    await snap(page, "title-drafting", phone, theme);
-
+    // The title page no longer shows the cards (owner, 2026-11-22); a saved one shows in My Arsenal.
     const drafted = await addTestTitle({ kind: "tv", name: `${P}Finished show ${theme} ${stamp}` });
     await finish(page, drafted.tmdbId);
     await addTestTitleHookCards(drafted.id, 3);
-    await page.reload();
-    const cards = page.getByTestId("title-arsenal-card");
-    await expect(cards).toHaveCount(3);
-    await cards.nth(1).getByTestId("card-save").click();
-    await expect(cards.nth(1).getByTestId("card-save")).toHaveAttribute("aria-pressed", "true");
-    await page.getByTestId("title-arsenal").scrollIntoViewIfNeeded();
-    await snap(page, "title-cards", phone, theme);
+    const [, saved] = await titleHookCards(drafted.id);
+    await addTestSave({ refId: saved });
 
     await page.goto("/arsenal/saved");
     await page.getByTestId("saved-filter-from-screening").click();

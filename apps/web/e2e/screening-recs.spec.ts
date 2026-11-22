@@ -1,7 +1,7 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 
 import {
-  addTestRec, addTestSeenTitle, addTestStory, addTestTitle, hasOwner, retireTestRec, runPrefix, signIn, titleReactions,
+  addTestRec, addTestSeenTitle, addTestTitle, hasOwner, retireTestRec, runPrefix, signIn, titleReactions,
   useE2eMarker,
 } from "./support/owner";
 
@@ -48,7 +48,9 @@ test.describe("owner", () => {
     return { id, name, because };
   }
 
-  const card = (name: string) => page.getByTestId("for-you").getByTestId("for-you-card").filter({ hasText: name });
+  // A card is a poster only now (owner, Nov 22): found by its link's name.
+  const card = (name: string) => page.getByTestId("for-you").getByTestId("for-you-card")
+    .filter({ has: page.getByRole("link", { name, exact: true }) });
 
   test.beforeAll(async ({ browser }, testInfo) => {
     if (testInfo.project.name !== "phone") return;
@@ -69,28 +71,27 @@ test.describe("owner", () => {
     test.skip(testInfo.project.name !== "phone", "phone project");
   });
 
-  test("the For you row shows a pick with Because you loved", async () => {
+  test("the For you row shows a pick as a poster, Film or Series under it, above the shelves", async () => {
     const r = await rec("movie", "pick");
     await page.goto("/screening");
     await expect(card(r.name)).toHaveCount(1);
-    await expect(card(r.name).getByTestId("rec-because")).toHaveText(`Because you loved ${r.because}`);
-    // For you sits above the shelves.
-    const [forYou, want] = await Promise.all([
-      page.getByTestId("for-you").boundingBox(), page.getByTestId("shelf-section-want").boundingBox(),
+    await expect(card(r.name)).toContainText("Film");
+    await expect(card(r.name).getByText(r.because)).toHaveCount(0); // no words but the tag
+    const [forYou, shelves] = await Promise.all([
+      page.getByTestId("for-you").boundingBox(), page.getByTestId("shelves").boundingBox(),
     ]);
-    expect(forYou!.y).toBeLessThan(want!.y);
+    expect(forYou!.y).toBeLessThan(shelves!.y);
   });
 
-  test("Not interested removes a card, and it does not return on refresh", async () => {
+  test("Not interested from a title page's menu takes a pick out of For you for good", async () => {
     const r = await rec("tv", "skip");
     await page.goto("/screening");
-    await expect(card(r.name)).toHaveCount(1);
-    await card(r.name).getByTestId("rec-not-interested").click();
-    await expect(card(r.name)).toHaveCount(0);
-    await expect(page.getByTestId("for-you-toast")).toContainText(`Not interested: ${r.name}`);
-    await expect(page.getByTestId("for-you-list")).toHaveAttribute("aria-busy", "false");
-    await expect.poll(() => titleReactions(r.id)).toEqual([{ reaction: "not_interested", seen: false, origin: "card" }]);
-    await page.reload();
+    await card(r.name).getByRole("link").click();
+    await expect(page.getByTestId("title-name")).toHaveText(r.name);
+    await page.getByTestId("title-more").click();
+    await page.getByTestId("title-not-interested").click();
+    await expect.poll(() => titleReactions(r.id)).toEqual([{ reaction: "not_interested", seen: false, origin: "title" }]);
+    await page.goto("/screening");
     await expect(page.getByTestId("for-you")).toBeVisible();
     await expect(card(r.name)).toHaveCount(0);
   });
@@ -117,33 +118,25 @@ test.describe("owner", () => {
     await expect(page.getByTestId("seen-title")).not.toHaveText(name);
   });
 
-  test("a title page's reaction persists, and a Want title shows In the news", async () => {
-    const stamp = Date.now();
-    const name = `${P}newsworthy ${stamp}`;
+  test("Like on a title page persists, and tapping it again takes it back", async () => {
+    const name = `${P}liked ${Date.now()}`;
     const t = await addTestTitle({ kind: "tv", name });
+    const actions = page.getByTestId("title-actions");
     await page.goto(`/screening/title/tv/${t.tmdbId}`);
     await expect(page.getByTestId("title-name")).toHaveText(name);
-    // Not on a shelf yet: no news section, whatever Home says.
-    await expect(page.getByTestId("title-news")).toHaveCount(0);
-    await page.getByTestId("title-love").click();
-    await expect(page.getByTestId("title-reactions")).toHaveAttribute("aria-busy", "false");
-    await page.getByTestId("shelf-want").click();
-    await expect(page.getByTestId("shelf-buttons")).toHaveAttribute("aria-busy", "false");
-    const headline = `Inside ${name}: the season everyone is talking about`;
-    await addTestStory({ pillar: "home", title: headline, summary: null, url: `https://news.e2e.invalid/${stamp}` });
-    await addTestStory({ pillar: "home", title: `${P}unrelated ${stamp}`, summary: null, url: `https://news.e2e.invalid/u-${stamp}` });
+    await page.getByTestId("title-liked").click();
+    await expect(actions).toHaveAttribute("aria-busy", "false");
     await page.reload();
-    await expect(page.getByTestId("title-reactions")).toHaveAttribute("data-reaction", "love");
-    await expect(page.getByTestId("title-love")).toHaveAttribute("aria-pressed", "true");
-    const news = page.getByTestId("title-news-item");
-    await expect(news).toHaveCount(1);
-    await expect(news).toContainText(headline);
+    await expect(actions).toHaveAttribute("data-reaction", "love");
+    await expect(page.getByTestId("title-liked")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("title-liked")).toContainText("Liked");
     await expect.poll(() => titleReactions(t.id)).toEqual([{ reaction: "love", seen: false, origin: "title" }]);
-    // Tapping the pressed reaction takes it back.
-    await page.getByTestId("title-love").click();
-    await expect(page.getByTestId("title-reactions")).toHaveAttribute("data-reaction", "none");
-    await expect(page.getByTestId("title-reactions")).toHaveAttribute("aria-busy", "false");
+    await page.getByTestId("title-liked").click();
+    await expect(actions).toHaveAttribute("data-reaction", "none");
+    await expect(actions).toHaveAttribute("aria-busy", "false");
     await expect.poll(async () => (await titleReactions(t.id)).map((r) => r.reaction)).toEqual(["love", "none"]);
+    // In the news left the title page (owner, Nov 22).
+    await expect(page.getByTestId("title-news")).toHaveCount(0);
   });
 
   test("a test pick is invisible without the marker", async ({}, testInfo) => {
@@ -155,7 +148,7 @@ test.describe("owner", () => {
       await context.unroute(`${baseURL}/**`);
       await page.goto("/screening");
       await expect(page.getByTestId("screening-tabs")).toBeVisible();
-      await expect(page.getByText(r.name)).toHaveCount(0);
+      await expect(page.getByRole("link", { name: r.name, exact: true })).toHaveCount(0);
       await expect(page.getByText(r.because)).toHaveCount(0);
       await page.goto("/screening/seen");
       await expect(page.getByText(P, { exact: false })).toHaveCount(0);

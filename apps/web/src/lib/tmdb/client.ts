@@ -2,6 +2,8 @@ import "server-only";
 
 import type { Candidate } from "@/lib/screening/vibe";
 
+import { makersOf, runtimeOf } from "./credits";
+
 import { compactProviders, type Providers } from "./services";
 
 // The web's ONLY TMDB client (Chat 4 Phase 3; db/051). The worker's twin is
@@ -131,6 +133,11 @@ export type TitleDetails = {
   trailerKey: string | null;
   nextEpisodeDate: string | null;
   status: string | null;
+  /** The Letterboxd-style page's hero (owner, 2026-11-22). */
+  backdropPath: string | null;
+  tagline: string | null;
+  runtime: number | null;
+  makers: { label: string; names: string[] } | null;
 };
 
 function usReleaseDate(r: Raw): string | null {
@@ -161,7 +168,7 @@ function trailerKey(r: Raw): string | null {
 /** One title, with its videos and US providers; null when TMDB has none. */
 export async function titleDetails(kind: Kind, tmdbId: number): Promise<TitleDetails | null> {
   if (!KINDS.includes(kind) || !Number.isSafeInteger(tmdbId) || tmdbId < 1) return null;
-  const append = kind === "movie" ? "videos,watch/providers,release_dates" : "videos,watch/providers";
+  const append = kind === "movie" ? "videos,watch/providers,release_dates,credits" : "videos,watch/providers";
   const r = (await get(`/${kind}/${tmdbId}`, { append_to_response: append })) as Raw | null;
   if (!r) return null;
   const next = kind === "tv" ? (r.next_episode_to_air as Raw | null) : null;
@@ -175,5 +182,9 @@ export async function titleDetails(kind: Kind, tmdbId: number): Promise<TitleDet
     trailerKey: trailerKey(r),
     nextEpisodeDate: next && typeof next.air_date === "string" ? next.air_date : null,
     status: typeof r.status === "string" ? r.status : null,
+    backdropPath: typeof r.backdrop_path === "string" && /^\/[A-Za-z0-9_.-]+$/.test(r.backdrop_path) ? r.backdrop_path : null,
+    tagline: typeof r.tagline === "string" && r.tagline.trim() ? r.tagline.trim() : null,
+    runtime: runtimeOf(kind, r),
+    makers: makersOf(kind, r),
   };
 }

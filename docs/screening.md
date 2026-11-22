@@ -374,3 +374,36 @@ left for later.
 - `e2e/screening-vibe-unit.spec.ts` (9); `e2e/screening-vibe.spec.ts` owner
   tests on the mock model (`lib/screening/vibe-mock.ts`): **not run** (owner
   credentials).
+
+## 9. The Screening Room as Letterboxd (owner, 2026-11-22)
+
+From five Letterboxd screenshots (the film page, its action sheet, the
+Watchlist grid, Popular this week).
+
+- **For you**: posters only, Film or Series under each, a tap opens the title
+  page (`components/screening/for-you.tsx`). Like, Watchlist and Not
+  interested happen on the title page; For you still drops a title the
+  moment it is shelved or reacted to.
+- **Title page** (`title/[kind]/[id]/page.tsx` loads, `TitleView` draws): the
+  TMDB backdrop across the top (w1280, fading into the page) with a back
+  arrow and a "⋯" menu over it; the name, year, Film/Series and "Directed by"
+  (a film's directors, at most two) or "Created by" (a series' creators); a
+  Trailer button (to the trailer below) and the runtime; the poster at the
+  right; the tagline and overview; the buttons; More like this. Below: the
+  trailer, Tonight on your services, Other ways to watch. **In the news and
+  the Arsenal cards left this page** (owner: "but that's it"); drafted hook
+  cards still go to the Arsenal pool and a saved one shows in My Arsenal.
+- **Buttons** (`components/screening/title-actions.tsx`): Watch (Finished),
+  Watching (series only), Like (the `love` reaction), Watchlist (Want).
+  Watch, Watching and Watchlist are one shelf; tapping the lit one takes the
+  title off its shelf (db/089, a `none` move). Like is apart. Lit buttons
+  fill (Watched, Liked).
+- **⋯ menu**: Not interested and Neutral, so For you keeps learning what the
+  owner does not want.
+- **Shelves**: Watching / Watchlist / Finished as tabs (`?shelf=`), each a
+  poster grid, 3 across on the phone, 5 from lg
+  (`components/screening/poster-grid.tsx`). Upcoming stays above them.
+- **db/089** `watch_status.status` gains `none`; `v_watch_current` leaves a
+  latest `none` out and `v_title_state.shelf` is `nullif(latest, 'none')`, so
+  every shelf reader is unchanged; `finished` stays "ever finished" (an
+  un-watched title stays out of For you; the Arsenal hook fired once).

@@ -145,3 +145,39 @@ export async function moveTitle(input: { titleId: number; shelf: string }): Prom
     refresh();
   });
 }
+
+/**
+ * The title page's shelf buttons (owner, 2026-11-22: Letterboxd's Watch,
+ * Watching, Watchlist): a shelf moves the title there; null takes it off
+ * its shelf (a 'none' move, db/089). Nothing is written when nothing changes.
+ */
+export async function setShelf(input: Target & { shelf: string | null }): Promise<ActionResult<{ titleId: number }>> {
+  return settle(async () => {
+    await requireOwner();
+    if (input.shelf === null) {
+      const supabase = await createClient();
+      let titleId: number;
+      if ("titleId" in input) {
+        titleId = await targetId(input);
+      } else {
+        // By TMDB id: a title never added to `titles` is on no shelf, so it is already off.
+        const found = await supabase.from("titles").select("id").eq("kind", String(input.kind)).eq("tmdb_id", Number(input.tmdbId)).maybeSingle();
+        if (found.error) throw new Refusal(`Couldn't read the title: ${found.error.message}`);
+        if (!found.data) return { titleId: 0 };
+        titleId = (found.data as { id: number }).id;
+      }
+      const cur = await supabase.from("v_watch_current").select("status").eq("title_id", titleId).maybeSingle();
+      if (cur.error) throw new Refusal(`Couldn't read the shelf: ${cur.error.message}`);
+      if (!cur.data) return { titleId };
+      const { error } = await supabase.from("watch_status").insert({ title_id: titleId, status: "none" });
+      if (error) throw new Refusal(`Couldn't take it off: ${error.message}`);
+      refresh();
+      return { titleId };
+    }
+    const shelf = checkShelf(input.shelf);
+    const titleId = await targetId(input);
+    await move(titleId, shelf);
+    refresh();
+    return { titleId };
+  });
+}

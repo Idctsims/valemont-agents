@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { addTestStory, addTestTitle, hasOwner, runPrefix, setTheme, signIn, useE2eMarker } from "./support/owner";
+import { addTestTitle, hasOwner, runPrefix, setTheme, signIn, useE2eMarker } from "./support/owner";
 
 // Screenshot gate for Chat 4 Phase 4: the For you row, the seen-it card,
 // Trailers For you (the REAL data, no marker), and a title page with "In the
@@ -43,20 +43,20 @@ test("screening recommendation screens", async ({ page }, testInfo) => {
     await snap(page, "recs-trailers-for-you", phone, theme);
   }
 
-  // The title page with In the news: test rows, shown with the marker only.
+  // The title page as Letterboxd's (owner, 2026-11-22): a test title on the Watchlist, liked.
   await useE2eMarker(page.context(), testInfo.project.use.baseURL!);
   const stamp = Date.now();
   const name = `${runPrefix()}gate title ${stamp}`;
   const t = await addTestTitle({ kind: "tv", name });
   await page.goto(`/screening/title/tv/${t.tmdbId}`);
-  await page.getByTestId("shelf-want").click();
-  await expect(page.getByTestId("shelf-buttons")).toHaveAttribute("aria-busy", "false");
-  await addTestStory({ pillar: "home", title: `Inside ${name}: a season of power plays`,
-                       summary: "The cast and the showrunner on what comes next.", url: `https://news.e2e.invalid/gate-${stamp}` });
+  await page.getByTestId("title-watchlist").click();
+  await expect(page.getByTestId("title-actions")).toHaveAttribute("aria-busy", "false");
+  await page.getByTestId("title-liked").click();
+  await expect(page.getByTestId("title-actions")).toHaveAttribute("aria-busy", "false");
   for (const theme of THEMES) {
     await setTheme(page, theme);
     await page.goto(`/screening/title/tv/${t.tmdbId}`);
-    await expect(page.getByTestId("title-news-item")).toHaveCount(1);
-    await snap(page, "recs-title-news", phone, theme, true);
+    await expect(page.getByTestId("title-actions")).toHaveAttribute("data-reaction", "love");
+    await snap(page, "recs-title", phone, theme, true);
   }
 });

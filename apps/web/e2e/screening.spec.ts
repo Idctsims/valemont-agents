@@ -78,27 +78,44 @@ test.describe("owner", () => {
     test.info().annotations.push({ type: "search_ms", description: String(took) });
   });
 
-  test("Want -> Watching -> Finished, and Finished records the date", async () => {
+  test("Watchlist -> Watching -> Watched, each a tab of posters; a lit button turns off (db/089)", async () => {
     const name = `${P}shelf ${Date.now()}`;
     const t = await addTestTitle({ kind: "tv", name });
-    // Shelve it from its (database-only) title page: a test title is not on TMDB.
+    const tile = (shelf: string) => page.getByTestId(`shelf-grid-${shelf}`).locator(`[data-title-id="${t.id}"]`);
+    const settled = () => expect(page.getByTestId("title-actions")).toHaveAttribute("aria-busy", "false");
+    // Its (database-only) title page: a test title is not on TMDB. A series has Watching.
     await page.goto(`/screening/title/tv/${t.tmdbId}`);
     await expect(page.getByTestId("title-name")).toHaveText(name);
-    await page.getByTestId("shelf-want").click();
-    await expect(page.getByTestId("shelf-buttons")).toHaveAttribute("aria-busy", "false");
-    await page.goto("/screening");
-    const row = () => page.getByTestId("shelf-title").filter({ hasText: name });
-    await expect(page.getByTestId("shelf-section-want").getByTestId("shelf-title").filter({ hasText: name })).toHaveCount(1);
+    await page.getByTestId("title-watchlist").click();
+    await settled();
+    await expect(page.getByTestId("title-watchlist")).toHaveAttribute("aria-pressed", "true");
+    await page.goto("/screening?shelf=want");
+    await expect(tile("want")).toHaveCount(1);
     // It comes out in 10 days: Upcoming lists it.
     await expect(page.getByTestId("upcoming").getByText(name)).toBeVisible();
-    await row().getByTestId("shelf-watching").click();
-    await expect(page.getByTestId("shelf-section-watching").getByTestId("shelf-title").filter({ hasText: name })).toHaveCount(1);
-    await row().getByTestId("shelf-finished").click();
-    await expect(page.getByTestId("shelf-section-finished").getByTestId("shelf-title").filter({ hasText: name })).toHaveCount(1);
-    await expect(row()).toContainText(/finished [A-Z][a-z]{2} \d{1,2}/);
+    await page.goto(`/screening/title/tv/${t.tmdbId}`);
+    await page.getByTestId("title-watching").click();
+    await settled();
+    await page.goto("/screening");
+    await expect(tile("watching")).toHaveCount(1);
+    await page.goto(`/screening/title/tv/${t.tmdbId}`);
+    await page.getByTestId("title-watched").click();
+    await settled();
+    await expect(page.getByTestId("title-watched")).toContainText("Watched");
+    await page.goto("/screening?shelf=finished");
+    await expect(tile("finished")).toHaveCount(1);
     await expect(page.getByTestId("upcoming").getByText(name)).toHaveCount(0);
+    // Watched again: off every shelf.
+    await page.goto(`/screening/title/tv/${t.tmdbId}`);
+    await page.getByTestId("title-watched").click();
+    await settled();
+    await expect(page.getByTestId("title-actions")).toHaveAttribute("data-shelf", "none");
+    for (const shelf of ["watching", "want", "finished"]) {
+      await page.goto(shelf === "watching" ? "/screening" : `/screening?shelf=${shelf}`);
+      await expect(page.locator(`[data-title-id="${t.id}"]`), shelf).toHaveCount(0);
+    }
     await expect.poll(async () => (await watchHistory(t.id)).map((h) => [h.status, h.finished_at !== null]))
-      .toEqual([["want", false], ["watching", false], ["finished", true]]);
+      .toEqual([["want", false], ["watching", false], ["finished", true], ["none", false]]);
   });
 
   test("a title page shows Tonight on your services before rent and buy", async () => {
@@ -140,17 +157,18 @@ test.describe("owner", () => {
     const name = `${P}hidden ${Date.now()}`;
     const t = await addTestTitle({ kind: "movie", name });
     await page.goto(`/screening/title/movie/${t.tmdbId}`);
-    await page.getByTestId("shelf-want").click();
-    await expect(page.getByTestId("shelf-buttons")).toHaveAttribute("aria-busy", "false");
-    await page.goto("/screening");
-    // With the marker: on the Want shelf, and in Upcoming (it comes out in 10 days).
-    await expect(page.getByTestId("shelf-section-want").getByText(name)).toHaveCount(1);
+    await page.getByTestId("title-watchlist").click();
+    await expect(page.getByTestId("title-actions")).toHaveAttribute("aria-busy", "false");
+    await page.goto("/screening?shelf=want");
+    // With the marker: on the Watchlist tab, and in Upcoming (it comes out in 10 days).
+    await expect(page.locator(`[data-title-id="${t.id}"]`)).toHaveCount(1);
     await expect(page.getByTestId("upcoming").getByText(name)).toHaveCount(1);
     try {
       await context.unroute(`${baseURL}/**`);
-      await page.goto("/screening");
-      await expect(page.getByTestId("shelf-section-want")).toBeVisible();
+      await page.goto("/screening?shelf=want");
+      await expect(page.getByTestId("shelf-tabs")).toBeVisible();
       // Without it: nowhere on the page, shelves and Upcoming alike.
+      await expect(page.locator(`[data-title-id="${t.id}"]`)).toHaveCount(0);
       await expect(page.getByText(name)).toHaveCount(0);
       const res = await page.goto(`/screening/title/movie/${t.tmdbId}`);
       expect(res?.status()).toBe(404);

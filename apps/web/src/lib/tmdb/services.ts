@@ -80,6 +80,6 @@ export function tonightServices(p: Providers | null | undefined): string[] {
 }
 
 /** A TMDB image URL (posters, provider logos). */
-export function tmdbImage(path: string | null | undefined, size: "w92" | "w185" | "w342" | "w45" = "w185"): string | null {
+export function tmdbImage(path: string | null | undefined, size: "w92" | "w185" | "w342" | "w45" | "w780" | "w1280" = "w185"): string | null {
   return path && /^\/[A-Za-z0-9_.-]+$/.test(path) ? `https://image.tmdb.org/t/p/${size}${path}` : null;
 }
