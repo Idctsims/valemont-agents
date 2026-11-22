@@ -9,7 +9,7 @@ import { TmdbAttribution } from "@/components/screening/attribution";
 import { ForYouRow } from "@/components/screening/for-you";
 import { Poster, SearchBox } from "@/components/screening/search-box";
 import { SeenBanner } from "@/components/screening/seen-banner";
-import { ShelfButtons } from "@/components/screening/shelf-buttons";
+import { PosterGrid, ShelfTabs } from "@/components/screening/poster-grid";
 import { VibeBox } from "@/components/screening/vibe-box";
 import { PageHeader } from "@/components/ui/page-header";
 import { ToolDialog } from "@/components/ui/tool-dialog";
@@ -21,8 +21,8 @@ import { recentVibes, shelves, upcoming } from "@/lib/screening/data";
 import { forYou, seenPassProgress, trailersForYouIds } from "@/lib/screening/recs";
 import type { Anchor } from "@/lib/screening/vibe";
 import {
-  FINISHED_SHOWN, UPCOMING_DAYS, screeningTabFromParam, shortDate, trailerViewFromParam, yearOf, type ScreeningTab,
-  type ShelfTitle, type TrailerView,
+  FINISHED_SHOWN, UPCOMING_DAYS, screeningTabFromParam, shortDate, trailerViewFromParam, type ScreeningTab, type Shelf,
+  type TrailerView,
 } from "@/lib/screening/types";
 import { createClient } from "@/lib/supabase/server";
 
@@ -44,6 +44,8 @@ type Params = {
   tab?: string | string[]; page?: string | string[]; view?: string | string[];
   /** A title page's "More like this": kind:tmdbId, with its name and year. */
   like?: string | string[]; label?: string | string[]; year?: string | string[];
+  /** The shelf tab (owner, Nov 22): watching (the default), want, finished. */
+  shelf?: string | string[];
 };
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
@@ -79,7 +81,7 @@ export default async function ScreeningPage({ searchParams }: { searchParams: Pr
         <Trailers page={pageFromParam(params.page)} view={trailerViewFromParam(params.view)} withTests={withTests} now={now}
                   supabase={supabase} />
       ) : (
-        <Shelves withTests={withTests} supabase={supabase} />
+        <Shelves withTests={withTests} supabase={supabase} shelf={shelfFromParam(one(params.shelf))} />
       )}
       <TmdbAttribution />
     </>
@@ -114,7 +116,13 @@ function parseLike(like: string | undefined, label: string | undefined, year: st
   return { kind: m[1] as "movie" | "tv", id: Number(m[2]), label: name, year: Number.isInteger(y) && y > 1800 ? y : null };
 }
 
-async function Shelves({ withTests, supabase }: { withTests: boolean; supabase: Awaited<ReturnType<typeof createClient>> }) {
+function shelfFromParam(v: string | undefined): Shelf {
+  return v === "want" || v === "finished" ? v : "watching";
+}
+
+async function Shelves({ withTests, supabase, shelf }: {
+  withTests: boolean; supabase: Awaited<ReturnType<typeof createClient>>; shelf: Shelf;
+}) {
   const [s, recs, pass] = await Promise.all([
     shelves(supabase, { withTests }), forYou(supabase, { withTests }), seenPassProgress(supabase, { withTests }),
   ]);
@@ -149,43 +157,21 @@ async function Shelves({ withTests, supabase }: { withTests: boolean; supabase: 
           </ul>
         )}
       </section>
-      <ShelfSection name="Watching" shelf="watching" rows={s.watching} empty="Nothing on. Search above, then tap Watching." />
-      <ShelfSection name="Want" shelf="want" rows={s.want} empty="Nothing saved for later yet." />
-      <ShelfSection name={s.finishedTotal > FINISHED_SHOWN ? `Finished · last ${FINISHED_SHOWN}` : "Finished"} shelf="finished"
-                    rows={s.finished} empty="Nothing finished yet." />
+      {/* Watching, Watchlist, Finished as Letterboxd's tabs, each a poster grid (owner, Nov 22). */}
+      <section id="shelves" aria-label="Your shelves" data-testid="shelves" className="mt-10 scroll-mt-6 lg:max-w-4xl">
+        <ShelfTabs current={shelf} counts={{ watching: s.watching.length, want: s.want.length, finished: s.finishedTotal }} />
+        {shelf === "watching" && <PosterGrid rows={s.watching} testId="shelf-grid-watching" empty="Nothing on. Open a title and tap Watching or Watch." />}
+        {shelf === "want" && <PosterGrid rows={s.want} testId="shelf-grid-want" empty="Your watchlist is empty. Open a title and tap Watchlist." />}
+        {shelf === "finished" && (
+          <>
+            <PosterGrid rows={s.finished} testId="shelf-grid-finished" empty="Nothing watched yet." />
+            {s.finishedTotal > FINISHED_SHOWN && (
+              <p className="label-mono mt-3 text-text-muted">The last {FINISHED_SHOWN} of {s.finishedTotal}</p>
+            )}
+          </>
+        )}
+      </section>
     </>
-  );
-}
-
-function ShelfSection({ name, shelf, rows, empty }: { name: string; shelf: string; rows: ShelfTitle[]; empty: string }) {
-  return (
-    <section aria-label={name} data-testid={`shelf-section-${shelf}`} className="mt-10 lg:max-w-3xl">
-      <h2 className="font-display text-2xl text-text">{name}</h2>
-      {rows.length === 0 ? (
-        <p className="mt-2 text-sm text-text-muted">{empty}</p>
-      ) : (
-        <ul className="mt-3 border-t border-border">
-          {rows.map((r) => (
-            <li key={r.titleId} data-testid="shelf-title" data-title-id={r.titleId}
-                className="flex flex-wrap items-center gap-3 border-b border-border py-3">
-              <Poster path={r.posterPath} name={r.name} small />
-              <div className="min-w-0 flex-1">
-                <Link href={`/screening/title/${r.kind}/${r.tmdbId}`} className="block truncate font-display text-lg text-text hover:text-accent">
-                  {r.name}
-                </Link>
-                <p className="label-mono text-text-muted">
-                  {r.kind === "tv" ? "Series" : "Film"}
-                  {yearOf(r.releaseDate) ? ` · ${yearOf(r.releaseDate)}` : ""}
-                  {r.finishedAt ? ` · finished ${shortDate(r.finishedAt.slice(0, 10))}` : ""}
-                  {r.isTest && <span className="ml-2 rounded-pill border border-text-muted px-2 normal-case tracking-normal text-text">test</span>}
-                </p>
-              </div>
-              <ShelfButtons target={{ titleId: r.titleId }} current={r.status} />
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }
 
