@@ -7,11 +7,11 @@ import {
 
 // The Screening Room hook (Chat 5 Phase 3; docs/arsenal.md §10; db/062), on a
 // TEST title with the marker:
-//   * Finished writes ONE hook (the title page says "Drafting…"); a TEST
-//     title's hook is never queued for the worker (no AI, ever);
-//   * a second Finished (after Watching) writes nothing new;
-//   * the drafted cards render on the title page with their tags (Checked,
-//     and one Unverified with its reason) and Save, plus the Power Word;
+//   * Watched (Finished) writes ONE hook; a TEST title's hook is never queued
+//     for the worker (no AI, ever);
+//   * a second Watched (after Watching) writes nothing new;
+//   * the title page no longer shows the cards (owner, 2026-11-22: the
+//     Letterboxd-style page keeps only the trailer and where to watch);
 //   * a saved card shows "From <title>" in My Arsenal, linking back, and the
 //     "From the Screening Room" filter keeps it and drops a card from
 //     elsewhere.
@@ -51,45 +51,29 @@ test.describe("owner", () => {
     test.skip(testInfo.project.name !== "phone", "phone project");
   });
 
-  test("Finished writes one hook and the page says Drafting", async () => {
+  test("Watched writes one hook; the title page shows no cards", async () => {
     await page.goto(titlePage());
-    await expect(page.getByTestId("title-arsenal")).toHaveCount(0);
-    await page.getByTestId("shelf-finished").click();
-    await expect(page.getByTestId("shelf-buttons")).toHaveAttribute("aria-busy", "false");
+    await page.getByTestId("title-watched").click();
+    await expect(page.getByTestId("title-actions")).toHaveAttribute("aria-busy", "false");
     await expect.poll(async () => (await titleHooks(title.id)).map((h) => `${h.status}:${h.is_test}`)).toEqual(["queued:true"]);
     expect(await titleHookJobs(title.id)).toBe(0); // a test title is never handed to the worker
     await page.reload();
-    await expect(page.getByTestId("title-arsenal")).toHaveAttribute("data-state", "queued");
-    await expect(page.getByTestId("title-arsenal-drafting")).toContainText("Drafting");
+    await expect(page.getByTestId("title-arsenal")).toHaveCount(0);
   });
 
-  test("a second Finished (a re-watch) writes nothing new", async () => {
-    await page.getByTestId("shelf-watching").click();
-    await expect(page.getByTestId("shelf-buttons")).toHaveAttribute("aria-busy", "false");
-    await page.getByTestId("shelf-finished").click();
-    await expect(page.getByTestId("shelf-buttons")).toHaveAttribute("aria-busy", "false");
-    await expect(page.getByTestId("shelf-buttons")).toHaveAttribute("data-shelf", "finished");
+  test("a second Watched (a re-watch) writes nothing new", async () => {
+    await page.getByTestId("title-watching").click();
+    await expect(page.getByTestId("title-actions")).toHaveAttribute("aria-busy", "false");
+    await page.getByTestId("title-watched").click();
+    await expect(page.getByTestId("title-actions")).toHaveAttribute("aria-busy", "false");
+    await expect(page.getByTestId("title-actions")).toHaveAttribute("data-shelf", "finished");
     expect(await titleHooks(title.id)).toHaveLength(1);
     expect(await titleHookJobs(title.id)).toBe(0);
-  });
-
-  test("the drafted cards render on the title page with their tags and Save", async () => {
+    // Drafted cards (the e2e helper, never the model), one saved, for My Arsenal below.
     await addTestTitleHookCards(title.id, 3);
-    await page.goto(titlePage());
-    const section = page.getByTestId("title-arsenal");
-    await expect(section).toHaveAttribute("data-state", "drafted");
-    const cards = section.getByTestId("title-arsenal-card");
-    await expect(cards).toHaveCount(3);
-    await expect(cards.nth(0).getByTestId("card-check")).toHaveText("Unverified");
-    await expect(cards.nth(0)).toContainText("a test reason");
-    await expect(cards.nth(1).getByTestId("card-check")).toHaveText("Checked");
-    await expect(section.getByTestId("title-arsenal-word")).toHaveCount(1);
-    await cards.nth(1).getByTestId("card-save").click();
-    await expect(cards.nth(1).getByTestId("card-save")).toHaveAttribute("aria-pressed", "true");
     const ids = await titleHookCards(title.id);
+    await addTestSave({ refId: ids[1] });
     await expect.poll(async () => (await arsenalSaves(ids[1])).map((s) => `${s.action}:${s.is_test}`)).toEqual(["save:true"]);
-    // Each Save is a 44 px target.
-    expect((await cards.nth(1).getByTestId("card-save").boundingBox())!.height).toBeGreaterThanOrEqual(44);
   });
 
   test("My Arsenal: the card says where it came from, and the Screening Room filter keeps it", async () => {
@@ -113,15 +97,15 @@ test.describe("owner", () => {
 
     await fromTitle.getByTestId("card-from-title").click();
     await expect(page).toHaveURL(new RegExp(`${titlePage()}$`));
-    await expect(page.getByTestId("title-arsenal")).toBeVisible();
+    await expect(page.getByTestId("title-name")).toHaveText(name);
   });
 
   test("a long title's From line ends in an ellipsis at 390 px, never clipped", async () => {
     const long = `${P}The Extraordinarily Long and Winding Saga of the Family Business That Would Not Sell ${stamp}`;
     const t = await addTestTitle({ kind: "movie", name: long });
     await page.goto(`/screening/title/movie/${t.tmdbId}`);
-    await page.getByTestId("shelf-finished").click();
-    await expect(page.getByTestId("shelf-buttons")).toHaveAttribute("aria-busy", "false");
+    await page.getByTestId("title-watched").click();
+    await expect(page.getByTestId("title-actions")).toHaveAttribute("aria-busy", "false");
     await addTestTitleHookCards(t.id, 1);
     const [cardId] = await titleHookCards(t.id);
     await addTestSave({ refId: cardId });
