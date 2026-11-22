@@ -317,3 +317,60 @@ one.
 5. Phone checks (the done-when list), `e2e/screening-recs.spec.ts`, the
    screenshot gate (`e2e/screens-screening-recs.spec.ts`), RAM at rest
    against Phase 3's reading.
+
+## 8. More like… (owner, 2026-11-21)
+
+The owner types a film, a series, a person or a phrase and gets titles with
+the same vibe ("Notting Hill" → Four Weddings, Love Actually, Roman Holiday;
+"Gladiator" → Troy, Kingdom of Heaven, Braveheart).
+
+### 8.1 Why Claude, not TMDB's lists (research, Nov 21)
+
+TMDB's `/recommendations` for Notting Hill gave "This Time Next Year" and
+"Yoh! Bestie" beside Pretty Woman; for Gladiator, Conan, Interceptor and Son
+of Batman beside Troy; `/similar` was noise for both. Filtering to ≥ 1,000
+votes and keyword discover helped but still let Expend4bles and Kissing
+Booth 2 through. Sonnet, asked for 15 titles that share the feel, named
+Four Weddings, Love Actually, You've Got Mail, Roman Holiday, Bridget Jones
+and Two Weeks Notice for Notting Hill, and Braveheart, Troy, Kingdom of
+Heaven, Spartacus, Ben-Hur, 300, The Northman and HBO's Rome for Gladiator.
+Haiku's lists had weaker picks (Chasing Liberty, Enchanted). Measured cost
+(`ai_usage`, purpose `screening_vibe_probe`, 10 calls, $0.04 in all):
+Sonnet ~$0.005 a search, ~5 s; Haiku ~$0.0003. Owner chose Claude picks
+verified on TMDB (option B); re-ranking by the taste profile (option C) is
+left for later.
+
+### 8.2 How it works
+
+- **Box** (`components/screening/vibe-box.tsx`), Shelves tab above the
+  search: TMDB `/search/multi` suggests films, series and people
+  (`/api/screening/anchors`, 250 ms debounce); a choice pins the anchor
+  (Gladiator 2000, not 2024); Enter on the text searches the phrase. A title
+  page's "More like this" opens the box with that title as the anchor.
+- **Route** `POST /api/screening/vibe` (`lib/screening/vibe.ts` is the pure
+  core): the cache (same `anchor_key` and `is_test`, newest row within 30
+  days, no model or TMDB call), the rate limit (10 stored searches a
+  minute), the budget (Sonnet; Haiku from 80%; refused at 100%), Sonnet with
+  structured output (15 picks: title, year, kind, a reason ≤ 12 words), then
+  each pick matched on TMDB by kind, name and year (exact year first, else
+  within one; a year-free retry) and dropped when unmatched; the anchor and
+  duplicates dropped; each card's US providers name the owner's services;
+  `ai_usage` purpose `screening_vibe`; one `screening_vibe_searches` row
+  (db/088). None matched is a 502 and stores nothing.
+- **Cards**: poster, Film/Series and year, the reason, the owner's services
+  (gold chip), Loved/Seen/Finished, Want and Watching; the owner's state is
+  read live on every answer (`data.ts titleStates`), cached or not.
+- **Recent**: the last 6 distinct anchors as chips (`data.ts recentVibes`).
+
+### 8.3 Verified before the merge
+
+- A real run of this feature's prompt (Sonnet, effort low, JSON schema) for
+  Notting Hill and Ridley Scott: 15 picks each, matched on live TMDB by
+  `matchPick`/`finalize`, **30 of 30 kept, each the right title** (e.g.
+  Wimbledon 2004, Dune 2021, Napoleon 2023); 203 ms and 66 ms of TMDB time.
+- db/088 on a scratch PG 17 (production's schema at db/087): the self-test
+  passes; 13 mutations, 12 red (the readonly grant is also given by default
+  privileges); `tests_live.test_screening_vibe_sql` 3/3 there.
+- `e2e/screening-vibe-unit.spec.ts` (9); `e2e/screening-vibe.spec.ts` owner
+  tests on the mock model (`lib/screening/vibe-mock.ts`): **not run** (owner
+  credentials).
