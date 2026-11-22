@@ -48,6 +48,18 @@ export function anchorKey(a: Anchor): string {
   return `text:${collapse(a.label).toLowerCase().slice(0, MAX_TEXT)}`;
 }
 
+/** A stored anchor_key back to an anchor (a recent-search chip; its key re-finds the stored row). */
+export function anchorFromKey(key: string, label: string): Anchor | null {
+  const m = /^(movie|tv|person):(\d+)$/.exec(key);
+  if (m) {
+    // "Gladiator (2000)" was stored for a title: the chip keeps the name; the key does the finding.
+    const name = m[1] === "person" ? label : label.replace(/\s\(\d{4}\)$/, "");
+    return { kind: m[1] as Anchor["kind"], id: Number(m[2]), label: name };
+  }
+  if (key.startsWith("text:") && key.length > 6) return { kind: "text", label };
+  return null;
+}
+
 /** The label shown for a search: "Gladiator (2000)", "Ridley Scott", or the phrase. */
 export function anchorLabel(a: Anchor): string {
   const name = collapse(a.label).slice(0, 180);

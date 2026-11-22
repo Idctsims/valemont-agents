@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Kind } from "@/lib/tmdb/client";
 import { splitProviders, type Providers } from "@/lib/tmdb/services";
 
+import { anchorFromKey, type Anchor } from "./vibe";
 import { FINISHED_SHOWN, UPCOMING_DAYS, chicagoDay, type Shelf, type ShelfTitle } from "./types";
 
 // Reads only, through the owner's session (RLS, db/051). The shelves are the
@@ -114,6 +115,30 @@ export async function titleStates(
       titleId: r.id, shelf: s?.shelf ?? null, seen: !!s?.seen, reaction: s?.reaction ?? null,
       services: splitProviders(r.providers).tonight.map((t) => t.service),
     });
+  }
+  return out;
+}
+
+/**
+ * More like…'s recent searches (db/088): the last `limit` distinct anchors,
+ * newest first, each as the anchor a chip re-runs (served from its stored
+ * row while it is in the cache window). An unpasted db/088 is no chips, logged.
+ */
+export async function recentVibes(supabase: SupabaseClient, opts: { withTests?: boolean; limit?: number } = {}) {
+  const { data, error } = await supabase.from("screening_vibe_searches").select("anchor_key, label")
+    .eq("is_test", !!opts.withTests).order("created_at", { ascending: false }).limit(40);
+  if (error) {
+    console.error(`screening: recent vibes unread: ${error.message}`);
+    return [];
+  }
+  const out: { key: string; label: string; anchor: Anchor }[] = [];
+  const seen = new Set<string>();
+  for (const r of (data ?? []) as { anchor_key: string; label: string }[]) {
+    if (seen.has(r.anchor_key)) continue;
+    seen.add(r.anchor_key);
+    const anchor = anchorFromKey(r.anchor_key, r.label);
+    if (anchor) out.push({ key: r.anchor_key, label: r.label, anchor });
+    if (out.length >= (opts.limit ?? 6)) break;
   }
   return out;
 }
