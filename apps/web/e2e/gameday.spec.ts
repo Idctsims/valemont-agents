@@ -168,6 +168,24 @@ test.describe("owner", () => {
     await expect(page.getByTestId("detail-watch")).not.toContainText("TBD");
   });
 
+  test("the magnifying glass finds a team with its game and opens it", async () => {
+    await page.goto("/gameday");
+    await page.getByTestId("team-search-open").click();
+    await expect(page.getByTestId("team-search")).toBeVisible();
+    // This run's own team: its prefix makes the name unique among past runs' test rows.
+    await page.getByTestId("team-search-input").fill(`${P}Alabama`);
+    const hit = page.getByTestId("team-hit").filter({ hasText: `${P}Alabama Crimson Tide` });
+    await expect(hit).toHaveAttribute("data-game", String(ids.bama));
+    await expect(hit).toContainText(`at ${P}LSU Tigers`);
+    // Under four letters a word must start with the text, through the quoted PostgREST form
+    // ("* Ala*"): every test name starts "e2e ", so any hit at all proves that form parsed.
+    await page.getByTestId("team-search-input").fill("Ala");
+    await expect(page.getByTestId("team-hit-name").first()).toContainText("Alabama");
+    await page.getByTestId("team-search-input").fill(`${P}Alabama`);
+    await hit.click();
+    await expect(page).toHaveURL(new RegExp(`/gameday/${ids.bama}$`));
+  });
+
   test("an unknown game is a 404", async () => {
     const res = await page.goto("/gameday/999999999999");
     expect(res?.status()).toBe(404);

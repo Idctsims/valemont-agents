@@ -2,9 +2,13 @@
 
 import { requireOwner } from "@/lib/auth";
 import { Refusal, settle, type ActionResult } from "@/lib/action-result";
-import { loadLive } from "@/lib/gameday/data";
+import { headers } from "next/headers";
+
+import { MARKER_HEADER, decideMarker } from "@/lib/capital/marker";
+import { loadLive, searchTeams } from "@/lib/gameday/data";
 import { loadSummary } from "@/lib/gameday/espn";
 import { POLL_MAX, type LivePatch } from "@/lib/gameday/slate";
+import type { TeamHit } from "@/lib/gameday/search";
 import type { GameSummary } from "@/lib/gameday/summary";
 import { createClient } from "@/lib/supabase/server";
 
@@ -31,4 +35,14 @@ export async function pollSummary(id: number): Promise<ActionResult<{ summary: G
     const res = await loadSummary(await createClient(), id);
     return res.summary ? { summary: res.summary } : { summary: null, reason: res.reason };
   }, "Couldn't refresh the game.");
+}
+
+// The team search box (owner, Nov 21): suggestions as the owner types.
+export async function findTeams(q: string): Promise<ActionResult<{ q: string; teams: TeamHit[] }>> {
+  return settle(async () => {
+    await requireOwner();
+    if (typeof q !== "string") throw new Refusal("Type a team name.");
+    const withTests = decideMarker((await headers()).get(MARKER_HEADER), process.env).kind === "test";
+    return { q, teams: await searchTeams(await createClient(), q, withTests) };
+  }, "Couldn't search the teams.");
 }
