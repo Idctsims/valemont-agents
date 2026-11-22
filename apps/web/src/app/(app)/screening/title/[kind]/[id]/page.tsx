@@ -46,7 +46,7 @@ export default async function TitlePage({ params }: { params: Promise<{ kind: st
   const t: TitleDetails | null = live ?? (shelf ? {
     tmdbId, kind, name: shelf.title.name, releaseDate: shelf.title.release_date, posterPath: shelf.title.poster_path,
     overview: null, genres: [], providers: (shelf.title.providers ?? {}) as Providers, trailerKey: null,
-    nextEpisodeDate: shelf.title.next_episode_date, status: null,
+    nextEpisodeDate: shelf.title.next_episode_date, status: null, backdropPath: null, tagline: null, runtime: null, makers: null,
   } : null);
   if (!t) notFound();
   const onList = shelf?.status === "want" || shelf?.status === "watching";

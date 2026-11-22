@@ -9,6 +9,14 @@ export const SHELVES: readonly { shelf: Shelf; label: string }[] = [
   { shelf: "finished", label: "Finished" },
 ];
 
+/**
+ * A shelf button's tap (owner, 2026-11-22: Letterboxd's buttons): the lit
+ * one turns off (null: off the shelf, db/089), any other moves the title.
+ */
+export function nextShelf(current: Shelf | null, tapped: Shelf): Shelf | null {
+  return current === tapped ? null : tapped;
+}
+
 /** Finished shows only the last 20 (owner, 2026-10-14). */
 export const FINISHED_SHOWN = 20;
 /** The Upcoming strip's horizon. */
