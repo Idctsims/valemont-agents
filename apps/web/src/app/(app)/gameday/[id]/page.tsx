@@ -6,11 +6,14 @@ import { notFound } from "next/navigation";
 
 import { EventScore } from "@/components/gameday/event-score";
 import { Networks } from "@/components/gameday/game-row";
+import { GameView, type StripGame } from "@/components/gameday/game-view";
 import { requireOwner } from "@/lib/auth";
-import { loadEvent, type GameEvent } from "@/lib/gameday/data";
+import { loadEvent, loadSlate, type GameEvent } from "@/lib/gameday/data";
+import { loadSummary } from "@/lib/gameday/espn";
 import {
   dateLabel, gameDay, kalshiUrl, minusSign, startLabel, timeSlot, type Golfer, type Score, type SlateRow,
 } from "@/lib/gameday/slate";
+import { slateSides, slateTeam, type TeamRow } from "@/lib/gameday/teams";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Game" };
@@ -20,7 +23,62 @@ export const metadata: Metadata = { title: "Game" };
 // neutral site, golf's leaderboard with the followed players, an F1
 // weekend's sessions, and the empty "Your bets" slot (Chat 9).
 
-type Participants = { home?: { rank?: number }; away?: { rank?: number } };
+type Face = { rank?: number; loc?: string; nick?: string; logo?: string; color?: string };
+type Participants = { home?: Face; away?: Face };
+
+/** College teams go by the school (Google: "Oregon", "MI State"); the pros by the nickname ("Knicks"). */
+const BY_SCHOOL = new Set(["cfb", "mcbb"]);
+
+/** The team-game page (owner, Nov 21): Google's layout, ESPN's summary read on open. */
+async function TeamGame({ ev, row, supabase }: { ev: GameEvent; row: SlateRow; supabase: Awaited<ReturnType<typeof createClient>> }) {
+  const p = (ev.participants && !Array.isArray(ev.participants) ? ev.participants : {}) as Participants;
+  const faces = slateSides({
+    id: ev.id,
+    aloc: p.away?.loc ?? null, an: p.away?.nick ?? null, al: p.away?.logo ?? null, ac: p.away?.color ?? null,
+    hloc: p.home?.loc ?? null, hn: p.home?.nick ?? null, hl: p.home?.logo ?? null, hc: p.home?.color ?? null,
+  } satisfies TeamRow);
+  const away = slateTeam(faces?.[0], ev.away!, false);
+  const home = slateTeam(faces?.[1], ev.home!, true);
+  const name = (t: typeof away) => (BY_SCHOOL.has(ev.league) ? t.city : (t.nick ?? t.city));
+
+  // The summary and the day's other games in the league, together.
+  const [sum, slate] = await Promise.all([
+    loadSummary(supabase, ev.id),
+    loadSlate(supabase, { day: ev.day, all: true, withTests: ev.is_test }).catch((e: Error) => {
+      console.error(`gameday: strip unread: ${e.message}`);
+      return [] as SlateRow[];
+    }),
+  ]);
+  const strip: StripGame[] = slate
+    .filter((r) => r.league === ev.league && r.home && r.away)
+    .slice(0, 30)
+    .map((r) => ({ id: r.id, row: r, away: slateTeam(r.tm?.[0], r.away!, false), home: slateTeam(r.tm?.[1], r.home!, true) }));
+
+  return (
+    <GameView
+      initial={row}
+      initialSummary={sum.summary}
+      teams={{ away, home }}
+      names={{ away: name(away), home: name(home) }}
+      ranks={{ away: p.away?.rank, home: p.home?.rank }}
+      leagueLabel={ev.league_label}
+      today={gameDay(new Date().toISOString())}
+      kalshi={ev.kalshi}
+      venue={ev.venue}
+      neutral={!!ev.neutral_site}
+      tv={ev.broadcast}
+      strip={strip}
+    >
+      {!sum.summary && !ev.is_test && (
+        <p data-testid="summary-unavailable" className="mt-4 text-sm text-text-muted">{sum.reason} Stats and plays will show when it does.</p>
+      )}
+      <section aria-label="Your bets" data-testid="detail-bets" className="mt-8 border-t border-border pt-4">
+        <h2 className="text-xl text-text">Your bets</h2>
+        <p className="mt-2 text-base text-text-muted">No bets on this game. Your bets attach here once bet tracking ships (Chat 9).</p>
+      </section>
+    </GameView>
+  );
+}
 
 /** The detail's event in the slate's row shape, the score trimmed as db/068 gameday_score does. */
 function asRow(ev: GameEvent): SlateRow {
@@ -108,9 +166,19 @@ export default async function GameDetailPage({ params }: { params: Promise<{ id:
   const { id: raw } = await params;
   const id = Number(raw);
   if (!Number.isSafeInteger(id) || id <= 0) notFound();
-  const ev = await loadEvent(await createClient(), id);
+  const supabase = await createClient();
+  const ev = await loadEvent(supabase, id);
   if (!ev) notFound();
   const row = asRow(ev);
+
+  if (ev.kind === "game" && ev.home && ev.away) {
+    return (
+      <article data-testid="game-detail" data-id={ev.id} className="lg:max-w-3xl">
+        <h1 className="sr-only">{ev.title}</h1>
+        <TeamGame ev={ev} row={row} supabase={supabase} />
+      </article>
+    );
+  }
 
   return (
     <article data-testid="game-detail" data-id={ev.id} className="lg:max-w-3xl">

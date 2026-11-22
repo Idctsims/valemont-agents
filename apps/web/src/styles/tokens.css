@@ -307,6 +307,14 @@
 @utility grid-board {
   grid-template-columns: 3rem 1fr auto;
 }
+/* A swipeable row with no visible scrollbar (Game Day's game strip and
+   tabs, owner Nov 21: Google's look). Touch, wheel and keys still scroll it. */
+@utility scroll-row {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
 
 /* Shell geometry. */
 @utility w-rail {
