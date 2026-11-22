@@ -67,6 +67,7 @@ test.describe("owner", () => {
     await expect(page.getByTestId("tmdb-logo")).toHaveAttribute("src", "/tmdb-logo.svg");
     expect(await page.getByTestId("tmdb-logo").evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
     const started = Date.now();
+    await page.getByTestId("screening-search-box-open").click(); // the magnifying glass, top right (Nov 21)
     await page.getByTestId("screening-search-input").fill("Succession");
     await expect(page.getByTestId("screening-search-state")).toHaveAttribute("data-state", "done");
     const took = Date.now() - started;

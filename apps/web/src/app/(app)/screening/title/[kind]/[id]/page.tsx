@@ -86,7 +86,7 @@ export default async function TitlePage({ params }: { params: Promise<{ kind: st
             {/* More like… with this title as the anchor (owner, Nov 21; docs/screening.md §8). */}
             <Link data-testid="title-more-like"
                   href={`/screening?like=${t.kind}:${t.tmdbId}&label=${encodeURIComponent(t.name)}${
-                    yearOf(t.releaseDate) ? `&year=${yearOf(t.releaseDate)}` : ""}#vibe`}
+                    yearOf(t.releaseDate) ? `&year=${yearOf(t.releaseDate)}` : ""}`}
                   className="tap inline-flex w-fit items-center gap-2 rounded-pill border border-border px-4 text-sm text-text hover:border-accent-ink">
               <Sparkle size={16} aria-hidden className="text-text-muted" /> More like this
             </Link>

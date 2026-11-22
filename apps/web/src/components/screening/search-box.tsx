@@ -9,7 +9,8 @@ import { tmdbImage } from "@/lib/tmdb/services";
 
 import { ShelfButtons } from "./shelf-buttons";
 
-// The Screening Room's search (db/051): typed into, debounced, answered by the
+// The Screening Room's search (db/051), in the magnifying glass's box at the
+// page's top right (owner, Nov 21). Typed into, debounced, answered by the
 // server route /api/screening/search (TMDB, server side). Each result: the
 // poster, the year, film or series, a link to its title page, and one-tap
 // Want / Watching.
@@ -57,13 +58,14 @@ export function SearchBox() {
   }, [q]);
 
   return (
-    <section aria-label="Search" data-testid="screening-search" className="lg:max-w-3xl">
-      <label htmlFor={id} className="label-mono text-text-muted">Find a show or film</label>
+    <section aria-label="Search" data-testid="screening-search">
+      <h2 className="pr-10 font-display text-2xl text-text">Find a show or film</h2>
+      <label htmlFor={id} className="sr-only">Find a show or film</label>
       <div className="mt-2 flex items-center gap-2 rounded-pill border border-border bg-surface px-4">
         <MagnifyingGlass size={18} aria-hidden className="text-text-muted" />
         <input
           id={id}
-          type="search"
+          type="text"
           inputMode="search"
           autoComplete="off"
           value={q}
