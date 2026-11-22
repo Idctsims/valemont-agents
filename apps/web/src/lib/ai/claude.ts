@@ -15,9 +15,14 @@ import { CHEAPEST_MODEL, type Usage } from "./pricing";
 export type WagsModel = { model: LanguageModel; id: string; mock: boolean };
 
 /** The real model, or the e2e mock when (and only when) policy.mockAllowed
- *  says so: Wags' scripted chat, or Arm Me's card stream ("arsenal"). */
-export async function languageModel(id: string, mockFor: "wags" | "arsenal" = "wags"): Promise<WagsModel> {
+ *  says so: Wags' scripted chat, Arm Me's card stream ("arsenal"), or
+ *  More like…'s four picks ("vibe"). */
+export async function languageModel(id: string, mockFor: "wags" | "arsenal" | "vibe" = "wags"): Promise<WagsModel> {
   if (mockAllowed(process.env)) {
+    if (mockFor === "vibe") {
+      const { mockVibeModel } = await import("@/lib/screening/vibe-mock");
+      return { model: mockVibeModel(), id: "mock", mock: true };
+    }
     if (mockFor === "arsenal") {
       const { mockArmModel } = await import("@/lib/arsenal/mock");
       return { model: mockArmModel(), id: "mock", mock: true };

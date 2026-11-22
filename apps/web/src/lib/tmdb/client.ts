@@ -1,5 +1,7 @@
 import "server-only";
 
+import type { Candidate } from "@/lib/screening/vibe";
+
 import { compactProviders, type Providers } from "./services";
 
 // The web's ONLY TMDB client (Chat 4 Phase 3; db/051). The worker's twin is
@@ -67,6 +69,53 @@ export async function searchTitles(query: string, limit = 12): Promise<SearchHit
       tmdbId: Number(r.id), kind: r.media_type as Kind, name: String(r.title ?? r.name ?? ""),
       year: yearOf(r), posterPath: typeof r.poster_path === "string" ? r.poster_path : null,
     }));
+}
+
+/** One suggestion in More like…'s box: a film, a series, or a person (owner, Nov 21; screening/vibe.ts). */
+export type AnchorHit =
+  | (SearchHit & { type: "title" })
+  | { type: "person"; tmdbId: number; name: string; dept: string | null; knownFor: string[]; profilePath: string | null };
+
+/** Films, series and people for a query, TMDB's order (its popularity), at most `limit`. */
+export async function searchAnchors(query: string, limit = 8): Promise<AnchorHit[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const data = (await get("/search/multi", { query: q, region: "US", include_adult: "false" })) as { results?: Raw[] } | null;
+  const out: AnchorHit[] = [];
+  for (const r of data?.results ?? []) {
+    if (r.media_type === "movie" || r.media_type === "tv") {
+      out.push({
+        type: "title", tmdbId: Number(r.id), kind: r.media_type as Kind, name: String(r.title ?? r.name ?? ""),
+        year: yearOf(r), posterPath: typeof r.poster_path === "string" ? r.poster_path : null,
+      });
+    } else if (r.media_type === "person") {
+      out.push({
+        type: "person", tmdbId: Number(r.id), name: String(r.name ?? ""),
+        dept: typeof r.known_for_department === "string" ? r.known_for_department : null,
+        knownFor: ((r.known_for as Raw[]) ?? []).map((k) => String(k.title ?? k.name ?? "")).filter(Boolean).slice(0, 2),
+        profilePath: typeof r.profile_path === "string" ? r.profile_path : null,
+      });
+    }
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** TMDB's titles of one kind by name, filtered to the year when given (More like…'s check of each pick). */
+export async function searchKind(kind: Kind, name: string, year: number | null): Promise<Candidate[]> {
+  const params: Record<string, string> = { query: name.slice(0, 100), include_adult: "false" };
+  if (year) params[kind === "movie" ? "year" : "first_air_date_year"] = String(year);
+  const data = (await get(`/search/${kind}`, params)) as { results?: Raw[] } | null;
+  return (data?.results ?? []).slice(0, 10).map((r) => ({
+    tmdbId: Number(r.id), kind, name: String(r.title ?? r.name ?? ""), year: yearOf(r),
+    popularity: Number(r.popularity ?? 0) || 0, posterPath: typeof r.poster_path === "string" ? r.poster_path : null,
+  }));
+}
+
+/** A title's US streaming providers alone (More like…'s "on your Netflix"); null when TMDB has none. */
+export async function titleProviders(kind: Kind, tmdbId: number): Promise<Providers | null> {
+  const r = (await get(`/${kind}/${tmdbId}/watch/providers`, {})) as { results?: Record<string, unknown> } | null;
+  return r ? compactProviders(r.results?.US) : null;
 }
 
 export type TitleDetails = {
