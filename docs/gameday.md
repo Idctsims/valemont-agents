@@ -229,3 +229,42 @@ only, never on db/068).
   TBD, the gold mark; Alabama on top; a live score updating; the detail
   page; the next Morning Brief's slate; Wags' "what's on tonight?"; the
   screenshot gate.
+
+## 10. The Google-style game page (2026-11-21)
+
+Owner, Nov 21, with five Google screenshots (a pre-game, two live, a final,
+player stats): "keep the Kalshi shortcut but match everything else to how
+Google does it"; then "build what you think". The cards drop the score box
+and the mono digits for big light sans digits (Geist, tabular).
+
+`/gameday/[id]` for a team game (`components/gameday/game-view.tsx`):
+
+- The day's other games in the league as a strip; league and week; logos
+  and big scores with the clock between them (green in play); name, rank and
+  record under each; football's down and distance on a field (each end zone
+  in its team's colour, the ball, the line to gain), the last play and the
+  current drive.
+- Pill tabs: Overview (the TV and Kalshi buttons side by side, the score by
+  period, game leaders, the scoring summary, venue, attendance, weather,
+  Your bets), Player stats (per team), Team stats, Play-by-play (newest
+  first, capped at 150). A tab shows only when ESPN has its data.
+- Golf, F1, tennis and UFC keep the §5 page.
+
+**Data: ESPN's public summary, fetched on open, never stored**
+(`lib/gameday/espn.ts`, parsed by `lib/gameday/summary.ts`). No migration, no
+worker change. Supabase reads: the event (~1 KB), one row for the ESPN id
+and one for the league path, and the day's slate for the strip (29–50 KB,
+§6). ESPN: ~0.5 MB a fetch, in Next's data cache 15 s while the game is on,
+10 min otherwise; parsed down to 18–28 KB (measured Nov 21: VT at MIA live,
+MIL at PHI final). While a game is on the page polls the summary every 30 s
+(a server action), not the database. A test row (`e2e-…`) never fetches,
+and falls back to db/068's score and the 60 s poll. A failed fetch is logged
+and the page says so; the header keeps the database's score.
+
+Not brought over: Google's written game story, highlight videos, Watch live
+deep links, Follow and Pin live score; standings and injuries (ESPN has
+them; left for later).
+
+Tests: `e2e/gameday-summary-unit.spec.ts` (the parser, on fixtures cut from
+the Nov 21 summaries). Pending: the owner's phone look, `gameday.spec` and
+`screens-gameday` signed in.

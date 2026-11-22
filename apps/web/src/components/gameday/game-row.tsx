@@ -17,7 +17,7 @@ import { slateTeam } from "@/lib/gameday/teams";
 // left", "make me want to open the app"): each team's logo, name and rank,
 // and the middle of the card is the scoreboard: the start time before the
 // game, the period and clock in play under a pulsing LIVE, Final after. Each
-// score sits in the board's box and pops when it changes. The networks run
+// score is a big light number, no box (owner, Nov 21), and pops when it changes. The networks run
 // along the foot, a gold chip when on the owner's services. The whole card
 // opens /gameday/[id]. No Kalshi price here.
 
@@ -72,7 +72,7 @@ function num(v: number | string | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** A side's score in the board's box. It pops when the live poll changes it; once final, the loser's is muted. */
+/** A side's score in big light digits, no box (owner, Nov 21: Google's look). It pops when the live poll changes it; once final, the loser's is muted. */
 function ScoreBox({ value, testId, muted }: { value: number | string | undefined; testId: string; muted: boolean }) {
   // The previous value kept in state (React's "information from previous renders"): no effect, no timer.
   const [prev, setPrev] = useState(value);
@@ -83,10 +83,9 @@ function ScoreBox({ value, testId, muted }: { value: number | string | undefined
   }
   return (
     <span key={bumps}
-          className={`mt-2.5 flex min-h-14 w-full max-w-38 items-center justify-center rounded-tile border border-border bg-bg ${
-            bumps > 0 ? "animate-score-pop" : ""}`}>
+          className={`mt-2 flex min-h-14 items-center justify-center rounded-tile px-2 ${bumps > 0 ? "animate-score-pop" : ""}`}>
       <span data-testid={testId}
-            className={`font-mono text-3xl tabular-nums tracking-tight ${muted ? "text-text-muted" : "text-text"}`}>
+            className={`font-sans text-4xl font-light leading-none tabular-nums tracking-tight ${muted ? "text-text-muted" : "text-text"}`}>
         {value ?? ""}
       </span>
     </span>
@@ -119,8 +118,8 @@ function Middle({ row }: { row: SlateRow }) {
     return (
       <div data-testid="game-clock" className="flex flex-col items-center gap-1 pt-3 text-center">
         <LiveMark />
-        <span data-testid="game-period" className="font-mono text-xl font-semibold tabular-nums text-text">{c.period}</span>
-        {c.clock && <span data-testid="game-time-left" className="font-mono text-sm tabular-nums text-live">{c.clock}</span>}
+        <span data-testid="game-period" className="font-sans text-xl font-medium tabular-nums text-text">{c.period}</span>
+        {c.clock && <span data-testid="game-time-left" className="font-sans text-sm tabular-nums text-live">{c.clock}</span>}
       </div>
     );
   }
@@ -135,7 +134,7 @@ function Middle({ row }: { row: SlateRow }) {
   }
   return (
     <div className="flex flex-col items-center gap-1 pt-4 text-center">
-      <span data-testid="game-start" className="whitespace-nowrap font-mono text-base font-semibold tabular-nums text-text">
+      <span data-testid="game-start" className="whitespace-nowrap font-sans text-base font-medium tabular-nums text-text">
         {timeSlot(row)}
       </span>
       <span className="text-xs text-text-muted">{vs}</span>

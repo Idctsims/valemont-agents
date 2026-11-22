@@ -3,7 +3,9 @@
 import { requireOwner } from "@/lib/auth";
 import { Refusal, settle, type ActionResult } from "@/lib/action-result";
 import { loadLive } from "@/lib/gameday/data";
+import { loadSummary } from "@/lib/gameday/espn";
 import { POLL_MAX, type LivePatch } from "@/lib/gameday/slate";
+import type { GameSummary } from "@/lib/gameday/summary";
 import { createClient } from "@/lib/supabase/server";
 
 // The live poll (owner, 2026-11-04): the client sends only the ids on screen
@@ -18,4 +20,15 @@ export async function pollLive(ids: number[]): Promise<ActionResult<{ rows: Live
     if (clean.length === 0) throw new Refusal("No games to refresh.");
     return { rows: await loadLive(await createClient(), clean) };
   }, "Couldn't refresh the live scores.");
+}
+
+// The game page's live poll (owner, Nov 21): ESPN's summary for one game,
+// read server-side (espn.ts), so watching a game costs Supabase one tiny row.
+export async function pollSummary(id: number): Promise<ActionResult<{ summary: GameSummary | null; reason?: string }>> {
+  return settle(async () => {
+    await requireOwner();
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Refusal("No game to refresh.");
+    const res = await loadSummary(await createClient(), id);
+    return res.summary ? { summary: res.summary } : { summary: null, reason: res.reason };
+  }, "Couldn't refresh the game.");
 }
