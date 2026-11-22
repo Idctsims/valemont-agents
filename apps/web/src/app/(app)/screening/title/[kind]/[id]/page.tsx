@@ -1,39 +1,29 @@
 import type { Metadata } from "next";
 
-import Image from "next/image";
 import { headers } from "next/headers";
-import Link from "next/link";
-import { Sparkle } from "@phosphor-icons/react/ssr";
 import { notFound } from "next/navigation";
 
-import { JustWatchAttribution, TmdbAttribution } from "@/components/screening/attribution";
-import { Poster } from "@/components/screening/search-box";
-import { ShelfButtons } from "@/components/screening/shelf-buttons";
-import { TitleArsenal } from "@/components/screening/title-arsenal";
-import { TitleReactions } from "@/components/screening/title-reactions";
-import { Fold } from "@/components/ui/fold";
-import { titleHook } from "@/lib/arsenal/hook";
+import { TitleView } from "@/components/screening/title-view";
 import { requireOwner } from "@/lib/auth";
 import { MARKER_HEADER, decideMarker } from "@/lib/capital/marker";
 import { titleOnShelf } from "@/lib/screening/data";
-import { titleNews, titleReaction } from "@/lib/screening/recs";
-import { isKind, longDate, shortDate, yearOf } from "@/lib/screening/types";
+import { titleReaction } from "@/lib/screening/recs";
+import { isKind } from "@/lib/screening/types";
 import { createClient } from "@/lib/supabase/server";
 import { titleDetails, type TitleDetails } from "@/lib/tmdb/client";
-import { splitProviders, tmdbImage, type ProviderRow, type Providers } from "@/lib/tmdb/services";
+import type { Providers } from "@/lib/tmdb/services";
 
 export const metadata: Metadata = { title: "Screening Room" };
 
-// One title (db/051): live from TMDB (server side), with its shelf from the
-// database. The trailer plays inline (youtube-nocookie; the CSP allows that
-// one frame origin). Where to stream: "Tonight on your services" first (a
-// streaming offer on one of the owner's services), then the other streaming
-// offers, rent and buy, folded. A test title (not on TMDB) renders from its
-// database row, and only with the verified e2e marker.
-// Phase 4 (db/053): Love / Neutral / Not interested, and "In the news" (up
-// to 3 recent Home stories that mention it) for a title on Want or Watching.
-// Chat 5 Phase 3 (db/062): once finished, its Arsenal cards ("Drafting…"
-// while the worker writes them), each with its tag and Save.
+// One title (db/051), laid out as Letterboxd's film page (owner, 2026-11-22;
+// docs/screening.md §9): the backdrop across the top with the back arrow and
+// "⋯" over it; the name, year and who made it, the trailer button and the
+// runtime, the poster at the right; the tagline and overview; the buttons
+// (Watch, Watching for a series, Like, Watchlist); More like this. Then only
+// the trailer, Tonight on your services and Other ways to watch. Live from
+// TMDB (server side) with the owner's record from the database; a test title
+// (not on TMDB) renders from its database row, and only with the verified e2e
+// marker. In the news and the Arsenal cards left this page (owner, Nov 22).
 
 export default async function TitlePage({ params }: { params: Promise<{ kind: string; id: string }> }) {
   await requireOwner();
@@ -49,132 +39,19 @@ export default async function TitlePage({ params }: { params: Promise<{ kind: st
     nextEpisodeDate: shelf.title.next_episode_date, status: null, backdropPath: null, tagline: null, runtime: null, makers: null,
   } : null);
   if (!t) notFound();
-  const onList = shelf?.status === "want" || shelf?.status === "watching";
-  const [reaction, news, hook] = shelf
-    ? await Promise.all([
-        titleReaction(supabase, shelf.title.id),
-        onList ? titleNews(supabase, shelf.title.id, { withTests }) : [],
-        titleHook(supabase, shelf.title.id),
-      ])
-    : [null, [], null];
-  const where = splitProviders(t.providers);
-  const elsewhere = where.otherStream.length + where.rent.length + where.buy.length;
+  // The record: the title's id when it is in `titles` (shelved or reacted to before), its shelf and reaction.
+  const known = shelf?.title.id ?? (await titleIdOf(supabase, kind, tmdbId, withTests));
+  const reaction = known ? await titleReaction(supabase, known) : null;
+  const target = known ? { titleId: known } : { kind: t.kind, tmdbId: t.tmdbId };
 
-  return (
-    <article data-testid="title-page" data-kind={t.kind} data-tmdb-id={t.tmdbId} className="lg:max-w-3xl">
-      <p className="label-mono text-text-muted">
-        <Link href="/screening" className="hover:text-text">Screening Room</Link> · {t.kind === "tv" ? "Series" : "Film"}
-      </p>
-      <div className="mt-4 flex flex-col gap-6 lg:flex-row">
-        <Poster path={t.posterPath} name={t.name} large />
-        <div className="min-w-0 flex-1">
-          <h1 data-testid="title-name" className="font-display text-4xl text-text text-balance">{t.name}</h1>
-          <p className="label-mono mt-2 text-text-muted">
-            {yearOf(t.releaseDate) ?? "Date unknown"}
-            {t.genres.length > 0 && ` · ${t.genres.slice(0, 3).join(", ")}`}
-            {t.status && ` · ${t.status}`}
-          </p>
-          <p data-testid="title-date" className="mt-3 text-sm text-text">
-            {t.kind === "tv"
-              ? t.nextEpisodeDate ? `Next episode ${longDate(t.nextEpisodeDate)}` : "No episode scheduled"
-              : t.releaseDate ? `US release ${longDate(t.releaseDate)}` : "No US release date yet"}
-          </p>
-          {t.overview && <p data-testid="title-overview" className="mt-4 text-base text-text-muted text-pretty">{t.overview}</p>}
-          <div className="mt-5 flex flex-col gap-3">
-            <ShelfButtons target={shelf ? { titleId: shelf.title.id } : { kind: t.kind, tmdbId: t.tmdbId }} current={shelf?.status ?? null} />
-            <TitleReactions target={shelf ? { titleId: shelf.title.id } : { kind: t.kind, tmdbId: t.tmdbId }} current={reaction} />
-            {/* More like… with this title as the anchor (owner, Nov 21; docs/screening.md §8). */}
-            <Link data-testid="title-more-like"
-                  href={`/screening?like=${t.kind}:${t.tmdbId}&label=${encodeURIComponent(t.name)}${
-                    yearOf(t.releaseDate) ? `&year=${yearOf(t.releaseDate)}` : ""}`}
-                  className="tap inline-flex w-fit items-center gap-2 rounded-pill border border-border px-4 text-sm text-text hover:border-accent-ink">
-              <Sparkle size={16} aria-hidden className="text-text-muted" /> More like this
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      {t.trailerKey && (
-        <section aria-label="Trailer" data-testid="title-trailer" className="mt-8">
-          <iframe
-            src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(t.trailerKey)}`}
-            title={`${t.name} trailer`}
-            loading="lazy"
-            allow="encrypted-media; picture-in-picture; fullscreen"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-            className="aspect-video w-full rounded-inner border border-border bg-surface-2"
-          />
-        </section>
-      )}
-
-      {hook && <TitleArsenal hook={hook} />}
-
-      {news.length > 0 && (
-        <section aria-label="In the news" data-testid="title-news" className="mt-8">
-          <h2 className="font-display text-2xl text-text">In the news</h2>
-          <ul className="mt-3 border-t border-border">
-            {news.map((n) => (
-              <li key={n.storyId} data-testid="title-news-item" className="border-b border-border py-3">
-                <a href={n.url} target="_blank" rel="noopener noreferrer" className="group block">
-                  <p className="font-display text-lg leading-snug text-text group-hover:text-accent">{n.title}</p>
-                  {n.summary && <p className="mt-1 line-clamp-2 text-sm text-text-muted">{n.summary}</p>}
-                  <p className="label-mono mt-1 text-text-muted">{n.sourceName} · {shortDate(n.firstSeenAt.slice(0, 10))}</p>
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <section aria-label="Where to stream" data-testid="where-to-stream" className="mt-8">
-        <h2 className="font-display text-2xl text-text">Tonight on your services</h2>
-        {where.tonight.length === 0 ? (
-          <p data-testid="tonight-none" className="mt-2 text-sm text-text-muted">Not streaming on Netflix, HBO Max, Paramount+, Starz or Prime Video in the US.</p>
-        ) : (
-          <ul data-testid="tonight" className="mt-3 flex flex-wrap gap-2">
-            {where.tonight.map((p) => (
-              <li key={p.service} data-testid="tonight-service" className="inline-flex items-center gap-2 rounded-pill border border-accent px-3 py-1 text-sm text-text">
-                <Logo row={p} />
-                {p.service}
-                {p.kind !== "flatrate" && <span className="label-mono text-text-muted">{p.kind === "ads" ? "with ads" : "free"}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-        {elsewhere > 0 && (
-          <div data-testid="rent-buy" className="mt-4">
-            <Fold label="Other ways to watch" count={elsewhere} testId="rent-buy-fold">
-              {where.otherStream.length > 0 && <Group label="Other streaming" rows={where.otherStream} />}
-              {where.rent.length > 0 && <Group label="Rent" rows={where.rent} />}
-              {where.buy.length > 0 && <Group label="Buy" rows={where.buy} />}
-            </Fold>
-          </div>
-        )}
-        <JustWatchAttribution link={t.providers.link} />
-      </section>
-      <TmdbAttribution />
-    </article>
-  );
+  const r = reaction === "love" || reaction === "neutral" || reaction === "not_interested" ? reaction : null;
+  return <TitleView t={t} shelf={shelf?.status ?? null} reaction={r} target={target} />;
 }
 
-function Group({ label, rows }: { label: string; rows: ProviderRow[] }) {
-  return (
-    <li className="py-3">
-      <p className="label-mono text-text-muted">{label}</p>
-      <ul className="mt-2 flex flex-wrap gap-2">
-        {rows.map((p) => (
-          <li key={p.id} className="inline-flex items-center gap-2 rounded-pill border border-border px-3 py-1 text-sm text-text-muted">
-            <Logo row={p} />
-            {p.name}
-          </li>
-        ))}
-      </ul>
-    </li>
-  );
-}
-
-function Logo({ row }: { row: ProviderRow }) {
-  const src = tmdbImage(row.logo, "w45");
-  return src ? <Image src={src} alt="" width={20} height={20} unoptimized className="size-5 rounded-inner" /> : null;
+/** A title's id in `titles` when it is there (reacted to but never shelved), else null. */
+async function titleIdOf(supabase: Awaited<ReturnType<typeof createClient>>, kind: string, tmdbId: number, withTests: boolean) {
+  let q = supabase.from("titles").select("id").eq("kind", kind).eq("tmdb_id", tmdbId);
+  if (!withTests) q = q.eq("is_test", false);
+  const { data } = await q.maybeSingle();
+  return (data as { id: number } | null)?.id ?? null;
 }

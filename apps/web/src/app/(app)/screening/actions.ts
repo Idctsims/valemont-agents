@@ -155,9 +155,17 @@ export async function setShelf(input: Target & { shelf: string | null }): Promis
   return settle(async () => {
     await requireOwner();
     if (input.shelf === null) {
-      if (!("titleId" in input)) return { titleId: 0 }; // never shelved: already off
-      const titleId = await targetId(input);
       const supabase = await createClient();
+      let titleId: number;
+      if ("titleId" in input) {
+        titleId = await targetId(input);
+      } else {
+        // By TMDB id: a title never added to `titles` is on no shelf, so it is already off.
+        const found = await supabase.from("titles").select("id").eq("kind", String(input.kind)).eq("tmdb_id", Number(input.tmdbId)).maybeSingle();
+        if (found.error) throw new Refusal(`Couldn't read the title: ${found.error.message}`);
+        if (!found.data) return { titleId: 0 };
+        titleId = (found.data as { id: number }).id;
+      }
       const cur = await supabase.from("v_watch_current").select("status").eq("title_id", titleId).maybeSingle();
       if (cur.error) throw new Refusal(`Couldn't read the shelf: ${cur.error.message}`);
       if (!cur.data) return { titleId };
