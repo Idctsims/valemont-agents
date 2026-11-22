@@ -5,6 +5,7 @@ import Link from "next/link";
 import { SquaresFour, Star } from "@phosphor-icons/react/ssr";
 
 import { SlateView } from "@/components/gameday/slate-view";
+import { TeamSearch } from "@/components/gameday/team-search";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireOwner } from "@/lib/auth";
 import { MARKER_HEADER, decideMarker } from "@/lib/capital/marker";
@@ -40,7 +41,11 @@ export default async function GameDayPage({ searchParams }: { searchParams: Prom
 
   return (
     <>
-      <PageHeader label="Sports" title="Game Day" />
+      {/* The team search sits at the header's top right (owner, Nov 21). */}
+      <div className="relative">
+        <PageHeader label="Sports" title="Game Day" />
+        <div className="absolute right-0 top-0"><TeamSearch /></div>
+      </div>
 
       {/* Whose games: a segmented switch, the shown side raised on the track (owner, Nov 20: a better
           way than two chips). Each side is a link, so the choice stays in the URL. */}

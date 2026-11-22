@@ -309,6 +309,10 @@
 }
 /* A swipeable row with no visible scrollbar (Game Day's game strip and
    tabs, owner Nov 21: Google's look). Touch, wheel and keys still scroll it. */
+/* Game Day's team search: the results scroll inside the box, the keyboard's room left. */
+@utility max-h-search {
+  max-height: min(60dvh, 32rem);
+}
 @utility scroll-row {
   scrollbar-width: none;
   &::-webkit-scrollbar {

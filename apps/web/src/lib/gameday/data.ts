@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { SEARCH_BACK_DAYS, SEARCH_ROWS, searchFilter, searchPattern, teamHits, type SearchRow, type TeamHit } from "./search";
 import type { LivePatch, SlateRow, Status } from "./slate";
 import { slateSides, type TeamRow } from "./teams";
 import type { TvTier } from "./tiers";
@@ -97,4 +98,28 @@ export async function loadEvent(supabase: SupabaseClient, id: number): Promise<G
   const { data, error } = await supabase.rpc("gameday_event", { p_id: id });
   if (error) throw new Error(`Couldn't read that game: ${error.message}`);
   return (data ?? null) as GameEvent | null;
+}
+
+/**
+ * The team search (owner, Nov 21): games from SEARCH_BACK_DAYS ago on whose
+ * home or away name holds the text (searchFilter), narrow columns, at
+ * most SEARCH_ROWS rows (~110 KB at worst, a two-letter search), then one
+ * hit per team (search.ts). Test rows only for a marked
+ * e2e request.
+ */
+export async function searchTeams(supabase: SupabaseClient, q: string, withTests: boolean): Promise<TeamHit[]> {
+  const pat = searchPattern(q);
+  if (!pat) return [];
+  const since = new Date(Date.now() - SEARCH_BACK_DAYS * 86_400_000).toISOString();
+  const { data, error } = await supabase
+    .from("sports_events")
+    .select(`${SIDES},league,home,away,starts_at,status`)
+    .eq("kind", "game")
+    .eq("is_test", withTests)
+    .gte("starts_at", since)
+    .or(searchFilter(pat))
+    .order("starts_at")
+    .limit(SEARCH_ROWS);
+  if (error) throw new Error(`Couldn't search the teams: ${error.message}`);
+  return teamHits((data ?? []) as unknown as SearchRow[], q, Date.now());
 }

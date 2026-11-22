@@ -13,9 +13,9 @@ import type { Team } from "@/lib/betting/teams";
 // price on /betting does; tapping one already in the slip takes it out.
 
 /** ESPN's logo, the theme's variant; nothing when the game has no ESPN link. */
-export function TeamLogo({ team, size }: { team: Team; size: "sm" | "md" | "lg" }) {
+export function TeamLogo({ team, size }: { team: Team; size: "sm" | "row" | "md" | "lg" }) {
   if (!team.logo) return null;
-  const box = size === "lg" ? "size-15 sm:size-19" : size === "md" ? "size-14" : "size-5.5";
+  const box = size === "lg" ? "size-15 sm:size-19" : size === "md" ? "size-14" : size === "row" ? "size-8" : "size-5.5";
   return (
     <span aria-hidden className={`inline-block shrink-0 ${box}`}>
       {/* eslint-disable-next-line @next/next/no-img-element -- ESPN's CDN, sized here; no optimizer round trip */}

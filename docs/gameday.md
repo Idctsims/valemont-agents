@@ -268,3 +268,28 @@ them; left for later).
 Tests: `e2e/gameday-summary-unit.spec.ts` (the parser, on fixtures cut from
 the Nov 21 summaries). Pending: the owner's phone look, `gameday.spec` and
 `screens-gameday` signed in.
+
+## 11. Team search (2026-11-21)
+
+Owner, Nov 21: a magnifying glass at Game Day's top right opens a search
+box; as the owner types, teams appear with their logos
+(`components/gameday/team-search.tsx`). Tapping a team opens its game: live,
+else the next not yet started, else the last one played (agent's call; the
+owner did not specify).
+
+Teams come from the games in `sports_events` from 14 days back on
+(`lib/gameday/search.ts`, read by `data.ts searchTeams` through the owner's
+session): under four letters the text must start a word ("st" is inside
+every "State"), from four it matches anywhere ("bama"). At most 400 rows a
+search: "st" alone matched 492 games on Nov 21, ~270 bytes a row, so
+~110 KB at worst; "miami" read 31 rows, 8.5 KB. Asked 200 ms after the last
+keystroke; an older answer never replaces a newer one. 12 teams at most,
+names that start with the text first, a live game first among equals, then
+the owner's league order.
+
+Known limits: accents and apostrophes must be typed as stored for the
+database match ("st john" finds St. John's, "st johns" does not).
+
+Tests: `e2e/gameday-search-unit.spec.ts`; `gameday.spec` owner "the
+magnifying glass finds a team…" (also proves the quoted PostgREST
+word-start form parses). Not run signed in yet.
