@@ -7,7 +7,7 @@ resolves_after, and now() is frozen inside a transaction. The rows are finished 
 resolved) before the test ends, so nothing is left in either due set.
 
 Real here: ledger.commit and its CHECKs and triggers, the stamp guard against production's
-preregistrations (v2 must be stamped: db/086), the database clock for the started-game refusal,
+preregistrations (v2.1 must be stamped: db/090), the database clock for the started-game refusal,
 the capture and resolution writes. Faked: Kalshi (settlement values and candles)."""
 
 from __future__ import annotations
@@ -64,9 +64,10 @@ class FullLoop(LiveLedgerTestCase):
                        "payload->>'rule_version', payload->>'scored_price', payload->>'capital_at_risk', "
                        "(SELECT count(*) FROM legs WHERE commitment_id = c.id) FROM commitments c WHERE id = %s", cid)
         kind, mode, closes_at, resolves_after, before_kickoff, rule, scored, capital, n_legs = row
-        self.assertEqual((kind, mode, rule, before_kickoff), ("event_contract", "paper", "P2", True))
+        self.assertEqual((kind, mode, rule, before_kickoff), ("event_contract", "paper", "P2.1", True))
         self.assertEqual(closes_at, kick)
-        self.assertEqual(resolves_after, expires)
+        # P2.1 §5: never before the close; the 5 s expected expiration is earlier than closes_at + 1 min.
+        self.assertEqual(resolves_after, max(expires, kick + timedelta(minutes=1)))
         self.assertTrue(D("0.15") <= D(scored) <= D("0.40"))
         legs = [r[0] for r in self.rows("SELECT subject FROM legs WHERE commitment_id = %s ORDER BY id", cid)]
         self.assertEqual(len(legs), n_legs)
@@ -77,8 +78,11 @@ class FullLoop(LiveLedgerTestCase):
         clock.at = kick + timedelta(minutes=6)
         cap = agent.capture_due()
         self.assertEqual((cap.captured, cap.missed, cap.failed), (1, 0, 0))
-        snap = self.row("SELECT status, clv FROM closing_snapshots WHERE commitment_id = %s", cid)
+        snap = self.row("SELECT status, clv, detail FROM closing_snapshots WHERE commitment_id = %s", cid)
         self.assertEqual(snap[0], "captured")
+        # P2.1 §6: every captured leg carries its close age; the ticket its median and maximum.
+        self.assertEqual({x["age_min"] for x in snap[2]["legs"]}, {1.0})
+        self.assertEqual((snap[2]["age_min_median"], snap[2]["age_min_max"], snap[2]["rule_version"]), (1.0, 1.0, "P2.1"))
 
         client.settled = {t: "1" for t in legs}
         client.settled[legs[0]] = "0"  # one leg misses: the ticket misses

@@ -1,7 +1,18 @@
-"""Phase 4.3: the ticket search, its prices and the leg reasons (rule version P2).
+"""Phase 4.3: the ticket search, its prices and the leg reasons (rule version P2.1).
 
-docs/preregistration_parlays.md §2-§4, version 2 (stamped: db/085 for the
-unchanged sections, db/086 for §0, §1, §3, §4 and §7). Pure: no SQL, no
+docs/preregistration_parlays.md §2-§4, version 2.1 (stamped: db/085, db/086,
+and db/090 for §0, §3, §5 and §6). P2.1 adds two things to §3's search and
+changes nothing else:
+
+- **The depth-first rebuild.** Only when the greedy pass yields no ticket at
+  any leg count of a scope, each count is rebuilt depth-first in the same
+  order (`depth_first`, REBUILD_BUDGET rule checks a count). When the greedy
+  yields a ticket, everything is P2's, byte for byte. A ticket records how it
+  was built (`search`: greedy | depth_first).
+- **`3 per game`.** A count above 3 x the scope's games cannot keep rule 10
+  and is not tried; with no count left to try, that is the binding rule.
+
+Pure: no SQL, no
 network, and no clock that decides anything (a search only measures its own
 pricing time, for the report). Given the same candidates (the legs that passed rules 1-4
 in `consensus.parlay_legs`), the same rho table and the same draw count, it
@@ -80,8 +91,13 @@ from consensus import combo
 from consensus import correlation as cr
 from consensus import parlay_legs as pl
 
-#: The pre-registration's version 2 (owner, 2026-11-20; db/086). §7's M5 switch makes P3.
-RULE_VERSION = "P2"
+#: The pre-registration's version 2.1 (owner, 2026-11-24; db/090). §7's M5 switch makes P3.
+RULE_VERSION = "P2.1"
+#: P2.1 §3: the depth-first rebuild's work per leg count, in rule checks (one candidate
+#: checked against the ticket so far). Deterministic: it counts checks, never time.
+REBUILD_BUDGET = 20_000
+#: How a ticket was built (P2.1 §3): P2's greedy pass, or the rebuild when the greedy drew nothing.
+GREEDY, DEPTH_FIRST = "greedy", "depth_first"
 #: Tier -> (agent, the leg-count range), §1.
 TIERS: Mapping[str, tuple[str, int, int]] = {
     "safer": ("parlay_safer", 3, 5),
@@ -279,6 +295,70 @@ def greedy(cands: Sequence[Cand], n: int, t: cr.RhoTable,
     return b
 
 
+class _Spent(Exception):
+    """The rebuild's budget ran out for one leg count."""
+
+
+def depth_first(cands: Sequence[Cand], n: int, t: cr.RhoTable, window: tuple[Decimal, Decimal] | None = None,
+                budget: int = REBUILD_BUDGET) -> tuple[Build | None, str]:
+    """P2.1 §3's rebuild of one leg count: the first ticket in the candidates'
+    order that keeps rules 5-11 and lands inside the window. A leg is taken in
+    order and given up only when no completion follows it. At most `budget`
+    rule checks; then the count yields nothing. Returns (the build or None,
+    "found" | "none" | "budget spent").
+
+    Each candidate ranked above a taken leg that the ticket does not hold gets
+    its reason against the ticket's legs ranked above it: the first of rules
+    5-11 it breaks, else `window`, else rule 5 (with it, no complete ticket of
+    this count could be built). That last is the stricter reading (§0) of a
+    leg the search took and gave up."""
+    ask_lo = min((c.ask for c in cands), default=Decimal(1))
+    ask_hi = max((c.ask for c in cands), default=Decimal(0))
+    checks = 0
+    size = len(cands)
+
+    def go(start: int, legs: list[Cand]) -> list[Cand] | None:
+        nonlocal checks
+        if len(legs) == n:
+            return legs if in_window(_product(legs), window) else None
+        need = n - len(legs)
+        for i in range(start, size - need + 1):
+            c = cands[i]
+            checks += 1
+            if checks > budget:
+                raise _Spent
+            if first_broken(legs, c, n, t) is not None:
+                continue
+            if window is not None and not reachable(_product(legs) * c.ask, need - 1, window, ask_lo, ask_hi):
+                continue
+            got = go(i + 1, [*legs, c])
+            if got is not None:
+                return got
+        return None
+
+    try:
+        legs = go(0, [])
+    except _Spent:
+        return None, "budget spent"
+    if legs is None:
+        return None, "none"
+    b = Build(list(legs))
+    held = {x.key for x in legs}
+    last = max(cands.index(x) for x in legs)
+    for i, c in enumerate(cands[:last]):
+        if c.key in held:
+            continue
+        above = [x for x in legs if cands.index(x) < i]
+        r = first_broken(above, c, n, t)
+        if r is not None:
+            b.why[c.key] = RULE_LABELS[r]
+        elif window is not None and not reachable(_product(above) * c.ask, n - len(above) - 1, window, ask_lo, ask_hi):
+            b.why[c.key] = WINDOW
+        else:
+            b.why[c.key] = RULE_LABELS[5]
+    return b, "found"
+
+
 def replace_for_second_sport(b: Build, cands: Sequence[Cand], n: int, t: cr.RhoTable,
                              window: tuple[Decimal, Decimal] | None = None) -> Build | None:
     """§3's cross-sport step: when every leg shares one sport, the last leg
@@ -451,6 +531,7 @@ class Ticket:
     fill_note: str | None
     expected_quote: None = None     # M1 not frozen: absent, shown EXPECTED_QUOTE_PENDING, never scored
     rule_version: str = RULE_VERSION
+    search: str = GREEDY            # P2.1 §3: greedy, or depth_first when the greedy drew nothing
 
     @property
     def tickers(self) -> list[str]:
@@ -460,7 +541,8 @@ class Ticket:
         """§4's fields as the commitment's payload will hold them (4.4 adds fetch times' context)."""
         p = self.priced
         return {
-            "rule_version": self.rule_version, "tier": self.tier, "scope": self.scope, "sport": self.sport,
+            "rule_version": self.rule_version, "search": self.search,
+            "tier": self.tier, "scope": self.scope, "sport": self.sport,
             "scored_price": str(p.scored_price), "taker_fee": str(p.taker_fee),
             "taker_fee_order": str(p.taker_fee_order), "contracts": NOMINAL_CONTRACTS,
             "maker_fee_assumed": str(p.maker_fee_assumed), "maker_fee_note": "assumption: 50% of the taker fee",
@@ -545,6 +627,22 @@ def search(tier: str, cands: Sequence[Cand], t: cr.RhoTable, *, sport: str | Non
                       f"{WINDOW}: {len(cands)} candidates < {fewest}, the fewest legs that reach the window",
                       tried, timing, time.perf_counter() - t0)
     reachable_counts = 0
+    # P2.1 §3: a count larger than 3 x the scope's games cannot keep rule 10 and is not tried.
+    games = len({c.m.game_ticker for c in cands})
+    tryable: list[int] = []
+
+    def finish(b: Build | None, n: int, note: str) -> None:
+        if cross_sport:
+            b = replace_for_second_sport(b, cands, n, t, window)  # type: ignore[arg-type]
+            if b is None:
+                tried[n] = "no second sport"
+                return
+        tp = time.perf_counter()
+        pr = price_ticket(b.legs, t, draws=draws, draws_max=draws_max)  # type: ignore[union-attr]
+        timing[n] = time.perf_counter() - tp
+        tried[n] = f"{note}rel {pr.rel_cost:.6f}"
+        built.append((b, pr))  # type: ignore[arg-type]
+
     for n in range(lo, hi + 1):
         # A count that cannot reach the window even from this scope's cheapest and
         # dearest asks (Safer 3, Mid 6, Lotto 11-12 on the 0.75-0.95 band) is tried
@@ -553,6 +651,10 @@ def search(tier: str, cands: Sequence[Cand], t: cr.RhoTable, *, sport: str | Non
             tried[n] = "window: unreachable at this leg count"
             continue
         reachable_counts += 1
+        if n > MAX_PER_GAME * games:
+            tried[n] = f"{RULE_LABELS[10]}: {n} legs > {MAX_PER_GAME} x {games} games"
+            continue
+        tryable.append(n)
         b: Build | None = greedy(cands, n, t, window)
         skips.update(b.why.values())  # type: ignore[union-attr]
         if len(b.legs) < n:  # type: ignore[union-attr]
@@ -562,25 +664,30 @@ def search(tier: str, cands: Sequence[Cand], t: cr.RhoTable, *, sport: str | Non
             tried[n] = f"window: {_product(b.legs)}"  # type: ignore[union-attr]
             skips[WINDOW] += 1
             continue
-        if cross_sport:
-            b = replace_for_second_sport(b, cands, n, t, window)  # type: ignore[arg-type]
-            if b is None:
-                tried[n] = "no second sport"
+        finish(b, n, "")
+    how = GREEDY
+    if not built and tryable:
+        # P2.1 §3: the greedy drew nothing at any count, so each count is rebuilt
+        # depth-first in the same order. Never when the greedy drew a ticket.
+        how = DEPTH_FIRST
+        for n in tryable:
+            rb, outcome = depth_first(cands, n, t, window)
+            if rb is None:
+                tried[n] += f"; rebuild: {outcome}"
                 continue
-        tp = time.perf_counter()
-        pr = price_ticket(b.legs, t, draws=draws, draws_max=draws_max)
-        timing[n] = time.perf_counter() - tp
-        tried[n] = f"rel {pr.rel_cost:.6f}"
-        built.append((b, pr))
+            finish(rb, n, "rebuilt: ")
     if not built:
         # Owner, Nov 20: a tier that cannot reach its window is empty with `window`.
-        # No count can reach it: `window`. Otherwise the reason that stopped the
+        # No count can reach it: `window`. No count that can reach it can be built
+        # under rule 10: `3 per game` (P2.1). Otherwise the reason that stopped the
         # counts that could: the cross-sport step's, else the most frequent skip
         # (the window among them, when it turned legs or complete tickets away).
         if reachable_counts == 0:
             why = (f"{WINDOW}: no leg count from {lo} to {hi} reaches it on asks "
                    f"{_cents(ask_lo)}-{_cents(ask_hi)}¢")
-        elif cross_sport and any(v == "no second sport" for v in tried.values()):
+        elif not tryable:
+            why = RULE_LABELS[10]
+        elif cross_sport and any(v.startswith("no second sport") for v in tried.values()):
             why = "no second sport"
         else:
             why = _binding(skips)
@@ -590,7 +697,7 @@ def search(tier: str, cands: Sequence[Cand], t: cr.RhoTable, *, sport: str | Non
     edges = [f"{c.m.market_ticker}:{c.leg.side}" for c in b.legs
              if is_edge_leg(c, (spans or {}).get(c.m.market_ticker))]
     ticket = Ticket(tier, agent, scope, None if cross_sport else sport, list(b.legs), pr, reasons, edges,
-                    t.data.get("version"), t.sha256, FILL_NOTE if cross_sport else None)
+                    t.data.get("version"), t.sha256, FILL_NOTE if cross_sport else None, search=how)
     return Result(tier, scope, sport, len(cands), ticket, None, tried, timing, time.perf_counter() - t0)
 
 

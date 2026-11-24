@@ -63,10 +63,11 @@ class TestParlay(ap.ParlayAgent):
 
 
 def agent(data: ps.SlotQuotes | None, *, tier: str = "safer", at: datetime = COMMIT,
-          db_now: datetime = COMMIT, guard=lambda: None, client: Any = None) -> TestParlay:
+          db_now: datetime = COMMIT, guard=lambda: None, client: Any = None,
+          starts: Any = None) -> TestParlay:
     a = type(f"Test{tier}", (TestParlay,), {"tier": tier})(
         client=client or FakeClient(), clock=lambda: at, slots=lambda key: data, guard=guard,
-        db_now=lambda: db_now, rho=T, draws=2000)
+        db_now=lambda: db_now, rho=T, draws=2000, starts=starts or (lambda events: {}))
     return a
 
 
@@ -214,7 +215,7 @@ class Commit(LedgerTestCase):
         self.assertEqual(p.resolves_after, max(c.leg.quote.expires for c in t.legs))
         self.assertEqual(p.quote_fetched_at, REQUOTED)
         pay = p.payload
-        self.assertEqual((pay["rule_version"], pay["invalidation"], pay["expected_quote"]), ("P2", "0", None))
+        self.assertEqual((pay["rule_version"], pay["invalidation"], pay["expected_quote"]), ("P2.1", "0", None))
         self.assertEqual(D(pay["capital_at_risk"]), (t.priced.scored_price + t.priced.taker_fee) * 100)
         self.assertEqual(pay["oldest_leg_age_s_at_commit"], 720.0)
         self.assertEqual(set(pay["kickoffs"]), {c.m.market_ticker for c in t.legs})
@@ -282,6 +283,105 @@ class ResolveAndClose(LedgerTestCase):
         a = agent(None, client=cl, at=k_b + timedelta(minutes=6))
         with self.assertRaisesRegex(CloseUnavailable, r"no two-sided quote .* before kickoff: B"):
             a.capture_close(pending(1, legs=self.LEGS, payload=self.PAY, closes_at=k_b))
+
+
+class P21Close(LedgerTestCase):
+    """P2.1 §5 and §6 (owner, Nov 24). The ResolveAndClose cases above have no rule_version: they
+    are P2 tickets (cohort 1) and keep P2's close, unchanged."""
+
+    LEGS = ResolveAndClose.LEGS
+    K_A, K_B = KICK, KICK + timedelta(hours=1)
+    PAY = {**ResolveAndClose.PAY, "rule_version": "P2.1",
+           "legs": [{"market_ticker": "A", "event_ticker": "EV-A"}, {"market_ticker": "B", "event_ticker": "EV-B"}]}
+
+    def close(self, candles, *, at=None, starts=None, payload=None):
+        a = agent(None, client=FakeClient(candles=candles), at=at or self.K_B + timedelta(minutes=6), starts=starts)
+        return a.capture_close(pending(1, legs=self.LEGS, payload=payload or self.PAY, closes_at=self.K_B)), a
+
+    def test_a_standing_quote_27_minutes_before_kickoff_is_the_close_with_its_age(self):
+        candles = {"A": [candle(self.K_A - timedelta(minutes=27), "0.25", "0.26")],
+                   "B": [candle(self.K_B - timedelta(minutes=8), "0.18", "0.20")]}
+        close, _ = self.close(candles)
+        self.assertEqual(close.price, D("0.255") * D("0.81"))
+        self.assertEqual([x["age_min"] for x in close.detail["legs"]], [27.0, 8.0])
+        self.assertEqual((close.detail["age_min_median"], close.detail["age_min_max"]), (17.5, 27.0))
+        self.assertEqual(close.detail["rule_version"], "P2.1")
+        # The same candles under P2's rule (cohort 1): missed, unchanged.
+        with self.assertRaisesRegex(CloseUnavailable, r"no two-sided quote .* before kickoff: A"):
+            self.close(candles, payload=ResolveAndClose.PAY)
+
+    def test_the_last_candle_must_be_two_sided_an_earlier_one_does_not_count(self):
+        candles = {"A": [candle(self.K_A - timedelta(minutes=50), "0.25", "0.26"),
+                         candle(self.K_A, None, "0.06")],  # one-sided at kickoff: the bid left
+                   "B": [candle(self.K_B - timedelta(minutes=1), "0.18", "0.20")]}
+        with self.assertRaisesRegex(CloseUnavailable, r"is not two-sided: A"):
+            self.close(candles)
+
+    def test_sixty_minutes_inclusive_and_nothing_older(self):
+        ok = {"A": [candle(self.K_A - timedelta(minutes=60), "0.25", "0.26")],
+              "B": [candle(self.K_B, "0.18", "0.20")]}
+        close, _ = self.close(ok)
+        self.assertEqual(close.detail["legs"][0]["age_min"], 60.0)
+        old = {"A": [candle(self.K_A - timedelta(minutes=61), "0.25", "0.26")], "B": ok["B"]}
+        with self.assertRaisesRegex(CloseUnavailable, r"no candle in the 1:00:00 before kickoff: A"):
+            self.close(old)
+
+    def test_a_postponed_leg_is_closed_at_its_new_start_and_not_before(self):
+        later = self.K_B + timedelta(days=1)
+        starts = lambda events: {"EV-B": later, "EV-A": self.K_A - timedelta(hours=2)}  # A's earlier: ignored
+        candles = {"A": [candle(self.K_A - timedelta(minutes=2), "0.70", "0.72")],
+                   "B": [candle(self.K_B - timedelta(minutes=1), "0.50", "0.52"),       # the original day
+                         candle(later - timedelta(minutes=3), "0.18", "0.20")]}
+        not_yet, _ = self.close(candles, starts=starts)  # 6 minutes after the original kickoff
+        self.assertIsNone(not_yet)
+        close, a = self.close(candles, starts=starts, at=later + timedelta(minutes=6))
+        a_leg, b_leg = close.detail["legs"]
+        self.assertEqual((a_leg["kickoff"], a_leg["postponed"]), (self.K_A.isoformat(), False))
+        self.assertEqual((b_leg["kickoff"], b_leg["kickoff_at_commit"], b_leg["postponed"], b_leg["age_min"]),
+                         (later.isoformat(), self.K_B.isoformat(), True, 3.0))
+        self.assertEqual(close.price, D("0.71") * D("0.81"))
+        self.assertIn(("candles", "B", later - timedelta(minutes=60), later), a.client.calls)
+
+    def test_resolves_after_is_never_before_closes_at(self):
+        # A postponed leg's expected expiration still on the original day (Sun Nov 22 16:45 Tennis).
+        data = slot()
+        stale = {t: pl.Quote(q.yes_bid, q.yes_ask, q.at, COMMIT + timedelta(minutes=30)) for t, q in data.quotes.items()}
+        data = ps.SlotQuotes(key=data.key, markets=data.markets, quotes=stale, cut={}, requote=data.requote,
+                             started_at=data.started_at, finished_at=data.finished_at, read_seconds=1.0)
+        a = agent(data)
+        a._tick_run_id = 1
+        (p,) = a.build_commitment(a.form_thesis(a.observe()))
+        self.assertEqual(p.resolves_after, p.closes_at + timedelta(minutes=1))
+        self.assertGreater(p.resolves_after, p.closes_at)
+
+
+class ClvSummary(unittest.TestCase):
+    """P2.1 §6: never a CLV figure without its ages; cohorts and scopes never pooled."""
+
+    def row(self, agent="parlay_safer", clv="0.01", ages=(5.0, 9.0), version="P2.1", scope="sport"):
+        return {"agent": agent, "scope": scope, "rule_version": version, "clv": clv, "clv_pct": "0.02",
+                "detail": {"legs": [{"ticker": f"T{i}", "age_min": a} for i, a in enumerate(ages)]}}
+
+    def test_the_ages_sit_beside_every_mean_per_agent_scope_and_cohort(self):
+        from consensus import parlay_clv
+        lines = parlay_clv.summarize([self.row(clv="0.01", ages=(5, 9)), self.row(clv="0.03", ages=(1, 27)),
+                                      self.row(version="P2", ages=(2,)), self.row(scope="cross_sport", ages=(3,))])
+        self.assertEqual([(x.scope, x.rule_version, x.tickets) for x in lines],
+                         [("cross_sport", "P2.1", 1), ("sport", "P2", 1), ("sport", "P2.1", 2)])
+        p21 = lines[2]
+        self.assertEqual((p21.mean_clv, p21.median_age_min, p21.max_age_min, p21.legs), (D("0.02"), 7.0, 27, 4))
+        self.assertIn("close age median 7 min, max 27 min", p21.text())
+
+    def test_a_p2_close_without_recorded_ages_takes_them_from_its_kickoff_and_candle_end(self):
+        from consensus import parlay_clv
+        detail = {"legs": [{"ticker": "A", "kickoff": "2026-11-22T20:00:00+00:00",
+                            "candle_end": "2026-11-22T19:57:00+00:00"}]}
+        self.assertEqual(parlay_clv.leg_ages(detail), [3.0])
+
+    def test_no_ages_no_figure(self):
+        from consensus import parlay_clv
+        with self.assertRaises(parlay_clv.MissingAges):
+            parlay_clv.summarize([{"agent": "parlay_mid", "clv": "0.01", "detail": {"legs": [{"ticker": "A"}]}}])
 
 
 # --------------------------------------------------------------------------- the image copy

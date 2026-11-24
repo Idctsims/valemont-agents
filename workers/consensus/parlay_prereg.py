@@ -1,15 +1,17 @@
-"""The parlay generator's stamp guard (pre-registration version 2; owner, 2026-11-20).
+"""The parlay generator's stamp guard (pre-registration version 2.1; owner, 2026-11-24).
 
 Nothing commits a parlay ticket unless every section of
 docs/preregistration_parlays.md, hashed exactly as it stands, matches a stamp
-the database made before now: db/085 for the six sections version 2 left
-unchanged, db/086 for §0, §1, §3, §4 and §7. This module names the sections
-of version 2 and refuses as a whole. The adapter calls `require_stamped()`
-before every slate. It raises PreregistrationMissing, which is never caught.
+the database made before now: db/085 for §2, §8, §9 and §10; db/086 for §1,
+§4 and §7; db/090 for §0, §3, §5 and §6 (version 2.1). This module names the
+sections of version 2.1 and refuses as a whole. The adapter calls
+`require_stamped()` before every slate. It raises PreregistrationMissing,
+which is never caught.
 
-Version 2 is the version: the heading `## 3. Leg rules, version P2
-(provisional)` must be the one in the text, and §3's rules are rule version P2.
-A text still at version 1 has no such heading, and the guard refuses.
+Version 2.1 is the version: the heading `## 3. Leg rules, version P2.1
+(provisional)` must be the one in the text, and §3's rules are rule version
+P2.1. A text still at version 2 (or 1) has no such heading, and the guard
+refuses: P2.1's code never commits under P2's text, and the reverse.
 
 **Where the text is read (Phase 4.4).** The Railway image is built from
 `workers/` only, so `workers/prereg/preregistration_parlays.md` is a
@@ -32,13 +34,13 @@ from core import paths
 from core import preregistration as pr
 
 DOCUMENT = "docs/preregistration_parlays.md"
-RULE_VERSION = "P2"
-#: Version 2's sections, by heading as it stands (§3's names the rule version).
+RULE_VERSION = "P2.1"
+#: Version 2.1's sections, by heading as it stands (§3's names the rule version).
 SECTIONS: tuple[str, ...] = (
     "## 0. Amendments",
     "## 1. Agents and money",
     "## 2. Schedule and volume",
-    "## 3. Leg rules, version P2 (provisional)",
+    "## 3. Leg rules, version P2.1 (provisional)",
     "## 4. Prices recorded on every ticket",
     "## 5. The commitment",
     "## 6. The CLV proxy",
