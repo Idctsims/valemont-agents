@@ -78,11 +78,11 @@ class FrozenTexts(unittest.TestCase):
 
     # The parlay pre-registration: v1 (owner-approved 2026-11-19, 484fd4d), §0-§10 stamped by db/085;
     # v2 (owner-approved 2026-11-20, d34a8e8) changed §0, §1, §3, §4, §7, stamped by db/086;
-    # v2.1 (owner-approved 2026-11-24, 34bc2b4; rule version P2.1) changed §0, §3, §5, §6, stamped by
+    # v2.1 (owner-approved 2026-11-24, c7126c1; rule version P2.1) changed §0, §3, §4, §5, §6, stamped by
     # db/090. The hashes are read from the migrations, never written here.
     PARLAYS = "docs/preregistration_parlays.md"
     V2_CHANGED = ("## 0", "## 1", "## 3", "## 4", "## 7")
-    V21_CHANGED = ("## 0", "## 3", "## 5", "## 6")
+    V21_CHANGED = ("## 0", "## 3", "## 4", "## 5", "## 6")
 
     def latest(self) -> dict[str, str]:
         return ({s: h for _, s, h in self.rows("085")} | {s: h for _, s, h in self.rows("086")}
@@ -122,7 +122,7 @@ class FrozenTexts(unittest.TestCase):
                 else:
                     self.assertEqual(pr.content_hash(pr.section_text(doc, section)), sha)
 
-    def test_db090_stamps_exactly_the_four_v21_changes_and_supersedes_only_them(self) -> None:
+    def test_db090_stamps_exactly_the_five_v21_changes_and_supersedes_only_them(self) -> None:
         self.assertEqual(tuple(s.split(".")[0] for _, s, _ in self.rows("090")), self.V21_CHANGED)
         self.assertIn("## 3. Leg rules, version P2.1 (provisional)", [s for _, s, _ in self.rows("090")])
         doc = (REPO_ROOT / self.PARLAYS).read_text(encoding="utf-8")
@@ -130,7 +130,7 @@ class FrozenTexts(unittest.TestCase):
             with self.subTest(section=section):
                 self.assertEqual(document, self.PARLAYS)
                 self.assertEqual(pr.content_hash(pr.section_text(doc, section)), sha)
-        # db/086's §1, §4, §7 still match the file; its §0 and §3 are superseded by db/090.
+        # db/086's §1 and §7 still match the file; its §0, §3 and §4 are superseded by db/090.
         for _, section, sha in self.rows("086"):
             with self.subTest(v2=section):
                 same = pr.content_hash(pr.section_text(doc, self.heading_now(section))) == sha
