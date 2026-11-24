@@ -2,8 +2,8 @@
 
 **Version 2.1.** Version 1's sections were stamped by db/085; version 2's
 changed sections (§0, §1, §3, §4, §7) are stamped by db/086 (owner, 2026-11-20),
-before any ticket was committed; version 2.1's changed sections (§0, §3, §5,
-§6) are stamped by db/090 (owner, 2026-11-24), forward only. Version 1 was written 2026-11-19 and amended
+before any ticket was committed; version 2.1's changed sections (§0, §3, §4,
+§5, §6) are stamped by db/090 (owner, 2026-11-24), forward only. Version 1 was written 2026-11-19 and amended
 the same day, before its stamp (owner): the one-line reason per leg, and the
 cross-sport Lotto. Sources:
 `docs/parlay_generator_step0.md` and the owner's decisions of Nov 19 on it; `docs/betting_science_audit.md` §4–§6 and
@@ -54,9 +54,9 @@ Everything else in version 1 stands.
 
 **Version 2.1 (owner, 2026-11-24), forward only.** Rule version `P2.1`. It
 changes §3 (a depth-first rebuild when the greedy build draws nothing for a
-scope, and the `3 per game` binding), §5 (`resolves_after`) and §6 (the
-close's lookback, its age, and a postponed leg's kickoff). Everything else in
-version 2 stands.
+scope, and the `3 per game` binding), §4 (the `rule_version` a ticket
+carries), §5 (`resolves_after`) and §6 (the close's lookback, its age, and a
+postponed leg's kickoff). Everything else in version 2 stands.
 - **Cohorts:** every ticket committed under P2 is cohort 1, and every ticket
   committed under P2.1 is cohort 2. Cohort 1 is never re-scored under P2.1's
   rules, and the two are reported apart and never pooled.
@@ -260,7 +260,7 @@ leg's fetch time:
 | `leg_reasons` | one line per leg, by §3's template | No |
 | `scope` | `sport` or `cross_sport` (§2) | — (a reporting key) |
 | `fill_note` | "extrapolated fill" on every cross-sport ticket; absent otherwise | No |
-| `rule_version` | `P2` here; §7's switch makes `P3` | — |
+| `rule_version` | `P2.1` here (P2 for cohort 1); §7's switch makes `P3` | — |
 
 ## 5. The commitment
 
