@@ -81,6 +81,8 @@ class SlotQuotes:
                 "events_asked": rq.events_asked, "events_skipped": rq.events_skipped, "cap": rq.cap,
                 "calls": rq.calls, "limited_429": rq.limited, "share_429": round(rq.share_429, 4),
                 "seconds": round(rq.seconds, 1), "bytes": rq.bytes, "pace_end": round(rq.pace, 2),
+                "series_reads": rq.series_reads, "event_reads": rq.event_reads, "markets_read": rq.markets_read,
+                "answer_ms": rq.answer_ms(),
                 "read_seconds": round(self.read_seconds, 1), "started_at": self.started_at.isoformat(),
                 "finished_at": self.finished_at.isoformat()}
 
@@ -149,5 +151,7 @@ def requote_job() -> RequoteResult:
     s = data.summary()
     log.info("parlay re-quote %s: %s", s["slot"], s)
     return RequoteResult(
-        f"{s['slot']}: {s['candidate_markets']} markets, {s['events_asked']} events, {s['calls']} calls, "
-        f"429s {s['limited_429']} ({s['share_429']:.2%}), {s['seconds']} s")
+        f"{s['slot']}: {s['candidate_markets']} markets, {s['events_asked']} events, {s['calls']} calls "
+        f"({s['series_reads']} series, {s['event_reads']} event reads), "
+        f"429s {s['limited_429']} ({s['share_429']:.2%}), {s['seconds']} s; answer p50 "
+        f"{s['answer_ms'].get('p50')} p90 {s['answer_ms'].get('p90')} max {s['answer_ms'].get('max')} ms")

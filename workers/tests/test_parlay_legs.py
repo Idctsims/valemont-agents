@@ -105,7 +105,8 @@ class Requote(unittest.TestCase):
             st = (statuses or {}).get(len(calls), 200)
             if st != 200:
                 return st, None
-            return 200, pages[url.split("event_ticker=")[1].split("&")[0]].pop(0)
+            key = "event_ticker=" if "event_ticker=" in url else "series_ticker="
+            return 200, pages[url.split(key)[1].split("&")[0]].pop(0)
         return http, calls
 
     def test_one_event_a_call_every_page_and_the_quotes(self):
@@ -130,10 +131,61 @@ class Requote(unittest.TestCase):
         self.assertGreater(r.pace, 0.5)
 
     def test_the_call_cap_stops_and_counts_the_rest(self):
-        es = [f"KXNBAPTS-26NOV22AAA{i:03d}" for i in range(5)]
+        # Five series of one event each: five event reads, the cap stops the last two.
+        es = [f"KXNBAS{i}-26NOV22AAABBB" for i in range(5)]
         http, _ = self.fake_http({e: [page([])] for e in es})
         r = pl.requote(es, http=http, now=lambda: NOW, sleep=lambda s: None, pace=0, max_calls=3)
         self.assertEqual((r.events_asked, r.events_skipped, r.cap), (3, 2, "calls"))
+
+    def test_more_than_two_events_of_a_series_are_one_series_read_at_page_1000(self):
+        # Owner, Nov 24: per series at page 1,000; per event for a series with <= 2 window events.
+        es = [f"KXNBAPTS-26NOV22G{i}" for i in range(3)]          # 3 of KXNBAPTS: one series read
+        game = ["KXNBAGAME-26NOV22G0", "KXNBAGAME-26NOV22G1"]     # 2 of KXNBAGAME: two event reads
+        other = "KXNBAPTS-26NOV29LATER"                           # the series' event outside the slot
+        http, calls = self.fake_http({
+            "KXNBAPTS": [page([{"ticker": f"{e}-A", "event_ticker": e, "yes_bid_dollars": "0.80", "yes_ask_dollars": "0.82"}
+                               for e in es] + [{"ticker": f"{other}-A", "event_ticker": other,
+                                                "yes_bid_dollars": "0.10", "yes_ask_dollars": "0.12"}], "c2"),
+                         page([{"ticker": f"{es[0]}-B", "event_ticker": es[0], "yes_bid_dollars": "0.50",
+                                "yes_ask_dollars": "0.51"}])],
+            **{g: [page([{"ticker": f"{g}-X", "event_ticker": g, "yes_bid_dollars": "0.40", "yes_ask_dollars": "0.41"}])]
+               for g in game}})
+        r = pl.requote([*es, *game], http=http, now=lambda: NOW, sleep=lambda s: None, pace=0)
+        self.assertEqual(len(calls), 4)  # two pages of the series, one per GAME event
+        self.assertTrue(all("limit=1000" in u and "status=open" in u for u in calls))
+        self.assertEqual(sum("series_ticker=KXNBAPTS" in u for u in calls), 2)
+        self.assertEqual((r.series_reads, r.event_reads, r.events_asked, r.events_skipped), (1, 2, 5, 0))
+        self.assertNotIn(f"{other}-A", r.quotes)  # another event of the series: dropped
+        self.assertEqual(set(r.quotes), {f"{e}-A" for e in es} | {f"{es[0]}-B"} | {f"{g}-X" for g in game})
+        self.assertEqual(r.markets_read, 7)  # the series' pages 4 + 1 (one of them dropped), 2 event reads
+        self.assertEqual(len(r.answer_s), 4)
+        self.assertEqual(r.answer_ms()["n"], 4)
+
+    def test_the_plan_keeps_the_earliest_games_last(self):
+        # `events` come latest start first; a read goes in the order of its earliest game.
+        events = ["KXA-LATE", "KXB-1", "KXB-2", "KXB-3", "KXC-EARLY"]
+        self.assertEqual(pl.requote_plan(events),
+                         [("event", ("KXA-LATE",)), ("series", ("KXB-1", "KXB-2", "KXB-3")), ("event", ("KXC-EARLY",))])
+        self.assertEqual(pl.requote_plan(["KXB-1", "KXB-2"]), [("event", ("KXB-1",)), ("event", ("KXB-2",))])
+
+    def test_a_series_read_with_a_market_outside_the_series_fails_loudly(self):
+        es = [f"KXNBAPTS-26NOV22G{i}" for i in range(3)]
+        http, _ = self.fake_http({"KXNBAPTS": [page([{"ticker": "KXNHLX-1-A", "event_ticker": "KXNHLX-1",
+                                                       "yes_bid_dollars": "0.1", "yes_ask_dollars": "0.2"}])]})
+        with self.assertRaises(KalshiShapeError):
+            pl.requote(es, http=http, now=lambda: NOW, sleep=lambda s: None, pace=0)
+
+    def test_the_budget_counts_every_event_of_an_unread_series(self):
+        es = ["KXA-1"] + [f"KXB-{i}" for i in range(3)]
+        http, _ = self.fake_http({"KXA-1": [page([])], "KXB": [page([])]})
+        r = pl.requote(es, http=http, now=lambda: NOW, sleep=lambda s: None, pace=0, max_calls=1)
+        self.assertEqual((r.events_asked, r.events_skipped, r.cap), (1, 3, "calls"))
+
+    def test_answer_times_summarized(self):
+        rq = pl.Requote(answer_s=[0.1, 0.2, 0.3, 0.4, 1.0])
+        self.assertEqual(rq.answer_ms(), {"n": 5, "p50": 300.0, "p90": 1000.0, "p99": 1000.0, "max": 1000.0,
+                                          "total_s": 2.0})
+        self.assertEqual(pl.Requote().answer_ms(), {"n": 0})
 
     def test_a_market_of_another_event_fails_loudly(self):
         e1 = "KXNBAPTS-26NOV22AAABBB"
