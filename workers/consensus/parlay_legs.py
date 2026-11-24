@@ -43,6 +43,11 @@ CALL_TIMEOUT_S = 15.0
 #: The re-quote's pace floor (owner, Nov 20: faster, not smaller). The board
 #: refresh keeps kb.PACE_FLOOR; the AIMD steps are unchanged.
 REQUOTE_FLOOR = 0.10
+#: The re-quote's page (owner, Nov 24): Kalshi's documented maximum for /markets.
+REQUOTE_PAGE = 1000
+#: A series with at most this many of the slot's events is read event by event;
+#: a larger one in one series read (owner, Nov 24: the board's own rule).
+REQUOTE_PER_EVENT_MAX = kb.PER_EVENT_MAX
 
 
 @dataclass(frozen=True)
@@ -278,10 +283,31 @@ class Requote:
     bytes: int = 0
     seconds: float = 0.0
     pace: float = 0.0
+    #: Owner, Nov 24: reads by series (page 1,000) where a series has more than
+    #: REQUOTE_PER_EVENT_MAX of the slot's events, else by event.
+    series_reads: int = 0
+    event_reads: int = 0
+    #: Every market the reads returned, the slot's or not (a series read also
+    #: returns its other events): the over-read is markets_read / quotes kept.
+    markets_read: int = 0
+    #: Each call's answer time in seconds (the pacer's, never its wait).
+    answer_s: list[float] = field(default_factory=list)
 
     @property
     def share_429(self) -> float:
         return self.limited / self.calls if self.calls else 0.0
+
+    def answer_ms(self) -> dict[str, float | int]:
+        """The per-call answer times: count, median, p90, p99, max and total, in ms."""
+        xs = sorted(self.answer_s)
+        if not xs:
+            return {"n": 0}
+
+        def pct(p: float) -> float:
+            return round(xs[min(len(xs) - 1, int(p * len(xs)))] * 1000, 1)
+
+        return {"n": len(xs), "p50": pct(0.5), "p90": pct(0.9), "p99": pct(0.99),
+                "max": round(xs[-1] * 1000, 1), "total_s": round(sum(xs), 1)}
 
 
 def parse_quotes(body: Any, event: str, at: datetime) -> tuple[dict[str, Quote], str | None]:
@@ -303,6 +329,43 @@ def parse_quotes(body: Any, event: str, at: datetime) -> tuple[dict[str, Quote],
     return out, (opt(body, "cursor", str, p, "$") or None)
 
 
+def parse_series_quotes(body: Any, series: str, keep: set[str], at: datetime) -> tuple[dict[str, Quote], int, str | None]:
+    """One /markets page of a series read -> ({market ticker: Quote} for the
+    slot's events only, every market on the page, the next cursor). A market of
+    another of the series' events is dropped; one outside the series fails loudly."""
+    p = f"requote[{series}]"
+    items = req(body, "markets", list, p, "$")
+    out: dict[str, Quote] = {}
+    for i, raw in enumerate(items):
+        path = f"$.markets[{i}]"
+        event = req(raw, "event_ticker", str, p, path)
+        if kb.series_of(event) != series:
+            raise KalshiShapeError(p, path, f"{event[:60]!r} is not in series {series[:60]!r}")
+        if event not in keep:
+            continue
+        got, _ = parse_quotes({"markets": [raw]}, event, at)
+        out.update(got)
+    return out, len(items), (opt(body, "cursor", str, p, "$") or None)
+
+
+def requote_plan(events: Sequence[str], per_event_max: int = REQUOTE_PER_EVENT_MAX) -> list[tuple[str, tuple[str, ...]]]:
+    """The slot's reads (owner, Nov 24): ("event", (E,)) for each event of a series
+    with at most `per_event_max` of the slot's events, else ("series", its events)
+    for one series read. `events` come latest start first; a read goes in the order
+    of its earliest game, so the earliest games are still read last."""
+    pos = {e: i for i, e in enumerate(events)}
+    by_series: dict[str, list[str]] = {}
+    for e in events:
+        by_series.setdefault(kb.series_of(e), []).append(e)
+    reads: list[tuple[str, tuple[str, ...]]] = []
+    for group in by_series.values():
+        if len(group) <= per_event_max:
+            reads += [("event", (e,)) for e in group]
+        else:
+            reads.append(("series", tuple(group)))
+    return sorted(reads, key=lambda r: (max(pos[e] for e in r[1]), r[1][0]))
+
+
 def requote_order(markets: Iterable[Market]) -> list[str]:
     """The slot's events, latest start first, so the earliest games are re-read
     last, closest to the commit (owner, Nov 20). Ties by event ticker."""
@@ -321,32 +384,53 @@ def requote(events: Sequence[str], *, http: kb.Http | None = None, max_calls: in
             max_seconds: float | None = None, now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
             clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep,
             pace: float = kb.PACE_START, floor: float = REQUOTE_FLOOR) -> Requote:
-    """Every open market of each event, one event at a time (`event_ticker=E`,
-    the refresh's only shape), in the order given, paced by kb.Paced with the
-    re-quote's own floor. A spent budget stops the run and counts the events
-    not read; their legs then fail `fresh`."""
+    """Every open market of the slot's events (owner, Nov 24): per `requote_plan`,
+    one series read (`series_ticker=S`, page 1,000, other events dropped) for a
+    series with more than REQUOTE_PER_EVENT_MAX of them, else one read per event
+    (`event_ticker=E`; a comma list answers 200 with no markets). Paced by
+    kb.Paced with the re-quote's own floor; every call's answer time is kept. A
+    spent budget stops the run and counts the events not read; their legs then
+    fail `fresh`."""
     t0 = clock()
     paced = kb.Paced(interval=pace, max_calls=max_calls, deadline=None if max_seconds is None else t0 + max_seconds,
                      http=http, clock=clock, sleep=sleep, timeout=CALL_TIMEOUT_S, floor=floor)
     client = KalshiClient(transport=paced, min_interval=0, sleep=paced.sleep)
     run = Requote()
+    reads = requote_plan(events)
     try:
-        for i, event in enumerate(events):
+        for i, (kind, group) in enumerate(reads):
             try:
                 cursor: str | None = None
+                label = group[0] if kind == "event" else kb.series_of(group[0])
+                keep = set(group)
                 for _ in range(kb.MAX_PAGES):
-                    body = client.get("/markets", event_ticker=event, status="open", limit=kb.MARKETS_PAGE, cursor=cursor)
-                    got, cursor = parse_quotes(body, event, now())
+                    if kind == "event":
+                        body = client.get("/markets", event_ticker=group[0], status="open", limit=REQUOTE_PAGE,
+                                          cursor=cursor)
+                        got, cursor = parse_quotes(body, group[0], now())
+                        run.markets_read += len(got)
+                    else:
+                        body = client.get("/markets", series_ticker=label, status="open", limit=REQUOTE_PAGE,
+                                          cursor=cursor)
+                        got, n, cursor = parse_series_quotes(body, label, keep, now())
+                        run.markets_read += n
+                    del body
                     run.quotes.update(got)
                     if not cursor:
                         break
                 else:
-                    raise kb.PageCapExceeded(event, "$.cursor", f"still paging after {kb.MAX_PAGES} pages")
+                    raise kb.PageCapExceeded(label, "$.cursor", f"still paging after {kb.MAX_PAGES} pages")
             except kb.BudgetSpent as cap:
-                run.cap, run.events_skipped = cap.reason, len(events) - i
+                run.cap = cap.reason
+                run.events_skipped = sum(len(g) for _, g in reads[i:])
                 break
-            run.events_asked += 1
+            run.events_asked += len(group)
+            if kind == "event":
+                run.event_reads += 1
+            else:
+                run.series_reads += 1
     finally:
         run.calls, run.limited, run.bytes = paced.calls, paced.limited, paced.bytes
         run.pace, run.seconds = paced.interval, clock() - t0
+        run.answer_s = list(paced.answer_s)
     return run

@@ -192,6 +192,9 @@ class Paced(Counting):
         self._clock, self._sleep = clock, sleep
         self._last: float | None = None
         self._ok_run = 0
+        #: Each call's answer time in seconds (the request, the body and its JSON
+        #: decode; never the pacing wait), by the real clock (owner, Nov 24).
+        self.answer_s: list[float] = []
 
     def sleep(self, seconds: float) -> None:
         if self.deadline is not None and self._clock() + seconds > self.deadline:
@@ -208,7 +211,11 @@ class Paced(Counting):
         if self.deadline is not None and self._clock() >= self.deadline:
             raise BudgetSpent("time")
         self._last = self._clock()
-        status, body = super().__call__(url)
+        t0 = time.perf_counter()
+        try:
+            status, body = super().__call__(url)
+        finally:
+            self.answer_s.append(time.perf_counter() - t0)
         if status == 429:
             self.interval = min(self.interval * 2, PACE_CEILING)
             self._ok_run = 0

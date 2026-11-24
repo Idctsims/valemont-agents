@@ -29,6 +29,7 @@ from dotenv import dotenv_values
 
 from consensus import parlay_legs as pl
 from core import ledger
+from core import memory
 from scripts.research.kalshi_history import DATA_DIR
 
 SLOT_CALLS, SLOT_SECONDS = 300, 300
@@ -55,6 +56,28 @@ def crawler_running() -> bool:
                for line in out.splitlines())
 
 
+#: Saturday Nov 21 10:33 Chicago, the biggest slot so far (the worker's log): its
+#: candidate markets and its candidate read. The owner's bar (Nov 24): at 1.5x
+#: this board, the re-quote ends with at least 4 minutes before the :45 commit.
+SATURDAY_MARKETS, SATURDAY_READ_S = 33_597, 20.6
+START_MIN, COMMIT_MIN, SPARE_MIN = 33, 45, 4
+
+
+def projection(rq: pl.Requote, markets: int, read_s: float) -> dict:
+    """1.5x Saturday from this run, linear in candidate markets: calls, the
+    re-quote's seconds and the candidate read all scale by the same factor.
+    Conservative for the series reads (their over-read is smaller on a board whose
+    games are mostly in the window), and it assumes this run's answer times."""
+    if not markets:
+        return {}
+    k = 1.5 * SATURDAY_MARKETS / markets
+    secs = rq.seconds * k + SATURDAY_READ_S * 1.5
+    spare = (COMMIT_MIN - START_MIN) * 60 - secs
+    return {"scale": round(k, 2), "calls": round(rq.calls * k), "seconds": round(secs), "ends_at_min": round(
+        START_MIN + secs / 60, 1), "spare_min": round(spare / 60, 1), "meets_4_min": spare >= SPARE_MIN * 60,
+        "if_start_28": {"spare_min": round(spare / 60 + 5, 1)}}
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--env-file", type=Path, required=True)
@@ -76,7 +99,11 @@ def main(argv: list[str] | None = None) -> int:
     read_s = time.monotonic() - t0
     markets = pl.markets_from_rows(rows)
     events = pl.requote_order(markets)
-    rq = pl.requote(events, max_calls=args.max_calls, max_seconds=args.max_seconds, floor=args.floor)
+    plan = pl.requote_plan(events)
+    start_mb = memory.rss_mb()
+    with memory.PeakSampler(interval_s=0.5) as rss:
+        rq = pl.requote(events, max_calls=args.max_calls, max_seconds=args.max_seconds, floor=args.floor)
+        fresh = pl.with_fresh_p(markets, rq.quotes)  # the slot keeps these too: part of the peak
     now = dt.datetime.now(dt.timezone.utc)
     f = pl.funnel(pl.legs_of(markets, rq.quotes), now, cut=cut)
     passed = {leg.market.market_ticker for leg in f.passed}
@@ -97,7 +124,19 @@ def main(argv: list[str] | None = None) -> int:
                     "oldest_quote_age_s_at_end": None if oldest is None else round(oldest.total_seconds(), 1),
                     "oldest_passing_leg_age_s_at_end": None if oldest_passed is None else round(oldest_passed.total_seconds(), 1),
                     "earliest_start": first_start,
-                    "slot_check": {"calls_under_300": rq.calls < SLOT_CALLS, "seconds_under_300": rq.seconds < SLOT_SECONDS}},
+                    "slot_check": {"calls_under_300": rq.calls < SLOT_CALLS, "seconds_under_300": rq.seconds < SLOT_SECONDS},
+                    # Owner, Nov 24: per series at page 1,000, per event for <= 2 window events.
+                    "plan": {"series_reads": sum(1 for k, _ in plan if k == "series"),
+                             "event_reads": sum(1 for k, _ in plan if k == "event")},
+                    "series_reads": rq.series_reads, "event_reads": rq.event_reads,
+                    "markets_read": rq.markets_read,
+                    "over_read": round(rq.markets_read / len(rq.quotes), 2) if rq.quotes else None,
+                    "answer_ms": rq.answer_ms()},
+        "rss_mb": {"start": start_mb, "peak": rss.peak_mb, "end": rss.end_mb,
+                   "peak_over_start": None if start_mb is None or rss.peak_mb is None else round(rss.peak_mb - start_mb, 1),
+                   "note": "this machine's working set (Windows) or RSS (Linux); the worker is Linux",
+                   "fresh_markets_kept": len(fresh)},
+        "projection_1_5x_saturday": projection(rq, len(markets), read_s),
         "funnel_legs_by_sport": table, "funnel_legs_total": totals,
     }
     out = DATA_DIR.parent / "parlays"  # research_data/ (VALEMONT_RESEARCH_DIR for a worktree)
