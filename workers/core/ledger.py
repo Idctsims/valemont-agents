@@ -6234,6 +6234,25 @@ def parlay_candidates(*, tests: bool = False, games: Sequence[str] | None = None
     return [dict(zip(PARLAY_CANDIDATE_COLUMNS, r)) for r in rows], cut
 
 
+#: P2.1 §6 (owner, 2026-11-24): a parlay leg's start as the board knows it now
+#: (kalshi_board_events.starts_at: the linked schedule game, else Kalshi's
+#: milestone). The close re-reads it to follow a postponed leg. Read only; an
+#: event the board has pruned is simply absent.
+BOARD_EVENT_STARTS_SQL: Final = """
+    SELECT event_ticker, starts_at FROM kalshi_board_events
+     WHERE event_ticker = ANY(%(events)s::text[]) AND starts_at IS NOT NULL
+"""
+
+
+def board_event_starts(event_tickers: Sequence[str], *, conn: psycopg.Connection | None = None) -> dict[str, datetime]:
+    """{event ticker: its start on the board now} for the events still listed."""
+    events = sorted(set(event_tickers))
+    if not events:
+        return {}
+    with _brief_conn(conn) as c, c.transaction():
+        return dict(c.execute(BOARD_EVENT_STARTS_SQL, {"events": events}).fetchall())
+
+
 #: M5's board snapshot (db/084): the copy runs inside Postgres; the answer is
 #: the function's jsonb (snapshot_id, slot, counts, bytes, ms, or skipped).
 RESEARCH_BOARD_SNAPSHOT_SQL: Final = "SELECT research_board_snapshot_take(%s)"

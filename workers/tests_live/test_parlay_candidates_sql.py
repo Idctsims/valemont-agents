@@ -51,6 +51,25 @@ class Candidates(board.BoardSqlCase):
             self.assertEqual(cut.get("TL Sport", 0) - before, 3)
 
 
+class BoardStarts(board.BoardSqlCase):
+    """P2.1 §6 (owner, Nov 24): ledger.board_event_starts, the start a close re-reads to
+    follow a postponed leg. Only this test's events are asked for."""
+
+    def test_each_listed_event_answers_its_start_and_a_moved_start_is_read_back(self) -> None:
+        with _rolled_back() as conn:
+            _, a, _, _ = self.game(conn, start=board.NOW + timedelta(hours=3), n_markets=1)
+            _, b, _, _ = self.game(conn, start=board.NOW + timedelta(hours=5), n_markets=1)
+            got = ledger.board_event_starts([a, b, "E2ETL-NOT-ON-THE-BOARD"], conn=conn)
+            self.assertEqual(set(got), {a, b})
+            self.assertEqual(got[a], conn.execute("SELECT starts_at FROM kalshi_board_events WHERE event_ticker = %s",
+                                                  (a,)).fetchone()[0])
+            later = board.NOW + timedelta(days=1)
+            conn.execute("UPDATE kalshi_board_events SET starts_at = %s WHERE event_ticker = %s AND is_test",
+                         (later, b))
+            self.assertEqual(ledger.board_event_starts([b], conn=conn), {b: later})
+            self.assertEqual(ledger.board_event_starts([], conn=conn), {})
+
+
 class FreshTwin(unittest.TestCase):
     """parlay_legs.fresh_p is the Python twin of the engine's blend and
     normalization (owner, Nov 20). Fed the board's own stored quotes, it must

@@ -5,8 +5,13 @@ floor, the fee rounding, determinism (same ticket, same reason bytes), the
 cross-sport replacement step and its "extrapolated fill" label. The real rho
 table is used, so rule 7 and 9 come from the shipped pricer."""
 
+import gzip
+import itertools
+import json
 import unittest
 from collections import Counter
+from pathlib import Path
+from unittest import mock
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal as D
 
@@ -171,7 +176,7 @@ class Search(unittest.TestCase):
         self.assertEqual(len(r.ticket.legs), 4)
         self.assertTrue(D("0.15") <= r.ticket.priced.scored_price <= D("0.40"))
         self.assertEqual(r.ticket.agent, "parlay_safer")
-        self.assertEqual((r.ticket.scope, r.ticket.fill_note, r.ticket.rule_version), ("sport", None, "P2"))
+        self.assertEqual((r.ticket.scope, r.ticket.fill_note, r.ticket.rule_version, r.ticket.search), ("sport", None, "P2.1", "greedy"))
         self.assertIsNone(r.ticket.expected_quote)
         self.assertEqual(r.ticket.payload()["expected_quote_note"], "pending (M1)")
         self.assertEqual(r.ticket.rho_sha256, T.sha256)
@@ -215,7 +220,7 @@ class Search(unittest.TestCase):
 
     def test_an_empty_slot_names_the_rule_that_bound(self):
         # Reachable counts exist (75c legs), but one event caps them to one leg each: event cap binds.
-        cands = sorted([cand(f"E{i}", ask="0.75", p="0.78", game="G1", event="E1", cap=1, subject=f"P{i}")
+        cands = sorted([cand(f"E{i}", ask="0.75", p="0.78", game=f"G{i}", event="E1", cap=1, subject=f"P{i}")
                         for i in range(6)], key=lambda c: c.order)
         r = pt.search("safer", cands, T, sport="Basketball", **DRAWS)
         self.assertIsNone(r.ticket)
@@ -380,6 +385,107 @@ class CrossSport(unittest.TestCase):
                         *board(7, "Hockey", "H", ask="0.75", p="0.78")], key=lambda c: c.order)
         b = pt.greedy(cands, 13, T, self.LOTTO)
         self.assertIs(pt.replace_for_second_sport(b, cands, 13, T, self.LOTTO), b)
+
+
+FIXTURE = Path(__file__).parent / "fixtures" / "parlay_p21_football.json.gz"
+#: The four thin Football slots of Nov 22-24 (M5 snapshots 28-31: Sun 16:45, Mon 10:45,
+#: Mon 16:45, Tue 10:45), each slot's Football markets with a side that passes rules 3-4
+#: at the snapshot's prices (exported read-only, Nov 24). The owner's simulation of P2.1
+#: on them (Nov 24, draws 20,000): Safer (legs, scored price, rel cost over fair).
+P21_SAFER = {28: (4, D("0.3966"), -0.061), 29: (4, D("0.3976"), 0.024),
+             30: (5, D("0.3960"), 0.034), 31: (4, D("0.3966"), -0.026)}
+P21_DRAWS = dict(draws=20000, draws_max=20000)
+
+
+def football_slot(snapshot):
+    """(the snapshot's Football candidates in §3's order, its time) from the fixture."""
+    data = next(x for x in json.loads(gzip.decompress(FIXTURE.read_bytes())) if x["snapshot"] == snapshot)
+    at = datetime.fromisoformat(data["taken_at"])
+    rows = []
+    for r in data["markets"]:
+        r = dict(r)
+        r["starts_at"] = datetime.fromisoformat(r["starts_at"])
+        rows.append(r)
+    markets = pl.markets_from_rows(rows)
+    quotes = {m.market_ticker: pl.Quote(m.yes_bid, m.yes_ask, at) for m in markets}
+    f = pl.funnel(pl.legs_of(markets, quotes), at)
+    cands, _ = pt.candidates(f.passed)
+    return [c for c in cands if c.m.sport == "Football"], at
+
+
+class P21(unittest.TestCase):
+    """docs/preregistration_parlays.md v2.1 §3 (owner, Nov 24): the depth-first rebuild only
+    when the greedy draws nothing, its deterministic budget, and `3 per game`."""
+
+    def test_the_greedy_ticket_is_p2s_and_the_rebuild_never_runs_when_the_greedy_draws(self):
+        cands = sorted(board(6, ask="0.75", p="0.74"), key=lambda c: c.order)
+        with mock.patch.object(pt, "depth_first", side_effect=AssertionError("rebuild ran")):
+            r = pt.search("safer", cands, T, sport="Basketball", **DRAWS)
+        self.assertEqual(r.ticket.search, "greedy")
+        # Byte-identical to the greedy pass of the same count: legs, prices and reasons.
+        b = pt.greedy(cands, len(r.ticket.legs), T, pt.WINDOWS["safer"])
+        self.assertEqual([c.key for c in b.legs], [c.key for c in r.ticket.legs])
+        self.assertEqual(pt.leg_reasons(b.legs, cands, b.why), r.ticket.leg_reasons)
+
+    def test_the_four_football_slots_reproduce_the_simulation(self):
+        for snapshot, (legs, price, rel) in P21_SAFER.items():
+            with self.subTest(snapshot=snapshot):
+                cands, _ = football_slot(snapshot)
+                r = pt.search("safer", cands, T, sport="Football", **P21_DRAWS)
+                self.assertIsNotNone(r.ticket, r.tried)
+                self.assertEqual((r.ticket.search, len(r.ticket.legs), r.ticket.priced.scored_price.quantize(D("0.0001"))),
+                                 ("depth_first", legs, price))
+                self.assertAlmostEqual(r.ticket.priced.rel_cost, rel, places=3)
+                self.assertTrue(any(v.startswith("rebuilt: ") for v in r.tried.values()), r.tried)
+                # P2's greedy pass drew nothing at any count on these slots.
+                self.assertTrue(all(len(pt.greedy(cands, n, T, pt.WINDOWS["safer"]).legs) < n for n in (4, 5)))
+
+    def test_lotto_on_the_two_game_slot_is_3_per_game_and_mid_too(self):
+        cands, _ = football_slot(28)  # Sun 16:45: 2 games, at most 6 legs under rule 10
+        self.assertEqual(len({c.m.game_ticker for c in cands}), 2)
+        for tier in ("mid", "lotto"):
+            with self.subTest(tier=tier):
+                r = pt.search(tier, cands, T, sport="Football", **P21_DRAWS)
+                self.assertIsNone(r.ticket)
+                self.assertEqual(r.binding, "3 per game")
+                self.assertTrue(any(v.startswith("3 per game: ") for v in r.tried.values()), r.tried)
+
+    def test_a_count_above_3_per_game_is_never_tried_and_binds_when_none_is_left(self):
+        cands = sorted([cand(f"S{i}", ask="0.75", p="0.78", game="G1", event=f"E{i}", subject=f"P{i}")
+                        for i in range(6)], key=lambda c: c.order)
+        r = pt.search("safer", cands, T, sport="Basketball", **DRAWS)
+        self.assertEqual(r.binding, "3 per game")
+        self.assertEqual(r.tried[4], "3 per game: 4 legs > 3 x 1 games")
+
+    def test_the_budget_counts_checks_never_time_and_is_deterministic(self):
+        cands, _ = football_slot(28)
+        window = pt.WINDOWS["safer"]
+        one, how = pt.depth_first(cands, 4, T, window)
+        two, how2 = pt.depth_first(cands, 4, T, window)
+        self.assertEqual((how, how2), ("found", "found"))
+        self.assertEqual([c.key for c in one.legs], [c.key for c in two.legs])
+        self.assertEqual(pt.depth_first(cands, 4, T, window, budget=1), (None, "budget spent"))
+        # The clock plays no part: a frozen or a racing clock gives the same ticket.
+        with mock.patch("time.perf_counter", side_effect=itertools.count(0, 1000)), \
+                mock.patch("time.monotonic", side_effect=itertools.count(0, 1000)):
+            three, _ = pt.depth_first(cands, 4, T, window)
+        self.assertEqual([c.key for c in three.legs], [c.key for c in one.legs])
+        self.assertEqual(pt.REBUILD_BUDGET, 20000)
+
+    def test_a_rebuilt_ticket_is_the_first_in_order_that_keeps_every_rule(self):
+        cands, _ = football_slot(31)
+        b, how = pt.depth_first(cands, 4, T, pt.WINDOWS["safer"])
+        self.assertEqual(how, "found")
+        idx = [cands.index(c) for c in b.legs]
+        self.assertEqual(idx, sorted(idx))  # taken in §3's order
+        legs = []
+        for c in b.legs:  # each keeps rules 5-11 against the legs before it
+            self.assertIsNone(pt.first_broken(legs, c, 4, T))
+            legs.append(c)
+        self.assertTrue(pt.in_window(pt._product(b.legs), pt.WINDOWS["safer"]))
+        # Every candidate ranked above a taken leg and not held has a reason.
+        last = max(idx)
+        self.assertEqual({c.key for c in cands[:last] if c not in b.legs} - set(b.why), set())
 
 
 class Slot(unittest.TestCase):

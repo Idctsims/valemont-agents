@@ -19,10 +19,18 @@ places an order, every commitment is `mode = 'paper'` (CLAUDE.md §1).
                      at most one per sport plus one cross-sport for Lotto
     resolve          the product of the legs' settlement values: hit (1),
                      miss (0) or partial (between). Nothing voids on Kalshi
-    capture_close    the CLV proxy (§6): each leg's two-sided side mid in the
-                     last 1-minute candle at or before its kickoff, within 5
-                     minutes, multiplied; against naive_p. A leg without one is
-                     a `missed` close naming the leg
+    capture_close    the CLV proxy (§6), by the ticket's own rule version:
+                     P2.1 (cohort 2): each leg's last 1-minute candle at or
+                     before its kickoff, within 60 minutes, two-sided, with its
+                     age; the kickoff re-read from the board when it moved
+                     later (a postponement; not due while that start is ahead).
+                     P2 (cohort 1, never re-scored): the last two-sided candle
+                     within 5 minutes, as stamped then. Either way the side
+                     mids are multiplied, against naive_p; a leg without one
+                     is a `missed` close naming the leg
+
+resolves_after (P2.1 §5) is the later of the latest leg's expected expiration
+and closes_at + 1 minute.
 
 The risk (§5, §9): capital_at_risk = (scored_price + taker fee per contract)
 x 100 contracts; the invalidation is structural 0; proceeds = settlement value
@@ -32,10 +40,11 @@ x 100. A miss scores -1.0 exactly.
 from __future__ import annotations
 
 import math
+import statistics
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Callable, ClassVar, Sequence
+from typing import Any, Callable, ClassVar, Mapping, Sequence
 
 from consensus import correlation as cr
 from consensus import parlay_legs as pl
@@ -56,8 +65,14 @@ PARLAY_DEFER_POLICY = DeferPolicy(max_attempts=500, max_overdue=timedelta(days=1
 PARLAY_CAPTURE_POLICY = DeferPolicy(max_attempts=450, max_overdue=timedelta(hours=72))
 #: How long after the latest kickoff before the close proxy is read.
 CAPTURE_SETTLE = timedelta(minutes=5)
-#: §6: a leg's close is its last two-sided candle within this before its kickoff.
+#: P2's §6 (cohort 1): a leg's close is its last two-sided candle within this before its kickoff.
 CLOSE_WINDOW = timedelta(minutes=5)
+#: P2.1's §6 (cohort 2): the last candle at or before kickoff, within this; it must be two-sided.
+CLOSE_LOOKBACK = timedelta(minutes=60)
+#: P2.1's §5: resolves_after is never earlier than closes_at plus this.
+RESOLVES_AFTER_CLOSE = timedelta(minutes=1)
+#: The rule versions whose §6 is P2.1's (a P2 ticket keeps P2's close, never re-scored).
+P21_CLOSE = frozenset({"P2.1"})
 KICKOFF_SOURCE = "kalshi_board_events.starts_at (the linked schedule game), as of the slot's candidate read"
 
 
@@ -97,6 +112,7 @@ class ParlayAgent(BaseAgent[Observation, Thesis]):
                  guard: Callable[[], Any] = parlay_prereg.require_stamped,
                  db_now: Callable[[], datetime] | None = None,
                  rho: cr.RhoTable | None = None,
+                 starts: Callable[[Sequence[str]], Mapping[str, datetime]] | None = None,
                  draws: int = cr.MC_DRAWS, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         if self.tier not in pt.TIERS:
@@ -107,6 +123,8 @@ class ParlayAgent(BaseAgent[Observation, Thesis]):
         self.guard = guard
         self.db_now = db_now or (lambda: ledger.measure_clock().db_time)
         self.rho = rho
+        #: P2.1 §6: each leg's start as the board knows it now (to follow a postponement).
+        self.starts = starts or (lambda events: ledger.board_event_starts(events))
         self.draws = draws
 
     # -- observe -----------------------------------------------------------------
@@ -198,7 +216,9 @@ class ParlayAgent(BaseAgent[Observation, Thesis]):
         expires = {c.m.market_ticker: c.leg.quote.expires for c in ticket.legs}  # type: ignore[union-attr]
         oldest = min(c.leg.quote.at for c in ticket.legs)  # type: ignore[union-attr]
         closes_at = max(kickoffs.values())
-        resolves_after = max(e for e in expires.values() if e is not None)
+        # P2.1 §5: never before the close. A postponed leg's expected expiration can stay on
+        # the original day (Sun Nov 22 16:45 Safer Tennis was refused after selection).
+        resolves_after = max(max(e for e in expires.values() if e is not None), closes_at + RESOLVES_AFTER_CLOSE)
         payload = ticket.payload() | {
             "invalidation": "0", "stop_rule": "structural_zero",
             "entry_cost": str(entry_cost), "capital_at_risk": str(capital),
@@ -245,6 +265,55 @@ class ParlayAgent(BaseAgent[Observation, Thesis]):
     def capture_close(self, pending: PendingCommitment) -> ClosePrice | None:
         if pending.closes_at is None or self.clock() < pending.closes_at + CAPTURE_SETTLE:
             return None
+        if pending.payload.get("rule_version") in P21_CLOSE:
+            return self._capture_p21(pending)
+        return self._capture_p2(pending)
+
+    def _capture_p21(self, pending: PendingCommitment) -> ClosePrice | None:
+        """P2.1 §6: each leg's last 1-minute candle at or before its kickoff, within
+        60 minutes, two-sided, with its age; the kickoff re-read from the board
+        when it has moved later (a postponement)."""
+        at_commit = {t: datetime.fromisoformat(k) for t, k in pending.payload["kickoffs"].items()}
+        event_of = {x["market_ticker"]: x["event_ticker"] for x in pending.payload["legs"]}
+        now_starts = self.starts(sorted({event_of[t] for t in at_commit if t in event_of}))
+        kickoffs: dict[str, datetime] = {}
+        for t, k in at_commit.items():
+            s = now_starts.get(event_of.get(t, ""))
+            kickoffs[t] = s if s is not None and s > k else k
+        if self.clock() < max(kickoffs.values()) + CAPTURE_SETTLE:
+            return None  # a postponed leg's start is still ahead: the close is not yet due
+        mids: list[Decimal] = []
+        legs_detail = []
+        for leg in pending.legs:
+            kickoff = kickoffs[leg.subject]
+            candles = self.client.candles(leg.market, leg.subject, kickoff - CLOSE_LOOKBACK, kickoff, 1)
+            before = [c for c in candles if c.end <= kickoff]
+            if not before:
+                raise CloseUnavailable(f"no candle in the {CLOSE_LOOKBACK} before kickoff: {leg.subject}")
+            last = before[-1]
+            if not (last.yes_bid_close is not None and last.yes_ask_close is not None
+                    and 0 < last.yes_bid_close <= last.yes_ask_close < 1):
+                raise CloseUnavailable(f"the last candle before kickoff ({last.end.isoformat()}, bid "
+                                       f"{last.yes_bid_close}, ask {last.yes_ask_close}) is not two-sided: {leg.subject}")
+            mid = (last.yes_bid_close + last.yes_ask_close) / 2
+            side_mid = mid if leg.direction == "yes" else 1 - mid
+            mids.append(side_mid)
+            legs_detail.append({
+                "ticker": leg.subject, "kickoff": kickoff.isoformat(),
+                "kickoff_at_commit": at_commit[leg.subject].isoformat(),
+                "postponed": kickoff != at_commit[leg.subject], "candle_end": last.end.isoformat(),
+                "age_min": round((kickoff - last.end).total_seconds() / 60, 1),
+                "yes_bid": str(last.yes_bid_close), "yes_ask": str(last.yes_ask_close), "side_mid": str(side_mid)})
+        ages = [x["age_min"] for x in legs_detail]
+        close = math.prod(mids, start=Decimal(1))
+        return ClosePrice(price=close, entry_price=Decimal(pending.payload["naive_p"]), detail={
+            "label": "CLV (proxy)", "rule_version": "P2.1",
+            "rule": "product of each leg's last 1-minute candle at or before its kickoff, within 60 minutes, "
+                    "two-sided, side mid; the kickoff re-read when it moved later",
+            "age_min_median": statistics.median(ages), "age_min_max": max(ages), "legs": legs_detail})
+
+    def _capture_p2(self, pending: PendingCommitment) -> ClosePrice | None:
+        """P2's §6, unchanged, for cohort 1: a P2 ticket is never re-scored under P2.1."""
         kickoffs = {t: datetime.fromisoformat(k) for t, k in pending.payload["kickoffs"].items()}
         mids: list[Decimal] = []
         legs_detail = []
@@ -260,12 +329,18 @@ class ParlayAgent(BaseAgent[Observation, Thesis]):
             side_mid = mid if leg.direction == "yes" else 1 - mid
             mids.append(side_mid)
             legs_detail.append({"ticker": leg.subject, "kickoff": kickoff.isoformat(), "candle_end": last.end.isoformat(),
+                                "age_min": round((kickoff - last.end).total_seconds() / 60, 1),
                                 "yes_bid": str(last.yes_bid_close), "yes_ask": str(last.yes_ask_close),
                                 "side_mid": str(side_mid)})
+        ages = [x["age_min"] for x in legs_detail]
         close = math.prod(mids, start=Decimal(1))
+        # The ages are measurement only (owner, Nov 24: never a CLV figure without its ages); the rule is P2's.
         return ClosePrice(price=close, entry_price=Decimal(pending.payload["naive_p"]),
-                          detail={"label": "CLV (proxy)", "rule": "product of each leg's last two-sided 1-minute "
-                                  "side mid at or before its kickoff, within 5 minutes", "legs": legs_detail})
+                          detail={"label": "CLV (proxy)", "rule_version": pending.payload.get("rule_version", "P2"),
+                                  "rule": "product of each leg's last two-sided 1-minute "
+                                  "side mid at or before its kickoff, within 5 minutes",
+                                  "age_min_median": statistics.median(ages), "age_min_max": max(ages),
+                                  "legs": legs_detail})
 
 
 class ParlaySafer(ParlayAgent):
