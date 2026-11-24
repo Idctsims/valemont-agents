@@ -72,7 +72,8 @@ class FullLoop(LiveLedgerTestCase):
         legs = [r[0] for r in self.rows("SELECT subject FROM legs WHERE commitment_id = %s ORDER BY id", cid)]
         self.assertEqual(len(legs), n_legs)
 
-        self.wait_for_server(resolves_after)
+        # P2.1 §5 puts resolves_after at closes_at + 1 minute here: past the default 30 s wait.
+        self.wait_for_server(resolves_after, timeout=timedelta(seconds=120))
         # The close proxy: every leg two-sided in the minute before its kickoff.
         client.candle_map = {t: [tp.candle(kick - timedelta(minutes=1), "0.73", "0.75")] for t in legs}
         clock.at = kick + timedelta(minutes=6)
