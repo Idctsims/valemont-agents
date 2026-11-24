@@ -1,8 +1,9 @@
 # Pre-registration: the Parlay Generator (`parlay_safer`, `parlay_mid`, `parlay_lotto`)
 
-**Version 2.** Version 1's sections were stamped by db/085; version 2's
+**Version 2.1.** Version 1's sections were stamped by db/085; version 2's
 changed sections (§0, §1, §3, §4, §7) are stamped by db/086 (owner, 2026-11-20),
-before any ticket was committed. Version 1 was written 2026-11-19 and amended
+before any ticket was committed; version 2.1's changed sections (§0, §3, §5,
+§6) are stamped by db/090 (owner, 2026-11-24), forward only. Version 1 was written 2026-11-19 and amended
 the same day, before its stamp (owner): the one-line reason per leg, and the
 cross-sport Lotto. Sources:
 `docs/parlay_generator_step0.md` and the owner's decisions of Nov 19 on it; `docs/betting_science_audit.md` §4–§6 and
@@ -51,6 +52,29 @@ Everything else in version 1 stands.
 - **Rule versions:** version 2's rules are rule version `P2`. §7's switch
   then makes `P3`.
 
+**Version 2.1 (owner, 2026-11-24), forward only.** Rule version `P2.1`. It
+changes §3 (a depth-first rebuild when the greedy build draws nothing for a
+scope, and the `3 per game` binding), §5 (`resolves_after`) and §6 (the
+close's lookback, its age, and a postponed leg's kickoff). Everything else in
+version 2 stands.
+- **Cohorts:** every ticket committed under P2 is cohort 1, and every ticket
+  committed under P2.1 is cohort 2. Cohort 1 is never re-scored under P2.1's
+  rules, and the two are reported apart and never pooled.
+- **Why §3:** on the thin Football slates of Nov 22-24 (four slots, 1 to 3
+  games on the board), the greedy build took first, in each game, a leg with
+  no modeled partner (a period line, a team total). Every later leg of that
+  game was then an unmodeled pair. Every tier was empty, although tickets
+  that keep every rule existed.
+- **Why §5:** Sun Nov 22 16:45 Safer Tennis was refused after selection. A
+  postponed match's expected expiration from Kalshi stayed on the original
+  day, which put `resolves_after` before `closes_at`.
+- **Why §6:** 9 of the first 58 closes were missed. In 6 of them the leg's
+  quote was two-sided and standing, but left no candle in the last 5
+  minutes (Kalshi writes a candle only in a minute where something changes).
+  In one, the match was played the day after its kickoff at commit
+  (postponed).
+- **§7's switch** stays version 3, rule version `P3`.
+
 ## 1. Agents and money
 
 - Three agents, one per tier, each with a leg count and a scored-price window
@@ -86,7 +110,7 @@ Everything else in version 1 stands.
   an empty slot, with the reason (the rule that bound), never skipped
   silently.
 
-## 3. Leg rules, version P2 (provisional)
+## 3. Leg rules, version P2.1 (provisional)
 
 A leg is one side (YES or NO) of one market. A candidate leg must meet all of
 these:
@@ -161,6 +185,22 @@ is deterministic:
     window is reachable.
 - A complete ticket whose scored price is outside the window yields nothing
   for that n.
+- **The depth-first rebuild (P2.1).** If the greedy build yields no ticket at
+  any leg count of the scope, each count is rebuilt depth-first.
+  - The rebuild takes the first ticket, in the same order, that keeps rules
+    5-11 and whose scored price lands inside the window. A leg is taken in
+    order and given up only when no completion follows it.
+  - Each count stops after 20,000 rule checks (one candidate checked against
+    the ticket so far is one check) and then yields nothing. The count is
+    deterministic: the same candidates give the same ticket.
+  - When the greedy build yields a ticket at any count, the rebuild does not
+    run. The build, the choice and the tie-breaks are then exactly P2's.
+  - On a cross-sport Lotto, the one-sport replacement step applies to a
+    rebuilt ticket as it does to a greedy one.
+- **`3 per game` (P2.1).** A leg count larger than 3 times the number of games
+  among the scope's candidates cannot keep rule 10 and is not tried. If no
+  count that can reach the window can be tried, the slot is empty with the
+  binding rule `3 per game`.
 - Each complete ticket inside its window is priced (§4).
 - Among those, the ticket with the **lowest relative cost over fair**,
   (scored price ÷ fair p) − 1, is committed.
@@ -236,7 +276,11 @@ leg's fetch time:
 - **pnl:** (proceeds − capital_at_risk) / capital_at_risk. A miss is −1.0
   exactly.
 - **Nothing voids on Kalshi.** A postponed game settles too.
-- **`resolves_after`:** the latest leg's expected expiration, from the API.
+- **`resolves_after` (P2.1):** the later of the latest leg's expected
+  expiration, from the API, and `closes_at` plus 1 minute. Why: a postponed
+  leg's expected expiration can stay on the original day. On Sun Nov 22 16:45
+  that put a Safer Tennis ticket's `resolves_after` before its `closes_at`,
+  and the ticket was refused after selection.
 - **`max_overdue`:** 10 days, set in the Registration, never the default
   (§9.3). Past it, core's give-up applies as written.
 - **Commit-before-outcome:** a ticket is committed only if every leg's game
@@ -248,16 +292,29 @@ leg's fetch time:
 The combo has no observable closing price on paper. **The CLV proxy**,
 labelled "CLV (proxy)" everywhere it appears, works as follows:
 
-- **The close:** each leg's two-sided mid (0 < bid ≤ ask < 1) in the last
-  1-minute candle at or before that leg's scheduled kickoff, taken for the
-  leg's side. The product of those is the ticket's close proxy.
+- **The close (P2.1):** each leg's last 1-minute candle at or before its
+  kickoff (below), within 60 minutes. That candle must be two-sided
+  (0 < bid ≤ ask < 1), and its mid is taken for the leg's side. Kalshi writes
+  a candle only in a minute where something changes, so the last candle is
+  the quote standing at kickoff. The product of the legs' side mids is the
+  ticket's close proxy.
+- **The close's age (P2.1):** every captured leg records its candle's age in
+  minutes (its kickoff minus the candle's end). Every CLV (proxy) figure is
+  reported with its ages: per agent, the median and the maximum age beside
+  the mean. A CLV figure is never reported without its ages.
+- **The kickoff for the close (P2.1):** the leg's start as known at capture,
+  from the board's schedule (the linked schedule game, else Kalshi's
+  milestone), when that is later than its kickoff at commit (a
+  postponement); otherwise its kickoff at commit. Both are recorded. While a
+  postponed leg's start is still ahead, the ticket's close is not yet due.
 - **Entry for the proxy:** `naive_p` at commit (mids against mids).
 - **The values:** `clv = close proxy − naive_p`; `clv_pct = clv / naive_p`.
 - **`closes_at`:** the latest leg's scheduled kickoff, from the sport's
-  schedule source, as of commit.
-- **A missing input:** if any leg lacks a two-sided candle in its last 5
-  minutes before kickoff, the proxy is not computed. A `missed` close is
-  recorded with the leg named.
+  schedule source, as of commit. It stays as committed: the earliest time
+  worth looking.
+- **A missing input:** if any leg's last candle within 60 minutes before its
+  kickoff is not two-sided, or it has none, the proxy is not computed. A
+  `missed` close is recorded with the leg named.
 
 The proxy is not a profit measure, and CLV is not a profit measure either
 (CLAUDE.md §8, §10).
