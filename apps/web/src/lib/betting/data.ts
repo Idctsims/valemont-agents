@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BoardCard, Credits, SportChip } from "./board";
 import type { ComboState, Quote } from "./combo";
 import type { GameMeta, GameTabs, Tab, TabEvent } from "./game";
+import { PAGE_SIZE, type SinglesPage, type SinglesQuery } from "./singles";
 import { teamTuples } from "./teams";
 
 // Reads only, through the owner's session (RLS on db/071's tables), via its
@@ -132,4 +133,14 @@ export async function loadComboRequest(supabase: SupabaseClient, id: number): Pr
     return { status: r.status, reason: r.reason ?? "", createdAt: r.created_at };
   }
   return { status: "queued", createdAt: r.created_at };
+}
+
+/** The Props tab's page (db/093): one sport, one tier, Props or Lines, 50 sides at a time. */
+export async function loadSingles(supabase: SupabaseClient, sport: string, q: SinglesQuery, withTests: boolean): Promise<SinglesPage> {
+  const { data, error } = await supabase.rpc("kalshi_singles", {
+    p_sport: sport, p_kind: q.kind, p_tier: q.tier, p_q: q.q ?? null, p_sort: q.sort,
+    p_offset: q.offset, p_limit: PAGE_SIZE, p_tests: withTests,
+  });
+  if (error) throw new Error(`Couldn't read the props: ${error.message}`);
+  return (data ?? { asof: 0, counts: {}, rows: [] }) as SinglesPage;
 }

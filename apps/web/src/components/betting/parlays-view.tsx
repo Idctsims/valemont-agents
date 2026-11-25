@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pollParlays } from "@/app/(app)/betting/parlays/actions";
 import { TicketCard } from "@/components/betting/parlay-card";
 import { TicketDetails } from "@/components/betting/parlay-details";
+import { Segmented } from "@/components/betting/segmented";
 import {
   STATUS_FILTERS, STATUS_NAME, TIER_FILTERS, TIER_NAME, dayLabel, dayOption, emptySlots, filterCounts, inferLeg,
   matchesStatus, matchesTier, menuDays, sortTickets, stage,
@@ -30,35 +31,6 @@ function parlaysHref(day: string, tier: TierFilter, status: StatusFilter): strin
   if (tier !== "all") q.set("tier", tier);
   if (status !== "all") q.set("status", status);
   return `/betting/parlays?${q}`;
-}
-
-/** A full-width segmented bar: equal columns on the phone, its natural width on desktop. Each segment
- *  shows how many tickets a tap would show (the other bar's choice applied). */
-function Segmented<T extends string>({ label, options, value, counts, name, testid, onChange }: {
-  label: string;
-  options: readonly T[];
-  value: T;
-  counts: Record<T, number>;
-  name: (o: T) => string;
-  testid: string;
-  onChange: (o: T) => void;
-}) {
-  return (
-    <div role="group" aria-label={label}
-         className="grid w-full grid-cols-4 gap-1 rounded-pill border border-border bg-surface-2 p-1 lg:w-fit">
-      {options.map((o) => {
-        const on = o === value;
-        return (
-          <button key={o} type="button" aria-pressed={on} data-testid={`${testid}-${o}`} onClick={() => onChange(o)}
-                  className={`inline-flex min-h-10 min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-pill border px-1.5 text-sm font-semibold transition-colors lg:px-5 ${
-                    on ? "border-accent bg-accent text-on-accent" : "border-transparent text-text-muted hover:text-text"}`}>
-            {name(o)}
-            <span data-testid={`${testid}-${o}-n`} className="font-mono text-xs tabular-nums">{counts[o]}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
 }
 
 /** ‹ [Today ▾] ›: the arrows step to the previous or next day with tickets; the menu jumps to any. The

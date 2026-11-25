@@ -6,11 +6,12 @@ import { usePathname } from "next/navigation";
 import { UnitSwitch } from "@/components/betting/betting-store";
 
 // /betting's sections (the approved mock's top bar): Board (and every game
-// page under it), Parlays (was Today; Phase 4.5), Record; and the x / %
+// page under it), Props (owner, Nov 25), Parlays (was Today; Phase 4.5), Record; and the x / %
 // switch beside them.
 
 const SECTIONS = [
   { key: "board", label: "Board", href: "/betting" },
+  { key: "props", label: "Props", href: "/betting/props" },
   { key: "parlays", label: "Parlays", href: "/betting/parlays" },
   { key: "record", label: "Record", href: "/betting/record" },
 ] as const;
@@ -18,14 +19,15 @@ const SECTIONS = [
 function current(path: string): string {
   if (path.startsWith("/betting/parlays") || path.startsWith("/betting/today")) return "parlays";
   if (path.startsWith("/betting/record")) return "record";
+  if (path.startsWith("/betting/props")) return "props";
   return "board";
 }
 
 export function BettingNav() {
   const on = current(usePathname() ?? "/betting");
   return (
-    <div className="mb-6 flex items-end justify-between gap-4 border-b border-border">
-      <nav aria-label="Betting sections" className="flex gap-6">
+    <div className="mb-6 flex items-end justify-between gap-2 border-b border-border sm:gap-4">
+      <nav aria-label="Betting sections" className="flex gap-4 sm:gap-6">
         {SECTIONS.map((s) => (
           <Link key={s.key} href={s.href} data-testid={`betting-tab-${s.key}`} aria-current={on === s.key ? "page" : undefined}
                 className={`tap -mb-px inline-flex items-center border-b-2 text-base transition-colors ${

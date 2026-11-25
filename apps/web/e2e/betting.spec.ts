@@ -29,7 +29,7 @@ import { addTestKalshiBoard, hasOwner, signIn, useE2eMarker } from "./support/ow
 //   pnpm test:e2e e2e/betting.spec.ts --project=phone --output=test-results/betting
 
 test.describe("logged out", () => {
-  for (const path of ["/betting", "/betting/today", "/betting/parlays", "/betting/record",
+  for (const path of ["/betting", "/betting/props", "/betting/today", "/betting/parlays", "/betting/record",
                       "/betting/game/KXNBAGAME-26NOV15GSWHOU"]) {
     test(`${path} asks for sign-in`, async ({ page }) => {
       await page.goto(path);
