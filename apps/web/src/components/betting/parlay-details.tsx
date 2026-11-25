@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { parlayDetails } from "@/app/(app)/betting/parlays/actions";
 import { useBetting } from "@/components/betting/betting-store";
 import { clock } from "@/components/betting/parlay-card";
+import { useWags } from "@/components/wags/wags-provider";
 import type { ParlayDetails } from "@/lib/betting/parlay-data";
 import { TIER_NAME, cohortName, perDollar, signedUsd, splitLabel, usd } from "@/lib/betting/parlays";
 
@@ -52,6 +53,7 @@ export function TicketDetails({ id, started, initial }: {
     initial ? { id, t: initial } : null);
   const [copied, setCopied] = useState(false);
   const { put } = useBetting();
+  const wags = useWags();
 
   useEffect(() => {
     if (initial) return;
@@ -146,6 +148,12 @@ export function TicketDetails({ id, started, initial }: {
           {t.reasons.map((r, i) => <li key={i} className="font-mono text-xs leading-relaxed text-text-muted">{r}</li>)}
         </ol>
       </details>
+
+      <button type="button" data-testid="parlay-ask-wags"
+              onClick={() => wags.open({ label: `Parlays · ${TIER_NAME[t.tier]} ${where}`, pillar: "parlays" })}
+              className="tap mt-3 text-sm font-semibold text-accent-ink">
+        Ask Wags about the parlays
+      </button>
 
       <p className="mt-4 text-xs text-text-muted">
         {cohortName(t.rv)}. Committed {clock(t.at)}, before any game started, and never edited.
