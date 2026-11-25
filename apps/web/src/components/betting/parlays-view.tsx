@@ -1,30 +1,105 @@
 "use client";
 
-import { X } from "@phosphor-icons/react";
+import { CaretDown, X } from "@phosphor-icons/react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { pollParlays } from "@/app/(app)/betting/parlays/actions";
 import { TicketCard } from "@/components/betting/parlay-card";
 import { TicketDetails } from "@/components/betting/parlay-details";
 import {
-  TIER_NAME, emptySlots, inferLeg, sortTickets, stage, type GameLive, type ParlayDay, type ParlayTicket,
+  STATUS_FILTERS, STATUS_NAME, TIER_FILTERS, TIER_NAME, dayLabel, dayOption, emptySlots, filterCounts, inferLeg,
+  matchesStatus, matchesTier, menuDays, sortTickets, stage,
+  type GameLive, type ParlayDay, type ParlayDayEntry, type ParlayTicket, type StatusFilter, type TierFilter,
 } from "@/lib/betting/parlays";
 
 // The Parlays tab (Chat 8 Phase 4.5; docs/parlays_page.md §3). One Chicago
-// day: Live now, Starts later, Settled; a tier filter (a list, never a
-// total); the empty slots behind one line; Details as a sheet on the phone
+// day: Live now, Starts later, Settled; two filter bars, tier and status
+// (All · Open · Hit · Missed; owner, Nov 25), each a list with ticket counts,
+// never a money total, kept in the URL; a day menu between the arrows
+// (db/092); the empty slots behind one line; Details as a sheet on the phone
 // and a panel on desktop. The live count polls ESPN through the server every
 // 30 s while a ticket's game is on (§4). Paper: nothing here bets.
 
 const POLL_MS = 30_000;
-const FILTERS = ["all", "safer", "mid", "lotto"] as const;
-type Filter = (typeof FILTERS)[number];
 
-function dayLabel(day: string, today: string): string {
-  if (day === today) return "Today";
-  const d = new Date(`${day}T12:00:00Z`);
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+/** The page's URL for a day and the filters (defaults left out). */
+function parlaysHref(day: string, tier: TierFilter, status: StatusFilter): string {
+  const q = new URLSearchParams({ day });
+  if (tier !== "all") q.set("tier", tier);
+  if (status !== "all") q.set("status", status);
+  return `/betting/parlays?${q}`;
+}
+
+/** A full-width segmented bar: equal columns on the phone, its natural width on desktop. Each segment
+ *  shows how many tickets a tap would show (the other bar's choice applied). */
+function Segmented<T extends string>({ label, options, value, counts, name, testid, onChange }: {
+  label: string;
+  options: readonly T[];
+  value: T;
+  counts: Record<T, number>;
+  name: (o: T) => string;
+  testid: string;
+  onChange: (o: T) => void;
+}) {
+  return (
+    <div role="group" aria-label={label}
+         className="grid w-full grid-cols-4 gap-1 rounded-pill border border-border bg-surface-2 p-1 lg:w-fit">
+      {options.map((o) => {
+        const on = o === value;
+        return (
+          <button key={o} type="button" aria-pressed={on} data-testid={`${testid}-${o}`} onClick={() => onChange(o)}
+                  className={`inline-flex min-h-10 min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-pill border px-1.5 text-sm font-semibold transition-colors lg:px-5 ${
+                    on ? "border-accent bg-accent text-on-accent" : "border-transparent text-text-muted hover:text-text"}`}>
+            {name(o)}
+            <span data-testid={`${testid}-${o}-n`} className="font-mono text-xs tabular-nums">{counts[o]}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** ‹ [Today ▾] ›: the arrows step to the previous or next day with tickets; the menu jumps to any. The
+ *  menu is a native select (the iPhone's wheel) under a pill that shows only the day. Without db/092
+ *  (days null) the day is plain text and the arrows still work. */
+function DayNav({ day, today, days, tier, status }: {
+  day: ParlayDay; today: string; days: ParlayDayEntry[] | null; tier: TierFilter; status: StatusFilter;
+}) {
+  const router = useRouter();
+  const arrow = "tap inline-flex items-center justify-center rounded-pill text-xl text-text-muted hover:text-text";
+  return (
+    <nav aria-label="Day" className="flex items-center gap-1">
+      {day.prev ? <Link href={parlaysHref(day.prev, tier, status)} aria-label="Previous day" data-testid="parlays-prev" className={arrow}>‹</Link>
+        : <span className="tap inline-flex" />}
+      {days ? (
+        <label className="relative inline-flex">
+          <span aria-hidden data-testid="parlays-day"
+                className="tap inline-flex items-center gap-2 rounded-pill border border-border bg-surface-2 px-4 font-semibold text-text">
+            {dayLabel(day.day, today)}
+            <CaretDown size={14} className="text-text-muted" />
+          </span>
+          <select aria-label="Choose a day" data-testid="parlays-day-menu" value={day.day}
+                  onChange={(e) => router.push(parlaysHref(e.target.value, tier, status))}
+                  className="absolute inset-0 w-full cursor-pointer appearance-none text-base opacity-0">
+            {menuDays(days, day.day).map((e) => <option key={e.d} value={e.d}>{dayOption(e, today)}</option>)}
+          </select>
+        </label>
+      ) : (
+        <span data-testid="parlays-day" className="min-w-24 text-center font-semibold text-text">{dayLabel(day.day, today)}</span>
+      )}
+      {day.next ? <Link href={parlaysHref(day.next, tier, status)} aria-label="Next day" data-testid="parlays-next" className={arrow}>›</Link>
+        : <span className="tap inline-flex" />}
+    </nav>
+  );
+}
+
+/** "No open Safer ticket this day.", "No Mid ticket hit this day.", "No ticket missed this day." */
+function noneText(tier: TierFilter, status: StatusFilter): string {
+  const what = [status === "open" ? "open" : "", tier === "all" ? "" : TIER_NAME[tier], "ticket"].filter(Boolean).join(" ");
+  const verb = status === "hit" ? " hit" : status === "miss" ? " missed" : "";
+  return `No ${what}${verb} this day.`;
 }
 
 /** What the live poll asks for: each linked game with the players the tickets name. */
@@ -107,15 +182,21 @@ function EmptySlots({ day }: { day: ParlayDay }) {
   );
 }
 
-export function ParlaysView({ day, today, initialLive = {}, poll = true }: {
+export function ParlaysView({ day, today, days = null, tier: tier0 = "all", status: status0 = "all", initialLive = {}, poll = true }: {
   day: ParlayDay;
   today: string;
+  /** The day menu (db/092); null keeps the arrows only. */
+  days?: ParlayDayEntry[] | null;
+  /** The filters, from the URL. */
+  tier?: TierFilter;
+  status?: StatusFilter;
   /** Live counts already read (none on the page: the client asks on open). */
   initialLive?: Record<string, GameLive>;
   /** Off only where there is no owner session to poll with. */
   poll?: boolean;
 }) {
-  const [filter, setFilter] = useState<Filter>("all");
+  const [tier, setTier] = useState<TierFilter>(tier0);
+  const [status, setStatus] = useState<StatusFilter>(status0);
   const [live, setLive] = useState<Record<string, GameLive>>(initialLive);
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const [open, setOpen] = useState<number | null>(null);
@@ -123,7 +204,12 @@ export function ParlaysView({ day, today, initialLive = {}, poll = true }: {
   const sheet = useRef<HTMLDialogElement>(null);
 
   const tickets = useMemo(() => sortTickets(day.tickets), [day.tickets]);
-  const shown = tickets.filter((t) => filter === "all" || t.tier === filter);
+  const shown = tickets.filter((t) => matchesTier(t, tier) && matchesStatus(t, status));
+  const counts = filterCounts(tickets, tier, status);
+  // The filters ride in the URL (a reload or Back keeps them), without a navigation.
+  useEffect(() => {
+    window.history.replaceState(window.history.state, "", parlaysHref(day.day, tier, status));
+  }, [day.day, tier, status]);
   const groups = {
     live: shown.filter((t) => stage(t, now) === "live"),
     pre: shown.filter((t) => stage(t, now) === "pre"),
@@ -192,25 +278,14 @@ export function ParlaysView({ day, today, initialLive = {}, poll = true }: {
           <p className="label-mono text-text-muted">Paper parlays · nothing here is bet</p>
           <h1 id="parlays-h" className="mt-3 font-display text-4xl text-text lg:text-display">Parlays</h1>
         </div>
-        <nav aria-label="Day" className="flex items-center gap-1">
-          {day.prev ? <Link href={`/betting/parlays?day=${day.prev}`} aria-label="Previous day" data-testid="parlays-prev"
-                            className="tap inline-flex items-center justify-center rounded-pill text-xl text-text-muted hover:text-text">‹</Link>
-            : <span className="tap inline-flex" />}
-          <span data-testid="parlays-day" className="min-w-24 text-center font-semibold text-text">{dayLabel(day.day, today)}</span>
-          {day.next ? <Link href={`/betting/parlays?day=${day.next}`} aria-label="Next day" data-testid="parlays-next"
-                            className="tap inline-flex items-center justify-center rounded-pill text-xl text-text-muted hover:text-text">›</Link>
-            : <span className="tap inline-flex" />}
-        </nav>
+        <DayNav day={day} today={today} days={days} tier={tier} status={status} />
       </div>
 
-      <div role="group" aria-label="Tier" className="mt-5 flex gap-2 overflow-x-auto">
-        {FILTERS.map((f) => (
-          <button key={f} type="button" aria-pressed={filter === f} data-testid={`parlays-filter-${f}`} onClick={() => setFilter(f)}
-                  className={`tap rounded-pill border px-4 text-sm transition-colors ${
-                    filter === f ? "border-text bg-text text-bg" : "border-border text-text-muted hover:text-text"}`}>
-            {f === "all" ? "All" : TIER_NAME[f]}
-          </button>
-        ))}
+      <div className="mt-5 flex flex-col gap-2 lg:flex-row lg:gap-3">
+        <Segmented label="Tier" options={TIER_FILTERS} value={tier} counts={counts.tiers} testid="parlays-filter"
+                   name={(f) => (f === "all" ? "All" : TIER_NAME[f])} onChange={setTier} />
+        <Segmented label="Status" options={STATUS_FILTERS} value={status} counts={counts.statuses} testid="parlays-status"
+                   name={(f) => STATUS_NAME[f]} onChange={setStatus} />
       </div>
       {liveError && <p role="status" className="mt-3 text-sm text-on-pace">{liveError}</p>}
 
@@ -220,7 +295,7 @@ export function ParlaysView({ day, today, initialLive = {}, poll = true }: {
             <p data-testid="parlays-none" className="max-w-measure border-t border-border pt-4 text-lg text-text">
               {day.tickets.length === 0
                 ? (day.enabled === false ? "The parlay agents are off." : `No ticket ${day.day === today ? "yet today" : "this day"}.`)
-                : `No ${TIER_NAME[filter]} ticket this day.`}
+                : noneText(tier, status)}
             </p>
           )}
           {section("live", "Live now", true)}

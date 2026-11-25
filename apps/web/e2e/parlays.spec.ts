@@ -85,6 +85,37 @@ test.describe("owner", () => {
     await page.getByTestId("parlays-filter-all").click();
   });
 
+  test("the status bar: Open, Hit, Missed; counts on each segment; the filters ride in the URL", async () => {
+    await page.getByTestId("parlays-status-hit").click();
+    await expect(page.getByTestId("parlays-status-hit")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator('[data-testid="parlay-ticket"]:not([data-outcome="hit"])')).toHaveCount(0);
+    await expect(ticket("safer")).toBeVisible();
+    await expect(page).toHaveURL(/status=hit/);
+    const hits = Number(await page.getByTestId("parlays-status-hit-n").textContent());
+    await expect(page.locator('[data-testid="parlay-ticket"]')).toHaveCount(hits);
+    await page.getByTestId("parlays-status-miss").click();
+    await expect(ticket("mid")).toBeVisible();
+    await expect(page.locator('[data-testid="parlay-ticket"][data-outcome="hit"]')).toHaveCount(0);
+    await page.getByTestId("parlays-status-open").click();
+    await expect(ticket("lotto")).toBeVisible();
+    await expect(page.getByTestId("parlays-done")).toHaveCount(0);
+    // A reload keeps the choice.
+    await page.reload();
+    await expect(page.getByTestId("parlays-status-open")).toHaveAttribute("aria-pressed", "true");
+    // The reload's live poll (ESPN, on open) runs first: server actions queue, so let it finish
+    // before the next test's Details action, which would wait behind it.
+    await page.waitForLoadState("networkidle");
+    await page.getByTestId("parlays-status-all").click();
+    await expect(page).not.toHaveURL(/status=/);
+  });
+
+  test("the day menu lists the shown day, selected, with its ticket count", async () => {
+    const day = await page.getByTestId("parlays-page").getAttribute("data-day");
+    const menu = page.getByTestId("parlays-day-menu");
+    await expect(menu).toHaveValue(day!);
+    await expect(menu.locator(`option[value="${day}"]`)).toContainText(/\d+ tickets?/);
+  });
+
   test("Details: stake, payout, the model's chance, CLV (proxy) with its ages and not profit, the log verbatim", async () => {
     await ticket("safer").getByTestId("parlay-details-open").click();
     const d = page.getByTestId("parlay-sheet").getByTestId("parlay-details");

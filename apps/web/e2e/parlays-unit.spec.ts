@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  asStatus, asTier, dayOption, filterCounts, matchesStatus, menuDays,
   emptySlots, legLive, legWords, multText, multiplier, normName, perDollar, signedUsd, sortTickets, stage, statNow,
   tally, usd, type GameLive, type ParlayGame, type ParlayLeg, type ParlayTicket,
 } from "../src/lib/betting/parlays";
@@ -160,5 +161,40 @@ test.describe("money and the day", () => {
     ]);
     expect(rows.map((r) => r.sport)).toEqual(["Football"]);
     expect(noMarket.get("10:45 safer")).toEqual(["Chess", "Esports"]);
+  });
+});
+
+test.describe("filters and the day menu (owner, Nov 25)", () => {
+  const t = (tier: ParlayTicket["tier"], outcome?: ParlayTicket["outcome"]) => ({ tier, outcome });
+  const day = [t("safer", "hit"), t("safer"), t("mid", "miss"), t("mid", "partial"), t("lotto", "miss"), t("lotto")];
+
+  test("Open is no outcome yet; a partial shows under All only", () => {
+    expect(day.filter((x) => matchesStatus(x, "open"))).toHaveLength(2);
+    expect(day.filter((x) => matchesStatus(x, "hit"))).toHaveLength(1);
+    expect(day.filter((x) => matchesStatus(x, "miss"))).toHaveLength(2);
+    expect(day.filter((x) => matchesStatus(x, "all"))).toHaveLength(6);
+  });
+
+  test("each bar counts with the other bar's choice applied", () => {
+    expect(filterCounts(day, "all", "all")).toEqual({
+      tiers: { all: 6, safer: 2, mid: 2, lotto: 2 }, statuses: { all: 6, open: 2, hit: 1, miss: 2 } });
+    expect(filterCounts(day, "mid", "miss")).toEqual({
+      tiers: { all: 2, safer: 0, mid: 1, lotto: 1 }, statuses: { all: 2, open: 0, hit: 0, miss: 1 } });
+  });
+
+  test("a bad URL value falls back to All", () => {
+    expect(asTier("mid")).toBe("mid");
+    expect(asTier("bogus")).toBe("all");
+    expect(asStatus(undefined)).toBe("all");
+    expect(asStatus("miss")).toBe("miss");
+  });
+
+  test("the menu's words: open and hit counts, Today by name; the shown day is always listed", () => {
+    expect(dayOption({ d: "2026-11-25", n: 11, open: 11, hit: 0, miss: 0 }, "2026-11-25")).toBe("Today · 11 tickets · 11 open");
+    expect(dayOption({ d: "2026-11-24", n: 20, open: 16, hit: 0, miss: 4 }, "2026-11-25")).toBe("Tue, Nov 24 · 20 tickets · 16 open · 0 hit");
+    expect(dayOption({ d: "2026-11-23", n: 1, open: 0, hit: 1, miss: 0 }, "2026-11-25")).toBe("Mon, Nov 23 · 1 ticket · 1 hit");
+    const days = [{ d: "2026-11-24", n: 2, open: 0, hit: 0, miss: 2 }, { d: "2026-11-21", n: 1, open: 0, hit: 1, miss: 0 }];
+    expect(menuDays(days, "2026-11-24")).toBe(days);
+    expect(menuDays(days, "2026-11-25").map((e) => e.d)).toEqual(["2026-11-25", "2026-11-24", "2026-11-21"]);
   });
 });
