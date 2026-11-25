@@ -10,7 +10,7 @@ import { TicketCard } from "@/components/betting/parlay-card";
 import { TicketDetails } from "@/components/betting/parlay-details";
 import { Segmented } from "@/components/betting/segmented";
 import {
-  STATUS_FILTERS, STATUS_NAME, TIER_FILTERS, TIER_NAME, dayLabel, dayOption, emptySlots, filterCounts, inferLeg,
+  STATUS_FILTERS, STATUS_NAME, TIER_FILTERS, TIER_NAME, dayLabel, dayOption, emptySlots, filterCounts, inferLeg, legKey,
   matchesStatus, matchesTier, menuDays, sortTickets, stage,
   type GameLive, type ParlayDay, type ParlayDayEntry, type ParlayTicket, type StatusFilter, type TierFilter,
 } from "@/lib/betting/parlays";
@@ -74,20 +74,22 @@ function noneText(tier: TierFilter, status: StatusFilter): string {
   return `No ${what}${verb} this day.`;
 }
 
-/** What the live poll asks for: each linked game with the players the tickets name. */
+/** What the live poll asks for: each game (Game Day's id, else its Kalshi game ticker, db/095) with the
+ *  players the tickets name. */
 function requests(tickets: ParlayTicket[], games: ParlayDay["games"], only?: (t: ParlayTicket) => boolean) {
-  const by = new Map<number, Set<string>>();
+  const by = new Map<string, { g?: number; k?: string; names: Set<string> }>();
   for (const t of tickets) {
     if (only && !only(t)) continue;
     for (const l of t.legs) {
-      if (!l.g) continue;
-      const s = by.get(l.g) ?? new Set<string>();
-      const x = inferLeg(l, games[l.g]);
-      if (x.kind === "prop" && x.who) s.add(x.who);
-      by.set(l.g, s);
+      const key = legKey(l);
+      if (!key) continue;
+      const r = by.get(key) ?? (l.g ? { g: l.g, names: new Set<string>() } : { k: l.gk, names: new Set<string>() });
+      const x = inferLeg(l, l.g ? games[l.g] : undefined);
+      if (x.kind === "prop" && x.who) r.names.add(x.who);
+      by.set(key, r);
     }
   }
-  return [...by].map(([g, names]) => ({ g, names: [...names] }));
+  return [...by.values()].map((r) => ({ ...r, names: [...r.names] }));
 }
 
 function EmptySlots({ day }: { day: ParlayDay }) {

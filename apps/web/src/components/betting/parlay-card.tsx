@@ -9,7 +9,7 @@ import { useState } from "react";
 
 import { TeamLogo } from "@/components/betting/matchup";
 import {
-  TIER_NAME, firstStart, inferLeg, legLive, legWords, multText, normName, signedUsd, stage, tally, usd,
+  TIER_NAME, firstStart, inferLeg, legGame, legKey, legLive, legWords, multText, normName, signedUsd, stage, tally, usd,
   type GameLive, type GameTeam, type LegLive, type ParlayGame, type ParlayLeg, type ParlayTicket,
 } from "@/lib/betting/parlays";
 import { logoKey, logoUrls, type Team } from "@/lib/betting/teams";
@@ -169,9 +169,11 @@ export function TicketCard({ t, games, live, now, onDetails, selected }: {
 }) {
   const [all, setAll] = useState(false);
   const st = stage(t, now);
-  const states = t.legs.map((l) => legLive(l, l.g ? games[l.g] : undefined, l.g ? live[l.g] : undefined, now));
+  const at = (l: ParlayTicket["legs"][number]) => { const k = legKey(l); return k ? live[k] : undefined; };
+  const states = t.legs.map((l) => legLive(l, legGame(l, games, live), at(l), now));
   const { cleared, out } = tally(states);
-  const liveGames = new Set(t.legs.filter((l, i) => l.g && states[i].state !== "pre" && !l.res && live[l.g!]?.state === "in").map((l) => l.g)).size;
+  const liveGames = new Set(t.legs.filter((l, i) => legKey(l) && states[i].state !== "pre" && !l.res && at(l)?.state === "in")
+    .map((l) => legKey(l))).size;
   const next = firstStart(t, now);
   const status = t.outcome === "hit" ? `paid ${usd(t.paid ?? t.pays)} · ${signedUsd((t.paid ?? t.pays) - t.stake)}`
     : t.outcome === "partial" ? `paid ${usd(t.paid ?? 0)} · ${signedUsd((t.paid ?? 0) - t.stake)}`
@@ -209,7 +211,7 @@ export function TicketCard({ t, games, live, now, onDetails, selected }: {
       </div>
       <ul className="mt-3 border-t border-border">
         {legs.map((l, i) => (
-          <LegRow key={i} leg={l} game={l.g ? games[l.g] : undefined} live={l.g ? live[l.g] : undefined} now={now}
+          <LegRow key={i} leg={l} game={legGame(l, games, live)} live={at(l)} now={now}
                   sport={t.scope === "cross_sport" ? undefined : t.sport} />
         ))}
       </ul>
