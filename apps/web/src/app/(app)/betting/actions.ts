@@ -5,13 +5,15 @@ import { headers } from "next/headers";
 import { requireOwner } from "@/lib/auth";
 import { Refusal, settle, type ActionResult } from "@/lib/action-result";
 import { cleanReason, requestLegs, type ComboState } from "@/lib/betting/combo";
-import { createComboRequest, loadComboRequest, loadGameTab } from "@/lib/betting/data";
+import { createComboRequest, createPayoutRequest, loadComboRequest, loadGameTab, loadPayoutRequest } from "@/lib/betting/data";
 import { isTab, type TabEvent } from "@/lib/betting/game";
+import { parseAmounts, type PayoutState } from "@/lib/betting/payout";
 import { MARKER_HEADER, decideMarker } from "@/lib/capital/marker";
 import { createClient } from "@/lib/supabase/server";
 
 // A game page's tabs, one at a time (db/079), and combo pricing (db/076): ask
-// for a price, then read it back. Nothing here bets (CLAUDE.md §1).
+// for a price, then read it back; and "bet $X to win $Y" (db/094). Nothing here
+// bets (CLAUDE.md §1).
 
 const TICKER = /^[A-Za-z0-9][A-Za-z0-9._-]{1,100}$/;
 
@@ -50,4 +52,29 @@ export async function comboStatus(id: number): Promise<ActionResult<{ state: Com
     if (!state) throw new Refusal("That price is gone (prices are kept 7 days).");
     return { state };
   }, "Couldn't read the price.");
+}
+
+/** "Bet $X to win $Y" (db/094): ask the worker for up to 3 tickets. The id to poll, or why not. */
+export async function askPayout(stake: unknown, payout: unknown): Promise<ActionResult<{ id: number }>> {
+  return settle(async () => {
+    await requireOwner();
+    const amounts = parseAmounts(stake, payout);
+    if ("error" in amounts) throw new Refusal(amounts.error);
+    // A verified e2e request searches the test board only (the spec's fixture).
+    const isTest = decideMarker((await headers()).get(MARKER_HEADER), process.env).kind === "test";
+    const res = await createPayoutRequest(await createClient(), amounts.stake, amounts.payout, isTest);
+    if ("refused" in res) throw new Refusal(cleanReason(res.refused));
+    return { id: res.id };
+  }, "Couldn't ask for a slip.");
+}
+
+/** A payout request's state: queued, answered with its tickets, or failed with why. */
+export async function payoutStatus(id: number): Promise<ActionResult<{ state: PayoutState }>> {
+  return settle(async () => {
+    await requireOwner();
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Refusal("No such request.");
+    const state = await loadPayoutRequest(await createClient(), id);
+    if (!state) throw new Refusal("That answer is gone (answers are kept 7 days).");
+    return { state };
+  }, "Couldn't read the answer.");
 }

@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 
 import { BettingFrame } from "@/components/betting/frame";
+import { PayoutBuilder } from "@/components/betting/payout-builder";
 import { PropsView } from "@/components/betting/props-view";
 import { requireOwner } from "@/lib/auth";
 import { pickSport } from "@/lib/betting/board";
@@ -47,18 +48,21 @@ export default async function PropsPage({ searchParams }: { searchParams: Promis
           Single bets in three price tiers. Add any to your slip, and it prices them together as one parlay.
         </p>
         {/* Folded on purpose (phone screenshots, Nov 25): open, the words pushed every row below the first screen
-            (phones fold the intro in here too). */}
-        <details data-testid="props-how" className="max-w-measure text-sm text-text-muted">
-          <summary className="tap flex items-center font-semibold text-accent-ink">How the prices work</summary>
-          <p className="text-pretty lg:hidden">
-            Single bets in three price tiers. Add any to your slip, and it prices them together as one parlay.
-          </p>
-          <p className="mt-2 text-pretty lg:mt-0">
-            The price is after Kalshi&apos;s fee. Where the sportsbooks or ESPN price the same bet, the side shows its
-            edge against them. Everywhere else the only price is Kalshi&apos;s own, so the number is what the side costs
-            to trade, not an edge.
-          </p>
-        </details>
+            (phones fold the intro in here too). "Build to a payout" (E1) shares the row, so the rows stay put. */}
+        <div className="flex flex-wrap items-start gap-x-6">
+          <PayoutBuilder />
+          <details data-testid="props-how" className="max-w-measure text-sm text-text-muted">
+            <summary className="tap flex items-center font-semibold text-accent-ink">How the prices work</summary>
+            <p className="text-pretty lg:hidden">
+              Single bets in three price tiers. Add any to your slip, and it prices them together as one parlay.
+            </p>
+            <p className="mt-2 text-pretty lg:mt-0">
+              The price is after Kalshi&apos;s fee. Where the sportsbooks or ESPN price the same bet, the side shows its
+              edge against them. Everywhere else the only price is Kalshi&apos;s own, so the number is what the side costs
+              to trade, not an edge.
+            </p>
+          </details>
+        </div>
         {sports.length > 0 && (
           <nav aria-label="Sport" data-testid="props-sports"
                className="flex max-w-full gap-0.5 self-start overflow-x-auto rounded-tile border border-border p-0.75">

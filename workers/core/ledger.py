@@ -6234,6 +6234,89 @@ def parlay_candidates(*, tests: bool = False, games: Sequence[str] | None = None
     return [dict(zip(PARLAY_CANDIDATE_COLUMNS, r)) for r in rows], cut
 
 
+# ---------------------------------------------------------------- payout requests
+# "Bet $X to win $Y" (E1; db/094; consensus/payout.py, docs/payout_target.md).
+# The web inserts a payout_requests row (its trigger queues one build_payout
+# job); the worker reads the board's combo candidates with their consensus
+# (PARLAY_CANDIDATES_SQL's read, plus each event's Kalshi read time), searches
+# in Python, and writes the answer and the settle in one transaction.
+
+BUILD_PAYOUT_KIND: Final = "build_payout"
+
+PAYOUT_REQUEST_SQL: Final = "SELECT id, stake, payout, status, is_test FROM payout_requests WHERE id = %(id)s"
+#: The generator's candidate read (PARLAY_CANDIDATES_SQL) with the Kalshi read
+#: time per market (leg_consensus_for's kalshi_at), so the search keeps fresh
+#: legs only. The generator's own SQL is untouched.
+PAYOUT_CANDIDATES_SQL: Final = PARLAY_CANDIDATES_SQL.replace(
+    "f.p_books, f.p_espn, f.stale_outside, e.game_title",
+    "f.p_books, f.p_espn, f.stale_outside, e.game_title, f.kalshi_at")
+BOARD_PERIODS_SQL: Final = """
+    SELECT s, public.kalshi_board_period(s) FROM unnest(%(series)s::text[]) AS s
+"""
+PAYOUT_ANSWER_INSERT_SQL: Final = """
+    INSERT INTO payout_answers (request_id, tickets, nearest, target_price, candidates, rho_version, compute_ms)
+    VALUES (%(request_id)s, %(tickets)s, %(nearest)s, %(target_price)s, %(candidates)s, %(rho_version)s,
+            %(compute_ms)s)
+"""
+PAYOUT_ANSWER_SQL: Final = "UPDATE payout_requests SET status = 'answered' WHERE id = %(id)s AND status = 'queued'"
+PAYOUT_SETTLE_SQL: Final = """
+    UPDATE payout_requests SET status = 'failed', reason = %(reason)s WHERE id = %(id)s AND status = 'queued'
+"""
+PAYOUT_PRUNE_SQL: Final = "SELECT payout_prune()"
+
+
+@dataclass(frozen=True)
+class PayoutRequest:
+    id: int
+    stake: Decimal
+    payout: Decimal
+    status: str
+    is_test: bool
+
+
+def payout_request(request_id: int, *, conn: psycopg.Connection | None = None) -> PayoutRequest | None:
+    with _brief_conn(conn) as c:
+        row = c.execute(PAYOUT_REQUEST_SQL, {"id": request_id}).fetchone()
+    return None if row is None else PayoutRequest(int(row[0]), Decimal(row[1]), Decimal(row[2]), row[3], bool(row[4]))
+
+
+def payout_candidates(*, tests: bool = False, conn: psycopg.Connection | None = None
+                      ) -> tuple[list[dict[str, Any]], dict[str, datetime]]:
+    """(the candidate markets keyed by PARLAY_CANDIDATE_COLUMNS, {market: Kalshi read time}). Read only."""
+    with _brief_conn(conn) as c, c.transaction():
+        rows = c.execute(PAYOUT_CANDIDATES_SQL, {"tests": tests, "games": None}).fetchall()
+    n = len(PARLAY_CANDIDATE_COLUMNS)
+    return ([dict(zip(PARLAY_CANDIDATE_COLUMNS, r[:n])) for r in rows],
+            {r[0]: r[n] for r in rows if r[n] is not None})
+
+
+def board_periods(series: Sequence[str], *, conn: psycopg.Connection | None = None) -> dict[str, str | None]:
+    """{series: its period (1H, 2Q, ...) or None}, by db/079's kalshi_board_period."""
+    if not series:
+        return {}
+    with _brief_conn(conn) as c:
+        return dict(c.execute(BOARD_PERIODS_SQL, {"series": sorted(set(series))}).fetchall())
+
+
+def payout_answer(request_id: int, answer: Mapping[str, Any], *, conn: psycopg.Connection | None = None) -> None:
+    """The answer, then the request answered: one transaction (db/094's guard
+    refuses an answer to a request that is not queued, and answered without it)."""
+    with _brief_conn(conn) as c, c.transaction():
+        c.execute(PAYOUT_ANSWER_INSERT_SQL, dict(answer) | {"request_id": request_id, "tickets": Jsonb(answer["tickets"])})
+        if c.execute(PAYOUT_ANSWER_SQL, {"id": request_id}).rowcount != 1:
+            raise RuntimeError(f"payout_requests {request_id}: not queued at answer")
+
+
+def payout_fail(request_id: int, reason: str, *, conn: psycopg.Connection | None = None) -> bool:
+    with _brief_conn(conn) as c, c.transaction():
+        return c.execute(PAYOUT_SETTLE_SQL, {"id": request_id, "reason": reason[:500]}).rowcount == 1
+
+
+def payout_prune(*, conn: psycopg.Connection | None = None) -> int:
+    with _brief_conn(conn) as c, c.transaction():
+        return int(c.execute(PAYOUT_PRUNE_SQL).fetchone()[0])
+
+
 #: P2.1 §6 (owner, 2026-11-24): a parlay leg's start as the board knows it now
 #: (kalshi_board_events.starts_at: the linked schedule game, else Kalshi's
 #: milestone). The close re-reads it to follow a postponed leg. Read only; an
