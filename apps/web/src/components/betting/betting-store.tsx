@@ -66,6 +66,8 @@ type Store = {
   flip: (ticker: string, side: Side) => string | null;
   remove: (ticker: string) => void;
   clear: () => void;
+  /** Replace the slip with these legs (a "bet $X to win $Y" ticket). */
+  load: (legs: ComboLeg[]) => void;
 };
 
 const Ctx = createContext<Store | null>(null);
@@ -101,6 +103,7 @@ export function BettingStore({ children }: { children: React.ReactNode }) {
     },
     remove: (t) => setLegs(legs.filter((l) => l.t !== t)),
     clear: () => setLegs([]),
+    load: (next) => setLegs(next),
   }), [unit, legs, setLegs]);
 
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;

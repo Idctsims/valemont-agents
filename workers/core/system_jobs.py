@@ -178,6 +178,11 @@
                              (consensus/combo_job.py, docs/correlation.md).
     combo_prune      daily   03:20 Chicago, never at boot: combo requests and
                              their quotes past 7 days.
+    build_payout     queued  one owner "bet $X to win $Y" (db/094): up to 3
+                             tickets near the target payout, answered on the
+                             next poll (consensus/payout_job.py, docs/payout_target.md).
+    payout_prune     daily   03:25 Chicago, never at boot: payout requests and
+                             their answers past 7 days.
     board_snapshot   18 h    10:30 and 16:30 Chicago, never at boot: M5's board
                              snapshot (db/084), copied inside Postgres; a slot
                              once, 28 real snapshots, then it refuses
@@ -232,6 +237,7 @@ from sports import jobs as sports_jobs
 from sports import kalshi_board
 from consensus import board_snapshot
 from consensus import combo_job
+from consensus import payout_job
 from consensus import parlay_slot
 from consensus import parlay_watch
 from consensus import job as consensus_job
@@ -532,6 +538,9 @@ QUEUE_HANDLERS: dict[str, QueueHandler] = {
     # db/076: one owner's combo request, queued once by its insert trigger.
     ledger.PRICE_COMBO_KIND: lambda payload: run_tracked(
         replace(PRICE_COMBO, fn=lambda: combo_job.price_job(payload))),
+    # db/094: one owner's "bet $X to win $Y", queued once by its insert trigger.
+    ledger.BUILD_PAYOUT_KIND: lambda payload: run_tracked(
+        replace(BUILD_PAYOUT, fn=lambda: payout_job.build_job(payload))),
 }
 
 
@@ -701,6 +710,9 @@ ARSENAL_TITLE_HOOK = SystemJob("arsenal_title_hook", 366 * 24 * 60 * 60, Interva
 #: Run per owner combo request (db/076), never scheduled: requests are sporadic.
 PRICE_COMBO = SystemJob("price_combo", 366 * 24 * 60 * 60, IntervalTrigger(days=366),
                         lambda: None, scheduled=False)
+#: Run per owner payout request (db/094), never scheduled: requests are sporadic.
+BUILD_PAYOUT = SystemJob("build_payout", 366 * 24 * 60 * 60, IntervalTrigger(days=366),
+                         lambda: None, scheduled=False)
 
 
 def _chain(*jobs: SystemJob) -> None:
@@ -883,6 +895,11 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
         PRICE_COMBO,
         SystemJob("combo_prune", 24 * 60 * 60, CronTrigger(hour=3, minute=20, timezone=OWNER_TZ),
                   combo_job.prune_job, misfire_grace=3600, run_at_boot=False),
+        # "Bet $X to win $Y" (db/094): one job_health row for every request, and
+        # the 7-day prune of requests and their answers at 03:25 Chicago.
+        BUILD_PAYOUT,
+        SystemJob("payout_prune", 24 * 60 * 60, CronTrigger(hour=3, minute=25, timezone=OWNER_TZ),
+                  payout_job.prune_job, misfire_grace=3600, run_at_boot=False),
         # M5's board snapshot (db/084): 10:30 and 16:30 Chicago, never at boot (a
         # redeploy must not take a slot early); a late fire within 30 min keeps its slot.
         SystemJob(board_snapshot.JOB, board_snapshot.INTERVAL_S,

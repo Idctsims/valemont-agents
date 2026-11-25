@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BoardCard, Credits, SportChip } from "./board";
 import type { ComboState, Quote } from "./combo";
 import type { GameMeta, GameTabs, Tab, TabEvent } from "./game";
+import type { PayoutAnswer, PayoutState } from "./payout";
 import { PAGE_SIZE, type SinglesPage, type SinglesQuery } from "./singles";
 import { teamTuples } from "./teams";
 
@@ -143,4 +144,37 @@ export async function loadSingles(supabase: SupabaseClient, sport: string, q: Si
   });
   if (error) throw new Error(`Couldn't read the props: ${error.message}`);
   return (data ?? { asof: 0, counts: {}, rows: [] }) as SinglesPage;
+}
+
+/** "Bet $X to win $Y" (db/094): a request the worker answers. The id, or the guard's refusal (the rate limit). */
+export async function createPayoutRequest(supabase: SupabaseClient, stake: number, payout: number,
+                                          isTest: boolean): Promise<{ id: number } | { refused: string }> {
+  const { data, error } = await supabase.from("payout_requests").insert({ stake, payout, is_test: isTest })
+    .select("id").single();
+  if (error) {
+    if (/payout_requests:/.test(error.message)) return { refused: error.message };
+    throw new Error(`Couldn't ask: ${error.message}`);
+  }
+  return { id: Number((data as { id: number }).id) };
+}
+
+export async function loadPayoutRequest(supabase: SupabaseClient, id: number): Promise<PayoutState | null> {
+  const { data, error } = await supabase
+    .from("payout_requests")
+    .select("status, reason, created_at, answered_at, payout_answers(tickets, nearest, target_price, candidates, compute_ms)")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(`Couldn't read the answer: ${error.message}`);
+  if (!data) return null;
+  const r = data as unknown as {
+    status: PayoutState["status"]; reason: string | null; created_at: string; answered_at: string | null;
+    payout_answers: PayoutAnswer | PayoutAnswer[] | null;
+  };
+  const a = Array.isArray(r.payout_answers) ? r.payout_answers[0] : r.payout_answers;
+  if (r.status === "answered" && a) {
+    return { status: "answered", createdAt: r.created_at, answeredAt: r.answered_at ?? r.created_at,
+             answer: { ...a, target_price: Number(a.target_price) } };
+  }
+  if (r.status === "failed") return { status: "failed", reason: r.reason ?? "", createdAt: r.created_at };
+  return { status: "queued", createdAt: r.created_at };
 }
