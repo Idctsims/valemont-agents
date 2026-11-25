@@ -100,7 +100,10 @@ test.describe("parseSummary: a live football game", () => {
     expect(s.leaders).toEqual([{ side: "home", category: "Passing Yards", name: "D. Mensah", line: "7/11, 87 YDS, 1 INT" }]);
     expect(s.teamStats).toEqual([{ label: "1st Downs", away: "8", home: "7" }]);
     expect(s.players.away.map((g) => g.name)).toEqual(["Passing", "Kick returns"]);
-    expect(s.players.away[0].rows).toEqual([{ name: "E. Grunkemeyer", jersey: "17", stats: ["9/14", "112", "1", "0"] }]);
+    // full: ESPN's whole name, which the Parlays page matches players by (Phase 4.5).
+    expect(s.players.away[0].rows).toEqual([{ name: "E. Grunkemeyer", jersey: "17", stats: ["9/14", "112", "1", "0"],
+                                               full: "Ethan Grunkemeyer" }]);
+    expect(s.players.away[0].key).toBe("passing");
     expect(s.players.away[1].rows[0].name).toBe("D. Hill Jr.");
     expect(s.players.home).toEqual([]);
     expect(s.scoring).toHaveLength(1);

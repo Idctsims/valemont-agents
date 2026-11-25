@@ -518,7 +518,8 @@ class Registry(unittest.TestCase):
                           "arsenal_outcome", "arsenal_arm_verify", "arsenal_arm_sweep",
                            "arsenal_title_hook", "arsenal_title_hook_sweep", "sports_schedule", "sports_live",
                            "kalshi_map", "kalshi_board", "kalshi_board_refresh", "consensus",
-                           "price_combo", "combo_prune", "board_snapshot", "parlay_requote"})
+                           "price_combo", "combo_prune", "board_snapshot", "parlay_requote",
+                           "parlay_legs_capture", "parlay_hit_push"})
         # db/054 (Chat 5): the pool Sundays 03:30, the drop daily 05:30 (both
         # Chicago, both at boot), collect every 10 min; verify runs per queued
         # item, never on its own.
@@ -622,12 +623,13 @@ class SystemOnlyBoot(SystemTestCase):
                                "system:kalshi_map", "system:kalshi_board",
                                "system:kalshi_board_refresh", "system:consensus",
                                "system:combo_prune", "system:board_snapshot",
-                               "system:parlay_requote"})
+                               "system:parlay_requote", "system:parlay_legs_capture",
+                               "system:parlay_hit_push"})
         # screening_match, feed_tech_summarize, feed_summarize, feed_score, feed_why and feed_repo_why
         # are registered (job_health rows, watched) but never scheduled: feed_ingest runs them.
         # arsenal_verify, arsenal_outcome and arsenal_arm_verify the same way: the job_queue handler runs them.
-        # 34 with db/065's sports_schedule and sports_live (Chat 7 Phase 1); 35 with db/066's kalshi_map; 37 with db/071's kalshi_board and kalshi_board_refresh; 38 with db/073's consensus; 40 with db/076's price_combo and combo_prune; 41 with db/084's board_snapshot; 42 with parlay_requote (Chat 8 Phase 4.4).
-        self.assertEqual(self.ledger.names().count("job_register"), 42)
+        # 34 with db/065's sports_schedule and sports_live (Chat 7 Phase 1); 35 with db/066's kalshi_map; 37 with db/071's kalshi_board and kalshi_board_refresh; 38 with db/073's consensus; 40 with db/076's price_combo and combo_prune; 41 with db/084's board_snapshot; 42 with parlay_requote (Chat 8 Phase 4.4); 44 with parlay_legs_capture and parlay_hit_push (Phase 4.5).
+        self.assertEqual(self.ledger.names().count("job_register"), 44)
         for chained in ("screening_match", "feed_tech_summarize", "feed_summarize", "feed_score", "feed_why",
                         "feed_repo_why", "arsenal_verify", "arsenal_outcome", "arsenal_arm_verify",
                         "arsenal_title_hook", "price_combo"):
@@ -685,7 +687,8 @@ class SystemOnlyBoot(SystemTestCase):
                           "arsenal_outcome", "arsenal_arm_verify", "arsenal_arm_sweep",
                            "arsenal_title_hook", "arsenal_title_hook_sweep", "sports_schedule", "sports_live",
                            "kalshi_map", "kalshi_board", "kalshi_board_refresh", "consensus",
-                           "price_combo", "combo_prune", "board_snapshot", "parlay_requote"})
+                           "price_combo", "combo_prune", "board_snapshot", "parlay_requote",
+                           "parlay_legs_capture", "parlay_hit_push"})
 
 
 if __name__ == "__main__":

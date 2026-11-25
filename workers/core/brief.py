@@ -511,6 +511,16 @@ def _sports_lines(t: Mapping[str, Any]) -> list[str]:
     return [str(x) for x in (t.get("lines") or []) if isinstance(x, str) and x.strip()][:5]
 
 
+def _parlays_lines(t: Mapping[str, Any]) -> list[str]:
+    """The Parlay Generator's PAPER tickets (db/091 ctx_parlays_brief): at most
+    2 lines worded by the database: yesterday's tickets per tier (or every
+    tier's empty slots with their binding rules, or "no slot ran"), then what
+    settled in the last 24 h, each tier's paper dollars its own. Used as given,
+    in the AI brief too (DATA_LINE_SECTIONS): a model must never add tiers
+    together (CLAUDE.md §9.2)."""
+    return [str(x) for x in (t.get("lines") or []) if isinstance(x, str) and x.strip()][:2]
+
+
 ARSENAL_ROOM_PHRASES = {"boardroom": "for the boardroom", "pitch": "for the pitch",
                         "negotiation": "for the negotiation", "homies": "with the homies"}
 
@@ -523,7 +533,7 @@ ONE_LINE_SECTIONS = frozenset({"tech_brief", "screening_brief", "arsenal_brief"}
 #: Sections whose line is always the data template, in the AI brief too: the
 #: model once wrote "Power word: asymmetric. … Test every move today against
 #: it." (brief 1018), dropping the reference and adding an exhortation.
-DATA_LINE_SECTIONS = frozenset({"arsenal_brief", "sports_brief"})
+DATA_LINE_SECTIONS = frozenset({"arsenal_brief", "sports_brief", "parlays_brief"})
 
 #: How the fallback words each section it knows. A later pillar adds one.
 FALLBACK_SECTIONS: dict[str, Callable[[Mapping[str, Any], str], list[str]]] = {
@@ -535,6 +545,7 @@ FALLBACK_SECTIONS: dict[str, Callable[[Mapping[str, Any], str], list[str]]] = {
     "screening_brief": lambda p, _today: _screening_lines(p.get("screening_brief") or {}),
     "arsenal_brief": lambda p, _today: _arsenal_lines(p.get("arsenal_brief") or {}),
     "sports_brief": lambda p, _today: _sports_lines(p.get("sports_brief") or {}),
+    "parlays_brief": lambda p, _today: _parlays_lines(p.get("parlays_brief") or {}),
 }
 
 

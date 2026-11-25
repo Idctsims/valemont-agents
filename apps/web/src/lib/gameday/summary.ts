@@ -42,7 +42,16 @@ export type Play = {
 };
 
 export type Leader = { side: Side; category: string; name: string; line: string };
-export type StatGroup = { name: string; labels: string[]; rows: { name: string; jersey?: string; stats: string[] }[] };
+export type StatRow = {
+  name: string;
+  jersey?: string;
+  stats: string[];
+  /** The Parlays page's live count (Phase 4.5): ESPN's full name and photo. */
+  full?: string;
+  img?: string;
+};
+/** `key` is ESPN's own group name ("passing", "forwards"; "" for basketball's one group). */
+export type StatGroup = { name: string; key?: string; labels: string[]; rows: StatRow[] };
 
 export type GameSummary = {
   away: SideLine;
@@ -285,10 +294,13 @@ export function parseSummary(raw: unknown, league: string): GameSummary | null {
         .filter((a) => at(a, "didNotPlay") !== true)
         .map((a) => {
           const stats = arr(at(a, "stats")).slice(0, labels.length).map((v) => str(v) ?? "");
+          const img = str(at(a, "athlete", "headshot", "href"));
           return {
             name: short(str(at(a, "athlete", "displayName")), obj(at(a, "athlete"))),
             jersey: str(at(a, "athlete", "jersey")),
             stats,
+            full: str(at(a, "athlete", "displayName")),
+            ...(img && img.startsWith("https://a.espncdn.com/") ? { img } : {}),
           };
         })
         .filter((r) => r.name && r.stats.some((v) => v !== "" && v !== "--"));
@@ -297,7 +309,7 @@ export function parseSummary(raw: unknown, league: string): GameSummary | null {
       const name = (str(at(g, "name")) ?? "")
         .replace(/([a-z])([A-Z])/g, (_, a: string, b: string) => `${a} ${b.toLowerCase()}`)
         .replace(/^[a-z]/, (c) => c.toUpperCase());
-      players[s].push({ name, labels, rows });
+      players[s].push({ name, key: str(at(g, "name")) ?? "", labels, rows });
     }
   }
 

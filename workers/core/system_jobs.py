@@ -188,6 +188,12 @@
                              refresh yields while it runs. JobSkipped unless
                              ROSTER=production and a parlay agent is enabled
                              (consensus/parlay_slot.py; Chat 8 Phase 4.4).
+    parlay_legs_capture 15 min  each recent parlay leg's player, stat, line,
+                             team and period, copied from the board before it
+                             prunes (db/091 parlay_leg_display; write-once).
+    parlay_hit_push  5 min   one push per ticket settled as a hit in the last
+                             12 h, recorded once in parlay_hit_pushes
+                             (consensus/parlay_watch.py; Chat 8 Phase 4.5).
 
 Alerts go through core/push.py with deep link /settings/health.
 """
@@ -227,6 +233,7 @@ from sports import kalshi_board
 from consensus import board_snapshot
 from consensus import combo_job
 from consensus import parlay_slot
+from consensus import parlay_watch
 from consensus import job as consensus_job
 from sports import kalshi_map
 
@@ -886,6 +893,12 @@ def build_system_jobs(env: Mapping[str, str] = os.environ) -> list[SystemJob]:
         SystemJob(parlay_slot.JOB, parlay_slot.INTERVAL_S,
                   CronTrigger(hour="10,16", minute=parlay_slot.REQUOTE_MINUTE, timezone=OWNER_TZ),
                   parlay_slot.requote_job, misfire_grace=parlay_slot.MISFIRE_GRACE_S, run_at_boot=False),
+        # The Parlays page (Phase 4.5): legs' display fields before the board prunes
+        # them, and one push per ticket that hits (docs/parlays_page.md).
+        SystemJob(parlay_watch.CAPTURE_JOB, parlay_watch.CAPTURE_INTERVAL_S,
+                  IntervalTrigger(seconds=parlay_watch.CAPTURE_INTERVAL_S), parlay_watch.capture_job),
+        SystemJob(parlay_watch.HIT_JOB, parlay_watch.HIT_INTERVAL_S,
+                  IntervalTrigger(seconds=parlay_watch.HIT_INTERVAL_S), parlay_watch.hit_push_job),
     ]
     if env.get("HEALTH_DRILL", "").strip().lower() == "true":
         log.warning("HEALTH_DRILL=true: scheduling health_drill, which always fails")
