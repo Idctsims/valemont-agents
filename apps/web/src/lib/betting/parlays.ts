@@ -30,6 +30,8 @@ export type ParlayLeg = {
   gt?: string;
   /** The Game Day id (sports_events.id). */
   g?: number;
+  /** db/095: the Kalshi game ticker of a leg with no Game Day link, for Kalshi's live data. */
+  gk?: string;
   /** The leg's team in its linked game. */
   sd?: GameSide;
   /** Kickoff at commit (epoch seconds). */
@@ -186,7 +188,7 @@ export function matchupLong(game: ParlayGame | undefined, title: string | undefi
   return title;
 }
 
-const GOAL_LEAGUES = new Set(["nhl", "epl", "mls", "ucl"]);
+const GOAL_LEAGUES = new Set(["nhl", "epl", "mls", "ucl", "soccer"]);
 const POINT_LEAGUES = new Set(["nba", "nfl", "cfb", "mcbb", "wcbb", "wnba"]);
 
 /** " goals" / " pts" after a total's line, when the game says which; nothing when it can't be told. */
@@ -341,7 +343,22 @@ export type GameLive = {
   home?: { score?: number; lines?: number[] };
   /** Keyed by normName. */
   players: Record<string, PlayerLive>;
+  /** A game with no Game Day link, from Kalshi's live data (kalshi-live.ts): its two sides from the title. */
+  game?: ParlayGame;
 };
+
+/** A leg's key in the live map: its Game Day id, else "k:<Kalshi game ticker>" (db/095). */
+export function legKey(l: Pick<ParlayLeg, "g" | "gk">): string | undefined {
+  return l.g ? String(l.g) : l.gk ? `k:${l.gk}` : undefined;
+}
+
+/** A leg's game: Game Day's, else the one Kalshi's live data names. */
+export function legGame(l: Pick<ParlayLeg, "g" | "gk">, games: Record<string, ParlayGame>,
+                        live: Record<string, GameLive>): ParlayGame | undefined {
+  if (l.g) return games[l.g];
+  const k = legKey(l);
+  return k ? live[k]?.game : undefined;
+}
 
 function v(stats: Record<string, string> | undefined, ...keys: string[]): number | undefined {
   if (!stats) return undefined;
@@ -401,7 +418,7 @@ function doubles(stats: Record<string, string> | undefined): number | undefined 
 /** A side's points over a period line's periods: 1H the first half's, 2H the second's (regulation only). */
 function periodScore(lines: number[] | undefined, per: string, lg: string): number | undefined {
   if (!lines) return undefined;
-  const halves = lg === "mcbb" || lg === "wcbb" || lg === "epl" || lg === "mls" || lg === "ucl";
+  const halves = lg === "mcbb" || lg === "wcbb" || lg === "epl" || lg === "mls" || lg === "ucl" || lg === "soccer";
   const pick = (idx: number[]) => (idx.every((i) => i < lines.length) ? idx.reduce((a, i) => a + lines[i], 0) : undefined);
   const m = /^([1-4])([QP])$/.exec(per);
   if (m) return pick([Number(m[1]) - 1]);
@@ -431,7 +448,8 @@ export function legLive(raw: ParlayLeg, game: ParlayGame | undefined, live: Game
   }
   const started = (live && live.state !== "pre") || (leg.start !== undefined && leg.start <= now);
   if (!live || live.state === "pre") {
-    // A game with no ESPN link (most soccer, tennis challengers, cricket): no count, its result at settlement.
+    // No live data (no ESPN link, and Kalshi has none for it: tennis challengers, cricket): no count,
+    // its result at settlement. Soccer comes from Kalshi's live data (kalshi-live.ts).
     if (started && !live) return { state: "live", note: "Under way · no live count" };
     return { state: started ? "live" : "pre", note: live?.detail };
   }

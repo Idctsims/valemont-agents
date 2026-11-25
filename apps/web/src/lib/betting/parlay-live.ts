@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { loadSummary } from "@/lib/gameday/espn";
 import type { GameSummary } from "@/lib/gameday/summary";
+import { GAME_TICKER, loadKalshiLive } from "./kalshi-live";
 import { normName, type GameLive, type GameSide, type PlayerLive } from "./parlays";
 
 // The Parlays page's live count and player photos (Phase 4.5; docs/parlays_page.md §4).
@@ -18,7 +19,8 @@ const TIMEOUT_MS = 6_000;
 export const LIVE_GAMES_MAX = 40;
 const NAMES_MAX = 40;
 
-export type LiveRequest = { g: number; names: string[] };
+/** A game Game Day links (g), or one it does not, by its Kalshi game ticker (k, db/095). */
+export type LiveRequest = { g?: number; k?: string; names: string[] };
 
 type EventRow = { id: number; espn_id: string; league: string; kind: string; status: string; participants: unknown };
 
@@ -97,13 +99,20 @@ export async function rosterFaces(path: string, teams: Partial<Record<GameSide, 
 /** Each requested game's live state and the named players' box scores (or, before it starts, their photos). */
 export async function loadParlayLive(supabase: SupabaseClient, req: LiveRequest[]): Promise<Record<string, GameLive>> {
   const wanted = new Map<number, Set<string>>();
+  const kalshi = new Map<string, Set<string>>();
   for (const r of req.slice(0, LIVE_GAMES_MAX)) {
-    if (!Number.isSafeInteger(r.g) || r.g <= 0) continue;
-    const set = wanted.get(r.g) ?? new Set<string>();
-    for (const n of (r.names ?? []).slice(0, NAMES_MAX)) if (typeof n === "string") set.add(normName(n));
-    wanted.set(r.g, set);
+    const names = new Set<string>();
+    for (const n of (Array.isArray(r.names) ? r.names : []).slice(0, NAMES_MAX)) if (typeof n === "string") names.add(normName(n));
+    if (typeof r.k === "string" && GAME_TICKER.test(r.k)) {
+      kalshi.set(r.k, new Set([...(kalshi.get(r.k) ?? []), ...names]));
+      continue;
+    }
+    if (typeof r.g !== "number" || !Number.isSafeInteger(r.g) || r.g <= 0) continue;
+    wanted.set(r.g, new Set([...(wanted.get(r.g) ?? []), ...names]));
   }
-  if (wanted.size === 0) return {};
+  // Games Game Day does not link: Kalshi's own live data (soccer), keyed "k:<ticker>".
+  const fromKalshi = kalshi.size ? loadKalshiLive([...kalshi].map(([k, names]) => ({ k, names }))) : Promise.resolve({});
+  if (wanted.size === 0) return fromKalshi;
   const { data, error } = await supabase
     .from("sports_events")
     .select("id, espn_id, league, kind, status, participants")
@@ -128,5 +137,5 @@ export async function loadParlayLive(supabase: SupabaseClient, req: LiveRequest[
     const res = await loadSummary(supabase, row.id);
     if (res.summary) out[row.id] = liveFromSummary(res.summary, names);
   }));
-  return out;
+  return { ...out, ...(await fromKalshi) };
 }

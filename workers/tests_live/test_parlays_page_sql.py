@@ -214,3 +214,34 @@ class ParlayDays092(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LegGameTicker095(unittest.TestCase):
+    """db/095: an unlinked leg carries its own game's Kalshi ticker (gk); a linked leg never does."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        with _rolled_back() as conn:
+            src = conn.execute("SELECT prosrc FROM pg_proc WHERE proname = 'parlay_day'").fetchone()
+            if src is None or "'gk'" not in src[0]:
+                raise unittest.SkipTest("db/095 not pasted")
+
+    def test_each_leg_has_its_game_ticker_exactly_when_unlinked(self) -> None:
+        with _rolled_back() as conn:
+            for back in (0, 1, 2):
+                day, j, games = conn.execute(f"""
+                    WITH d AS (SELECT (now() AT TIME ZONE 'America/Chicago')::date - %s AS day)
+                    SELECT d.day, public.parlay_day(d.day, false),
+                           (SELECT coalesce(json_object_agg(c.id, (SELECT json_agg(x->>'game_ticker')
+                                                                     FROM jsonb_array_elements(c.payload->'legs') x)), '{{}}')
+                              FROM commitments c JOIN agents a ON a.id = c.agent_id
+                             WHERE a.slug IN {PARLAYS} AND NOT a.is_test AND c.mode = 'paper'
+                               AND (c.committed_at AT TIME ZONE 'America/Chicago')::date = d.day)
+                      FROM d""", (back,)).fetchone()
+                with self.subTest(day=day):
+                    for t in j["tickets"]:
+                        for i, leg in enumerate(t["legs"]):
+                            if "g" in leg:
+                                self.assertNotIn("gk", leg)
+                            else:
+                                self.assertEqual(leg.get("gk"), games[str(t["id"])][i])
