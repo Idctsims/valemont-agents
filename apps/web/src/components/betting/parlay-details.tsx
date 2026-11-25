@@ -80,7 +80,8 @@ export function TicketDetails({ id, started, initial }: {
 
   return (
     <div data-testid="parlay-details" data-id={t.id}>
-      <div className="flex items-start justify-between gap-3">
+      {/* pr-10: the sheet's close button sits in this corner on the phone. */}
+      <div className="flex items-start justify-between gap-3 pr-10 lg:pr-0">
         <div>
           <p className="label-mono text-text-muted">{TIER_NAME[t.tier]} · {where} · {clock(t.at)} slot</p>
           <p className="mt-1 font-display text-4xl text-text">×{mult.toFixed(2)}</p>

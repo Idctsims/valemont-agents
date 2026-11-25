@@ -33,5 +33,6 @@ export default async function ParlaysPage({ searchParams }: { searchParams: Prom
       </p>
     );
   }
-  return <ParlaysView day={data} today={today} />;
+  // Keyed by day: a new day starts with its own first ticket selected (the desktop panel).
+  return <ParlaysView key={data.day} day={data} today={today} />;
 }

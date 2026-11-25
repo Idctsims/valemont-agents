@@ -63,9 +63,12 @@ function AgentCard({ a, row, sports, cohort }: { a: (typeof AGENTS)[number]; row
           <dl className="mt-2">
             <Line k="Paper result" testId="record-pl" v={`${signedUsd(row.pl ?? 0)} on ${usd(row.staked ?? 0)}`} />
             <Line k="Settled · hit · open" v={`${settled} · ${row.hit}${row.partial ? ` (+${row.partial} partial)` : ""} · ${row.open}`} />
-            <Line k={<span>CLV (proxy) <span className="label-mono rounded-tile border border-border px-1">not profit</span></span>}
+            <Line k={<span>CLV (proxy)<span className="label-mono mt-0.5 block whitespace-nowrap">not profit</span></span>}
                   testId="record-clv"
-                  v={row.clv_n ? `${pct(row.clv_pct_mean)} · ages ${row.age_med ?? "—"} / ${row.age_max ?? "—"} min` : "no close read yet"} />
+                  v={row.clv_n
+                    ? <span>{pct(row.clv_pct_mean)}<span className="mt-0.5 block whitespace-nowrap text-xs text-text-muted">
+                        close ages {row.age_med ?? "—"} / {row.age_max ?? "—"} min</span></span>
+                    : "no close read yet"} />
             <Line k="Closes missed" v={row.missed} />
           </dl>
         </>
