@@ -548,3 +548,62 @@ export type ParlayRecord = { asof: number; cohorts: string[]; rows: RecordRow[] 
 export function cohortName(rv: string): string {
   return rv === "P2" ? "Cohort 1 · P2" : rv === "P2.1" ? "Cohort 2 · P2.1" : `Rules ${rv}`;
 }
+
+// --------------------------------------------------------------------------- filters and the day menu
+
+/** One Chicago day in the day menu (db/092's parlay_days): ticket counts, never a sum of money. */
+export type ParlayDayEntry = { d: string; n: number; open: number; hit: number; miss: number };
+
+export const TIER_FILTERS = ["all", "safer", "mid", "lotto"] as const;
+export type TierFilter = (typeof TIER_FILTERS)[number];
+/** Open = no outcome yet. A partial (or any other) outcome shows under All only. */
+export const STATUS_FILTERS = ["all", "open", "hit", "miss"] as const;
+export type StatusFilter = (typeof STATUS_FILTERS)[number];
+export const STATUS_NAME: Record<StatusFilter, string> = { all: "All", open: "Open", hit: "Hit", miss: "Missed" };
+
+export function asTier(x: string | undefined): TierFilter {
+  return (TIER_FILTERS as readonly string[]).includes(x ?? "") ? (x as TierFilter) : "all";
+}
+export function asStatus(x: string | undefined): StatusFilter {
+  return (STATUS_FILTERS as readonly string[]).includes(x ?? "") ? (x as StatusFilter) : "all";
+}
+
+export function matchesTier(t: Pick<ParlayTicket, "tier">, f: TierFilter): boolean {
+  return f === "all" || t.tier === f;
+}
+export function matchesStatus(t: Pick<ParlayTicket, "outcome">, f: StatusFilter): boolean {
+  if (f === "all") return true;
+  if (f === "open") return !t.outcome;
+  return t.outcome === f;
+}
+
+/** Each bar's counts with the OTHER bar's choice applied, so a count is what a tap would show. */
+export function filterCounts(ts: Pick<ParlayTicket, "tier" | "outcome">[], tier: TierFilter, status: StatusFilter) {
+  const tiers = Object.fromEntries(TIER_FILTERS.map((f) =>
+    [f, ts.filter((t) => matchesTier(t, f) && matchesStatus(t, status)).length])) as Record<TierFilter, number>;
+  const statuses = Object.fromEntries(STATUS_FILTERS.map((f) =>
+    [f, ts.filter((t) => matchesTier(t, tier) && matchesStatus(t, f)).length])) as Record<StatusFilter, number>;
+  return { tiers, statuses };
+}
+
+/** "Today", else "Mon, Nov 24". */
+export function dayLabel(day: string, today: string): string {
+  if (day === today) return "Today";
+  return new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", {
+    weekday: "short", month: "short", day: "numeric", timeZone: "UTC",
+  });
+}
+
+/** A day menu entry: "Mon, Nov 24 · 20 tickets · 16 open · 0 hit". Settled-only days: "· 3 hit". */
+export function dayOption(e: ParlayDayEntry, today: string): string {
+  const parts = [dayLabel(e.d, today), `${e.n} ticket${e.n === 1 ? "" : "s"}`];
+  if (e.open > 0) parts.push(`${e.open} open`);
+  if (e.open < e.n) parts.push(`${e.hit} hit`);
+  return parts.join(" · ");
+}
+
+/** The menu's days, newest first: every listed day, plus the shown day if it has no ticket. */
+export function menuDays(days: ParlayDayEntry[], shown: string): ParlayDayEntry[] {
+  if (days.some((e) => e.d === shown)) return days;
+  return [...days, { d: shown, n: 0, open: 0, hit: 0, miss: 0 }].sort((a, b) => b.d.localeCompare(a.d));
+}

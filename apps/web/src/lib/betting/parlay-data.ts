@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { ParlayDay, ParlayRecord } from "./parlays";
+import type { ParlayDay, ParlayDayEntry, ParlayRecord } from "./parlays";
 
 // The Parlays page's reads (db/091): one RPC each, through the owner's session
 // (RLS). Test tickets (the _e2e_parlays agent) only for a verified e2e request.
@@ -53,4 +53,14 @@ export async function e2eParlayDay(supabase: SupabaseClient): Promise<string | n
     .order("committed_at", { ascending: false }).limit(1).maybeSingle();
   const at = (data as { committed_at?: string } | null)?.committed_at;
   return at ? chicagoToday(new Date(at)) : null;
+}
+
+/** The day menu (db/092). Never throws: the page keeps its arrows if the menu can't load. */
+export async function loadParlayDays(supabase: SupabaseClient, withTests: boolean): Promise<ParlayDayEntry[] | null> {
+  const { data, error } = await supabase.rpc("parlay_days", { p_tests: withTests });
+  if (error) {
+    console.error(`parlay_days: ${error.message}`);
+    return null;
+  }
+  return (data as ParlayDayEntry[] | null) ?? [];
 }

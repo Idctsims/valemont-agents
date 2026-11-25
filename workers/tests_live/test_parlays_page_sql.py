@@ -179,5 +179,38 @@ class ParlaysPage091(unittest.TestCase):
                                               (f"public.{table}",)).fetchone()[0])
 
 
+class ParlayDays092(unittest.TestCase):
+    """db/092: the day menu's counts, against the raw rows in the same statement."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        with _rolled_back() as conn:
+            if conn.execute("SELECT to_regprocedure('public.parlay_days(boolean)')").fetchone()[0] is None:
+                raise unittest.SkipTest("db/092 not pasted")
+
+    def test_each_day_counts_its_tickets_newest_first(self) -> None:
+        with _rolled_back() as conn:
+            days, raw = conn.execute(f"""
+                SELECT public.parlay_days(false),
+                       (SELECT coalesce(json_object_agg(x.d, json_build_array(x.n, x.open, x.hit, x.miss)), '{{}}')
+                          FROM (SELECT (c.committed_at AT TIME ZONE 'America/Chicago')::date AS d, count(*) AS n,
+                                       count(*) FILTER (WHERE r.outcome IS NULL) AS open,
+                                       count(*) FILTER (WHERE r.outcome = 'hit') AS hit,
+                                       count(*) FILTER (WHERE r.outcome = 'miss') AS miss
+                                  FROM commitments c JOIN agents a ON a.id = c.agent_id
+                                  LEFT JOIN resolutions r ON r.commitment_id = c.id
+                                 WHERE a.slug IN {PARLAYS} AND NOT a.is_test AND c.mode = 'paper'
+                                 GROUP BY 1) x)""").fetchone()
+        self.assertEqual({e["d"]: [e["n"], e["open"], e["hit"], e["miss"]] for e in days}, raw)
+        self.assertEqual([e["d"] for e in days], sorted((e["d"] for e in days), reverse=True))
+
+    def test_access(self) -> None:
+        with _rolled_back() as conn:
+            q = "SELECT has_function_privilege(%s, 'public.parlay_days(boolean)', 'EXECUTE')"
+            self.assertFalse(conn.execute(q, ("anon",)).fetchone()[0])
+            self.assertTrue(conn.execute(q, ("authenticated",)).fetchone()[0])
+            self.assertTrue(conn.execute(q, ("valemont_readonly",)).fetchone()[0])
+
+
 if __name__ == "__main__":
     unittest.main()
