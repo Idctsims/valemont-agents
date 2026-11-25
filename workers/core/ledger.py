@@ -6263,3 +6263,61 @@ def research_board_snapshot(slot: str, *, conn: psycopg.Connection | None = None
         raise ValueError(f"research_board_snapshot: slot is am or pm, not {slot!r}")
     with _brief_conn(conn) as c, c.transaction():
         return dict(c.execute(RESEARCH_BOARD_SNAPSHOT_SQL, (slot,)).fetchone()[0])
+
+
+# --------------------------------------------------------------------------- the Parlays page (db/091)
+#: Each recent parlay leg's display fields, copied from the board while the
+#: board still holds them (it prunes 6 h after a game starts). Write-once.
+PARLAY_LEGS_CAPTURE_SQL: Final = "SELECT parlay_leg_display_capture()"
+
+
+def parlay_legs_capture(*, conn: psycopg.Connection | None = None) -> int:
+    """Rows written (0 when every recent leg is already captured)."""
+    with _brief_conn(conn) as c, c.transaction():
+        return int(c.execute(PARLAY_LEGS_CAPTURE_SQL).fetchone()[0])
+
+
+@dataclass(frozen=True)
+class ParlayHit:
+    commitment_id: int
+    tier: str
+    scope: str
+    sport: str | None
+    legs: int
+    stake: Decimal
+    paid: Decimal
+    day: date
+
+
+#: Real parlay tickets settled as a hit in the last `window`, not yet pushed.
+#: The window keeps a deploy from pushing old hits (docs/parlays_page.md §1).
+PARLAY_HITS_DUE_SQL: Final = """
+    SELECT c.id, c.payload->>'tier', coalesce(c.payload->>'scope', 'sport'), c.payload->>'sport',
+           jsonb_array_length(c.payload->'legs'), (c.payload->>'capital_at_risk')::numeric,
+           (r.detail->>'proceeds')::numeric, (c.committed_at AT TIME ZONE 'America/Chicago')::date
+      FROM resolutions r
+      JOIN commitments c ON c.id = r.commitment_id
+      JOIN agents a ON a.id = c.agent_id
+     WHERE r.outcome = 'hit' AND r.resolved_at > now() - %(window)s
+       AND a.slug IN ('parlay_safer', 'parlay_mid', 'parlay_lotto') AND NOT a.is_test AND c.mode = 'paper'
+       AND NOT EXISTS (SELECT 1 FROM parlay_hit_pushes p WHERE p.commitment_id = c.id)
+     ORDER BY r.resolved_at, c.id
+"""
+
+
+def parlay_hits_due(window: timedelta, *, conn: psycopg.Connection | None = None) -> list[ParlayHit]:
+    with _brief_conn(conn) as c, c.transaction():
+        return [ParlayHit(*row) for row in c.execute(PARLAY_HITS_DUE_SQL, {"window": window}).fetchall()]
+
+
+PARLAY_HIT_PUSHED_SQL: Final = """
+    INSERT INTO parlay_hit_pushes (commitment_id, notification_id) VALUES (%s, %s)
+    ON CONFLICT (commitment_id) DO NOTHING
+"""
+
+
+def parlay_hit_pushed(commitment_id: int, notification_id: int | None, *,
+                      conn: psycopg.Connection | None = None) -> None:
+    """Records that a ticket's hit was pushed (append-only; once per ticket)."""
+    with _brief_conn(conn) as c, c.transaction():
+        c.execute(PARLAY_HIT_PUSHED_SQL, (commitment_id, notification_id))
