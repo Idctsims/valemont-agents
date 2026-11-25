@@ -82,6 +82,7 @@ SET search_path = ''
 AS $$
     SELECT CASE WHEN p_team IS NULL OR jsonb_typeof(p_team) <> 'object' THEN NULL
                 ELSE jsonb_strip_nulls(jsonb_build_object(
+                         'id', p_team->>'id',
                          'abbr', p_team->>'abbr', 'loc', p_team->>'loc', 'nick', p_team->>'nick',
                          'name', CASE WHEN p_team ? 'loc' THEN NULL ELSE p_team->>'name' END,
                          'logo', p_team->>'logo', 'color', p_team->>'color')) END;
@@ -235,6 +236,18 @@ AS $$
                  WHERE e.event_ticker = g.gt AND (NOT s2.is_test OR p_tests)
             ) se LIMIT 1) AS sid
           FROM (SELECT DISTINCT gt FROM lg WHERE gt IS NOT NULL) g
+    ), gk AS (
+        -- Each linked game's two sides as Kalshi codes them (ESPN's code, or its alias,
+        -- db/066), so a leg's team says home or away.
+        SELECT se.id AS sid,
+               coalesce(ah.kalshi_code, se.participants->'home'->>'abbr') AS hk,
+               coalesce(aa.kalshi_code, se.participants->'away'->>'abbr') AS ak
+          FROM public.sports_events se
+          LEFT JOIN public.sports_team_aliases ah
+                 ON ah.league = se.league AND ah.espn_code = se.participants->'home'->>'abbr'
+          LEFT JOIN public.sports_team_aliases aa
+                 ON aa.league = se.league AND aa.espn_code = se.participants->'away'->>'abbr'
+         WHERE se.id IN (SELECT sid FROM gl WHERE sid IS NOT NULL)
     ), legs_j AS (
         SELECT lg.id,
                jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
@@ -244,9 +257,11 @@ AS $$
                    'team', lg.team, 'per', lg.period,
                    'gt', CASE WHEN gl.sid IS NULL THEN lg.game_title END,
                    'g', gl.sid,
+                   'sd', CASE WHEN lg.team IS NULL THEN NULL WHEN lg.team = gk.hk THEN 'home'
+                              WHEN lg.team = gk.ak THEN 'away' END,
                    'start', extract(epoch FROM lg.kickoff)::bigint,
                    'res', lg.res)) ORDER BY lg.i) AS legs
-          FROM lg LEFT JOIN gl ON gl.gt = lg.gt
+          FROM lg LEFT JOIN gl ON gl.gt = lg.gt LEFT JOIN gk ON gk.sid = gl.sid
          GROUP BY lg.id
     ), games AS (
         SELECT jsonb_object_agg(se.id::text, jsonb_strip_nulls(jsonb_build_object(
@@ -805,12 +820,13 @@ BEGIN
         IF v_k->'legs'->1->>'label' <> 'Test Player: 10+ pts (Test Away vs Test Home)'
            OR v_k->'legs'->1->>'who' <> 'Test Player' OR v_k->'legs'->1->>'side' <> 'no'
            OR (v_k->'legs'->1->>'line')::numeric <> 9.5 OR (v_k->'legs'->1->>'g')::bigint <> v_sid
+           OR v_k->'legs'->1->>'sd' <> 'home' OR v_k->'legs'->0->>'sd' <> 'home'
            OR v_k->'legs'->0->>'label' <> 'Test Home wins (Test Away vs Test Home)' THEN
             RAISE EXCEPTION 'SELFTEST FAILED: the legs read %', v_k->'legs';
         END IF;
         IF NOT (v_j->'games' ? v_sid::text) THEN RAISE EXCEPTION 'SELFTEST FAILED: the game is missing'; END IF;
         IF v_j->'games'->(v_sid::text)->'home'
-               IS DISTINCT FROM '{"abbr": "HOM", "loc": "Hometown", "nick": "Home", "color": "c53030"}'::jsonb THEN
+               IS DISTINCT FROM '{"id": "9002", "abbr": "HOM", "loc": "Hometown", "nick": "Home", "color": "c53030"}'::jsonb THEN
             RAISE EXCEPTION 'SELFTEST FAILED: the game''s home side reads %', v_j->'games'->(v_sid::text)->'home';
         END IF;
         SELECT count(*) INTO v_n FROM jsonb_array_elements(v_j->'results') x

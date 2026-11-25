@@ -82,8 +82,8 @@ test("betting screens", async ({ page }, testInfo) => {
       await page.getByTestId("combo-sheet-toggle").click();
     }
 
-    await page.goto("/betting/today");
-    await snap(page, "today", phone, theme);
+    await page.goto("/betting/parlays");
+    await snap(page, "parlays", phone, theme);
     await page.goto("/betting/record");
     await snap(page, "record", phone, theme);
   }

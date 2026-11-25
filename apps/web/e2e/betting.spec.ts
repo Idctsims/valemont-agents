@@ -23,13 +23,14 @@ import { addTestKalshiBoard, hasOwner, signIn, useE2eMarker } from "./support/ow
 //     Test Player 10+ passes the shipped method and FAILS the least
 //     favourable (a span row): not claimed, no up colour;
 //   * the x / % switch flips every price and sticks across a reload;
-//   * Refresh shows the source time; Today and Record say why they are empty.
+//   * Refresh shows the source time; the Parlays and Record tabs open (Phase 4.5).
 //
 // Run (owner, CLAUDE.md §6, the Read-Host form):
 //   pnpm test:e2e e2e/betting.spec.ts --project=phone --output=test-results/betting
 
 test.describe("logged out", () => {
-  for (const path of ["/betting", "/betting/today", "/betting/record", "/betting/game/KXNBAGAME-26NOV15GSWHOU"]) {
+  for (const path of ["/betting", "/betting/today", "/betting/parlays", "/betting/record",
+                      "/betting/game/KXNBAGAME-26NOV15GSWHOU"]) {
     test(`${path} asks for sign-in`, async ({ page }) => {
       await page.goto(path);
       await expect(page).toHaveURL(/\/login\?next=%2Fbetting/);
@@ -182,12 +183,16 @@ test.describe("owner", () => {
     await expect(page.getByTestId("tab-panel")).toContainText("No half or quarter markets are open for this game yet.");
   });
 
-  test("Today and Record are honest empty states", async () => {
-    await page.getByTestId("betting-tab-today").click();
-    await expect(page).toHaveURL(/\/betting\/today$/);
-    await expect(page.getByTestId("today-empty")).toHaveText("Parlays drop with Phase 4.");
+  // Phase 4.5: Today became Parlays (its old URL redirects); both tabs open. Their content: e2e/parlays.spec.ts.
+  test("Parlays and Record open from the tabs; Today redirects to Parlays", async () => {
+    await page.getByTestId("betting-tab-parlays").click();
+    await expect(page).toHaveURL(/\/betting\/parlays$/);
+    await expect(page.getByTestId("parlays-page")).toBeVisible();
+    await page.goto("/betting/today");
+    await expect(page).toHaveURL(/\/betting\/parlays$/);
+    await expect(page.getByTestId("betting-tab-parlays")).toHaveAttribute("aria-current", "page");
     await page.getByTestId("betting-tab-record").click();
-    await expect(page.getByTestId("record-empty")).toHaveText("No committed tickets yet.");
+    await expect(page.getByTestId("record-page")).toBeVisible();
     await expect(page.getByTestId("betting-tab-record")).toHaveAttribute("aria-current", "page");
   });
 });

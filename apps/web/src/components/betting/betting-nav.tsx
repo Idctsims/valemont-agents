@@ -6,16 +6,17 @@ import { usePathname } from "next/navigation";
 import { UnitSwitch } from "@/components/betting/betting-store";
 
 // /betting's sections (the approved mock's top bar): Board (and every game
-// page under it), Today, Record; and the x / % switch beside them.
+// page under it), Parlays (was Today; Phase 4.5), Record; and the x / %
+// switch beside them.
 
 const SECTIONS = [
   { key: "board", label: "Board", href: "/betting" },
-  { key: "today", label: "Today", href: "/betting/today" },
+  { key: "parlays", label: "Parlays", href: "/betting/parlays" },
   { key: "record", label: "Record", href: "/betting/record" },
 ] as const;
 
 function current(path: string): string {
-  if (path.startsWith("/betting/today")) return "today";
+  if (path.startsWith("/betting/parlays") || path.startsWith("/betting/today")) return "parlays";
   if (path.startsWith("/betting/record")) return "record";
   return "board";
 }

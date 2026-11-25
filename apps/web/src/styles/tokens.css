@@ -501,6 +501,14 @@
 @utility bg-team {
   background-color: var(--vm-team, var(--vm-surface-3));
 }
+/* A Parlays leg row: the face, the words, the count or mark. */
+@utility grid-cols-leg {
+  grid-template-columns: 2.75rem minmax(0, 1fr) auto;
+}
+/* A player's photo on a Parlays ticket (Phase 4.5): ringed in the team's colour. */
+@utility ring-team {
+  box-shadow: inset 0 0 0 2px var(--vm-team, var(--vm-border));
+}
 /* A picked cell on a board card: the accent as an underline inside it. */
 @utility shadow-pick {
   box-shadow: inset 0 -3px 0 var(--vm-accent-ink);
