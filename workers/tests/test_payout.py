@@ -16,12 +16,13 @@ NOW = datetime(2026, 11, 25, 20, 0, tzinfo=timezone.utc)
 D = Decimal
 
 
-def market(i: int, bid: str, ask: str, *, yes_only: bool = False, eligible: bool = True) -> pl.Market:
-    """One game's moneyline (one market per game: every pair is across games, independent)."""
-    game = f"KXNBAGAME-26NOV25G{i:02d}"
+def market(i: int, bid: str, ask: str, *, yes_only: bool = False, eligible: bool = True,
+           game: str | None = None, suffix: str = "HOM") -> pl.Market:
+    """A game's moneyline (by default one market per game: every pair is across games, independent)."""
+    game = game or f"KXNBAGAME-26NOV25G{i:02d}"
     mid = (D(bid) + D(ask)) / 2
     return pl.Market(
-        market_ticker=f"{game}-HOM", event_ticker=game, game_ticker=game, series_ticker="KXNBAGAME",
+        market_ticker=f"{game}-{suffix}", event_ticker=game, game_ticker=game, series_ticker="KXNBAGAME",
         sport="Basketball", league="nba", starts_at=NOW + timedelta(hours=3), market_kind="game_line",
         stat="winner", subject=f"Team {i}", team=f"T{i:02d}", line=None, tier="kalshi", p_yes=mid,
         yes_bid=D(bid), yes_ask=D(ask), payout="binary", combo_eligible=eligible, combo_yes_only=yes_only,
@@ -69,13 +70,41 @@ class Search(unittest.TestCase):
         keys = [tuple(sorted(c.key for c in p.legs)) for p in ans.picks]
         self.assertEqual(len(keys), len(set(keys)))
 
-    def test_a_target_under_a_cent_answers_the_nearest(self) -> None:
+    def test_a_target_under_a_cent_is_built_no_1c_floor(self) -> None:
+        # Owner, Nov 25: $1 -> $1,000 answered "nearest $86-89" under the generator's 1c floor;
+        # Kalshi quotes combos below 1c, so it is in reach.
         legs = payout.legs_from(BOARD, FRESH, NOW)
         ans = payout.search(D(1), D(1000), legs, self.t, draws=20_000, draws_max=20_000)
-        self.assertTrue(ans.nearest)
+        self.assertFalse(ans.nearest)
         self.assertTrue(ans.picks)
         for p in ans.picks:
-            self.assertGreaterEqual(p.priced.scored_price, D("0.01"))
+            self.assertGreaterEqual(payout.contracts(D(1), p.priced.scored_price), 1000)
+            self.assertLessEqual(p.priced.scored_price, ans.target)
+
+    def test_legs_are_sized_to_the_target_no_filler_no_lottery_leg(self) -> None:
+        legs = payout.legs_from(BOARD, FRESH, NOW)
+        ans = payout.search(D(10), D(100), legs, self.t, draws=20_000, draws_max=20_000)
+        for p in ans.picks:
+            if len(p.legs) > 1:
+                for c in p.legs:
+                    self.assertTrue(D("0.10") <= c.ask <= D("0.90"), c.ask)
+
+    def test_one_leg_per_game(self) -> None:
+        # Two sides of the same game, priced to fit together exactly: never both on a ticket.
+        g = "KXNBAGAME-26NOV25SAME"
+        board = [market(90, "0.28", "0.30", game=g, suffix="AAA"), market(91, "0.29", "0.31", game=g, suffix="BBB"),
+                 *BOARD]
+        at = {**FRESH, **{m.market_ticker: NOW - timedelta(minutes=5) for m in board[:2]}}
+        ans = payout.search(D(10), D(105), payout.legs_from(board, at, NOW), self.t, draws=20_000, draws_max=20_000)
+        for p in ans.picks:
+            games = [c.m.game_ticker for c in p.legs]
+            self.assertEqual(len(games), len(set(games)))
+    def test_an_unreachable_target_answers_the_nearest(self) -> None:
+        # Three legs at most (three games): 1,000,000x is out of reach.
+        legs = payout.legs_from(BOARD[:3], FRESH, NOW)
+        ans = payout.search(D(1), D(1_000_000), legs, self.t, draws=20_000, draws_max=20_000)
+        self.assertTrue(ans.nearest)
+        self.assertTrue(ans.picks)
 
     def test_a_single_bet_when_one_side_is_the_target(self) -> None:
         legs = payout.legs_from(BOARD, FRESH, NOW)

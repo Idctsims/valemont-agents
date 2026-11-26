@@ -96,9 +96,13 @@ class Build(PayoutSqlCase):
             self.assertEqual(run.outcome, "answered", run.reason)
             nearest, tickets = conn.execute("SELECT nearest, tickets FROM payout_answers WHERE request_id = %s",
                                             (rid,)).fetchone()
+            # Ten test games, one leg each: 5,000x is out of reach, so the nearest it can build.
             self.assertTrue(nearest)
+            self.assertTrue(tickets)
             for t in tickets:
-                self.assertGreaterEqual(Decimal(str(t["price"])), payout.pt.TICK_FLOOR)
+                self.assertLess(t["contracts"], 5000)
+                games = [leg["m"].rsplit("-", 1)[0] for leg in t["legs"]]
+                self.assertEqual(len(games), len(set(games)))
 
 
 if __name__ == "__main__":
