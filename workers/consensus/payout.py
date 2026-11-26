@@ -6,24 +6,27 @@ Y x (c + fee(c)): the target is the c with c + fee(c) = S / Y. This finds up to
 three tickets priced at it or up to 10% under it (so the payout is at least
 Y, up to ~10% more), from everything on the board.
 
-It reuses the Parlay Generator's parts and never changes them
-(consensus/parlay_ticket.py is pre-registered, P2.1):
-- `pt.candidates`: the legs in the generator's order, ask / the raw Kalshi side
-  mid, cheapest to trade first. (Not consensus p per dollar: on Nov 20 that
-  order selected on ESPN's single-book p sitting above Kalshi's ask.)
-- `pt.greedy`: one pass per leg count, keeping rules 5-11 (event cap, refused
-  pairs, one prop per player, no unmodeled same-game pair, 3 per game, the 1c
-  tick floor) and skipping a leg once the rest could no longer reach the window.
-- `pt.price_ticket`: the correlated fair chance (copula within a game,
-  independent across games).
-The tickets are ranked as the generator ranks them, by cost over fair (the
-highest chance to hit for the price), fewer legs on a tie.
+Its own search (owner, Nov 25 evening, after "the slips aren't even trying"
+on $1 -> $1,000), not the Parlay Generator's pre-registered one:
+- **One leg per game.** Legs from different games are independent, so the
+  product of their asks is an honest estimate of the combo's price and the
+  correlated fair chance is the product of theirs. Same-game legs gave a 0%
+  ticket (two legs that cannot both hit) and a fake +245% (nested legs priced
+  as their product). One prop per player follows.
+- **Legs sized to the target.** For k legs each leg aims near c^(1/k) (6 legs to
+  0.09c: about 31c each), within a band of it, cheapest to trade first (ask /
+  the raw Kalshi side mid, the generator's order); the last leg is the one
+  that lands the price. Asks 10c-90c on a multi-leg ticket (no 95c filler, no
+  5c lottery leg); a single bet may ask 5c-95c.
+- **No 1c floor.** Kalshi quotes combos below 1c on a $0.0001 grid (the RFQ
+  guide); the generator's rule 11 tick floor does not apply here.
+- Ranked by cost over fair (the best chance to hit for the price), fewer legs
+  on a tie. When nothing lands in the window, the nearest price it could
+  build, marked `nearest`.
 
-When nothing lands there, the window widens both ways in steps and the answer is
-the nearest payout it can reach, marked `nearest`. A target under 1c (about
-99x and up) is never reachable: rule 11's tick floor.
-
-Pure: no SQL and no network. Nothing here bets or commits (CLAUDE.md §1, §2).
+It reuses `pt.candidates` (the order) and `pt.price_ticket` (the pricer) and
+never changes the generator. Pure: no SQL and no network. Nothing here bets
+or commits (CLAUDE.md §1, §2).
 """
 
 from __future__ import annotations
@@ -40,14 +43,17 @@ from consensus import parlay_legs as pl
 from consensus import parlay_ticket as pt
 
 FEE_RATE = Decimal("0.07")
-#: A leg's ask: 5c to 95c (the Props tab's bands, end to end).
+#: A leg's ask: 5c to 95c as a single bet; 10c to 90c on a multi-leg ticket.
 ASK_LO, ASK_HI = Decimal("0.05"), Decimal("0.95")
+MULTI_LO, MULTI_HI = Decimal("0.10"), Decimal("0.90")
+#: A leg's ask may sit this far either side of its share of the target (c^(1/k)).
+BAND = Decimal("1.15")
+#: Kalshi's finest combo price step below 1c (the RFQ guide): the lowest target searched.
+PRICE_FLOOR = Decimal("0.0001")
 FRESH = timedelta(minutes=20)
 MAX_LEGS = 12
-#: The window: +-10% of the target price, then wider steps for the nearest answer.
-STEPS = (Decimal("0.10"), Decimal("0.25"), Decimal("0.5"), Decimal("1"), Decimal("3"), Decimal("9"))
-#: The search prices at most this many tickets (the 20 s budget).
-MAX_PRICED = 12
+#: The window: the target or up to 10% under it (the payout at least what was asked).
+CHEAPER = Decimal("0.10")
 TOP = 3
 #: Past this multiple (payout / stake), the page warns: the longshot corner.
 WARN_MULTIPLE = 100
@@ -109,42 +115,81 @@ def legs_from(markets: Sequence[pl.Market], at: Mapping[str, datetime], now: dat
     return out
 
 
+def _game(c: pt.Cand) -> str:
+    return c.m.game_ticker
+
+
+def _player(c: pt.Cand) -> tuple[str, str] | None:
+    m = c.m
+    return ((m.team or "?"), m.subject.strip().lower()) if m.market_kind == "prop" and m.subject else None
+
+
+def _fits(legs: Sequence[pt.Cand], c: pt.Cand) -> bool:
+    """One leg per game, one prop per player."""
+    if any(_game(x) == _game(c) for x in legs):
+        return False
+    me = _player(c)
+    return me is None or all(_player(x) != me for x in legs)
+
+
+def build(cands: Sequence[pt.Cand], k: int, target: Decimal) -> list[pt.Cand] | None:
+    """A k-leg ticket priced as near the target as the board allows, never above
+    it when it can be in the window. Each next leg aims at what is left of the
+    price spread evenly over the legs left ((target / price so far)^(1 / legs
+    left)), the cheapest to trade within BAND of that aim, so no leg is left to
+    make up the difference; the last leg is the one that lands the price.
+    None when k legs cannot be found."""
+    lo, hi = (ASK_LO, ASK_HI) if k == 1 else (MULTI_LO, MULTI_HI)
+    pool = [c for c in cands if lo <= c.ask <= hi]
+    legs: list[pt.Cand] = []
+    for i in range(k - 1):
+        aim = Decimal(math.exp(math.log(float(target / pt._product(legs))) / (k - i)))
+        pick = next((c for c in pool if aim / BAND <= c.ask <= aim * BAND and _fits(legs, c)), None)
+        if pick is None:
+            return None
+        legs.append(pick)
+    need = target / pt._product(legs)
+    # The last leg: in the window (at most the target, at least 10% under) and cheapest to
+    # trade; else the one whose price lands nearest the target.
+    best, best_d = None, None
+    for c in pool:
+        if not _fits(legs, c):
+            continue
+        if need / (1 + CHEAPER) <= c.ask <= need:
+            return [*legs, c]
+        d = abs(math.log(float(c.ask / need)))
+        if best_d is None or d < best_d:
+            best, best_d = c, d
+    return None if best is None else [*legs, best]
+
+
 def search(stake: Decimal, payout: Decimal, legs: Sequence[pl.Leg], t: cr.RhoTable, *,
            draws: int = cr.MC_DRAWS, draws_max: int = cr.MC_DRAWS_MAX) -> Answer:
     t0 = time.perf_counter()
     target = target_price(stake, payout)
     cands, _ = pt.candidates(legs)
-    aim = max(target, pt.TICK_FLOOR)
-    picks: list[Pick] = []
+    aim = max(target, PRICE_FLOOR)
+    win = (aim / (1 + CHEAPER), aim)
+    built: list[Pick] = []
     seen: set[tuple[tuple[str, str], ...]] = set()
-    priced = 0
-    nearest = target < pt.TICK_FLOOR
-    for i, rel in enumerate(STEPS):
-        # First: the target price or up to 10% cheaper, so the payout is at least
-        # what was asked (up to ~10% more). A price above it buys fewer contracts:
-        # the Nov 25 dry run's +-10% window paid 91-93 on a $100 ask. The nearest
-        # answer's wider steps look both ways.
-        win = (aim / (1 + rel), aim) if i == 0 and not nearest else window(aim, rel)
-        for k in range(1, MAX_LEGS + 1):
-            if priced >= MAX_PRICED or len(cands) < k:
-                break
-            b = pt.greedy(cands, k, t, win)
-            if len(b.legs) < k or not pt.in_window(pt._product(b.legs), win):
-                continue
-            key = tuple(sorted(c.key for c in b.legs))
-            if key in seen:
-                continue
-            seen.add(key)
-            picks.append(Pick(list(b.legs), pt.price_ticket(b.legs, t, draws=draws, draws_max=draws_max)))
-            priced += 1
-        if picks:
-            nearest = nearest or i > 0
-            break
-    if nearest and picks:
-        # The nearest payout first, then the best chance among those as near.
-        picks.sort(key=lambda p: (abs(p.priced.scored_price - target), p.priced.rel_cost, len(p.legs)))
+    for k in range(1, MAX_LEGS + 1):
+        ticket = build(cands, k, aim)
+        if ticket is None:
+            continue
+        key = tuple(sorted(c.key for c in ticket))
+        if key in seen:
+            continue
+        seen.add(key)
+        built.append(Pick(ticket, pt.price_ticket(ticket, t, draws=draws, draws_max=draws_max)))
+    inside = [p for p in built if pt.in_window(p.priced.scored_price, win)]
+    nearest = target < PRICE_FLOOR or not inside
+    if inside and not nearest:
+        picks = sorted(inside, key=lambda p: (p.priced.rel_cost, len(p.legs),
+                                              sorted(c.m.market_ticker for c in p.legs)))
     else:
-        picks.sort(key=lambda p: (p.priced.rel_cost, len(p.legs), sorted(c.m.market_ticker for c in p.legs)))
+        # The nearest payout first, then the best chance among those as near.
+        picks = sorted(built, key=lambda p: (abs(math.log(float(p.priced.scored_price / aim))),
+                                             p.priced.rel_cost, len(p.legs)))
     return Answer(target, picks[:TOP], nearest, len(cands), time.perf_counter() - t0)
 
 

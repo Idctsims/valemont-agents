@@ -29,34 +29,43 @@ contracts are whole, the payout moves in $1 steps, and the answer shows the exac
 
 ## 3. The search (worker, on request)
 
+**Rebuilt Nov 25 evening (owner: on $1 -> $1,000 "the slips aren't even trying").** The first
+version reused the Parlay Generator's greedy pass. That pass built tickets from 95¢ filler legs
+plus one 5¢ longshot, and it mixed legs from one game: one ticket could not hit at all (0%),
+and one paired nested legs priced as their product (a fake +245%). It also kept the
+generator's 1¢ tick floor, so it answered "nearest, $86–89". Kalshi quotes combos below 1¢, on
+a $0.0001 grid (the RFQ guide). The search is now E1's own. It reuses the generator's
+candidate order and pricer, and never changes the generator.
+
 1. **Candidates:**
    - every binary side on the board whose event is combo-eligible and whose game has not
      started;
-   - only with a Kalshi price read in the last 20 minutes, and an ask between 5¢ and 95¢;
+   - only with a Kalshi price read in the last 20 minutes;
    - "YES only" events take YES only;
    - each side carries its consensus p (`leg_consensus_for`, as everywhere).
-2. **Order:** the generator's order (`pt.candidates`): ask ÷ the raw Kalshi side mid,
-   cheapest to trade first.
-   - **Changed from this draft's "p ÷ (ask + fee)" (Nov 25):** on Nov 20, ordering by
-     consensus p selected on ESPN's single-book p sitting above Kalshi's ask, an artifact,
-     not value (owner-approved then for the generator).
-   - The correlated fair chance still chooses among complete tickets (step 5).
-3. **For each leg count k from 1 to 12:**
-   - a greedy pass in that order keeps the generator's rules (`first_broken`): event cap,
-     refused pairs, one prop per player, no unmodeled same-game pair, at most 3 legs from
-     one game;
-   - a leg is skipped when, once added, the remaining legs could no longer bring the price
-     into the window (`reachable`, the generator's own check);
-   - k = 1 is a single bet: when one side alone is priced near the target, no parlay is
-     needed, and the answer says so.
-4. **Each complete ticket is priced** by the correlated pricer (`price_ticket`: copula within
-   a game, independent across games).
-5. **The answer is up to 3 tickets,** ranked by fair p ÷ price, the highest chance to hit for
-   that payout. Ties go to fewer legs.
-6. **Nothing lands in the window:** the window widens both ways in steps (±25%, ±50%, ×2,
-   ×4, ×10), and the answer is the nearest payout it can build, labelled.
-   - A combo can't be priced under 1¢ (the generator's tick floor), so about 99x and up is
-     always "nearest". The Nov 25 dry run: $5 → $500 answered $430–435.
+   - Asks: 5¢–95¢ for a single bet, and 10¢–90¢ on a multi-leg ticket.
+2. **Order:** the generator's (`pt.candidates`): ask ÷ the raw Kalshi side mid, cheapest to
+   trade first. (Not consensus p per dollar: on Nov 20 that order selected on ESPN's
+   single-book p sitting above Kalshi's ask.)
+3. **One leg per game,** and one prop per player. Legs from different games are independent,
+   so the product of their asks is an honest estimate of the combo's price, and the fair
+   chance is the product of theirs.
+4. **For each leg count k from 1 to 12, legs sized to the target:**
+   - each next leg aims at what is left of the price, spread evenly over the legs left
+     ((target ÷ price so far)^(1 ÷ legs left));
+   - it is the cheapest to trade within ×/÷1.15 of that aim;
+   - the last leg is the one that lands the price at the target or up to 10% under it (else
+     the nearest).
+5. **Each ticket is priced** by the correlated pricer (`price_ticket`).
+6. **The answer is up to 3 tickets inside the window,** ranked by cost over fair (the best
+   chance to hit for the price), fewer legs on a tie. None inside: the nearest-priced tickets,
+   marked `nearest`.
+
+**Dry run on the real board after the rebuild (read-only, Nov 25 evening, 1,177 fresh sides):**
+- $1 -> $1,000: $1,095, $1,017, $1,026, with 8–11 legs of about 30–60¢. About 1 in 1,200;
+  expected return −10.5% to −14.3%.
+- $10 -> $100: $101, $101, $100. The 3-leg one is 52/48/37¢. About 1 in 11; −7.6% to −9.0%.
+- $20 -> $50: a single bet at 38¢ paying $50, then 2- and 3-leg tickets.
 
 Budget: at most 20 s from request to answer (the combo quote's bar), and at most 12 tickets
 priced.
